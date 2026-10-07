@@ -38,4 +38,12 @@
 
 화면 캡처는 `docs/screenshots/week-01-home.png`, `week-01-detail.png`, `week-01-create.png`, `week-01-mine.png`, `week-01-login.png`, `week-01-signup.png`, `week-01-mobile.png`입니다.
 
-Pages는 프론트 변경이 main에 푸시되면 자동 배포하도록 변경했습니다. GitHub API와 공개 사이트로의 요청은 이 클라우드의 네트워크 정책에서 403으로 차단되어 원격 배포 성공·공개 사이트 접속은 여기서 검증하지 못했습니다. GitHub Actions의 실제 결과로 성공 여부를 확인해야 합니다.
+Pages는 프론트 변경이 main에 푸시되면 자동 배포하도록 변경했습니다. GitHub API와 공개 사이트로의 직접 요청은 이 클라우드의 네트워크 정책에서 403으로 차단되었습니다. 이후 접근 가능한 GitHub Actions 공개 웹 페이지로 원격 배포 성공을 확인했으며 아래에 결과를 기록했습니다.
+
+## 최신 배포 확인 · 2026-10-08
+
+서비스 수정 커밋 `3b08228`을 main에 푸시하고 원격 SHA를 확인했습니다. 자동 배포 [Publish service UI 실행 #2](https://github.com/lov22eee/Volink/actions/runs/37649906335)의 공개 실행 페이지에서 해당 커밋과 **Status: Success**를 확인했습니다. GitHub Pages 배포는 성공했습니다. 공개 사이트 HTML 자체의 직접 요청은 이 클라우드 정책에서 차단되어 별도 접속 검증을 완료했다고 표현하지 않습니다.
+
+접속 주소: https://lov22eee.github.io/Volink/
+
+클라우드 재사용 설정의 `install_script`와 `start_skill`을 단일 HTML 생성·현재 6개 서비스 화면·11개 브라우저 검증 기준으로 갱신해 저장했습니다. 환경 설정 초안 저장과 사용자에 의한 환경 Publish는 별개이며, 현재 서비스의 GitHub Pages 배포와도 별개입니다.
