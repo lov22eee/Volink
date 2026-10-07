@@ -4,6 +4,12 @@ export type Activity = { id: number; title: string; description: string; categor
 export type Catalog = { demo: boolean; baseDate: string; places: Place[]; personas: Persona[]; activities: Activity[]; notice: string }
 export type ProjectStatus = { week: number; database: string; authenticationImplemented: boolean; mapIntegrated: boolean }
 
+declare global {
+  interface Window {
+    __VOLINK_UI_DEMO__?: { catalog: Catalog }
+  }
+}
+
 export const weekOne = [
   { area: '화면', items: ['React·Vite 개발환경 구성', '참가자·모집자·관리자 화면 흐름도', '주요 화면 UI 초안 및 발표 화면'] },
   { area: '서버', items: ['Spring Boot·MySQL 개발환경 구성', '핵심 테이블·ERD 초안', '사용자 역할·소유권 기반 권한 초안'] },

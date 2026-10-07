@@ -29,7 +29,7 @@ jobs:
         run: ./scripts/backend.sh -B test
       - name: Frontend type check and build
         working-directory: frontend
-        run: npm run build
+        run: npm run ui:export
       - name: Start application and check database-backed requests
         run: |
           ./scripts/start-dev.sh

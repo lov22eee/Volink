@@ -1,0 +1,113 @@
+{
+  "places": [
+    {
+      "id": 1,
+      "name": "옥정중앙공원",
+      "area": "양주 · 옥정동",
+      "addressNote": "경동대학교 메트로폴캠퍼스 주변 후보. 현장·주소·좌표 확인 필요.",
+      "coordinateStatus": "UNVERIFIED"
+    },
+    {
+      "id": 2,
+      "name": "독바위공원",
+      "area": "양주 · 옥정 생활권",
+      "addressNote": "공공장소 후보. 이동 거리·활동 허용 여부·좌표 확인 필요.",
+      "coordinateStatus": "UNVERIFIED"
+    },
+    {
+      "id": 3,
+      "name": "회암사지 역사공원",
+      "area": "양주 · 회암동",
+      "addressNote": "공공장소 후보. 유적 보호구역 제외·활동 허용 여부·좌표 확인 필요.",
+      "coordinateStatus": "UNVERIFIED"
+    }
+  ],
+  "baseDate": "2026-10-11",
+  "activities": [
+    {
+      "id": 1,
+      "title": "공원에서 시작하는 작은 변화",
+      "description": "함께 산책하며 공원 주변의 가벼운 쓰레기를 정리하는 활동 시안입니다.",
+      "category": "환경 정화",
+      "placeId": 1,
+      "placeName": "옥정중앙공원",
+      "startTime": "10:00",
+      "durationMinutes": 90,
+      "capacity": 6,
+      "confirmed": 3
+    },
+    {
+      "id": 2,
+      "title": "우리 동네, 가벼운 플로깅",
+      "description": "공개된 산책로에서 짧게 걷고 주변을 정리하는 활동 시안입니다.",
+      "category": "환경 정화",
+      "placeId": 2,
+      "placeName": "독바위공원",
+      "startTime": "14:00",
+      "durationMinutes": 60,
+      "capacity": 8,
+      "confirmed": 5
+    },
+    {
+      "id": 3,
+      "title": "깨끗한 공원 함께 만들기",
+      "description": "유적 보호구역 밖의 허용된 공원 구역에서 진행할 환경 정화 시안입니다.",
+      "category": "환경 정화",
+      "placeId": 3,
+      "placeName": "회암사지 역사공원",
+      "startTime": "11:00",
+      "durationMinutes": 120,
+      "capacity": 4,
+      "confirmed": 2
+    }
+  ],
+  "notice": "UI 시연용 데이터입니다. 로그인·활동 개설·신청 기능은 아직 구현되지 않았습니다.",
+  "personas": [
+    {
+      "code": "admin-01",
+      "displayName": "관리자 01",
+      "role": "ADMIN"
+    },
+    {
+      "code": "organizer-01",
+      "displayName": "모집자 01",
+      "role": "ORGANIZER"
+    },
+    {
+      "code": "organizer-02",
+      "displayName": "모집자 02",
+      "role": "ORGANIZER"
+    },
+    {
+      "code": "participant-01",
+      "displayName": "참가자 01",
+      "role": "PARTICIPANT"
+    },
+    {
+      "code": "participant-02",
+      "displayName": "참가자 02",
+      "role": "PARTICIPANT"
+    },
+    {
+      "code": "participant-03",
+      "displayName": "참가자 03",
+      "role": "PARTICIPANT"
+    },
+    {
+      "code": "participant-04",
+      "displayName": "참가자 04",
+      "role": "PARTICIPANT"
+    },
+    {
+      "code": "participant-05",
+      "displayName": "참가자 05",
+      "role": "PARTICIPANT"
+    },
+    {
+      "code": "participant-06",
+      "displayName": "참가자 06",
+      "role": "PARTICIPANT"
+    }
+  ],
+  "demo": true
+}
