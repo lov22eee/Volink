@@ -43,6 +43,7 @@ jobs:
           cp docs/ui/Volink_서비스화면.html pages-static/index.html
           mkdir -p pages-static/design
           cp docs/design/week01.html pages-static/design/week01.html
+          cp docs/design/Volink_1주차_설계요약.pdf pages-static/design/Volink_1주차_설계요약.pdf
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

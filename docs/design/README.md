@@ -2,6 +2,10 @@
 
 [공개 페이지](https://lov22eee.github.io/Volink/design/week01.html) · [HTML 파일](week01.html)
 
+[회원 유형·권한 / UI 구조 / 시연 자료·기본 테스트 계획 PDF](Volink_1주차_설계요약.pdf)는 사용자가 지정한 세 부분만 남긴 A4 1장 파일입니다. 서비스 흐름·ERD·API·참가 상태 전환·위험 분류표는 제외했습니다.
+
+재생성: `frontend/`에서 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium node scripts/export-design-pdf.mjs`. 개인 PC에서 Playwright Chromium을 설치했다면 경로 변수 없이 실행합니다. 2026-10-08 PDF 텍스트 추출로 세 항목·화면 6개·테스트 항목 포함과 제외 항목 미포함, 페이지 수 1장 및 글자 영역이 페이지 안에 있는지 확인하고 실제 PDF를 이미지로 렌더링해 검토했습니다.
+
 사용자가 제출한 보고서의 서비스 흐름, 회원 유형·권한, 화면 구조, 데이터·API·테스트 설계를 한 페이지에 정리했습니다. 2026-10-08에 만든 설계 설명 자료이며, 제출 기간의 기능 구현 완료나 업무 테스트 통과를 의미하지 않습니다. API 경로·기관 구조·테스트 항목은 초안과 계획입니다.
 
 서비스 홈·메뉴에는 연결하지 않습니다. Pages 워크플로가 이 파일 하나를 `design/week01.html`에 복사합니다. `docs/design/` 변경을 main에 푸시하면 자동 배포합니다.

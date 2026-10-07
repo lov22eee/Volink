@@ -17,6 +17,7 @@ Volink는 지역 주민이 짧은 봉사활동을 직접 열고, 주변 이웃�
 ## 빠른 안내
 
 - **[1주차 설계 정리 · 한 페이지](https://lov22eee.github.io/Volink/design/week01.html)** — 제출 보고서의 흐름·권한·UI·ERD/API·테스트 계획을 보여주는 자료입니다. [파일로 열기](docs/design/week01.html)도 가능합니다.
+- **[선택한 세 항목 PDF 다운로드](docs/design/Volink_1주차_설계요약.pdf)** — 회원 유형·권한, UI 구조, 시연 자료·기본 테스트 계획만 담은 A4 1장입니다.
 - **[지금 만든 서비스 화면 열기 · HTML 파일](docs/ui/Volink_서비스화면.html)** — 파일을 저장해 Chrome·Edge로 열면 설치 없이 화면을 직접 눌러볼 수 있습니다.
 - [지금 동작하는 것](#현재-구현-상태)
 - [내 PC에서 실행하기](#실행하기)
