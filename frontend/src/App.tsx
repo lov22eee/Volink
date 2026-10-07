@@ -86,7 +86,7 @@ export default function App() {
       <p className="brand-caption">우리 동네의 작은 변화</p>
       <div className="workspace-label">VOLUNTEER TOGETHER</div>
       <nav aria-label="주요 메뉴">{navigation.map(nav => <a href={`#/${nav.id}`} key={nav.id} className={`nav-item ${page === nav.id ? 'active' : ''}`} aria-current={page === nav.id ? 'page' : undefined}><Icon name={nav.icon} />{nav.title}{page === nav.id && <span className="nav-dot" />}</a>)}</nav>
-      <div className="sidebar-bottom"><span className="mini-label">2026 졸업작품</span><strong>작은 실천을 연결합니다.</strong><p>경동대학교 · 팀 Volink<br />오준원 · 박용빈 · 김병수</p><a href="#/presentation" className="presentation-link"><Icon name="screen" size={17} />1주차 발표 화면<Icon name="arrow" size={16} /></a></div>
+      <div className="sidebar-bottom"><span className="mini-label">2026 졸업작품</span><strong>작은 실천을 연결합니다.</strong><p>경동대학교 · 팀 Volink<br />오준원 · 박용빈 · 김병수</p><a href="/presentations/report-20261006.html" className="presentation-link"><Icon name="screen" size={17} />제출 보고서 발표<Icon name="arrow" size={16} /></a><a href="#/presentation" className="presentation-link" style={{ marginTop: 16 }}><Icon name="screen" size={17} />1주차 실행 화면 발표<Icon name="arrow" size={16} /></a></div>
     </aside>}
     <div className="main-shell">
       <header className="topbar"><div className="breadcrumb">Volink <span>/</span> {isPresentation ? '1주차 발표' : navigation.find(n => n.id === page)?.title}</div><div className="topbar-right"><span className="week-pill">WEEK 01 · UI 초안</span><span className={`connection ${status ? 'online' : ''}`} role="status"><i />{status ? 'API · DB 연결됨' : error ? '연결 실패' : '서버 확인 중'}</span></div></header>
