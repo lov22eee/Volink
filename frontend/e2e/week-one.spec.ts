@@ -1,0 +1,95 @@
+import { test, expect } from '@playwright/test'
+
+test('live database catalog renders three demo activity cards', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('status')).toHaveText('API · DB 연결됨')
+  await expect(page.locator('.activity-card')).toHaveCount(3)
+  await expect(page.getByText('공원에서 시작하는 작은 변화', { exact: true })).toBeVisible()
+  await page.screenshot({ path: '../docs/screenshots/week-01-home.png', fullPage: true })
+})
+
+test('category and text filters expose correct results and empty state', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.activity-card')).toHaveCount(3)
+  await page.getByRole('button', { name: '생활 지원', exact: true }).click()
+  await expect(page.getByText('조건에 맞는 시연 활동이 없습니다.')).toBeVisible()
+  await expect(page.locator('.activity-card')).toHaveCount(0)
+  await page.getByRole('button', { name: '전체', exact: true }).click()
+  await page.getByRole('textbox', { name: '활동 또는 장소 검색' }).fill('플로깅')
+  await expect(page.locator('.activity-card')).toHaveCount(1)
+})
+
+test('activity details honestly show that applications are not implemented', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '공원에서 시작하는 작은 변화 상세 보기' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('button', { name: '참가 신청 · 준비 중' })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('create prototype validates capacity and never submits to the server', async ({ page }) => {
+  const writes: string[] = []
+  page.on('request', r => { if (r.method() !== 'GET') writes.push(r.url()) })
+  await page.goto('/#/create')
+  await expect(page.getByRole('status')).toHaveText('API · DB 연결됨')
+  await page.getByLabel('활동 이름').fill('테스트 공원 정화')
+  await page.getByLabel('장소 후보').selectOption('1')
+  await page.getByLabel('활동 날짜').fill('2026-10-10')
+  await page.getByLabel('시작 시간').fill('10:00')
+  await page.getByLabel('활동 소개').fill('학교 주변 공원에서 가벼운 쓰레기를 정리합니다.')
+  await page.getByLabel('모집 정원').fill('11')
+  await page.getByRole('checkbox').nth(0).check()
+  await page.getByRole('checkbox').nth(1).check()
+  await page.getByRole('button', { name: '입력값 확인하기' }).click()
+  await expect(page.locator('.success-message')).toHaveCount(0)
+  expect(await page.getByLabel('모집 정원').evaluate((element: HTMLInputElement) => element.validity.rangeOverflow)).toBe(true)
+  await page.getByLabel('모집 정원').fill('6')
+  await page.getByRole('button', { name: '입력값 확인하기' }).click()
+  await expect(page.locator('.success-message')).toContainText('활동은 등록되지 않았습니다.')
+  expect(writes).toEqual([])
+  await page.screenshot({ path: '../docs/screenshots/week-01-create.png', fullPage: true })
+})
+
+test('role flows and progress page communicate implemented versus planned work', async ({ page }) => {
+  await page.goto('/#/flows')
+  await page.getByRole('button', { name: '관리자', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '관리자의 서비스 이용 흐름' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '신고·증빙 확인' })).toBeVisible()
+  await page.goto('/#/progress')
+  await expect(page.locator('.persona')).toHaveCount(9)
+  await expect(page.locator('.checklist li')).toHaveCount(9)
+  await expect(page.getByText('로그인 계정은 아직 생성하지 않았습니다.', { exact: false })).toBeVisible()
+  await page.screenshot({ path: '../docs/screenshots/week-01-progress.png', fullPage: true })
+})
+
+test('four presentation slides show live API evidence and next-week handoff', async ({ page }) => {
+  await page.goto('/#/presentation')
+  await expect(page.getByRole('status')).toHaveText('API · DB 연결됨')
+  await page.getByRole('button', { name: '다음', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '1주차에 준비한 것' })).toBeVisible()
+  await page.screenshot({ path: '../docs/screenshots/week-01-presentation.png', fullPage: true })
+  await page.getByRole('button', { name: '다음', exact: true }).click()
+  await expect(page.getByText('현재 API · DB 연결 성공')).toBeVisible()
+  await page.getByRole('button', { name: '다음', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '다음 담당자에게 전달' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '다음', exact: true })).toBeDisabled()
+})
+
+test('API failure is visible and never replaced by fabricated demo data', async ({ page }) => {
+  await page.route('**/api/**', route => route.fulfill({ status: 503, body: 'unavailable' }))
+  await page.goto('/')
+  await expect(page.getByRole('alert')).toContainText('서버에 연결할 수 없습니다.')
+  await expect(page.locator('.activity-card')).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveText('연결 실패')
+})
+
+test('mobile layout has no horizontal overflow and preserves working navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.locator('.activity-card')).toHaveCount(3)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('link', { name: '사용자 흐름', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '사용자별 화면 흐름' })).toBeVisible()
+  await page.screenshot({ path: '../docs/screenshots/week-01-mobile.png', fullPage: true })
+})

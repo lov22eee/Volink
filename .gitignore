@@ -1,0 +1,34 @@
+# Credentials and machine-local settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+application-local.*
+application-secret.*
+
+# Dependencies, build output and local services
+node_modules/
+dist/
+target/
+.cache/
+.tools/
+.run/
+.local/
+data/
+mysql-data/
+*.db
+*.sqlite*
+*.log
+playwright-report/
+test-results/
+coverage/
+*.tsbuildinfo
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
