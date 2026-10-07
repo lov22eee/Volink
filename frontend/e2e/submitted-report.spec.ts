@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
-const source = fileURLToPath(new URL('../public/presentations/report-20261006.html', import.meta.url))
+const source = fileURLToPath(new URL('../../docs/archive/report-20261006.html', import.meta.url))
 
 test('submitted report deck works offline with keyboard, notes and all seven slides', async ({ page }) => {
   const externalRequests: string[] = []
@@ -32,7 +32,8 @@ test('submitted report deck works offline with keyboard, notes and all seven sli
 })
 
 test('UI wireframes switch all six screens and presentation works on mobile', async ({ page }) => {
-  await page.goto('/presentations/report-20261006.html#slide-4')
+  await page.setContent(await readFile(source, 'utf8'), { waitUntil: 'load' })
+  await page.getByRole('button', { name: '4번 슬라이드' }).click()
   const names = ['활동 찾기', '활동 상세', '활동 만들기', '내 활동', '로그인', '회원가입']
   for (const name of names) {
     await page.getByRole('button', { name, exact: false }).click()

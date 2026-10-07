@@ -5,7 +5,7 @@ import path from 'node:path'
 
 const frontend = fileURLToPath(new URL('..', import.meta.url))
 const repo = path.resolve(frontend, '..')
-const source = path.join(frontend, 'public/presentations/report-20261006.html')
+const source = path.join(repo, 'docs/archive/report-20261006.html')
 const output = path.join(repo, 'docs/slides')
 const captures = path.join(repo, 'docs/screenshots')
 await mkdir(output, { recursive: true })

@@ -1,6 +1,11 @@
 name: Publish service UI
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:

@@ -1,3 +1,5 @@
+> 2026-10-08: 예전 발표 자료 보관 문서입니다. 공개 서비스의 발표 메뉴는 제거했습니다. 실제 화면 안내는 `docs/presentation.md`를 따릅니다.
+
 # 제출 보고서 발표 자료 검증
 
 검증일: 2026-10-07, 한국 기준. 기준 문서: 사용자가 이미 제출한 20261006 HWP(작업기간 2026.09.28~10.05).
@@ -35,7 +37,7 @@
 
 ## 결과 파일
 
-- 원본 발표 소스: `frontend/public/presentations/report-20261006.html`
+- 원본 발표 소스: `docs/archive/report-20261006.html`
 - PDF: `docs/slides/Volink_제출보고서_발표_20261006.pdf`
 - 실제 표지·권한·UI 캡처: `docs/screenshots/submitted-report-*.png`
 - 발표 대본·보고서 대응표: `docs/submitted-report-presentation.md`
