@@ -34,7 +34,8 @@
       "startTime": "10:00",
       "durationMinutes": 90,
       "capacity": 6,
-      "confirmed": 3
+      "confirmed": 3,
+      "activityType": "GENERAL"
     },
     {
       "id": 2,
@@ -46,7 +47,8 @@
       "startTime": "14:00",
       "durationMinutes": 60,
       "capacity": 8,
-      "confirmed": 5
+      "confirmed": 5,
+      "activityType": "GENERAL"
     },
     {
       "id": 3,
@@ -58,7 +60,8 @@
       "startTime": "11:00",
       "durationMinutes": 120,
       "capacity": 4,
-      "confirmed": 2
+      "confirmed": 2,
+      "activityType": "GENERAL"
     }
   ],
   "notice": "UI 시연용 데이터입니다. 로그인·활동 개설·신청 기능은 아직 구현되지 않았습니다.",
@@ -66,47 +69,68 @@
     {
       "code": "admin-01",
       "displayName": "관리자 01",
-      "role": "ADMIN"
+      "role": "ADMIN",
+      "scenario": "위험 검토·기관 승인·신고 처리"
+    },
+    {
+      "code": "institution-01",
+      "displayName": "기관 담당자 01",
+      "role": "INSTITUTION",
+      "scenario": "기관 승인 완료 · 기관 주관 활동 개설"
+    },
+    {
+      "code": "institution-02",
+      "displayName": "기관 담당자 02",
+      "role": "INSTITUTION",
+      "scenario": "기관 승인 대기 · 주관 활동 개설 불가"
     },
     {
       "code": "organizer-01",
       "displayName": "모집자 01",
-      "role": "ORGANIZER"
+      "role": "ORGANIZER",
+      "scenario": "자율 활동 개설·승인·출석 처리"
     },
     {
       "code": "organizer-02",
       "displayName": "모집자 02",
-      "role": "ORGANIZER"
+      "role": "ORGANIZER",
+      "scenario": "자율 활동 개설·승인·출석 처리"
     },
     {
       "code": "participant-01",
       "displayName": "참가자 01",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     },
     {
       "code": "participant-02",
       "displayName": "참가자 02",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     },
     {
       "code": "participant-03",
       "displayName": "참가자 03",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     },
     {
       "code": "participant-04",
       "displayName": "참가자 04",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     },
     {
       "code": "participant-05",
       "displayName": "참가자 05",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     },
     {
       "code": "participant-06",
       "displayName": "참가자 06",
-      "role": "PARTICIPANT"
+      "role": "PARTICIPANT",
+      "scenario": "신청·대기·출석·완료 기록"
     }
   ],
   "demo": true

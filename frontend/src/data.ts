@@ -1,6 +1,6 @@
 export type Place = { id: number; name: string; area: string; addressNote: string; coordinateStatus: string }
-export type Persona = { code: string; displayName: string; role: 'ORGANIZER' | 'PARTICIPANT' | 'ADMIN' }
-export type Activity = { id: number; title: string; description: string; category: string; placeId: number; placeName: string; startTime: string; durationMinutes: number; capacity: number; confirmed: number }
+export type Persona = { code: string; displayName: string; role: 'ORGANIZER' | 'PARTICIPANT' | 'INSTITUTION' | 'ADMIN'; scenario: string }
+export type Activity = { id: number; title: string; description: string; category: string; placeId: number; placeName: string; startTime: string; durationMinutes: number; capacity: number; confirmed: number; activityType: 'GENERAL' | 'INSTITUTION' }
 export type Catalog = { demo: boolean; baseDate: string; places: Place[]; personas: Persona[]; activities: Activity[]; notice: string }
 export type DisplayCatalog = { demo: boolean; baseDate: string; places: Pick<Place, 'id' | 'name' | 'area'>[]; activities: Activity[] }
 
