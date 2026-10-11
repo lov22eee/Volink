@@ -1,0 +1,76 @@
+# API 명세 · 2주차 확정
+
+2026-10-11 확정. **3주차부터 구현할 명세이며 지금은 동작하지 않습니다.** 현재 동작하는 API는 [architecture.md](architecture.md#현재-api)의 3개뿐입니다.
+
+## 공통 규칙
+
+- 주소: `/api/...`, JSON, 시간은 한국 시간 ISO-8601(`2026-10-18T10:00:00+09:00`).
+- 인증: `Authorization: Bearer <access token>` (3주차, [security-cost.md](security-cost.md)).
+- 화면이 보낸 인원 수·상태·역할은 믿지 않습니다. 서버가 DB에서 다시 확인합니다.
+- 목록은 `?page=0&size=20`, 응답 `{ items, page, size, total }`.
+
+### 오류 응답
+
+```json
+{ "code": "VALIDATION_FAILED", "message": "입력 내용을 확인해 주세요.",
+  "fieldErrors": [{ "field": "capacity", "message": "모집 정원은 2~10명입니다." }] }
+```
+
+| HTTP | code | 화면 처리 |
+|---|---|---|
+| 400 | `VALIDATION_FAILED` | 칸 아래 오류 + 위쪽 “고칠 항목 N개” |
+| 401 | `UNAUTHENTICATED` | 로그인 화면으로 |
+| 403 | `FORBIDDEN`, `ACCOUNT_RESTRICTED`, `ORGANIZATION_NOT_APPROVED` | 이유 안내, 버튼 숨김 |
+| 404 | `NOT_FOUND` | “찾을 수 없습니다” 화면 (권한 없는 남의 자료도 404) |
+| 409 | `DUPLICATE_APPLICATION`, `CAPACITY_FULL`, `INVALID_STATE`, `EMAIL_TAKEN` | 최신 상태 다시 불러오기 |
+| 410 | `OFFER_EXPIRED`, `QR_EXPIRED`, `APPEAL_PERIOD_OVER` | 만료 안내 |
+| 422 | `ACTIVITY_BLOCKED`, `UNDER_AGE`, `CHECKIN_OUT_OF_TIME`, `CHECKIN_OUT_OF_RANGE` | 이유 + 다음 행동 안내 |
+| 429 | `TOO_MANY_REQUESTS` | 잠시 후 다시 |
+
+## API 목록
+
+권한: 공개 / 회원 / 본인 / 모집자(자기 활동) / 확인된 기관회원 / 관리자.
+
+| 주차 | 요청 | 권한 | 내용 |
+|---|---|---|---|
+| 3 | `POST /api/auth/signup` | 공개 | 일반·기관 가입. 만 14세 미만 422 `UNDER_AGE`, `role` 필드 무시(ADMIN 불가), 기관이면 organizations PENDING 생성 |
+| 3 | `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/logout` | 공개/회원 | 토큰 발급·갱신·폐기 |
+| 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 1~3개 |
+| 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
+| 3 | `GET /api/activities/{id}` | 공개 (비공개는 모집자·관리자) | 상세 |
+| 3 | `GET /api/admin/organizations?status=PENDING` · `POST /api/admin/organizations/{id}/approve` · `.../reject` | 관리자 | 기관 확인, 반려 사유 필수 |
+| 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
+| 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | 반경(기본 3km)·날짜·분야·유형 검색, 가까운 순. REVIEW 미승인·BLOCKED 제외. 내 위치는 저장 안 함 |
+| 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
+| 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
+| 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
+| 5 | `POST /api/participations/{id}/cancel` | 본인 | 시작 전 취소, 빈자리 승격 |
+| 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | 승격 제안 응답, 만료 410 |
+| 5 | `GET /api/me/participations?status=` | 본인 | 내 신청 |
+| 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` | 본인 | 화면 안 알림(주기 조회, 푸시 없음) |
+| 6 | `GET /api/activities/{id}/qr` | 모집자 | 60초 서명 QR 값 |
+| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | 시간(시작 30분 전~30분 후)·QR·200m 확인, 좌표 저장 안 함 |
+| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | 사유 필수 |
+| 6 | `POST /api/participations/{id}/complete` | 모집자 | 종료 후, 체크인한 사람만. 기록 생성 |
+| 6 | `GET /api/me/records` | 본인 | 활동 기록 |
+| 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
+| 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
+| 7 | `GET /api/admin/reports` · `POST /api/admin/reports/{id}/resolve` | 관리자 | 보류·재개·무효, 사유 필수 |
+| 7 | `POST /api/admin/users/{id}/sanctions` | 관리자 | 경고·제한·정지, 사유 필수 |
+| 7 | `GET /api/activities/recommended` | 회원 | 거리+시간+관심 분야 점수 합(단순 추천) |
+| 7 | `GET /api/reports/{id}/evidences/{eid}/url` | 관리자 | 제한시간 URL(5분) |
+
+## 화면별 API 요구사항
+
+| 화면 | 쓰는 API | 화면이 받아야 할 값 | 오류·빈 상태 |
+|---|---|---|---|
+| 활동 찾기 | `GET /api/activities` | id, title, category, activityType, placeName, distanceKm, startsAt, durationMinutes, capacity, confirmedCount, waitlistOpen, lat/lng(장소) | 결과 0건 안내, 위치 거부 시 지역 기본값, 실패 시 다시 시도 |
+| 활동 상세 | `GET /api/activities/{id}` + 내 신청 상태 | 위 + description, organizer 표시명, myParticipationStatus, 보험 비적용 안내 | 404, 마감·정원 참 |
+| 활동 만들기 | `POST /api/activities`, `GET /api/me` | riskLevel, riskReasons[], status | 칸별 `fieldErrors`, BLOCKED 이유, 기관 미확인 403 |
+| 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |
+| 내 활동 · 개설 | 신청자 목록·승인·QR | 확정/제안/대기 수, 남은 응답 시간, 상태 기록 | 정원 초과 409 |
+| 내 활동 · 기록 | `GET /api/me/records`, 이의제기 | confirmedAt, appealDeadline, status | 7일 지나면 버튼 숨김 |
+| 로그인 | `POST /api/auth/login` | 토큰, 회원 유형 | 이메일·비밀번호 오류는 하나의 문구로 |
+| 회원가입 | `POST /api/auth/signup` | 생성된 회원, 기관 상태 PENDING | `UNDER_AGE`, `EMAIL_TAKEN`, 칸별 오류 |
+
+화면 입력 규칙과 서버 검증 문구는 [rules.md](rules.md)로 맞춥니다.

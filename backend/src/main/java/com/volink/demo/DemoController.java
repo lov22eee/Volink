@@ -28,13 +28,14 @@ public class DemoController {
                 FROM demo_places ORDER BY id
                 """);
         List<Map<String, Object>> personas = jdbc.queryForList("""
-                SELECT code, display_name AS displayName, persona_role AS role
+                SELECT code, display_name AS displayName, persona_role AS role, scenario
                 FROM demo_personas ORDER BY code
                 """);
         List<Map<String, Object>> activities = jdbc.queryForList("""
                 SELECT a.id, a.title, a.description, c.name AS category,
                        a.place_id AS placeId, p.name AS placeName, a.start_time AS startTime,
-                       a.duration_minutes AS durationMinutes, a.capacity, a.example_confirmed AS confirmed
+                       a.duration_minutes AS durationMinutes, a.capacity, a.example_confirmed AS confirmed,
+                       a.activity_type AS activityType
                 FROM demo_activity_templates a
                 JOIN demo_places p ON p.id = a.place_id
                 JOIN categories c ON c.id = a.category_id
@@ -48,8 +49,9 @@ public class DemoController {
     @GetMapping("/project/status")
     public Map<String, Object> status() {
         jdbc.queryForObject("SELECT 1", Integer.class);
-        return Map.of("project", "Volink", "week", 1, "database", "UP",
-                "capabilities", List.of("React UI prototype", "Spring Boot API", "MySQL / Flyway", "Demo catalog"),
+        return Map.of("project", "Volink", "week", 2, "database", "UP",
+                "capabilities", List.of("React UI prototype", "Spring Boot API", "MySQL / Flyway", "Demo catalog",
+                        "Week-2 schema: members, organizations, reports, notifications (tables only)"),
                 "authenticationImplemented", false, "mapIntegrated", false,
                 "notice", "활동 기록은 플랫폼 내부 기록이며 공식 봉사실적으로 인정되지 않습니다.");
     }

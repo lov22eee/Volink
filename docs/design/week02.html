@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Volink 2주차 설계</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;--ink:#243d32;--muted:#6f8070;--line:#e0e7d9;--soft:#edf3e6;--green:#245e48;--surface:#ffffff;--page:#f5f7f2;--warn:#a35a3f;--warn-soft:#f8e7de;color:var(--ink);background:var(--page);line-height:1.6}
+    @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#e3ebe2;--muted:#a3b2a2;--line:#2f3d35;--soft:#22312a;--green:#7fc3a0;--surface:#18221d;--page:#111814;--warn:#e9a68b;--warn-soft:#3a2720}}
+    :root[data-theme="dark"]{--ink:#e3ebe2;--muted:#a3b2a2;--line:#2f3d35;--soft:#22312a;--green:#7fc3a0;--surface:#18221d;--page:#111814;--warn:#e9a68b;--warn-soft:#3a2720}
+    *{box-sizing:border-box}body{margin:0;background:var(--page)}main{max-width:1080px;margin:auto;padding:36px 16px 48px}
+    header p{color:var(--muted);font-size:14px;margin:6px 0}.brand{font-weight:800;color:var(--green)}h1{font-size:32px;margin:6px 0;letter-spacing:-1px}h2{font-size:20px;margin:0 0 6px;letter-spacing:-.5px}
+    .lead{font-size:14px;color:var(--muted);margin:0 0 16px}
+    section{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:22px;margin:16px 0}
+    .toc{display:flex;flex-wrap:wrap;gap:8px;padding:0;margin:12px 0 0;list-style:none}.toc li{background:var(--soft);border-radius:20px;padding:6px 13px;font-size:13px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+    .card{border:1px solid var(--line);border-radius:10px;padding:13px;font-size:12px;color:var(--muted)}.card strong{display:block;color:var(--ink);font-size:13px;margin-bottom:6px}
+    .tag{display:inline-block;border-radius:5px;padding:2px 7px;font-size:11px;background:var(--soft);color:var(--green);font-weight:600;margin:2px 2px 0 0}.tag.no{background:var(--warn-soft);color:var(--warn)}
+    .flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px}.flow span{background:var(--soft);border-radius:7px;padding:7px 10px;font-weight:600}.flow i{color:var(--muted);font-style:normal}
+    .flow .side{background:var(--warn-soft);color:var(--warn)}
+    .mock{border:1px solid var(--line);border-radius:9px;padding:12px;font-size:11px;color:var(--muted)}.field{border:1px solid var(--line);border-radius:5px;padding:6px 8px;margin:4px 0}.field.bad{border-color:var(--warn);background:var(--warn-soft)}.err{color:var(--warn);font-size:10px}
+    svg text{fill:var(--ink);font-size:12px}svg .axis{stroke:var(--line)}svg .bar{fill:var(--green)}svg .val{font-weight:700}
+    .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:18px}figure{margin:0}figcaption{font-size:13px;font-weight:600;margin-bottom:6px}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-weight:600}
+    .table-wrap{overflow-x:auto}.note{font-size:12px;color:var(--muted);margin:12px 0 0}
+    @media(max-width:700px){.chart-row{grid-template-columns:1fr}h1{font-size:26px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">Volink</div>
+    <h1>2주차 · 명세 확정</h1>
+    <p>지난주 설계 초안을 실제 DB 구조와 규칙으로 굳혔습니다. 업무 기능은 아직 없습니다.</p>
+    <p>목차는 다음과 같습니다.</p>
+    <ol class="toc"><li>1 회원·권한</li><li>2 상태 흐름</li><li>3 입력 규칙 화면</li><li>4 데이터 구조</li><li>5 위험 키워드</li><li>6 남은 일</li></ol>
+  </header>
+
+  <section>
+    <h2>1. 회원은 셋, 기관은 확인 후 주관</h2>
+    <p class="lead">관리자는 가입으로 만들 수 없습니다. 만 14세 미만은 가입할 수 없습니다.</p>
+    <div class="grid">
+      <div class="card"><strong>일반회원</strong><span class="tag">자율 활동 개설</span><span class="tag">신청·기록</span></div>
+      <div class="card"><strong>기관회원</strong><span class="tag">확인 대기 → 확인 완료</span><span class="tag">기관 주관 활동</span><span class="tag no">확인 전 주관 불가</span></div>
+      <div class="card"><strong>관리자</strong><span class="tag">REVIEW 검토</span><span class="tag">기관 확인·신고·제재</span><span class="tag no">사유 없이 조치 불가</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 신청 한 건의 길</h2>
+    <p class="lead">거절·재신청·보류 복원 규칙을 정했습니다. 제안 중인 자리도 정원에 넣습니다.</p>
+    <div class="flow" aria-label="신청 상태 흐름">
+      <span>신청</span><i>→</i><span>확정</span><i>→</i><span>체크인</span><i>→</i><span>완료</span><i>·</i>
+      <span class="side">거절</span><span class="side">대기 → 제안 → 확정/만료</span><span class="side">취소</span><span class="side">노쇼</span><span class="side">보류 → 재개/무효</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 틀린 칸을 바로 알려 줍니다</h2>
+    <p class="lead">활동 만들기 8칸, 회원가입 10칸에 규칙과 문구를 붙였습니다. 서버 검사는 3주차입니다.</p>
+    <div class="grid">
+      <div class="mock"><b>활동 만들기</b><div class="field">정원 6명 (2–10)</div><div class="field bad">시작 05:30</div><div class="err">시작 시간은 06:00 이후로 정해 주세요.</div><div class="field">90분 (30–180)</div></div>
+      <div class="mock"><b>회원가입</b><div class="field bad">생년월일 2016-10-11</div><div class="err">만 14세 미만은 가입할 수 없습니다.</div><div class="field">관심 분야 1–3개</div></div>
+      <div class="mock"><b>지도·목록</b><div class="field">① 옥정중앙공원 ② 독바위공원 ③ 회암사지</div><div class="field">장소를 누르면 목록이 좁혀짐</div><div class="err" style="color:var(--muted)">실제 지도는 4주차</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. 데이터 구조 17개 테이블</h2>
+    <p class="lead">V3로 9개를 더해 계획서 ERD 네 묶음을 채웠습니다. 실제 MySQL 백엔드 테스트 14개가 통과했습니다.</p>
+    <div class="chart-row">
+      <figure>
+        <figcaption>묶음별 업무 테이블 수 (V1~V3)</figcaption>
+        <svg viewBox="0 0 420 170" width="100%" role="img" aria-label="사용자·분류 5, 활동 2, 참가 4, 안전·관리 6">
+          <g transform="translate(90 10)">
+            <line class="axis" x1="0" y1="0" x2="0" y2="148"/>
+            <g><title>사용자·분류: 5개 (users, categories, user_interests, organizations, notifications)</title><text x="-8" y="24" text-anchor="end">사용자·분류</text><rect class="bar" x="0" y="8" width="230" height="24" rx="4"/><text class="val" x="238" y="25">5</text></g>
+            <g><title>활동: 2개 (activities, activity_locations)</title><text x="-8" y="60" text-anchor="end">활동</text><rect class="bar" x="0" y="44" width="92" height="24" rx="4"/><text class="val" x="100" y="61">2</text></g>
+            <g><title>참가: 4개 (participations, check_ins, activity_records, activity_logs)</title><text x="-8" y="96" text-anchor="end">참가</text><rect class="bar" x="0" y="80" width="184" height="24" rx="4"/><text class="val" x="192" y="97">4</text></g>
+            <g><title>안전·관리: 6개 (reports, report_evidences, appeals, sanctions, admin_actions, risk_keywords)</title><text x="-8" y="132" text-anchor="end">안전·관리</text><rect class="bar" x="0" y="116" width="276" height="24" rx="4"/><text class="val" x="284" y="133">6</text></g>
+          </g>
+        </svg>
+      </figure>
+      <figure>
+        <figcaption>위험 키워드 초안 32개</figcaption>
+        <svg viewBox="0 0 420 170" width="100%" role="img" aria-label="BLOCKED 15개, REVIEW 17개">
+          <g transform="translate(90 30)">
+            <line class="axis" x1="0" y1="0" x2="0" y2="100"/>
+            <g><title>BLOCKED 15개: 게시 거부 (높은 곳·전기·가스·물속·의료·금전 모금 등)</title><text x="-8" y="30" text-anchor="end">BLOCKED</text><rect class="bar" x="0" y="14" width="240" height="26" rx="4"/><text class="val" x="248" y="32">15</text></g>
+            <g><title>REVIEW 17개: 관리자 확인 후 공개 (어르신·아동·동물·시설·일몰 이후 등)</title><text x="-8" y="78" text-anchor="end">REVIEW</text><rect class="bar" x="0" y="62" width="272" height="26" rx="4"/><text class="val" x="280" y="80">17</text></g>
+          </g>
+        </svg>
+      </figure>
+    </div>
+    <div class="table-wrap"><table aria-label="차트 값 표"><tr><th>묶음</th><th>테이블</th></tr>
+      <tr><td>사용자·분류 5</td><td>users, categories, user_interests, organizations, notifications</td></tr>
+      <tr><td>활동 2</td><td>activities, activity_locations</td></tr>
+      <tr><td>참가 4</td><td>participations, check_ins, activity_records, activity_logs</td></tr>
+      <tr><td>안전·관리 6</td><td>reports, report_evidences, appeals, sanctions, admin_actions, risk_keywords</td></tr></table></div>
+  </section>
+
+  <section>
+    <h2>5. 키워드는 거르는 도구일 뿐</h2>
+    <p class="lead">키워드에 안 걸려도 안전하다는 뜻은 아닙니다. REVIEW는 관리자가 마지막에 봅니다.</p>
+    <div class="flow"><span>금지 규칙</span><i>→</i><span>위험 키워드</span><i>→</i><span>관리자 확인(REVIEW)</span></div>
+  </section>
+
+  <section>
+    <h2>6. 아직 안 된 것</h2>
+    <p class="lead">로그인·가입 저장·위험도 판정·신청은 미구현입니다. 장소 좌표와 허용 여부는 미확인입니다.</p>
+    <div class="flow"><span>3주 인증·개설·위험도</span><i>→</i><span>4주 위치 검색·첫 배포</span><i>→</i><span>5주 신청·대기열·알림</span><i>→</i><span>6주 체크인·완료</span><i>→</i><span>7주 신고·이의·제재·추천</span></div>
+    <p class="note">활동 기록은 공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않습니다.</p>
+  </section>
+</main>
+</body>
+</html>
