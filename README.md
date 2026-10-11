@@ -17,6 +17,7 @@ Volink는 지역 주민이 짧은 봉사활동을 직접 열고, 주변 이웃�
 ## 빠른 안내
 
 - **[2주차 명세 확정 · 한 장 요약](docs/design/week02.html)** — 회원·권한, 상태 흐름, 입력 규칙, 17개 테이블, 위험 키워드. main 반영 후 공개 주소 `/design/week02.html`.
+- **[2주차 백엔드 증빙](docs/design/week02-backend.html)** · [PDF 3장](docs/design/Volink_2주차_백엔드증빙.pdf) — 화면→서버→DB 연결 그림, 실제 서버 응답, DB가 규칙 위반을 거부하는 실제 오류, 테스트 14개. 2026-10-11 실제 실행 결과. 공개 주소 `/design/week02-backend.html`.
 - **[계획서 텍스트 변환본](docs/plan.md)** — 기능·규칙·일정의 기준 원본(연락처 제외). 주차 이어받기는 [RELAY 절차](docs/RELAY.md).
 - **[1주차 설계 정리 · 한 페이지](https://lov22eee.github.io/Volink/design/week01.html)** — 제출 보고서의 흐름·권한·UI·ERD/API·테스트 계획을 보여주는 자료입니다. [파일로 열기](docs/design/week01.html)도 가능합니다.
 - **[선택한 세 항목 PDF 다운로드](docs/design/Volink_1주차_설계요약.pdf)** — 회원 유형·권한, UI 구조, 시연 자료·기본 테스트 계획만 담은 A4 1장입니다.

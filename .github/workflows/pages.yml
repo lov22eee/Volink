@@ -44,6 +44,8 @@ jobs:
           mkdir -p pages-static/design
           cp docs/design/week01.html pages-static/design/week01.html
           cp docs/design/week02.html pages-static/design/week02.html
+          cp docs/design/week02-backend.html pages-static/design/week02-backend.html
+          cp docs/design/Volink_2주차_백엔드증빙.pdf pages-static/design/Volink_2주차_백엔드증빙.pdf
           cp docs/design/Volink_1주차_설계요약.pdf pages-static/design/Volink_1주차_설계요약.pdf
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

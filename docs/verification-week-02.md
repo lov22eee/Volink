@@ -21,3 +21,12 @@
 - 로그인·가입·개설·신청·체크인 등 업무 API 테스트: 기능이 없어 실행 대상 없음([test-cases.md](test-cases.md) 3주차 이후 목록).
 - GitHub Actions 원격 실행·Pages 배포: PR 단계라 main 반영 전입니다. 병합 후 Actions에서 확인합니다.
 - 장소 좌표·이용 조건 확인: 현장·관리기관 확인이 필요해 미실행.
+
+## 백엔드 증빙 자료 · 2026-10-11 추가
+
+`docs/design/week02-backend.html`과 PDF 3장의 값은 같은 날 개발 환경에서 직접 실행한 결과입니다.
+
+- `GET /api/demo/catalog` → 200, `GET /api/project/status` → 200(week 2, database UP), `POST /api/demo/catalog` → 401, `GET /api/users` → 401 (Vite 프록시 경유 curl).
+- MySQL에 규칙 위반 INSERT 3건 → `ck_user_birth_date`, `ck_user_admin_general`, `ck_risk_keyword_level` 위반 오류(3819). 정상 INSERT 1건은 트랜잭션 안에서 저장 확인 후 ROLLBACK해 개발 DB에 남기지 않았습니다(users 0건).
+- main 병합 후 GitHub Actions [검증 실행 #9](https://github.com/lov22eee/Volink/actions/runs/38121062589) 성공, [Pages 배포 #5](https://github.com/lov22eee/Volink/actions/runs/38121062607) 성공을 확인했습니다.
+- HTML 1280px·390px 가로 넘침 없음, 외부 요청 0건. PDF는 A4 가로 3쪽이며 렌더링 이미지로 잘림이 없는지 확인했습니다.
