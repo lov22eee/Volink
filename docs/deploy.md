@@ -32,6 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/lov22eee/Volink/<브랜치>/scripts
 - 새 코드 반영: `sudo bash /opt/volink/scripts/aws/server-setup.sh`
 - 따라갈 브랜치 바꾸기: `echo main | sudo tee /etc/volink/ref`
 - 시연 계정 비밀번호는 서버 화면에서만 확인: `sudo grep DEMO_ACCOUNT_PASSWORD /opt/volink/.env` (채팅·문서에 붙이지 않음)
+- 관리자 만들기: 사이트에서 일반회원으로 가입한 뒤 서버에서 `sudo bash /opt/volink/scripts/aws/make-admin.sh 이메일` → 다시 로그인. 공개 가입으로는 관리자를 만들 수 없는 규칙은 그대로이며, 서버 접속 권한이 있는 사람만 지정 가능
 - 안 쓸 때 비용 줄이기: 인스턴스 **중지**(고정 IP라 주소는 유지)
 
 ## 첫 배포 기록 (2026-10-13)
