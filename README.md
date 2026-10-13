@@ -344,6 +344,7 @@ git push origin main
 - **실행·테스트 결과:** `./scripts/backend.sh test` 25/25 통과 · `check-dev.sh` 통과 · `npm run ui:export` 통과 · Playwright 16/16 통과 (2026-10-13, [검증 기록](docs/verification-week-03.md)). 작업 중 **저장 시각이 9시간 밀리는 버그**(서버 시간대 UTC)를 화면 캡처에서 발견해 고치고 테스트를 추가했습니다.
 - **DB·환경·설치 변경:** V4(활동 장소·위험 이유·검토 메모, `refresh_tokens`). 백엔드 의존성 `spring-boot-starter-oauth2-resource-server`. `.env`에 `JWT_SECRET`, `DEMO_ACCOUNT_PASSWORD` 추가(`setup-env.sh`가 빠진 값만 추가). `/api/project/status` week=3.
 - **미완료·알려진 문제:** 장소 좌표 미입력(2주차 ☐ 유지). 공개 Pages에서는 가입·로그인 불가(서버 미배포). 일몰 시각은 월별 근사값. 위험 단어 ‘칼’ 등 짧은 단어 오탐 가능(REVIEW로 넘김). 관심 분야 수정 화면 없음. 운영 배포 시 `JWT_SECRET` 필수 설정·`AUTH_COOKIE_SECURE=true` 확인 필요.
+- **2026-10-13 배포 앞당김:** 3주차 발표 라이브 시연을 위해 4주차 '첫 배포'만 먼저 진행합니다. AWS 무료 플랜 지역 제한으로 시드니 리전을 씁니다. 방법과 상태는 [docs/deploy.md](docs/deploy.md)에 있으며 접속을 확인하기 전까지 4주차 ☐는 그대로 둡니다.
 - **다음 작업(4주차):** 장소 좌표 → POINT·공간 인덱스, 반경·날짜·분야 검색 API, Kakao 지도, EC2·Nginx·HTTPS 첫 배포, REVIEW 비공개·BLOCKED 차단 검색 테스트. 결정할 것: 월 예산 상한, 도메인 구매 여부, 장소 좌표.
 - **발표 화면·주차 보고서:** [발표 순서·대본](docs/presentation.md), [보고서](docs/reports/week-03.md), [테스트 담당 확인 목록](docs/manual-test-week03.md).
 
