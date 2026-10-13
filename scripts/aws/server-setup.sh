@@ -17,7 +17,7 @@ if ! swapon --show | grep -q /swapfile; then
   grep -q /swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 apt-get update -q
-apt-get install -yq git curl python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
+apt-get install -yq git curl unzip python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
 systemctl enable --now docker
 if [ "$(/opt/node/bin/node -v 2>/dev/null)" != "$NODE_VERSION" ]; then
   tmp=$(mktemp -d)
