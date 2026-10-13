@@ -11,6 +11,14 @@ APP=/opt/volink
 export DEBIAN_FRONTEND=noninteractive HOME=/root
 step() { echo "== $(date '+%F %T') $*"; }
 
+# Update the checkout first, then run the fresh copy (bash must not read a file that git is replacing).
+if [ -z "${VOLINK_FRESH:-}" ]; then
+  git -C "$APP" fetch -q origin "$REF"
+  git -C "$APP" checkout -q -B "$REF" "origin/$REF"
+  cp "$APP/scripts/aws/server-setup.sh" /tmp/volink-setup.sh
+  VOLINK_FRESH=1 exec bash /tmp/volink-setup.sh
+fi
+
 step "packages"
 if ! swapon --show | grep -q /swapfile; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
@@ -30,10 +38,8 @@ if [ "$(/opt/node/bin/node -v 2>/dev/null)" != "$NODE_VERSION" ]; then
 fi
 export PATH="/opt/node/bin:$PATH"
 
-step "source $REF"
+step "source $REF @ $(git -C "$APP" rev-parse --short HEAD)"
 cd "$APP"
-git fetch -q origin "$REF"
-git checkout -q -B "$REF" "origin/$REF"
 
 step "env + database"
 bash scripts/setup-env.sh
