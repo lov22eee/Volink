@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **3주차부터 구현할 명세이며 지금은 동작하지 않습니다.** 현재 동작하는 API는 [architecture.md](architecture.md#현재-api)의 3개뿐입니다.
+2026-10-11 확정. **2026-10-13 기준 3주차 행은 구현·테스트 완료**(백엔드 통합 테스트), 4주차 이후 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -29,6 +29,8 @@
 
 ## API 목록
 
+3주차 구현 메모: `role` 필드는 무시, 로그인 실패 5회/분/이메일 → 429, 리프레시 쿠키 `volink_refresh`(HttpOnly·SameSite=Strict·Path=/api/auth, 사용 시 교체), 관리자 승인 사유는 선택·반려 사유는 필수, 활동 장소는 4주차 전까지 `placeId`(시연 장소 후보 1~3).
+
 권한: 공개 / 회원 / 본인 / 모집자(자기 활동) / 확인된 기관회원 / 관리자.
 
 | 주차 | 요청 | 권한 | 내용 |
@@ -36,7 +38,9 @@
 | 3 | `POST /api/auth/signup` | 공개 | 일반·기관 가입. 만 14세 미만 422 `UNDER_AGE`, `role` 필드 무시(ADMIN 불가), 기관이면 organizations PENDING 생성 |
 | 3 | `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/logout` | 공개/회원 | 토큰 발급·갱신·폐기 |
 | 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 1~3개 |
-| 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
+| 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원, 관리자 불가) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
+| 3 | `GET /api/activities` | 공개 | **구현 추가:** 모집 중(RECRUITING)이고 시작 전인 활동, 시작 시각 순. 4주차에 반경·날짜·분야 조건 추가 |
+| 3 | `GET /api/me/activities` | 본인 | **구현 추가:** 내가 개설한 활동 전체(검토 이유·반려 사유 포함) |
 | 3 | `GET /api/activities/{id}` | 공개 (비공개는 모집자·관리자) | 상세 |
 | 3 | `GET /api/admin/organizations?status=PENDING` · `POST /api/admin/organizations/{id}/approve` · `.../reject` | 관리자 | 기관 확인, 반려 사유 필수 |
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |

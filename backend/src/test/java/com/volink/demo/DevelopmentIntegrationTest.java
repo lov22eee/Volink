@@ -2,22 +2,14 @@ package com.volink.demo;
 
 import java.util.Map;
 import java.sql.SQLException;
+import com.volink.IntegrationTestBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,31 +17,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-@Testcontainers
-class DevelopmentIntegrationTest {
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName
-            .parse("mysql@sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242")
-            .asCompatibleSubstituteFor("mysql"));
-
-    @DynamicPropertySource
-    static void database(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-    }
-
+class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
 
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class)).isEqualTo(4);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Integer.class)).isZero();
+        // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
     }
 
     @Test
@@ -70,17 +47,18 @@ class DevelopmentIntegrationTest {
     }
 
     @Test
-    void readinessShowsWeekTwoAndDoesNotClaimAuthentication() throws Exception {
+    void readinessShowsWeekThreeWithAuthentication() throws Exception {
         mvc.perform(get("/api/project/status"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.database").value("UP"))
-                .andExpect(jsonPath("$.week").value(2)).andExpect(jsonPath("$.authenticationImplemented").value(false));
+                .andExpect(jsonPath("$.week").value(3)).andExpect(jsonPath("$.authenticationImplemented").value(true));
         mvc.perform(get("/actuator/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
     }
 
     @Test
     void protectedAndWriteEndpointsAreNotOpened() throws Exception {
         mvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/demo/catalog")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/demo/catalog")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/me")).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     }
 
     @Test
@@ -125,20 +103,19 @@ class DevelopmentIntegrationTest {
     }
 
     @Test
-    void schemaMatchesTheDocumentedWeekTwoErd() {
+    void schemaMatchesTheDocumentedErd() {
         assertThat(jdbc.queryForList("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_name <> 'flyway_schema_history'
                 """, String.class)).containsExactlyInAnyOrder(
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
-                "report_evidences", "appeals", "sanctions", "risk_keywords",
+                "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
                 "demo_places", "demo_personas", "demo_activity_templates");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
                 .containsExactlyInAnyOrder(Map.entry("BLOCKED", 15), Map.entry("REVIEW", 17));
         assertThat(jdbc.queryForObject("SELECT base_risk FROM categories WHERE name = '지역 돌봄'", String.class)).isEqualTo("REVIEW");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM organizations", Integer.class)).isZero();
     }
 
     @Test

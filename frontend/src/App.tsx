@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import type { Activity, DisplayCatalog as Catalog } from './data'
+import type { DisplayCatalog as Catalog } from './data'
 import { activityRules, signupRules, validateActivity, validateSignup } from './rules'
 import type { Errors } from './rules'
+import { api, ApiError, login, logout, preview, refresh } from './api'
+import type { LiveActivity, User } from './api'
 
-type IconName = 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building'
+type IconName = 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield'
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -17,6 +19,7 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></>,
     users: <><circle cx="9" cy="8" r="3" /><path d="M3 20v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5" /></>,
     building: <><path d="M5 21V3h14v18M3 21h18M10 21v-4h4v4M9 7h1m4 0h1M9 11h1m4 0h1" /></>,
+    shield: <><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z" /><path d="m9 12 2 2 4-4" /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -34,16 +37,31 @@ function ParkArt({ variant = 0 }: { variant?: number }) {
   </svg>
 }
 
-type Page = 'explore' | 'detail' | 'create' | 'mine' | 'login' | 'signup'
+
+type Page = 'explore' | 'detail' | 'live' | 'create' | 'mine' | 'login' | 'signup' | 'admin'
 type Route = { page: Page; activityId?: number }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
+const categories = ['환경 정화', '생활 지원', '지역 돌봄']
 
 function getRoute(): Route {
   const path = window.location.hash.replace(/^#\/?/, '')
-  const detail = /^activities\/(\d+)$/.exec(path)
-  if (detail) return { page: 'detail', activityId: Number(detail[1]) }
-  return { page: ['create', 'mine', 'login', 'signup'].includes(path) ? path as Page : 'explore' }
+  const example = /^activities\/(\d+)$/.exec(path)
+  if (example) return { page: 'detail', activityId: Number(example[1]) }
+  const live = /^activity\/(\d+)$/.exec(path)
+  if (live) return { page: 'live', activityId: Number(live[1]) }
+  return { page: ['create', 'mine', 'login', 'signup', 'admin'].includes(path) ? path as Page : 'explore' }
+}
+
+// One card shape for example templates and real (saved) activities.
+type CardItem = {
+  key: string; kind: 'example' | 'live'; id: number; title: string; category: string; activityType: string
+  placeId: number | null; placeName: string; date: string; startTime: string; durationMinutes: number
+  confirmed: number; capacity: number; href: string; organizationName?: string | null
+}
+
+function fromLive(activity: LiveActivity): CardItem {
+  return { ...activity, key: 'live-' + activity.id, kind: 'live', placeName: activity.placeName ?? '장소 미정', href: '#/activity/' + activity.id }
 }
 
 export default function App() {
@@ -51,11 +69,19 @@ export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(embeddedCatalog ?? null)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
+  const [user, setUser] = useState<User | null>(null)
+  const [ready, setReady] = useState(preview)
 
   useEffect(() => {
     const navigate = () => { setRoute(getRoute()); window.scrollTo(0, 0) }
     window.addEventListener('hashchange', navigate)
     return () => window.removeEventListener('hashchange', navigate)
+  }, [])
+
+  // Restore the login after a reload through the HttpOnly refresh cookie.
+  useEffect(() => {
+    if (preview) return
+    refresh().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
   }, [])
 
   useEffect(() => {
@@ -74,20 +100,27 @@ export default function App() {
     return () => controller.abort()
   }, [reload])
 
+  async function signOut() {
+    await logout()
+    setUser(null)
+    window.location.hash = '#/explore'
+  }
+
   const navigation: { id: Page; title: string; icon: IconName }[] = [
     { id: 'explore', title: '활동 찾기', icon: 'compass' },
     { id: 'create', title: '활동 만들기', icon: 'plus' },
     { id: 'mine', title: '내 활동', icon: 'users' },
+    ...(user?.role === 'ADMIN' ? [{ id: 'admin' as Page, title: '관리', icon: 'shield' as IconName }] : []),
   ]
-  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입' }
-  const activity = catalog?.activities.find(item => item.id === route.activityId)
+  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리' }
+  const example = catalog?.activities.find(item => item.id === route.activityId)
 
   return <div className="app-shell">
     <aside className="sidebar">
       <a href="#/explore" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={25} /></span>volink<span className="brand-dot">.</span></a>
       <p className="brand-caption">우리 동네의 작은 변화</p>
       <nav aria-label="주요 메뉴">{navigation.map(item => {
-        const active = route.page === item.id || (route.page === 'detail' && item.id === 'explore')
+        const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore')
         return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}{active && <span className="nav-dot" />}</a>
       })}</nav>
       <div className="sidebar-bottom"><Icon name="leaf" size={23} /><p>작은 실천이 모여<br />우리 동네를 바꿉니다.</p></div>
@@ -95,23 +128,35 @@ export default function App() {
     <div className="main-shell">
       <header className="topbar">
         <div className="breadcrumb">Volink <span>/</span> {titles[route.page]}</div>
-        <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" aria-current={route.page === 'login' ? 'page' : undefined}>로그인</a><a href="#/signup" className="secondary-button" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>
+        {user
+          ? <nav className="account-links" aria-label="계정 메뉴"><span className="user-name">{user.name}님</span><button className="secondary-button" onClick={signOut}>로그아웃</button></nav>
+          : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" aria-current={route.page === 'login' ? 'page' : undefined}>로그인</a><a href="#/signup" className="secondary-button" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>}
       </header>
       <main id="main-content">
         {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
         {route.page === 'explore' && <Explore catalog={catalog} />}
-        {route.page === 'detail' && (activity && catalog ? <ActivityDetail activity={activity} catalog={catalog} /> : <section className="empty-state"><h1>활동을 찾을 수 없습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>)}
-        {route.page === 'create' && <CreateActivity catalog={catalog} />}
-        {route.page === 'mine' && <MyActivities />}
-        {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} />}
+        {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
+        {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} />}
+        {route.page === 'create' && <CreateActivity catalog={catalog} user={user} ready={ready} />}
+        {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
+        {route.page === 'admin' && <AdminPage user={user} ready={ready} />}
+        {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
       </main>
-      <footer className="footer"><span>© Volink</span><p>화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></footer>
+      <footer className="footer"><span>© Volink</span><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 참가 신청은 준비 중입니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></footer>
     </div>
   </div>
 }
 
+function NotFound() {
+  return <section className="empty-state"><h1>활동을 찾을 수 없습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
+}
+
 function PageHeading({ title, description }: { title: string; description: string }) {
   return <div className="page-heading"><h1>{title}</h1><p>{description}</p></div>
+}
+
+function fromExample(activity: Catalog['activities'][number], baseDate: string): CardItem {
+  return { ...activity, key: 'example-' + activity.id, kind: 'example', date: baseDate, href: '#/activities/' + activity.id }
 }
 
 function Explore({ catalog }: { catalog: Catalog | null }) {
@@ -121,13 +166,21 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
   const [kind, setKind] = useState('all')
   const [view, setView] = useState('list')
   const [placeId, setPlaceId] = useState<number | null>(null)
-  const activities = catalog?.activities.filter(activity =>
+  const [live, setLive] = useState<LiveActivity[]>([])
+
+  useEffect(() => {
+    if (preview) return
+    api<LiveActivity[]>('/api/activities').then(setLive).catch(() => setLive([]))
+  }, [])
+
+  const items = catalog ? [...live.map(fromLive), ...catalog.activities.map(activity => fromExample(activity, catalog.baseDate))] : []
+  const activities = items.filter(activity =>
     (category === '전체' || activity.category === category) &&
     (activity.title + ' ' + activity.placeName).includes(query.trim()) &&
-    (!date || date === catalog.baseDate) &&
+    (!date || date === activity.date) &&
     (kind === 'all' || activity.activityType === kind) &&
     (view !== 'map' || placeId === null || activity.placeId === placeId),
-  ) ?? []
+  )
 
   return <>
     <section className="hero">
@@ -136,7 +189,7 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
     </section>
     <section id="activities" className="activity-section">
       <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div><span className="location-tag"><Icon name="pin" size={16} />양주</span></div>
-      <div className="filter-row"><div className="category-tabs" aria-label="활동 분야">{['전체', '환경 정화', '생활 지원', '지역 돌봄'].map(value => <button className={category === value ? 'selected' : ''} key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div><label className="search-box"><Icon name="compass" size={17} /><input aria-label="활동 또는 장소 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="활동이나 장소를 찾아보세요" /></label></div>
+      <div className="filter-row"><div className="category-tabs" aria-label="활동 분야">{['전체', ...categories].map(value => <button className={category === value ? 'selected' : ''} key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div><label className="search-box"><Icon name="compass" size={17} /><input aria-label="활동 또는 장소 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="활동이나 장소를 찾아보세요" /></label></div>
       <div className="secondary-filters">
         <label>날짜<input aria-label="활동 날짜로 검색" type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
         <label>활동 유형<select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
@@ -148,7 +201,7 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
           <div className="map-canvas" aria-hidden="true">{catalog?.places.map((place, index) => <span key={place.id} className={'map-pin' + (placeId === place.id ? ' selected' : '')} style={{ left: [28, 62, 44][index % 3] + '%', top: [34, 52, 72][index % 3] + '%' }}>{index + 1}</span>)}</div>
           <div className="map-places" role="group" aria-label="장소별로 보기"><button aria-pressed={placeId === null} onClick={() => setPlaceId(null)}>모든 장소</button>{catalog?.places.map((place, index) => <button key={place.id} aria-pressed={placeId === place.id} onClick={() => setPlaceId(place.id)}><span className="map-number">{index + 1}</span>{place.name}</button>)}</div>
           <p>지도는 준비 중입니다. 번호는 위치를 나타내지 않으며, 장소를 고르면 목록이 바뀝니다.</p></aside>}
-        {!catalog ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div> : activities.length ? <div className="activity-grid">{activities.map(activity => <ActivityCard key={activity.id} activity={activity} baseDate={catalog.baseDate} />)}</div> : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}
+        {!catalog ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div> : activities.length ? <div className="activity-grid">{activities.map(activity => <ActivityCard key={activity.key} item={activity} />)}</div> : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}
       </div>
     </section>
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
@@ -159,7 +212,7 @@ function dateLabel(value: string) {
   return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(value + 'T12:00:00+09:00'))
 }
 
-function typeLabel(activity: Activity) {
+function typeLabel(activity: { activityType: string }) {
   return activity.activityType === 'INSTITUTION' ? '기관 주관 활동' : '자율 활동'
 }
 
@@ -177,53 +230,124 @@ function focusFirstError(form: HTMLFormElement, errors: Errors) {
   if (first) (form.querySelector(`[name="${first}"]`) as HTMLElement | null)?.focus()
 }
 
-function ActivityCard({ activity, baseDate }: { activity: Activity; baseDate: string }) {
-  return <article className="activity-card">
-    <div className="card-art"><ParkArt variant={activity.id - 1} /><span className="card-label">예시 활동</span><span className="duration-tag"><Icon name="clock" size={13} />{activity.durationMinutes}분</span></div>
-    <div className="card-body"><span className="category-label">{activity.category} · {typeLabel(activity)}</span><h3>{activity.title}</h3><p className="card-location"><Icon name="pin" size={15} />{activity.placeName}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(baseDate)} · {activity.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{activity.confirmed}</strong><span>/ {activity.capacity}명</span></div><a className="card-detail" href={'#/activities/' + activity.id} aria-label={activity.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
+function ActivityCard({ item }: { item: CardItem }) {
+  return <article className="activity-card" data-kind={item.kind}>
+    <div className="card-art"><ParkArt variant={item.id - 1} /><span className={'card-label' + (item.kind === 'live' ? ' live' : '')}>{item.kind === 'live' ? '모집 중' : '예시 활동'}</span><span className="duration-tag"><Icon name="clock" size={13} />{item.durationMinutes}분</span></div>
+    <div className="card-body"><span className="category-label">{item.category} · {typeLabel(item)}</span><h3>{item.title}</h3><p className="card-location"><Icon name="pin" size={15} />{item.placeName}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(item.date)} · {item.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{item.confirmed}</strong><span>/ {item.capacity}명</span></div><a className="card-detail" href={item.href} aria-label={item.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
   </article>
 }
 
-function ActivityDetail({ activity, catalog }: { activity: Activity; catalog: Catalog }) {
+function DetailView({ item, description, badge, note, children }: { item: CardItem; description: string; badge: string; note: string; children?: ReactNode }) {
   return <>
     <a href="#/explore" className="back-link">← 활동 목록으로</a>
     <div className="detail-layout">
-      <article className="panel detail-content"><div className="detail-art"><ParkArt variant={activity.id - 1} /></div><div className="detail-tags"><span className="outline-badge">예시 활동</span><span>{activity.category} · {typeLabel(activity)}</span></div><h1>{activity.title}</h1><p>{activity.description}</p><h2>함께할 활동</h2><p>짧게 걷고 주변의 가벼운 쓰레기를 정리합니다. 편한 신발과 물을 준비해 주세요. 위험한 물건은 직접 처리하지 않습니다.</p><h2>참여 순서</h2><ol className="participation-steps"><li>참가 신청</li><li>승인 또는 대기</li><li>현장 출석</li><li>활동 완료</li></ol><p className="small-print">예시 활동은 참가 신청을 받지 않습니다.</p></article>
-      <aside className="panel detail-booking"><h2>활동 정보</h2><dl><div><dt><Icon name="pin" size={17} />장소</dt><dd>{activity.placeName}</dd></div><div><dt><Icon name="clock" size={17} />일시</dt><dd>{dateLabel(catalog.baseDate)} · {activity.startTime}</dd></div><div><dt><Icon name="clock" size={17} />활동 시간</dt><dd>{activity.durationMinutes}분</dd></div><div><dt><Icon name="users" size={17} />참여 인원</dt><dd>{activity.confirmed} / {activity.capacity}명</dd></div></dl><button disabled className="primary-button">참가 신청 · 준비 중</button><p className="small-print">장소와 일정은 예시입니다. 실제 모집 중인 활동이 아닙니다.</p></aside>
+      <article className="panel detail-content"><div className="detail-art"><ParkArt variant={item.id - 1} /></div><div className="detail-tags"><span className="outline-badge">{badge}</span><span>{item.category} · {typeLabel(item)}{item.organizationName ? ' · ' + item.organizationName : ''}</span></div><h1>{item.title}</h1>{children}<p className="detail-description">{description}</p><h2>참여 순서</h2><ol className="participation-steps"><li>참가 신청</li><li>승인 또는 대기</li><li>현장 출석</li><li>활동 완료</li></ol><p className="small-print">{note}</p></article>
+      <aside className="panel detail-booking"><h2>활동 정보</h2><dl><div><dt><Icon name="pin" size={17} />장소</dt><dd>{item.placeName}</dd></div><div><dt><Icon name="clock" size={17} />일시</dt><dd>{dateLabel(item.date)} · {item.startTime}</dd></div><div><dt><Icon name="clock" size={17} />활동 시간</dt><dd>{item.durationMinutes}분</dd></div><div><dt><Icon name="users" size={17} />참여 인원</dt><dd>{item.confirmed} / {item.capacity}명</dd></div></dl><button disabled className="primary-button">참가 신청 · 준비 중</button><p className="small-print">위험한 물건은 직접 처리하지 않습니다. 사고가 나면 먼저 119에 신고해 주세요.</p></aside>
     </div>
   </>
 }
 
-function CreateActivity({ catalog }: { catalog: Catalog | null }) {
+function ExampleDetail({ activity, description }: { activity: CardItem; description: string }) {
+  return <DetailView item={activity} description={description} badge="예시 활동" note="예시 활동은 참가 신청을 받지 않습니다. 장소와 일정은 예시입니다." />
+}
+
+function LiveDetail({ id, ready }: { id: number; ready: boolean }) {
+  const [activity, setActivity] = useState<LiveActivity | null>(null)
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
+    if (!ready) return
+    api<LiveActivity>('/api/activities/' + id).then(setActivity).catch(() => setMissing(true))
+  }, [id, ready])
+  if (missing || preview) return <NotFound />
+  if (!activity) return <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
+  const hidden = activity.status !== 'RECRUITING'
+  return <DetailView item={fromLive(activity)} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'}
+    note={'개설: ' + activity.organizerName + ' · 참가 신청은 준비 중입니다.'}>
+    {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
+  </DetailView>
+}
+
+function statusLabel(status: string) {
+  return ({ RECRUITING: '공개됨', DRAFT: '관리자 검토 중', CANCELLED: '반려됨', IN_PROGRESS: '진행 중', FINISHED: '종료', HELD: '보류' } as Record<string, string>)[status] ?? status
+}
+
+function LoginRequired({ ready, text }: { ready: boolean; text: string }) {
+  if (!ready) return <div className="empty-state">로그인 상태를 확인하는 중입니다.</div>
+  return <section className="panel account-empty"><div className="empty-icon"><Icon name="users" size={31} /></div><h2>로그인이 필요합니다</h2><p>{text}</p><div className="button-row"><a href="#/login" className="primary-button">로그인 <Icon name="arrow" size={17} /></a><a href="#/signup" className="secondary-button">회원가입</a></div></section>
+}
+
+type CreateResult = { kind: 'published' | 'review'; activity: LiveActivity }
+
+function CreateActivity({ catalog, user, ready }: { catalog: Catalog | null; user: User | null; ready: boolean }) {
   const [kind, setKind] = useState<MemberType>('general')
   const [message, setMessage] = useState('')
   const [errors, setErrors] = useState<Errors>({})
+  const [blocked, setBlocked] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<CreateResult | null>(null)
   const r = activityRules
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const organization = user?.organization
+  const canHost = organization?.status === 'APPROVED'
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const found = validateActivity(new FormData(event.currentTarget))
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const found = validateActivity(data)
     setErrors(found)
-    if (Object.keys(found).length) { setMessage(''); focusFirstError(event.currentTarget, found); return }
-    setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.')
+    setBlocked('')
+    if (Object.keys(found).length) { setMessage(''); focusFirstError(form, found); return }
+    if (preview || !user) { setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.'); return }
+    setBusy(true)
+    try {
+      const activity = await api<LiveActivity>('/api/activities', 'POST', {
+        activityType: kind === 'institution' ? 'INSTITUTION' : 'GENERAL', title: data.get('title'), category: data.get('category'),
+        placeId: Number(data.get('place')), date: data.get('date'), time: data.get('time'), capacity: Number(data.get('capacity')),
+        durationMinutes: Number(data.get('duration')), description: data.get('description'), safetyConfirmed: data.getAll('safety').length === 2,
+      })
+      setResult({ kind: activity.status === 'RECRUITING' ? 'published' : 'review', activity })
+      window.scrollTo(0, 0)
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'ACTIVITY_BLOCKED') setBlocked(cause.fieldErrors.risk ?? cause.message)
+      else if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
+      else setMessage(cause instanceof Error ? cause.message : '등록하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
   }
+
+  if (!preview && !user) return <><PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." /><LoginRequired ready={ready} text="활동을 만들려면 먼저 로그인해 주세요." /></>
+  if (result) return <>
+    <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
+    <section className="panel result-panel" role="status">
+      <span className={'risk-badge ' + (result.kind === 'published' ? 'low' : 'review')}>{result.kind === 'published' ? '바로 공개' : '관리자 검토'}</span>
+      <h2>{result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
+      <p>{result.kind === 'published' ? '활동 찾기 목록에서 이웃들이 볼 수 있습니다.' : '확인이 필요한 내용이 있어 관리자가 확인한 뒤 공개합니다. 그 전에는 나와 관리자만 볼 수 있습니다.'}</p>
+      {result.activity.riskReasons && <p className="small-print">검토 이유: {result.activity.riskReasons}</p>}
+      <div className="button-row"><a className="primary-button" href={'#/activity/' + result.activity.id}>만든 활동 보기 <Icon name="arrow" size={17} /></a><button className="secondary-button" onClick={() => { setResult(null); setMessage('') }}>다른 활동 만들기</button></div>
+    </section>
+  </>
+
   const count = Object.keys(errors).length
   return <>
     <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
     <div className="two-column">
-      <form className="panel activity-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
+      <form className="panel activity-form" noValidate onSubmit={submit} onChange={() => { setMessage(''); setBlocked('') }}>
         <h2>활동 정보</h2>
         <fieldset className="type-picker"><legend>활동 유형</legend><label><input type="radio" name="kind" checked={kind === 'general'} onChange={() => setKind('general')} />자율 활동</label><label><input type="radio" name="kind" checked={kind === 'institution'} onChange={() => setKind('institution')} />기관 주관 활동</label></fieldset>
-        {kind === 'institution' && <p className="inline-notice">기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다. 현재는 기관 확인과 활동 등록을 제공하지 않습니다.</p>}
+        {kind === 'institution' && !canHost && <p className="inline-notice">{organization?.status === 'PENDING' ? '기관 확인을 기다리고 있습니다. 관리자 확인이 끝나면 기관 주관 활동을 열 수 있습니다.' : organization?.status === 'REJECTED' ? '기관 확인이 반려되었습니다. 사유: ' + (organization.rejectReason ?? '') : '기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다.'}</p>}
+        {kind === 'institution' && canHost && <p className="inline-notice">{organization?.name} 이름으로 활동을 엽니다.</p>}
         <label>활동 이름 <span className="field-hint">{r.titleMin}–{r.titleMax}자</span><input name="title" maxLength={r.titleMax} placeholder="예: 공원에서 함께하는 가벼운 플로깅" {...invalid('title', errors)} /><FieldError name="title" errors={errors} /></label>
-        <div className="form-row"><label>분야<select name="category"><option>환경 정화</option><option>생활 지원</option><option>지역 돌봄</option></select></label><label>장소<select aria-label="장소" name="place" defaultValue="" {...invalid('place', errors)}><option value="" disabled>장소를 선택해 주세요</option>{catalog?.places.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select><FieldError name="place" errors={errors} /></label></div>
+        <div className="form-row"><label>분야<select name="category">{categories.map(value => <option key={value}>{value}</option>)}</select></label><label>장소<select aria-label="장소" name="place" defaultValue="" {...invalid('place', errors)}><option value="" disabled>장소를 선택해 주세요</option>{catalog?.places.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select><FieldError name="place" errors={errors} /></label></div>
         <div className="form-row"><label>활동 날짜 <span className="field-hint">내일 이후 · {r.maxDaysAhead}일 이내</span><input type="date" name="date" {...invalid('date', errors)} /><FieldError name="date" errors={errors} /></label><label>시작 시간 <span className="field-hint">{r.earliestStart} 이후 · {r.latestEnd} 전 종료</span><input type="time" name="time" {...invalid('time', errors)} /><FieldError name="time" errors={errors} /></label></div>
         <div className="form-row"><label>모집 정원 <span className="field-hint">{r.capacityMin}–{r.capacityMax}명</span><input type="number" name="capacity" min={r.capacityMin} max={r.capacityMax} defaultValue={6} {...invalid('capacity', errors)} /><FieldError name="capacity" errors={errors} /></label><label>활동 시간 <span className="field-hint">{r.durationMin}–{r.durationMax}분</span><input type="number" name="duration" min={r.durationMin} max={r.durationMax} defaultValue={90} {...invalid('duration', errors)} /><FieldError name="duration" errors={errors} /></label></div>
         <label>활동 소개 <span className="field-hint">{r.descriptionMin}–{r.descriptionMax}자</span><textarea name="description" maxLength={r.descriptionMax} rows={4} placeholder="함께할 일과 준비물을 알려주세요." {...invalid('description', errors)} /><FieldError name="description" errors={errors} /></label>
         <fieldset className="safety-checks" {...invalid('safety', errors)}><legend>안전 안내 확인</legend><label><input type="checkbox" name="safety" value="daytime" />공공장소의 주간 저위험 활동으로 기획합니다.</label><label><input type="checkbox" name="safety" value="notice" />공식 봉사실적과 종합보험이 적용되지 않음을 이해합니다.</label><FieldError name="safety" errors={errors} /></fieldset>
         {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
-        <button className="primary-button" type="submit" disabled={kind === 'institution'}>입력 내용 확인 <Icon name="arrow" size={17} /></button>
+        {blocked && <div className="form-alert blocked" role="alert"><strong>등록할 수 없는 활동입니다.</strong><span>{blocked}</span><span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금 등은 열 수 없습니다.</span></div>}
+        <button className="primary-button" type="submit" disabled={busy || (kind === 'institution' && !canHost)}>{preview ? '입력 내용 확인' : '활동 등록'} <Icon name="arrow" size={17} /></button>
         {message && <p role="status" className="success-message">{message}</p>}
-        <p className="small-print">현재는 입력 항목을 확인할 수 있으며 실제 활동 등록은 준비 중입니다.</p>
+        <p className="small-print">{preview ? '현재는 입력 항목을 확인할 수 있으며 실제 활동 등록은 준비 중입니다.' : '등록하면 위험한 활동인지 자동으로 확인합니다. 확인이 필요한 활동은 관리자 검토 후 공개됩니다.'}</p>
       </form>
       <aside className="form-aside"><div className="panel"><h2>함께하기 좋은<br />작은 활동의 기준</h2><ul className="feature-list"><li><Icon name="users" />2–10명의 작은 모임</li><li><Icon name="clock" />3시간 이내의 짧은 활동</li><li><Icon name="pin" />확인 가능한 공공장소</li><li><Icon name="leaf" />주간·저위험 활동 우선</li></ul></div><div className="help-card"><h3>안전하게 함께해요</h3><p>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없습니다. 어린이·어르신 대상, 동물·시설 내부 활동, 해가 진 뒤 끝나는 활동은 확인 후 공개됩니다.</p></div></aside>
     </div>
@@ -238,36 +362,142 @@ const applicationStates = [
   ['거절됨', '이번 활동에는 함께하지 못해요'],
 ]
 
-function MyActivities() {
+function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   const [tab, setTab] = useState('신청한 활동')
-  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '개설한 활동': '내가 만든 활동과 참가자 현황을 확인하는 공간입니다.', '활동 기록': '출석과 완료가 확인된 활동을 모아 보는 공간입니다. 완료 기록은 7일 안에 이의를 신청할 수 있습니다.' }
+  const [mine, setMine] = useState<LiveActivity[] | null>(null)
+  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '개설한 활동': '내가 만든 활동과 공개 상태를 확인하는 공간입니다.', '활동 기록': '출석과 완료가 확인된 활동을 모아 보는 공간입니다. 완료 기록은 7일 안에 이의를 신청할 수 있습니다.' }
+  useEffect(() => {
+    if (user) api<LiveActivity[]>('/api/me/activities').then(setMine).catch(() => setMine([]))
+  }, [user])
+  const tabs = <div className="activity-tabs" role="tablist" aria-label="내 활동 구분">{Object.keys(descriptions).map(value => <button key={value} role="tab" id={'tab-' + value} aria-controls="my-activity-panel" aria-selected={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div>
+  const states = tab === '신청한 활동' && <section className="panel"><h2>신청 상태 안내</h2><ul className="state-list" aria-label="신청 상태 안내">{applicationStates.map(([name, text]) => <li key={name}><strong>{name}</strong><span>{text}</span></li>)}</ul></section>
+
+  if (preview || !user) return <>
+    <PageHeading title="내 활동" description="신청부터 참여, 내가 만든 활동까지 한곳에서." />
+    {tabs}
+    <section className="panel account-empty" id="my-activity-panel" role="tabpanel" aria-labelledby={'tab-' + tab}><div className="empty-icon"><Icon name="users" size={31} /></div><h2>내 활동을 한곳에서 확인해요</h2><p>{descriptions[tab]}</p><a href="#/login" className="primary-button">로그인 화면으로 <Icon name="arrow" size={17} /></a><p className="small-print">{preview ? '로그인과 개인 활동 내역은 준비 중입니다.' : ready ? '로그인하면 내 활동을 볼 수 있습니다.' : '로그인 상태를 확인하는 중입니다.'}</p></section>
+    {states}
+  </>
+
+  const organization = user.organization
   return <>
     <PageHeading title="내 활동" description="신청부터 참여, 내가 만든 활동까지 한곳에서." />
-    <div className="activity-tabs" role="tablist" aria-label="내 활동 구분">{Object.keys(descriptions).map(value => <button key={value} role="tab" id={'tab-' + value} aria-controls="my-activity-panel" aria-selected={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div>
-    <section className="panel account-empty" id="my-activity-panel" role="tabpanel" aria-labelledby={'tab-' + tab}><div className="empty-icon"><Icon name="users" size={31} /></div><h2>내 활동을 한곳에서 확인해요</h2><p>{descriptions[tab]}</p><a href="#/login" className="primary-button">로그인 화면으로 <Icon name="arrow" size={17} /></a><p className="small-print">로그인과 개인 활동 내역은 준비 중입니다.</p></section>
-    {tab === '신청한 활동' && <section className="panel"><h2>신청 상태 안내</h2><ul className="state-list" aria-label="신청 상태 안내">{applicationStates.map(([name, text]) => <li key={name}><strong>{name}</strong><span>{text}</span></li>)}</ul></section>}
+    <section className="panel member-card" aria-label="내 정보">
+      <div><strong>{user.name}</strong><span>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? '기관회원' : '일반회원'} · {user.email}</span></div>
+      {user.interests.length > 0 && <div className="tags">{user.interests.map(value => <span key={value}>{value}</span>)}</div>}
+      {organization && <p className={'org-status ' + organization.status.toLowerCase()}>{organization.name} · {organization.status === 'APPROVED' ? '기관 확인 완료' : organization.status === 'PENDING' ? '기관 확인 대기 중' : '기관 확인 반려' + (organization.rejectReason ? ' · ' + organization.rejectReason : '')}</p>}
+    </section>
+    {tabs}
+    <section className="panel" id="my-activity-panel" role="tabpanel" aria-labelledby={'tab-' + tab}>
+      {tab === '개설한 활동'
+        ? mine === null ? <p>불러오는 중입니다.</p> : mine.length === 0 ? <div className="account-empty"><h2>아직 만든 활동이 없어요</h2><a href="#/create" className="primary-button">활동 만들기 <Icon name="arrow" size={17} /></a></div>
+          : <ul className="my-list">{mine.map(activity => <li key={activity.id}>
+            <span className={'risk-badge ' + (activity.status === 'RECRUITING' ? 'low' : activity.status === 'DRAFT' ? 'review' : 'blocked')}>{statusLabel(activity.status)}</span>
+            <a href={'#/activity/' + activity.id}><strong>{activity.title}</strong></a>
+            <span>{dateLabel(activity.date)} · {activity.startTime} · {activity.placeName ?? '장소 미정'}</span>
+            {activity.status === 'DRAFT' && activity.riskReasons && <small>검토 이유: {activity.riskReasons}</small>}
+            {activity.status === 'CANCELLED' && activity.reviewNote && <small>반려 사유: {activity.reviewNote}</small>}
+          </li>)}</ul>
+        : <div className="account-empty"><h2>{tab === '신청한 활동' ? '신청 기능은 준비 중입니다' : '활동 기록은 준비 중입니다'}</h2><p>{descriptions[tab]}</p></div>}
+    </section>
+    {states}
   </>
 }
 
-const interestOptions = ['환경 정화', '생활 지원', '지역 돌봄']
+type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string }
 
-function AccountForm({ signup }: { signup: boolean }) {
+function AdminPage({ user, ready }: { user: User | null; ready: boolean }) {
+  const [organizations, setOrganizations] = useState<PendingOrganization[]>([])
+  const [activities, setActivities] = useState<LiveActivity[]>([])
+  const [notice, setNotice] = useState('')
+  const load = useCallback(() => {
+    api<PendingOrganization[]>('/api/admin/organizations').then(setOrganizations).catch(() => setOrganizations([]))
+    api<LiveActivity[]>('/api/admin/activities').then(setActivities).catch(() => setActivities([]))
+  }, [])
+  useEffect(() => { if (user?.role === 'ADMIN') load() }, [user, load])
+
+  if (!user) return <><PageHeading title="관리" description="기관 확인과 검토가 필요한 활동을 처리합니다." /><LoginRequired ready={ready} text="관리자 계정으로 로그인해 주세요." /></>
+  if (user.role !== 'ADMIN') return <section className="empty-state"><h1>관리자만 볼 수 있습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
+
+  async function decide(path: string, approve: boolean, reason: string) {
+    try {
+      await api(path + (approve ? '/approve' : '/reject'), 'POST', { reason })
+      setNotice(approve ? '승인했습니다.' : '반려했습니다.')
+      load()
+    } catch (cause) {
+      setNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '처리하지 못했습니다.')
+    }
+  }
+
+  return <>
+    <PageHeading title="관리" description="기관 확인과 검토가 필요한 활동을 처리합니다. 반려할 때는 사유를 꼭 적어 주세요." />
+    {notice && <p className="inline-notice" role="status">{notice}</p>}
+    <section className="panel" aria-label="기관 확인 대기">
+      <h2>기관 확인 대기 <span className="count">{organizations.length}</span></h2>
+      {organizations.length === 0 ? <p className="small-print">확인을 기다리는 기관이 없습니다.</p>
+        : <ul className="review-list">{organizations.map(item => <ReviewItem key={item.id} title={item.name} detail={`담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt}`}
+          onDecide={(approve, reason) => decide('/api/admin/organizations/' + item.id, approve, reason)} />)}</ul>}
+    </section>
+    <section className="panel" aria-label="검토 대기 활동">
+      <h2>검토 대기 활동 <span className="count">{activities.length}</span></h2>
+      {activities.length === 0 ? <p className="small-print">검토를 기다리는 활동이 없습니다.</p>
+        : <ul className="review-list">{activities.map(item => <ReviewItem key={item.id} title={item.title} href={'#/activity/' + item.id}
+          detail={`${item.organizerName} · ${dateLabel(item.date)} ${item.startTime} · ${item.placeName ?? '장소 미정'}`} reasons={item.riskReasons ?? ''}
+          onDecide={(approve, reason) => decide('/api/admin/activities/' + item.id, approve, reason)} />)}</ul>}
+    </section>
+  </>
+}
+
+function ReviewItem({ title, detail, reasons, href, onDecide }: { title: string; detail: string; reasons?: string; href?: string; onDecide: (approve: boolean, reason: string) => void }) {
+  const [reason, setReason] = useState('')
+  return <li>
+    <div>{href ? <a href={href}><strong>{title}</strong></a> : <strong>{title}</strong>}<span>{detail}</span>{reasons && <small>검토 이유: {reasons}</small>}</div>
+    <label className="reason-field">처리 사유<input aria-label={title + ' 처리 사유'} value={reason} maxLength={500} onChange={event => setReason(event.target.value)} placeholder="반려 시 필수" /></label>
+    <div className="button-row"><button className="primary-button" onClick={() => onDecide(true, reason)}>승인</button><button className="secondary-button" onClick={() => onDecide(false, reason)}>반려</button></div>
+  </li>
+}
+
+function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user: User) => void }) {
   const [memberType, setMemberType] = useState<MemberType>('general')
   const [message, setMessage] = useState('')
   const [errors, setErrors] = useState<Errors>({})
-  function submit(event: FormEvent<HTMLFormElement>) {
+  const [busy, setBusy] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const data = new FormData(event.currentTarget)
+    const form = event.currentTarget
+    const data = new FormData(form)
     const found: Errors = signup ? validateSignup(data, memberType === 'institution') : {}
     if (!signup) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.get('email') ?? '').trim())) found.email = '이메일 형식을 확인해 주세요.'
       if (!String(data.get('password') ?? '')) found.password = '비밀번호를 입력해 주세요.'
     }
     setErrors(found)
-    if (Object.keys(found).length) { setMessage(''); focusFirstError(event.currentTarget, found); return }
-    setMessage(signup ? '회원가입은 아직 제공하지 않습니다. 입력한 정보는 전송하거나 저장하지 않았습니다.' : '로그인은 아직 제공하지 않습니다. 입력한 정보는 전송하거나 저장하지 않았습니다.')
+    if (Object.keys(found).length) { setMessage(''); focusFirstError(form, found); return }
+    if (preview) {
+      setMessage(signup ? '회원가입은 아직 제공하지 않습니다. 입력한 정보는 전송하거나 저장하지 않았습니다.' : '로그인은 아직 제공하지 않습니다. 입력한 정보는 전송하거나 저장하지 않았습니다.')
+      return
+    }
+    setBusy(true)
+    const email = String(data.get('email')).trim()
+    const password = String(data.get('password'))
+    try {
+      if (signup) await api('/api/auth/signup', 'POST', {
+        memberType: memberType === 'institution' ? 'INSTITUTION' : 'GENERAL', name: data.get('name'), email, password,
+        birthDate: data.get('birthDate'), interests: data.getAll('interests'), organizationName: data.get('organization'),
+        organizationContact: data.get('organizationContact'), agreedNotice: Boolean(data.get('notice')),
+      })
+      onSession(await login(email, password))
+      window.location.hash = '#/mine'
+    } catch (cause) {
+      if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
+      else setMessage(cause instanceof Error ? cause.message : '요청을 처리하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
   }
   const count = Object.keys(errors).length
+  const label = preview ? (signup ? '회원가입 · 준비 중' : '로그인 · 준비 중') : signup ? '가입하기' : '로그인'
   return <div className="account-layout">
     <section className="account-intro"><span className="eyebrow">VOLUNTEER TOGETHER</span><h1>작은 실천의 시작,<br />함께하는 Volink.</h1><p>가까운 곳에서 이웃과 만나<br />우리 동네에 작은 변화를 더해요.</p><ParkArt /></section>
     <form className="panel activity-form account-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
@@ -275,17 +505,17 @@ function AccountForm({ signup }: { signup: boolean }) {
       {signup && <><fieldset className="member-picker"><legend>회원 유형</legend><label className={memberType === 'general' ? 'selected' : ''}><input type="radio" name="memberType" value="general" checked={memberType === 'general'} onChange={() => setMemberType('general')} /><Icon name="users" /><strong>일반회원</strong><span>이웃과 함께 자율 활동</span></label><label className={memberType === 'institution' ? 'selected' : ''}><input type="radio" name="memberType" value="institution" checked={memberType === 'institution'} onChange={() => setMemberType('institution')} /><Icon name="building" /><strong>기관회원</strong><span>기관 확인 후 주관 활동</span></label></fieldset>
         <label>이름<input name="name" autoComplete="name" maxLength={signupRules.nameMax} placeholder="이름을 입력해 주세요" {...invalid('name', errors)} /><FieldError name="name" errors={errors} /></label>
         <label>생년월일 <span className="field-hint">만 {signupRules.minimumAge}세 이상 가입 가능</span><input name="birthDate" type="date" autoComplete="bday" {...invalid('birthDate', errors)} /><FieldError name="birthDate" errors={errors} /></label>
-        <fieldset className="interest-picker" {...invalid('interests', errors)}><legend>관심 분야 <span className="field-hint">1–{signupRules.maxInterests}개</span></legend>{interestOptions.map(value => <label key={value}><input type="checkbox" name="interests" value={value} />{value}</label>)}<FieldError name="interests" errors={errors} /></fieldset></>}
+        <fieldset className="interest-picker" {...invalid('interests', errors)}><legend>관심 분야 <span className="field-hint">1–{signupRules.maxInterests}개</span></legend>{categories.map(value => <label key={value}><input type="checkbox" name="interests" value={value} />{value}</label>)}<FieldError name="interests" errors={errors} /></fieldset></>}
       {signup && memberType === 'institution' && <><label>기관명<input name="organization" maxLength={100} placeholder="기관 이름을 입력해 주세요" {...invalid('organization', errors)} /><FieldError name="organization" errors={errors} /></label><label>기관 연락처<input name="organizationContact" type="tel" autoComplete="tel" maxLength={20} placeholder="담당자 연락처" {...invalid('organizationContact', errors)} /><FieldError name="organizationContact" errors={errors} /></label>
         <ol className="org-steps" aria-label="기관 확인 절차"><li><strong>가입 신청</strong><span>기관 정보 제출</span></li><li><strong>확인 대기</strong><span>관리자가 기관을 확인해요</span></li><li><strong>확인 완료</strong><span>기관 주관 활동 개설</span></li></ol>
-        <p className="inline-notice">확인 전에는 자율 활동만 참여할 수 있고, 확인이 반려되면 사유를 알려 드립니다. 기관 가입·확인 기능은 준비 중입니다.</p></>}
+        <p className="inline-notice">확인 전에는 자율 활동만 열 수 있고, 확인이 반려되면 사유를 알려 드립니다. 기관 연락처는 다른 회원에게 공개하지 않습니다.</p></>}
       <label>이메일<input name="email" type="email" autoComplete={signup ? 'email' : 'username'} maxLength={254} placeholder="이메일을 입력해 주세요" {...invalid('email', errors)} /><FieldError name="email" errors={errors} /></label>
       <label>비밀번호{signup && <span className="field-hint">영문·숫자 포함 {signupRules.passwordMin}–{signupRules.passwordMax}자</span>}<input name="password" type="password" autoComplete={signup ? 'new-password' : 'current-password'} maxLength={signupRules.passwordMax} placeholder={signup ? '8자 이상 입력해 주세요' : '비밀번호를 입력해 주세요'} {...invalid('password', errors)} /><FieldError name="password" errors={errors} /></label>
       {signup && <><label>비밀번호 확인<input name="passwordConfirm" type="password" autoComplete="new-password" maxLength={signupRules.passwordMax} placeholder="비밀번호를 다시 입력해 주세요" {...invalid('passwordConfirm', errors)} /><FieldError name="passwordConfirm" errors={errors} /></label><fieldset className="safety-checks" {...invalid('notice', errors)}><legend>이용 안내</legend><label><input type="checkbox" name="notice" value="agreed" />활동 기록은 공식 봉사실적으로 인정되지 않으며 종합보험이 적용되지 않음을 확인합니다.</label><FieldError name="notice" errors={errors} /></fieldset></>}
       {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
-      <button type="submit" className="primary-button">{signup ? '회원가입 · 준비 중' : '로그인 · 준비 중'}<Icon name="arrow" size={17} /></button>
+      <button type="submit" className="primary-button" disabled={busy}>{label}<Icon name="arrow" size={17} /></button>
       {message && <p role="status" className="inline-notice">{message}</p>}
-      <p className="small-print">현재는 화면만 확인할 수 있습니다. 실제 개인정보를 입력하지 마세요.</p>
+      <p className="small-print">{preview ? '현재는 화면만 확인할 수 있습니다. 실제 개인정보를 입력하지 마세요.' : '비밀번호는 암호화해 저장하며, 연락처는 다른 회원에게 공개하지 않습니다.'}</p>
       <p className="account-switch">{signup ? '이미 계정이 있으신가요?' : '처음 오셨나요?'} <a href={signup ? '#/login' : '#/signup'}>{signup ? '로그인' : '회원가입'}</a></p>
     </form>
   </div>
