@@ -4,9 +4,8 @@
 
 ## 어디서 확인하나
 
-- **공개 사이트(GitHub Pages)는 미리보기**라서 가입·로그인·저장이 되지 않습니다. 서버 배포는 4주차입니다.
-- 그래서 3주차는 **서비스를 실행한 컴퓨터**에서 확인합니다. README ‘실행하기’대로 `./scripts/setup-env.sh` → `cd frontend && npm ci` → `./scripts/start-dev.sh` 후 `http://127.0.0.1:5173`을 엽니다.
-- 관리자 시연 계정: `admin-01@demo.volink.kr`. 비밀번호는 그 컴퓨터의 `.env` 파일 `DEMO_ACCOUNT_PASSWORD` 값입니다. 채팅·문서에 붙여넣지 마세요.
+- 2026-10-13부터 **배포 서버 https://3-104-31-169.sslip.io** 에서 확인합니다(설치 필요 없음). GitHub Pages는 여전히 저장이 안 되는 미리보기입니다.
+- 관리자 계정은 팀 단톡방으로 따로 받습니다. 비밀번호를 문서·깃허브에 적지 마세요. (로컬에서 확인할 때는 기존처럼 `admin-01@demo.volink.kr` + `.env`의 `DEMO_ACCOUNT_PASSWORD`)
 - 확인용 이메일은 `test1@example.com`처럼 실제가 아닌 주소를 씁니다.
 
 ## 회원가입·로그인 (6)
