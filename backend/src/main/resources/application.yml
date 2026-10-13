@@ -28,3 +28,19 @@ management:
 logging:
   level:
     org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration: ERROR
+volink:
+  auth:
+    # Base64 HS256 key of 32+ bytes. Empty = random per process (local development only).
+    jwt-secret: ${JWT_SECRET:}
+    cookie-secure: ${AUTH_COOKIE_SECURE:true}
+  demo:
+    # Local/demo environment only: password for the 11 demo accounts. Empty = no demo accounts are created.
+    account-password: ${DEMO_ACCOUNT_PASSWORD:}
+---
+spring:
+  config:
+    activate:
+      on-profile: dev | test
+volink:
+  auth:
+    cookie-secure: ${AUTH_COOKIE_SECURE:false}

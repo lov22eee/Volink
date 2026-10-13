@@ -43,16 +43,16 @@ public class DemoController {
                 """);
         return Map.of("demo", true, "baseDate", LocalDate.now(ZoneId.of("Asia/Seoul")).plusDays(3),
                 "places", places, "personas", personas, "activities", activities,
-                "notice", "UI 시연용 데이터입니다. 로그인·활동 개설·신청 기능은 아직 구현되지 않았습니다.");
+                "notice", "UI 시연용 예시 데이터입니다. 실제 개설 활동은 /api/activities에서 조회합니다. 신청 기능은 아직 없습니다.");
     }
 
     @GetMapping("/project/status")
     public Map<String, Object> status() {
         jdbc.queryForObject("SELECT 1", Integer.class);
-        return Map.of("project", "Volink", "week", 2, "database", "UP",
-                "capabilities", List.of("React UI prototype", "Spring Boot API", "MySQL / Flyway", "Demo catalog",
-                        "Week-2 schema: members, organizations, reports, notifications (tables only)"),
-                "authenticationImplemented", false, "mapIntegrated", false,
+        return Map.of("project", "Volink", "week", 3, "database", "UP",
+                "capabilities", List.of("React UI", "Spring Boot API", "MySQL / Flyway", "Demo catalog",
+                        "JWT signup/login", "Activity creation with risk check", "Admin review of organizations and REVIEW activities"),
+                "authenticationImplemented", true, "mapIntegrated", false,
                 "notice", "활동 기록은 플랫폼 내부 기록이며 공식 봉사실적으로 인정되지 않습니다.");
     }
 }
