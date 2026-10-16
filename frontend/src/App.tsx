@@ -4,8 +4,8 @@ import type { DisplayCatalog as Catalog } from './data'
 import { activityRules, signupRules, validateActivity, validateSignup } from './rules'
 import type { Errors } from './rules'
 import QRCode from 'qrcode'
-import { api, ApiError, login, logout, preview, refresh } from './api'
-import type { Applicant, AppNotification, LiveActivity, MyParticipation, MyRecord, Participation, PlaceInfo, User, ViewerInfo } from './api'
+import { api, ApiError, login, logout, preview, refresh, upload } from './api'
+import type { Applicant, AppNotification, LiveActivity, MyParticipation, MyRecord, MyReport, Participation, PlaceInfo, Recommended, Sanction, User, ViewerInfo } from './api'
 import { kakaoEnabled, PlaceMap, placesCentre } from './map'
 import type { Origin } from './map'
 
@@ -154,13 +154,13 @@ export default function App() {
       </header>
       <main id="main-content">
         {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
-        {route.page === 'explore' && <Explore catalog={catalog} places={places} />}
+        {route.page === 'explore' && <Explore catalog={catalog} places={places} user={user} />}
         {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
         {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} user={user} onChange={pollUnread} />}
         {route.page === 'notifications' && <Notifications user={user} ready={ready} onChange={pollUnread} />}
         {route.page === 'checkin' && route.activityId && <CheckIn id={route.activityId} token={route.token} user={user} ready={ready} />}
         {route.page === 'create' && <CreateActivity places={places} user={user} ready={ready} />}
-        {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
+        {route.page === 'mine' && <MyActivities user={user} ready={ready} onUser={setUser} />}
         {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
         {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
       </main>
@@ -181,7 +181,7 @@ function fromExample(activity: Catalog['activities'][number], baseDate: string):
   return { ...activity, key: 'example-' + activity.id, kind: 'example', date: baseDate, href: '#/activities/' + activity.id }
 }
 
-function Explore({ catalog, places }: { catalog: Catalog | null; places: PlaceInfo[] }) {
+function Explore({ catalog, places, user }: { catalog: Catalog | null; places: PlaceInfo[]; user: User | null }) {
   const [category, setCategory] = useState('전체')
   const [query, setQuery] = useState('')
   const [date, setDate] = useState('')
@@ -238,6 +238,7 @@ function Explore({ catalog, places }: { catalog: Catalog | null; places: PlaceIn
       <div className="hero-copy"><span className="eyebrow"><span className="tiny-dot" />작은 실천, 가까운 연결</span><h1>가까운 곳에서,<br />함께 만드는 <em>변화.</em></h1><p>잠깐의 시간으로 우리 동네를 조금 더 좋게.<br />나와 이웃이 함께할 작은 봉사활동을 만나보세요.</p><button className="primary-button" onClick={() => document.getElementById('activities')?.scrollIntoView()}>주변 활동 살펴보기 <Icon name="arrow" size={18} /></button><span className="hero-note">2–10명 함께 · 3시간 이내</span></div>
       <div className="hero-art"><ParkArt /><div className="floating-note"><span className="floating-icon"><Icon name="leaf" /></span><div><strong>혼자보다, 함께.</strong><span>우리 동네에 변화를 남겨요</span></div></div></div>
     </section>
+    {user && !preview && <Recommendations origin={origin} />}
     <section id="activities" className="activity-section">
       <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div><span className="location-tag"><Icon name="pin" size={16} />{origin ? origin.label + ' 기준 ' + radius + 'km' : '양주'}</span></div>
       <div className="filter-row"><div className="category-tabs" aria-label="활동 분야">{['전체', ...categories].map(value => <button className={category === value ? 'selected' : ''} key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div><label className="search-box"><Icon name="compass" size={17} /><input aria-label="활동 또는 장소 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="활동이나 장소를 찾아보세요" /></label></div>
@@ -350,6 +351,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
     {mine?.status === 'OFFERED' && mine.offerExpiresAt && <p className="small-print">{offerDeadline(mine.offerExpiresAt)}까지 수락하지 않으면 다음 대기자에게 넘어갑니다.</p>}
     <ApplyButtons activity={activity} user={user} ready={ready} organizer={organizer} full={full} mine={mine} busy={busy || hidden} act={act} />
     {message && <p className="inline-notice" role="status">{message}</p>}
+    {user && (organizer || (mine && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'HELD', 'INVALIDATED'].includes(mine.status))) && <ReportForm activityId={activity.id} />}
   </div>
   return <DetailView item={item} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'}
     note={'개설: ' + activity.organizerName + ' · 신청·확정 안내는 화면 안 알림으로 드립니다. 연락처는 공개하지 않습니다.'} action={action}
@@ -515,6 +517,185 @@ function CheckIn({ id, token, user, ready }: { id: number; token?: string; user:
   </>
 }
 
+const reasonLabels: Record<string, string> = { SAFETY: '안전 문제', FALSE_RECORD: '허위 출석·기록', HARASSMENT: '괴롭힘·폭언', INAPPROPRIATE: '부적절한 활동', OTHER: '기타' }
+
+/** Interest + distance + time score from the server, with the reasons shown as chips. */
+function Recommendations({ origin }: { origin: Origin | null }) {
+  const [items, setItems] = useState<Recommended[]>([])
+  useEffect(() => {
+    const query = origin ? '?lat=' + origin.lat.toFixed(6) + '&lng=' + origin.lng.toFixed(6) : ''
+    api<Recommended[]>('/api/activities/recommended' + query).then(list => setItems(list.slice(0, 3))).catch(() => setItems([]))
+  }, [origin])
+  if (!items.length) return null
+  return <section className="activity-section recommend" aria-label="추천 활동">
+    <div className="section-heading"><div><span className="eyebrow">FOR YOU</span><h2>나에게 맞는 활동</h2></div><span className="location-tag">관심 분야·거리·일정으로 골랐어요</span></div>
+    <div className="activity-grid">{items.map(item => <div key={item.id} className="recommend-item"><ActivityCard item={fromLive(item)} /><p className="reason-chips">{item.reasons.map(reason => <span key={reason}>{reason}</span>)}</p></div>)}</div>
+  </section>
+}
+
+function InterestEditor({ user, onUser }: { user: User; onUser: (user: User) => void }) {
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState('')
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const interests = new FormData(event.currentTarget).getAll('interests')
+    try {
+      onUser(await api<User>('/api/me/interests', 'PUT', { interests }))
+      setOpen(false)
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof ApiError ? (cause.fieldErrors.interests ?? cause.message) : '저장하지 못했습니다.')
+    }
+  }
+  if (user.role === 'ADMIN') return null
+  if (!open) return <button className="text-button" onClick={() => setOpen(true)}>관심 분야 바꾸기</button>
+  return <form className="interest-form" onSubmit={save}>
+    <fieldset className="interest-picker"><legend>관심 분야 <span className="field-hint">1–3개 · 추천에 쓰여요</span></legend>{categories.map(value => <label key={value}><input type="checkbox" name="interests" value={value} defaultChecked={user.interests.includes(value)} />{value}</label>)}</fieldset>
+    {error && <p className="field-error" role="alert">{error}</p>}
+    <div className="button-row"><button className="primary-button" type="submit">저장</button><button className="secondary-button" type="button" onClick={() => setOpen(false)}>닫기</button></div>
+  </form>
+}
+
+/** Participants and the organizer can report; up to 3 jpg/png/pdf files (checked again by the server). */
+function ReportForm({ activityId }: { activityId: number }) {
+  const [open, setOpen] = useState(false)
+  const [errors, setErrors] = useState<Errors>({})
+  const [done, setDone] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    const files = data.getAll('files').filter((file): file is File => file instanceof File && file.size > 0)
+    if (files.length > 3) { setErrors({ files: '증빙은 최대 3개까지 올릴 수 있습니다.' }); return }
+    setBusy(true)
+    try {
+      const report = await api<{ id: number }>('/api/reports', 'POST', { activityId, reasonType: data.get('reasonType'), description: data.get('description') })
+      const failed: string[] = []
+      for (const file of files) await upload('/api/reports/' + report.id + '/evidences', file).catch((cause: unknown) => failed.push(file.name + ': ' + (cause instanceof ApiError ? Object.values(cause.fieldErrors).join(' ') || cause.message : '올리지 못함')))
+      setErrors({})
+      setDone('신고를 접수했습니다. 관리자가 확인한 뒤 알림으로 결과를 알려 드립니다.' + (failed.length ? ' 올리지 못한 파일: ' + failed.join(', ') : ''))
+    } catch (cause) {
+      setErrors(cause instanceof ApiError && Object.keys(cause.fieldErrors).length ? cause.fieldErrors : { description: cause instanceof Error ? cause.message : '신고하지 못했습니다.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (done) return <p className="inline-notice" role="status">{done}</p>
+  if (!open) return <button className="text-button report-link" onClick={() => setOpen(true)}>문제 신고하기</button>
+  return <form className="report-form" onSubmit={submit} noValidate>
+    <label>신고 사유<select name="reasonType" defaultValue="SAFETY">{Object.entries(reasonLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    <label>내용 <span className="field-hint">10자 이상</span><textarea name="description" rows={3} maxLength={1000} {...invalid('description', errors)} /><FieldError name="description" errors={errors} /></label>
+    <label>증빙 파일 <span className="field-hint">jpg·png·pdf, 10MB, 최대 3개 · 사진 위치 정보는 지워집니다</span><input type="file" name="files" multiple accept=".jpg,.jpeg,.png,.pdf" {...invalid('files', errors)} /><FieldError name="files" errors={errors} /></label>
+    <div className="button-row"><button className="primary-button" disabled={busy}>신고하기</button><button className="secondary-button" type="button" onClick={() => setOpen(false)}>닫기</button></div>
+  </form>
+}
+
+function AppealForm({ recordId, onDone }: { recordId: number; onDone: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  if (!open) return <button className="text-button" onClick={() => setOpen(true)}>이의 신청</button>
+  async function send() {
+    try {
+      await api('/api/records/' + recordId + '/appeals', 'POST', { reason })
+      onDone()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '신청하지 못했습니다.')
+    }
+  }
+  return <div className="appeal-form"><label className="reason-field">이의 내용 (10자 이상)<textarea aria-label="이의 내용" rows={2} value={reason} maxLength={1000} onChange={event => setReason(event.target.value)} /></label>
+    {error && <p className="field-error" role="alert">{error}</p>}
+    <div className="button-row"><button className="primary-button" onClick={send}>이의 신청하기</button><button className="secondary-button" onClick={() => setOpen(false)}>닫기</button></div></div>
+}
+
+type AdminReport = { id: number; activityId: number; title: string; reasonType: string; description: string; status: string; reporterName: string; targetUserId: number | null; targetName: string | null; targetEmail: string | null; createdAt: string; evidences: { id: number; contentType: string; sizeBytes: number }[] }
+
+function ReportsAdmin({ onNotice }: { onNotice: (message: string) => void }) {
+  const [items, setItems] = useState<AdminReport[]>([])
+  const [reasons, setReasons] = useState<Record<number, string>>({})
+  const load = useCallback(() => api<AdminReport[]>('/api/admin/reports').then(setItems).catch(() => setItems([])), [])
+  useEffect(() => { load() }, [load])
+  async function resolve(item: AdminReport, action: string, label: string) {
+    try {
+      await api('/api/admin/reports/' + item.id + '/resolve', 'POST', { action, reason: reasons[item.id] ?? '' })
+      onNotice('신고 #' + item.id + ' ' + label + ' 처리했습니다.')
+      load()
+    } catch (cause) {
+      onNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '처리하지 못했습니다.')
+    }
+  }
+  async function open(item: AdminReport, evidence: number) {
+    const link = await api<{ url: string }>('/api/admin/reports/' + item.id + '/evidences/' + evidence + '/url')
+    window.open(link.url, '_blank', 'noopener')
+  }
+  return <section className="panel" aria-label="신고 처리">
+    <h2>신고 처리 <span className="count">{items.length}</span></h2>
+    <p className="small-print">보류하면 대상자의 출석·기록(대상이 없으면 활동)을 멈춥니다. ‘조치 없이 종료’와 ‘조치 완료’는 보류를 풀고, ‘기록 무효’는 대상자의 참가 기록을 무효로 합니다. 모든 처리에 사유가 필요합니다. 증빙 링크는 5분 동안만 열립니다.</p>
+    {items.length === 0 ? <p className="small-print">처리할 신고가 없습니다.</p> : <ul className="review-list">{items.map(item => <li key={item.id}>
+      <div><a href={'#/activity/' + item.activityId}><strong>#{item.id} {item.title}</strong></a><span>{reasonLabels[item.reasonType]} · 신고 {item.reporterName}{item.targetName ? ' → 대상 ' + item.targetName : ' · 활동 신고'} · {item.createdAt} · {item.status === 'REVIEWING' ? '보류 중' : '접수'}</span><small>{item.description}</small>
+        {item.evidences.length > 0 && <span className="evidence-links">{item.evidences.map((evidence, index) => <button key={evidence.id} className="text-button" onClick={() => open(item, evidence.id)}>증빙 {index + 1} ({evidence.contentType === 'application/pdf' ? 'PDF' : '사진'})</button>)}</span>}</div>
+      <label className="reason-field">처리 사유<input aria-label={'신고 ' + item.id + ' 처리 사유'} value={reasons[item.id] ?? ''} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} placeholder="필수" /></label>
+      <div className="button-row wrap">{item.status === 'RECEIVED' && <button className="secondary-button" onClick={() => resolve(item, 'HOLD', '보류')}>보류</button>}<button className="secondary-button" onClick={() => resolve(item, 'DISMISS', '조치 없이 종료')}>조치 없이 종료</button><button className="secondary-button" onClick={() => resolve(item, 'ACTION', '조치 완료')}>조치 완료</button>{item.targetUserId && <button className="primary-button" onClick={() => resolve(item, 'INVALIDATE', '기록 무효')}>기록 무효</button>}</div>
+    </li>)}</ul>}
+  </section>
+}
+
+type AdminAppeal = { id: number; recordId: number; reason: string; submittedAt: string; appellantName: string; ownerName: string; activityId: number; title: string }
+
+function AppealsAdmin({ onNotice }: { onNotice: (message: string) => void }) {
+  const [items, setItems] = useState<AdminAppeal[]>([])
+  const load = useCallback(() => api<AdminAppeal[]>('/api/admin/appeals').then(setItems).catch(() => setItems([])), [])
+  useEffect(() => { load() }, [load])
+  return <section className="panel" aria-label="이의 신청">
+    <h2>이의 신청 <span className="count">{items.length}</span></h2>
+    <p className="small-print">이의가 접수된 기록은 보류됩니다. 인정하면 기록이 무효가 되고, 기각하면 다시 유효해집니다.</p>
+    {items.length === 0 ? <p className="small-print">처리할 이의 신청이 없습니다.</p> : <ul className="review-list">{items.map(item => <ReviewItem key={item.id} title={item.title + ' · ' + item.ownerName + ' 님 기록'} href={'#/activity/' + item.activityId}
+      detail={'신청 ' + item.appellantName + ' · ' + item.submittedAt} reasons={item.reason}
+      onDecide={async (accept, reason) => {
+        try { await api('/api/admin/appeals/' + item.id + (accept ? '/accept' : '/reject'), 'POST', { reason }); onNotice(accept ? '이의를 인정해 기록을 무효로 했습니다.' : '이의를 기각했습니다.'); load() }
+        catch (cause) { onNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '처리하지 못했습니다.') }
+      }} />)}</ul>}
+  </section>
+}
+
+type AdminUser = { id: number; email: string; name: string; role: string; status: string; noShows: number; sanctions: Sanction[] }
+
+function SanctionsAdmin({ onNotice }: { onNotice: (message: string) => void }) {
+  const [query, setQuery] = useState('')
+  const [users, setUsers] = useState<AdminUser[] | null>(null)
+  const [errors, setErrors] = useState<Errors>({})
+  const search = () => api<AdminUser[]>('/api/admin/users?email=' + encodeURIComponent(query)).then(setUsers).catch(cause => { setUsers(null); onNotice(cause instanceof ApiError ? (cause.fieldErrors.email ?? cause.message) : '찾지 못했습니다.') })
+  async function sanction(event: FormEvent<HTMLFormElement>, user: AdminUser) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    try {
+      await api('/api/admin/users/' + user.id + '/sanctions', 'POST', { type: data.get('type'), days: Number(data.get('days')) || null, reason: data.get('reason') })
+      setErrors({})
+      onNotice(user.name + ' 님에게 제재를 적용했습니다.')
+      search()
+    } catch (cause) {
+      setErrors(cause instanceof ApiError ? cause.fieldErrors : {})
+      onNotice(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+    }
+  }
+  return <section className="panel" aria-label="회원 제재">
+    <h2>회원 제재</h2>
+    <p className="small-print">경고는 알림만, 제한은 신청·개설 불가, 정지는 모든 쓰기 불가입니다. 최근 90일 불참 3회면 14일 제한이 자동으로 걸립니다. 기간이 끝나면 자동으로 풀립니다.</p>
+    <div className="button-row"><input className="search-input" aria-label="회원 이메일 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="이메일 일부" /><button className="secondary-button" onClick={search}>찾기</button></div>
+    {users && (users.length === 0 ? <p className="small-print">찾는 회원이 없습니다.</p> : <ul className="review-list">{users.map(user => <li key={user.id}>
+      <div><strong>{user.name}</strong><span>{user.email} · {user.status === 'ACTIVE' ? '정상' : user.status === 'RESTRICTED' ? '제한 중' : '정지 중'} · 최근 90일 불참 {user.noShows}회</span>{user.sanctions.map((item, index) => <small key={index}>{item.type === 'WARNING' ? '경고' : item.type === 'RESTRICTION' ? '제한' : '정지'} · {item.reason}{item.endsAt ? ' · ~' + item.endsAt : ''}</small>)}</div>
+      {user.role === 'ADMIN' ? <span className="small-print">관리자</span> : <form className="sanction-form" onSubmit={event => sanction(event, user)}>
+        <select name="type" aria-label={user.name + ' 제재 종류'}><option value="WARNING">경고</option><option value="RESTRICTION">이용 제한</option><option value="SUSPENSION">이용 정지</option></select>
+        <input name="days" type="number" min={1} max={365} placeholder="일수" aria-label={user.name + ' 제재 기간(일)'} />
+        <input name="reason" maxLength={500} placeholder="사유(필수)" aria-label={user.name + ' 제재 사유'} />
+        <button className="primary-button">적용</button>
+        {Object.values(errors).length > 0 && <span className="field-error" role="alert">{Object.values(errors).join(' ')}</span>}
+      </form>}
+      <span />
+    </li>)}</ul>)}
+  </section>
+}
+
 function statusLabel(status: string) {
   return ({ RECRUITING: '공개됨', DRAFT: '관리자 검토 중', CANCELLED: '반려됨', IN_PROGRESS: '진행 중', FINISHED: '종료', HELD: '보류' } as Record<string, string>)[status] ?? status
 }
@@ -610,16 +791,21 @@ const applicationStates = [
   ['거절됨', '이번 활동에는 함께하지 못해요'],
 ]
 
-function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
+function MyActivities({ user, ready, onUser }: { user: User | null; ready: boolean; onUser: (user: User) => void }) {
   const [tab, setTab] = useState('신청한 활동')
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
   const [applied, setApplied] = useState<MyParticipation[] | null>(null)
   const [records, setRecords] = useState<MyRecord[] | null>(null)
-  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '개설한 활동': '내가 만든 활동과 공개 상태를 확인하는 공간입니다.', '활동 기록': '출석과 완료가 확인된 활동을 모아 보는 공간입니다. 완료 기록은 7일 안에 이의를 신청할 수 있습니다.' }
+  const [reports, setReports] = useState<MyReport[] | null>(null)
+  const [sanctions, setSanctions] = useState<Sanction[]>([])
+  const loadRecords = useCallback(() => api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([])), [])
+  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '개설한 활동': '내가 만든 활동과 공개 상태를 확인하는 공간입니다.', '활동 기록': '출석과 완료가 확인된 활동을 모아 보는 공간입니다. 완료 기록은 7일 안에 이의를 신청할 수 있습니다.', '신고 내역': '내가 신고한 내용과 처리 결과를 확인하는 공간입니다.' }
   useEffect(() => {
     if (user) api<LiveActivity[]>('/api/me/activities').then(setMine).catch(() => setMine([]))
     if (user) api<MyParticipation[]>('/api/me/participations').then(setApplied).catch(() => setApplied([]))
-    if (user) api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
+    if (user) loadRecords()
+    if (user) api<MyReport[]>('/api/me/reports').then(setReports).catch(() => setReports([]))
+    if (user) api<Sanction[]>('/api/me/sanctions').then(setSanctions).catch(() => setSanctions([]))
   }, [user])
   const tabs = <div className="activity-tabs" role="tablist" aria-label="내 활동 구분">{Object.keys(descriptions).map(value => <button key={value} role="tab" id={'tab-' + value} aria-controls="my-activity-panel" aria-selected={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div>
   const states = tab === '신청한 활동' && <section className="panel"><h2>신청 상태 안내</h2><ul className="state-list" aria-label="신청 상태 안내">{applicationStates.map(([name, text]) => <li key={name}><strong>{name}</strong><span>{text}</span></li>)}</ul></section>
@@ -637,6 +823,8 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
     <section className="panel member-card" aria-label="내 정보">
       <div><strong>{user.name}</strong><span>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? '기관회원' : '일반회원'} · {user.email}</span></div>
       {user.interests.length > 0 && <div className="tags">{user.interests.map(value => <span key={value}>{value}</span>)}</div>}
+      <InterestEditor user={user} onUser={onUser} />
+      {sanctions.filter(item => item.active && item.type !== 'WARNING').map((item, index) => <p key={index} className="form-alert" role="alert">{item.type === 'SUSPENSION' ? '이용 정지' : '신청·개설 제한'} 중입니다{item.endsAt ? ' (' + offerDeadline(item.endsAt.replace(' ', 'T')) + '까지)' : ''} · {item.reason}</p>)}
       {organization && <p className={'org-status ' + organization.status.toLowerCase()}>{organization.name} · {organization.status === 'APPROVED' ? '기관 확인 완료' : organization.status === 'PENDING' ? '기관 확인 대기 중' : '기관 확인 반려' + (organization.rejectReason ? ' · ' + organization.rejectReason : '')}</p>}
     </section>
     {tabs}
@@ -658,12 +846,21 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
               <span>{dateLabel(item.date)} · {item.startTime} · {item.placeName ?? '장소 미정'}</span>
               {item.status === 'OFFERED' && item.offerExpiresAt && <small>{offerDeadline(item.offerExpiresAt)}까지 수락해 주세요</small>}
             </li>)}</ul>
-          : records === null ? <p>불러오는 중입니다.</p> : records.length === 0 ? <div className="account-empty"><h2>아직 활동 기록이 없어요</h2><p>{descriptions[tab]}</p></div>
+          : tab === '신고 내역'
+            ? reports === null ? <p>불러오는 중입니다.</p> : reports.length === 0 ? <div className="account-empty"><h2>신고한 내용이 없어요</h2><p>{descriptions[tab]}</p></div>
+              : <ul className="my-list">{reports.map(item => <li key={item.id}>
+                <span className={'risk-badge ' + (item.status === 'RECEIVED' || item.status === 'REVIEWING' ? 'review' : 'low')}>{({ RECEIVED: '접수', REVIEWING: '검토 중', ACTION_TAKEN: '조치 완료', DISMISSED: '조치 없이 종료' } as Record<string, string>)[item.status]}</span>
+                <a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
+                <span>{reasonLabels[item.reasonType]} · {item.createdAt}</span>
+                {item.resultNote && <small>처리 결과: {item.resultNote}</small>}
+              </li>)}</ul>
+            : records === null ? <p>불러오는 중입니다.</p> : records.length === 0 ? <div className="account-empty"><h2>아직 활동 기록이 없어요</h2><p>{descriptions[tab]}</p></div>
             : <ul className="my-list">{records.map(item => <li key={item.id}>
               <span className={'risk-badge ' + (item.status === 'VALID' ? 'low' : 'review')}>{item.status === 'VALID' ? '완료 기록' : item.status === 'HELD' ? '보류' : '무효'}</span>
               <a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
               <span>{dateLabel(item.date)} · {item.startTime} · {item.durationMinutes}분 · {item.placeName ?? '장소 미정'} · {item.checkInMethod === 'QR' ? 'QR·위치 출석' : '수동 출석'}</span>
               <small>완료 확인 {offerDeadline(item.confirmedAt)} · 이의 신청 마감 {offerDeadline(item.appealDeadline)}</small>
+              {item.status === 'VALID' && new Date(item.appealDeadline + ':00+09:00').getTime() > Date.now() && <AppealForm recordId={item.id} onDone={loadRecords} />}
             </li>)}</ul>}
     </section>
     {states}
@@ -716,6 +913,9 @@ function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null
       <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다. 좌표를 넣어야 거리 검색과 지도에 나옵니다. 현장 이용 허가는 따로 확인해야 합니다.</p>
       <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); onPlacesChanged() }} />)}</ul>
     </section>
+    <ReportsAdmin onNotice={setNotice} />
+    <AppealsAdmin onNotice={setNotice} />
+    <SanctionsAdmin onNotice={setNotice} />
   </>
 }
 

@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **3주차 행(2026-10-13)과 4·5·6주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 7주차 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13)과 4~7주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트).
 
 ## 공통 규칙
 
@@ -60,12 +60,14 @@
 | 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |
 | 6 | `POST /api/participations/{id}/complete` | 모집자 | **구현.** 종료 전·체크인 안 한 사람 409. `activity_records` 생성·`RECORD_CONFIRMED` 알림 |
 | 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·이의 신청 마감(+7일)·상태 |
-| 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
-| 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
-| 7 | `GET /api/admin/reports` · `POST /api/admin/reports/{id}/resolve` | 관리자 | 보류·재개·무효, 사유 필수 |
-| 7 | `POST /api/admin/users/{id}/sanctions` | 관리자 | 경고·제한·정지, 사유 필수 |
-| 7 | `GET /api/activities/recommended` | 회원 | 거리+시간+관심 분야 점수 합(단순 추천) |
-| 7 | `GET /api/reports/{id}/evidences/{eid}/url` | 관리자 | 제한시간 URL(5분) |
+| 7 | `POST /api/records/{id}/appeals` `{reason}` | 기록 본인·모집자·함께 완료한 참가자 | **구현.** 10~1000자, 완료 확인 7일 지나면 410 `APPEAL_PERIOD_OVER`, 같은 사람 중복 409 `DUPLICATE_APPEAL`, 관계없는 사람 404. 기록 보류 |
+| 7 | `GET /api/admin/appeals` · `POST /api/admin/appeals/{id}/accept`·`reject` `{reason}` | 관리자 | **구현.** 사유 필수. 인정 = 기록·참가 무효, 기각 = 다시 유효 |
+| 7 | `POST /api/reports` `{activityId, targetUserId?, reasonType, description}` · `POST /api/reports/{id}/evidences` (multipart `file`) | 참여자·모집자 | **구현.** 사유 SAFETY·FALSE_RECORD·HARASSMENT·INAPPROPRIATE·OTHER, 10~1000자, 1시간 10건(429). 증빙: 앞부분 바이트로 jpeg·png·pdf 확인(확장자도 일치), 10MB, 최대 3개, 사진은 다시 저장해 메타데이터 제거. **보관은 서버 비공개 폴더**(S3는 아직) |
+| 7 | `GET /api/me/reports` · `GET /api/me/sanctions` | 본인 | **구현.** 내 신고와 처리 결과, 내 제재(진행 중 여부) |
+| 7 | `GET /api/admin/reports?status=` · `POST /api/admin/reports/{id}/resolve` `{action, reason}` | 관리자 | **구현.** action = HOLD(대상자 출석·기록 또는 활동 보류)·DISMISS·ACTION(보류 해제)·INVALIDATE(대상자 기록 무효). 사유 필수, 처리 끝난 신고 409 |
+| 7 | `GET /api/admin/users?email=` · `POST /api/admin/users/{id}/sanctions` `{type, days, reason, reportId?}` | 관리자 | **구현.** 3글자 이상 검색(최근 90일 불참 수·제재 이력). WARNING·RESTRICTION·SUSPENSION, 사유 필수, 제한·정지는 1~365일, 관리자 제재 불가. 노쇼 3회/90일 → 자동 14일 제한 |
+| 7 | `GET /api/activities/recommended?lat&lng` | 회원 | **구현.** 점수 = 0.4×관심 분야 + 0.35×거리(0km 1 → 5km 0, 위치 없으면 모두 0.5) + 0.25×일정(내일 1 → 14일 뒤 0), 이유 목록, 내 활동·신청한 활동 제외, 상위 6개 |
+| 7 | `GET /api/admin/reports/{id}/evidences/{eid}/url` → `GET /api/evidence-files/{eid}?exp&sig` | 관리자 → 링크 | **구현.** 5분짜리 HMAC 서명 링크. 서명 틀림 403, 만료 410, `no-store`·`nosniff` |
 
 ## 화면별 API 요구사항
 

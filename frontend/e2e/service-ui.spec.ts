@@ -7,7 +7,7 @@ const developmentCopy = /졸업작품|경동대학교|1주차|2주차|WEEK|발�
 
 const examples = '.activity-card[data-kind="example"]'
 // Evidence screenshots of the current week; earlier weeks' files stay as they were.
-const shot = (name: string) => `../docs/screenshots/week-06-${name}.png`
+const shot = (name: string) => `../docs/screenshots/week-07-${name}.png`
 const password = 'example123'
 
 // The demo admin account exists only in the local dev environment; its password lives in the ignored ../.env.
@@ -21,8 +21,18 @@ function demoPassword() {
 function moveActivity(id: string, startMinutesFromNow: number) {
   const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter(row => row.includes('=') && !row.startsWith('#')).map(row => [row.slice(0, row.indexOf('=')), row.slice(row.indexOf('=') + 1).trim()]))
   const korea = (minutes: number) => new Date(Date.now() + 9 * 3_600_000 + minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ')
-  const sql = `UPDATE activities SET starts_at = '${korea(startMinutesFromNow)}', ends_at = '${korea(startMinutesFromNow + 60)}' WHERE id = ${Number(id)}`
+  runSql(env, `UPDATE activities SET starts_at = '${korea(startMinutesFromNow)}', ends_at = '${korea(startMinutesFromNow + 60)}' WHERE id = ${Number(id)}`)
+}
+
+function runSql(env: Record<string, string>, sql: string) {
   execFileSync('docker', ['compose', 'exec', '-T', '-e', 'MYSQL_PWD=' + env.MYSQL_PASSWORD, 'db', 'mysql', '-u', env.MYSQL_USER, env.MYSQL_DATABASE, '-e', sql], { cwd: '..' })
+}
+
+// Local dev DB only: mark a confirmed participant of an activity as checked in by QR (the check-in itself is tested in week 6).
+function markCheckedIn(activityId: string) {
+  const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter(row => row.includes('=') && !row.startsWith('#')).map(row => [row.slice(0, row.indexOf('=')), row.slice(row.indexOf('=') + 1).trim()]))
+  const id = Number(activityId)
+  runSql(env, `INSERT INTO check_ins(participation_id, method, within_radius, checked_by, checked_at) SELECT id, 'QR', TRUE, user_id, NOW() FROM participations WHERE activity_id = ${id} AND status = 'CONFIRMED'; UPDATE participations SET status = 'CHECKED_IN' WHERE activity_id = ${id} AND status = 'CONFIRMED'`)
 }
 
 function uniqueEmail(prefix: string) {
@@ -562,4 +572,86 @@ test('a confirmed participant checks in with the QR on site and gets an activity
   await expect(record).toContainText('이의 신청 마감')
   await phone.screenshot({ path: shot('records'), fullPage: true })
   await onSite.close()
+})
+
+// Week 7: report with evidence → appeal → admin dismisses / rejects / restricts → the member sees the restriction; recommendations and interests.
+test('reports with evidence, a 7-day appeal and a sanction are handled by the admin with reasons', async ({ page }) => {
+  const organizer = await signup(page)
+  const title = '신고 시험 활동 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = (await page.getByRole('link', { name: /만든 활동 보기/ }).getAttribute('href'))!
+  const activityId = link.split('/').pop()!
+  await signOut(page)
+  const member = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '승인' }).click()
+  await expect(page.locator('.seat-line')).toContainText('확정 1')
+  markCheckedIn(activityId)
+  moveActivity(activityId, -90)
+  await page.reload()
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '완료 확인' }).click()
+  await expect(page.getByRole('region', { name: '신청자 관리' }).getByRole('status')).toContainText('활동 완료를 확인했습니다')
+
+  await page.getByRole('button', { name: '문제 신고하기' }).click()
+  await page.getByLabel('신고 사유').selectOption('HARASSMENT')
+  await page.getByLabel(/^내용/).fill('활동 중에 참가자 사이에 거친 말이 오갔습니다.')
+  const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000004000000040802000000269309290000001049444154789c6370989000470cc47100ec431301fd35b1840000000049454e44ae426082', 'hex')
+  await page.getByLabel(/증빙 파일/).setInputFiles([{ name: 'scene.png', mimeType: 'image/png', buffer: png }, { name: 'memo.txt', mimeType: 'text/plain', buffer: Buffer.from('not allowed') }])
+  await page.getByRole('button', { name: '신고하기' }).click()
+  await expect(page.getByRole('status').filter({ hasText: '신고를 접수했습니다' })).toContainText('memo.txt')
+  await signOut(page)
+
+  await loginAs(page, member, password)
+  await page.goto('/#/mine')
+  await page.getByRole('tab', { name: '활동 기록' }).click()
+  const record = page.getByRole('listitem').filter({ hasText: title })
+  await record.getByRole('button', { name: '이의 신청' }).click()
+  await record.getByLabel('이의 내용').fill('활동 시간이 실제보다 짧게 기록되었습니다.')
+  await record.getByRole('button', { name: '이의 신청하기' }).click()
+  await expect(record).toContainText('보류')
+  await page.getByRole('button', { name: '관심 분야 바꾸기' }).click()
+  await page.getByRole('checkbox', { name: '생활 지원' }).check()
+  await page.getByRole('button', { name: '저장', exact: true }).click()
+  await expect(page.getByLabel('내 정보')).toContainText('생활 지원')
+  await signOut(page)
+
+  await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
+  await page.goto('/#/admin')
+  const reports = page.getByRole('region', { name: '신고 처리' })
+  const item = reports.getByRole('listitem').filter({ hasText: title })
+  await expect(item.getByRole('button', { name: /증빙 1/ })).toBeVisible()
+  await item.getByRole('button', { name: '조치 없이 종료' }).click()
+  await expect(page.getByRole('status').first()).toContainText('처리 사유를 입력해 주세요')
+  await item.getByLabel(/처리 사유/).fill('양쪽 진술을 확인했고 추가 조치는 필요 없음')
+  await item.getByRole('button', { name: '조치 없이 종료' }).click()
+  await expect(page.getByRole('status').first()).toContainText('조치 없이 종료 처리했습니다')
+  await page.screenshot({ path: shot('admin-safety'), fullPage: true })
+  const appeals = page.getByRole('region', { name: '이의 신청' })
+  const appeal = appeals.getByRole('listitem').filter({ hasText: title })
+  await appeal.getByLabel(/처리 사유/).fill('모집자 기록과 실제 시간이 일치함')
+  await appeal.getByRole('button', { name: '반려' }).click()
+  await expect(page.getByRole('status').first()).toContainText('이의를 기각했습니다')
+  const sanctions = page.getByRole('region', { name: '회원 제재' })
+  await sanctions.getByLabel('회원 이메일 검색').fill(member)
+  await sanctions.getByRole('button', { name: '찾기' }).click()
+  await sanctions.getByLabel(/제재 종류/).selectOption('RESTRICTION')
+  await sanctions.getByLabel(/제재 기간/).fill('3')
+  await sanctions.getByLabel(/제재 사유/).fill('시험용 제한: 반복된 연락 두절')
+  await sanctions.getByRole('button', { name: '적용' }).click()
+  await expect(sanctions).toContainText('제한 중')
+  await signOut(page)
+
+  await loginAs(page, member, password)
+  await expect(page.getByRole('alert').filter({ hasText: '신청·개설 제한 중입니다' })).toBeVisible()
+  await page.screenshot({ path: shot('restricted'), fullPage: true })
+  await page.goto('/#/explore')
+  await expect(page.getByRole('region', { name: '추천 활동' })).toBeVisible()
+  await page.getByRole('region', { name: '추천 활동' }).screenshot({ path: shot('recommend') })
 })

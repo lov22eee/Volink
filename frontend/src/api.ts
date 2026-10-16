@@ -20,6 +20,9 @@ export type Participation = { id: number; status: ParticipationStatus; waitOrder
 export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
 export type ViewerInfo = Seats & { participation: Participation | null }
 export type Applicant = Participation & { name: string; appliedAt: string; checkInMethod?: 'QR' | 'MANUAL' | null; checkInReason?: string | null }
+export type Recommended = LiveActivity & { score: number; reasons: string[] }
+export type MyReport = { id: number; activityId: number; title: string; reasonType: string; status: string; resultNote: string | null; createdAt: string }
+export type Sanction = { type: 'WARNING' | 'RESTRICTION' | 'SUSPENSION'; reason: string; startsAt: string; endsAt: string | null; active: boolean | number }
 export type MyRecord = { id: number; activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes: number; checkInMethod: 'QR' | 'MANUAL'; confirmedAt: string; appealDeadline: string; status: 'VALID' | 'HELD' | 'INVALIDATED' }
 export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string }
 export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
@@ -65,6 +68,18 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   if (response.status === 401 && accessToken && !path.startsWith('/api/auth/')) {
     if (await refresh()) response = await send(path, method, body, true)
   }
+  return parse(response)
+}
+
+/** Multipart upload (report evidence) with the same token renewal as api(). */
+export async function upload<T>(path: string, file: File): Promise<T> {
+  const send = () => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(path, { method: 'POST', body: form, credentials: 'same-origin', headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {} })
+  }
+  let response = await send()
+  if (response.status === 401 && accessToken && await refresh()) response = await send()
   return parse(response)
 }
 

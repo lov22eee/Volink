@@ -54,3 +54,10 @@ curl -fsSL https://raw.githubusercontent.com/lov22eee/Volink/<브랜치>/scripts
 4. 로컬은 `frontend/.env.local`에 `VITE_KAKAO_JS_KEY=키` (커밋 안 됨)
 
 키가 없으면 지도 자리에 좌표의 상대 위치만 그린 그림이 나옵니다.
+
+## 백업과 복원 (7주차)
+
+- 매일 04:10(한국 시간) `scripts/aws/backup.sh`가 DB와 증빙 파일을 `/var/backups/volink`에 7일치 보관합니다(root만 읽기). 기록: `/var/log/volink-backup.log`
+- 지금 바로 백업: `sudo bash /opt/volink/scripts/aws/backup.sh`
+- 복원 방법은 스크립트 맨 위 주석에 있습니다. **현재 데이터를 덮어쓰므로** 시연 전에는 하지 마세요.
+- 서버 디스크가 고장 나면 백업도 함께 사라집니다. 중요해지면 S3 같은 바깥 저장소로 복사해야 합니다(아직 안 함).

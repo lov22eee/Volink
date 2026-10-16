@@ -3,6 +3,7 @@ package com.volink.checkin;
 import com.volink.common.ApiException;
 import com.volink.notification.NotificationService;
 import com.volink.place.PlaceService;
+import com.volink.safety.SanctionService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -29,9 +30,11 @@ public class CheckInService {
     private final QrService qr;
     private final NotificationService notifications;
     private final Clock clock;
+    private final SanctionService sanctions;
 
-    public CheckInService(JdbcTemplate jdbc, QrService qr, NotificationService notifications, Clock clock) {
+    public CheckInService(JdbcTemplate jdbc, QrService qr, NotificationService notifications, Clock clock, SanctionService sanctions) {
         this.jdbc = jdbc;
+        this.sanctions = sanctions;
         this.qr = qr;
         this.notifications = notifications;
         this.clock = clock;
@@ -156,9 +159,11 @@ public class CheckInService {
             Activity activity = load(id, true);
             jdbc.update("UPDATE activities SET status = 'FINISHED' WHERE id = ?", id);
             log(id, null, activity.organizerId(), activity.status(), "FINISHED", "종료 시각");
-            for (long pid : jdbc.queryForList("SELECT id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED' FOR UPDATE", Long.class, id)) {
+            for (Map<String, Object> row : jdbc.queryForList("SELECT id, user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED' FOR UPDATE", id)) {
+                long pid = ((Number) row.get("id")).longValue();
                 jdbc.update("UPDATE participations SET status = 'NO_SHOW', updated_at = ? WHERE id = ?", now, pid);
                 log(id, pid, activity.organizerId(), "CONFIRMED", "NO_SHOW", "체크인 없이 종료");
+                sanctions.afterNoShow(((Number) row.get("user_id")).longValue());
             }
             notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "활동이 끝났습니다", activity.title() + " · 체크인한 참가자의 완료를 확인해 주세요.", activity.link());
             changed++;

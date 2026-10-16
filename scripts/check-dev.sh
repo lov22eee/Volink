@@ -9,7 +9,7 @@ def get(path):
         return json.load(r)
 assert get('/actuator/health')['status']=='UP'
 status=get('/api/project/status')
-assert status['week']==6 and status['database']=='UP'
+assert status['week']==7 and status['database']=='UP'
 assert status['authenticationImplemented'] is True
 catalog=get('/api/demo/catalog')
 assert catalog['demo'] is True
