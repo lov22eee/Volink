@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs'
 const developmentCopy = /졸업작품|경동대학교|1주차|2주차|WEEK|발표|페르소나|API|DB|개발 진행|사용자 흐름/
 
 const examples = '.activity-card[data-kind="example"]'
+// Evidence screenshots of the current week; earlier weeks' files stay as they were.
+const shot = (name: string) => `../docs/screenshots/week-04-${name}.png`
 const password = 'example123'
 
 // The demo admin account exists only in the local dev environment; its password lives in the ignored ../.env.
@@ -52,10 +54,10 @@ async function signOut(page: Page) {
   await expect(page.getByRole('navigation', { name: '계정 메뉴' }).getByRole('link', { name: '로그인' })).toBeVisible()
 }
 
-async function fillActivity(page: Page, title: string, description: string, time = '10:00') {
+async function fillActivity(page: Page, title: string, description: string, time = '10:00', place = '1') {
   await page.goto('/#/create')
   await page.getByLabel(/활동 이름/).fill(title)
-  await page.getByLabel('장소', { exact: true }).selectOption('1')
+  await page.getByLabel('장소', { exact: true }).selectOption(place)
   await page.getByLabel(/활동 날짜/).fill(seoulDate(7))
   await page.getByLabel(/시작 시간/).fill(time)
   await page.getByLabel(/활동 소개/).fill(description)
@@ -78,7 +80,7 @@ test('service home renders database examples without presentation or development
   await page.getByRole('button', { name: '주변 활동 살펴보기' }).click()
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-home.png', fullPage: true })
+  await page.screenshot({ path: shot('home'), fullPage: true })
 })
 
 test('category, query, date and activity type filters narrow examples and can reset', async ({ page }) => {
@@ -103,20 +105,20 @@ test('category, query, date and activity type filters narrow examples and can re
   await page.getByRole('button', { name: '필터 초기화' }).click()
 })
 
-test('map layout lists places and narrows the list by place without claiming a real map', async ({ page }) => {
+test('map layout lists places and narrows the list by place', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '지도로 보기' }).click()
   const map = page.getByRole('complementary', { name: '지도 영역' })
-  await expect(map).toContainText('지도는 준비 중입니다.')
+  await expect(map).toContainText('장소를 고르면 목록이 바뀝니다.')
   await expect(map.getByRole('group', { name: '장소별로 보기' }).getByRole('button')).toHaveCount(4)
   await expect(page.locator(examples)).toHaveCount(3)
-  await map.getByRole('button', { name: /독바위공원/ }).click()
+  await map.getByRole('group', { name: '장소별로 보기' }).getByRole('button', { name: /독바위공원/ }).click()
   await expect(page.locator(examples)).toHaveCount(1)
   await expect(page.locator(examples)).toContainText('독바위공원')
   await map.getByRole('button', { name: '모든 장소' }).click()
   await expect(page.locator(examples)).toHaveCount(3)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.locator('#activities').screenshot({ path: '../docs/screenshots/week-03-map.png' })
+  await page.locator('#activities').screenshot({ path: shot('map') })
   await page.getByRole('button', { name: '목록으로 보기' }).click()
   await expect(page.getByRole('complementary', { name: '지도 영역' })).toHaveCount(0)
 })
@@ -130,7 +132,7 @@ test('standalone detail route shows the planned participation steps without acce
   await expect(page.getByRole('button', { name: '참가 신청 · 준비 중' })).toBeDisabled()
   await expect(page.locator('body')).not.toContainText(developmentCopy)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-detail.png', fullPage: true })
+  await page.screenshot({ path: shot('detail'), fullPage: true })
   await page.reload()
   await expect(page.getByRole('heading', { name: '공원에서 시작하는 작은 변화' })).toBeVisible()
   await page.goto('/#/activities/999')
@@ -179,7 +181,7 @@ test('create form requires login, shows field errors for every input rule and sa
   await page.getByLabel(/모집 정원/).fill('1')
   await page.getByRole('button', { name: '활동 등록' }).click()
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-create.png', fullPage: true })
+  await page.screenshot({ path: shot('create'), fullPage: true })
   await page.getByLabel(/모집 정원/).fill('6')
   await page.getByRole('button', { name: '활동 등록' }).click()
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
@@ -196,7 +198,7 @@ test('my activities has applicant, organizer and record views without fabricated
   await page.getByRole('tab', { name: '신청한 활동' }).click()
   await expect(page.getByRole('list', { name: '신청 상태 안내' }).getByRole('listitem')).toHaveCount(5)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-mine.png', fullPage: true })
+  await page.screenshot({ path: shot('mine'), fullPage: true })
   await page.getByRole('link', { name: '로그인 화면으로' }).click()
   await expect(page).toHaveURL(/#\/login$/)
 })
@@ -231,7 +233,7 @@ test('signup checks every rule on screen, then creates an institution member wai
   await page.getByRole('button', { name: '가입하기' }).click()
   await expect(page.locator('#passwordConfirm-error')).toHaveText('비밀번호가 일치하지 않습니다.')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-signup.png', fullPage: true })
+  await page.screenshot({ path: shot('signup'), fullPage: true })
   await page.getByRole('textbox', { name: '비밀번호 확인', exact: true }).fill('example123')
   await page.getByRole('button', { name: '가입하기' }).click()
   await expect(page).toHaveURL(/#\/mine$/)
@@ -247,7 +249,7 @@ test('signup checks every rule on screen, then creates an institution member wai
   await page.getByRole('button', { name: '로그인', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('이메일 또는 비밀번호가 올바르지 않습니다.')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-login.png', fullPage: true })
+  await page.screenshot({ path: shot('login'), fullPage: true })
 })
 
 test('API failure stays visible, can recover and never uses fabricated fallback data', async ({ page }) => {
@@ -271,7 +273,7 @@ test('all six service screens work on mobile without horizontal overflow or pres
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 찾기', exact: true }).click()
   await expect(page.locator(examples)).toHaveCount(3)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-mobile.png', fullPage: true })
+  await page.screenshot({ path: shot('mobile'), fullPage: true })
 })
 
 test('login survives a page reload and logout ends the session', async ({ page }) => {
@@ -293,7 +295,7 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await page.getByRole('button', { name: '활동 등록' }).click()
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-published.png', fullPage: true })
+  await page.screenshot({ path: shot('published'), fullPage: true })
   await page.getByRole('link', { name: '만든 활동 보기' }).click()
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.locator('.detail-tags')).toContainText('모집 중')
@@ -308,7 +310,7 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await expect(page.getByRole('alert')).toContainText('등록할 수 없는 활동입니다.')
   await expect(page.getByRole('alert')).toContainText('사다리')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-blocked.png', fullPage: true })
+  await page.screenshot({ path: shot('blocked'), fullPage: true })
   await page.goto('/')
   await expect(page.locator('.activity-card', { hasText: '사다리 청소 모임' })).toHaveCount(0)
 })
@@ -325,7 +327,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await expect(page.getByRole('tabpanel')).toContainText(title)
   await expect(page.getByRole('tabpanel')).toContainText('관리자 검토 중')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-mine.png', fullPage: true })
+  await page.screenshot({ path: shot('mine'), fullPage: true })
   await page.goto('/')
   await expect(page.locator('.activity-card', { hasText: title })).toHaveCount(0)
   await signOut(page)
@@ -337,7 +339,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await item.getByRole('button', { name: '반려' }).click()
   await expect(page.getByRole('status')).toContainText('반려 사유를 입력해 주세요.')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: '../docs/screenshots/week-03-admin.png', fullPage: true })
+  await page.screenshot({ path: shot('admin'), fullPage: true })
   await item.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
   await page.goto('/')
@@ -369,4 +371,54 @@ test('an institution member can host an activity only after the admin approves t
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
   await page.goto('/')
   await expect(page.locator('.activity-card', { hasText: title })).toContainText('기관 주관 활동')
+})
+
+// Week 4: the admin enters a place coordinate (local dev DB only; re-enter the real one afterwards), then radius search.
+test('admin enters a place coordinate and nearby search shows distance, falling back when location is refused', async ({ page, browser }) => {
+  const place = { lat: 37.81, lng: 127.09 }
+  await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
+  await page.goto('/#/admin')
+  const places = page.getByRole('region', { name: '장소 좌표' })
+  await places.getByLabel('독바위공원 좌표').fill('37.8x, 127')
+  await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
+  await expect(places.getByRole('alert')).toContainText('위도, 경도 순서로')
+  await places.getByLabel('독바위공원 좌표').fill(`${place.lat}, ${place.lng}`)
+  await places.getByLabel('독바위공원 만남 지점').fill('공원 입구 안내판 앞')
+  await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
+  await expect(page.getByRole('status')).toContainText('독바위공원 좌표를 저장했습니다.')
+  await expect(places.getByRole('listitem').filter({ hasText: '독바위공원' })).toContainText('좌표 입력됨')
+  await places.screenshot({ path: shot('admin-places') })
+  await signOut(page)
+
+  await signup(page)
+  const title = '독바위공원 가벼운 플로깅 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.', '10:00', '2')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
+
+  // About 0.9 km south of the place, so it is inside 1 km and 3 km.
+  const nearby = await browser.newContext({ geolocation: { latitude: place.lat - 0.0081, longitude: place.lng }, permissions: ['geolocation'] })
+  const visitor = await nearby.newPage()
+  await visitor.goto('http://127.0.0.1:5173/')
+  await visitor.getByRole('button', { name: '내 주변 찾기' }).click()
+  await expect(visitor.locator('.location-tag')).toContainText('내 위치 기준 3km')
+  const card = visitor.locator('.activity-card').filter({ hasText: title })
+  await expect(card.locator('.distance')).toHaveText('0.9km')
+  await expect(visitor.locator(examples)).toHaveCount(0)
+  await expect(visitor.getByText('내 위치는 이번 검색에만 쓰고 저장하지 않습니다.')).toBeVisible()
+  await visitor.getByLabel('검색 반경').selectOption('1')
+  await expect(card).toHaveCount(1)
+  await visitor.getByRole('button', { name: '지도로 보기' }).click()
+  await expect(visitor.getByRole('img', { name: '활동 장소 지도' })).toBeVisible()
+  await visitor.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+  await visitor.locator('#activities').screenshot({ path: shot('nearby') })
+  await nearby.close()
+
+  const refused = await browser.newContext({ permissions: [] })
+  const stranger = await refused.newPage()
+  await stranger.goto('http://127.0.0.1:5173/')
+  await stranger.getByRole('button', { name: '내 주변 찾기' }).click()
+  await expect(stranger.getByRole('status')).toContainText('활동 장소 중심을 기준으로 찾습니다.')
+  await expect(stranger.locator('.location-tag')).toContainText('활동 장소 중심 기준 3km')
+  await refused.close()
 })
