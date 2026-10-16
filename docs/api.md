@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **2026-10-13 기준 3주차 행은 구현·테스트 완료**(백엔드 통합 테스트), 4주차 이후 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13)과 4·5·6주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 7주차 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -44,19 +44,22 @@
 | 3 | `GET /api/activities/{id}` | 공개 (비공개는 모집자·관리자) | 상세 |
 | 3 | `GET /api/admin/organizations?status=PENDING` · `POST /api/admin/organizations/{id}/approve` · `.../reject` | 관리자 | 기관 확인, 반려 사유 필수 |
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
-| 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | 반경(기본 3km)·날짜·분야·유형 검색, 가까운 순. REVIEW 미승인·BLOCKED 제외. 내 위치는 저장 안 함 |
-| 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
-| 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
-| 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
-| 5 | `POST /api/participations/{id}/cancel` | 본인 | 시작 전 취소, 빈자리 승격 |
-| 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | 승격 제안 응답, 만료 410 |
-| 5 | `GET /api/me/participations?status=` | 본인 | 내 신청 |
-| 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` | 본인 | 화면 안 알림(주기 조회, 푸시 없음) |
-| 6 | `GET /api/activities/{id}/qr` | 모집자 | 60초 서명 QR 값 |
-| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | 시간(시작 30분 전~30분 후)·QR·200m 확인, 좌표 저장 안 함 |
-| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | 사유 필수 |
-| 6 | `POST /api/participations/{id}/complete` | 모집자 | 종료 후, 체크인한 사람만. 기록 생성 |
-| 6 | `GET /api/me/records` | 본인 | 활동 기록 |
+| 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
+| 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
+| 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |
+| 5 | `POST /api/activities/{id}/participations` | 회원 | **구현.** 자리 있으면 APPLIED, 정원(확정+제안)이 차면 WAITLISTED·순번, 시작 2시간 전 이후 정원 참이면 409 `WAITLIST_CLOSED`. 중복 409 `DUPLICATE_APPLICATION`(첫 취소 뒤 1회·만료 뒤 재신청 허용, 거절은 불가). 내 활동·관리자 403, 제한 계정 403 `ACCOUNT_RESTRICTED`. 응답은 아래 `my-participation`과 같음 |
+| 5 | `GET /api/activities/{id}/my-participation` | 공개(로그인 시 내 신청 포함) | **구현.** `{confirmed, offered, waiting, pending, participation: {id, status, waitOrder, offerExpiresAt, cancelCount} 또는 null}` |
+| 5 | `GET /api/activities/{id}/participations` | 모집자 | **구현.** `{capacity, confirmed, offered, waiting, pending, items:[{id, name(가림), status, waitOrder, offerExpiresAt, appliedAt}]}`, 남의 활동 404 |
+| 5 | `POST /api/participations/{id}/approve` · `.../reject` `{reason?}` | 모집자 | **구현.** 활동 행 잠금 후 확정+제안 수 재확인, 차면 409 `CAPACITY_FULL`. 거절은 승인 대기·대기 중만, 사유 기본값 ‘모집자 판단’. 남의 신청 404 |
+| 5 | `POST /api/participations/{id}/cancel` | 본인 | **구현.** 시작 전만. 확정·제안 자리가 비면 대기 1번에게 제안(시작 2시간 전부터는 제안 안 함) |
+| 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
+| 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
+| 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
+| 6 | `GET /api/activities/{id}/qr` | 모집자 | **구현.** `{open, token(열려 있을 때만), opensAt, closesAt, validSeconds:60}`. 값 = `활동번호.발급초.HMAC`. 남의 활동 404 |
+| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | **구현.** 확인 순서: 확정 아니면 403(이미 체크인 409) → 시간 밖 422 `CHECKIN_OUT_OF_TIME` → QR 60초 지남 410 `QR_EXPIRED`, 위조·다른 활동 400 `QR_INVALID` → 위치 없음·장소 좌표 없음·200m 밖 422 `CHECKIN_OUT_OF_RANGE`. 좌표 저장 안 함 |
+| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |
+| 6 | `POST /api/participations/{id}/complete` | 모집자 | **구현.** 종료 전·체크인 안 한 사람 409. `activity_records` 생성·`RECORD_CONFIRMED` 알림 |
+| 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·이의 신청 마감(+7일)·상태 |
 | 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
 | 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
 | 7 | `GET /api/admin/reports` · `POST /api/admin/reports/{id}/resolve` | 관리자 | 보류·재개·무효, 사유 필수 |
@@ -68,7 +71,7 @@
 
 | 화면 | 쓰는 API | 화면이 받아야 할 값 | 오류·빈 상태 |
 |---|---|---|---|
-| 활동 찾기 | `GET /api/activities` | id, title, category, activityType, placeName, distanceKm, startsAt, durationMinutes, capacity, confirmedCount, waitlistOpen, lat/lng(장소) | 결과 0건 안내, 위치 거부 시 지역 기본값, 실패 시 다시 시도 |
+| 활동 찾기 | `GET /api/activities`, `GET /api/places` | id, title, category, activityType, placeName, distanceKm, date·startTime, durationMinutes, capacity, confirmed, latitude/longitude (대기열 정보는 5주차) | 결과 0건 안내(반경 넓히기), 위치 거부 시 활동 장소 중심, 실패 시 다시 시도 |
 | 활동 상세 | `GET /api/activities/{id}` + 내 신청 상태 | 위 + description, organizer 표시명, myParticipationStatus, 보험 비적용 안내 | 404, 마감·정원 참 |
 | 활동 만들기 | `POST /api/activities`, `GET /api/me` | riskLevel, riskReasons[], status | 칸별 `fieldErrors`, BLOCKED 이유, 기관 미확인 403 |
 | 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |
