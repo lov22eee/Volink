@@ -70,12 +70,24 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
 
 type Session = { accessToken: string; user: User }
 
-export async function refresh(): Promise<User | null> {
-  const response = await send('/api/auth/refresh', 'POST', undefined, false)
-  if (!response.ok) { accessToken = null; return null }
-  const session: Session = await response.json()
-  accessToken = session.accessToken
-  return session.user
+// The refresh cookie is single-use (rotated on every refresh). Two refreshes at once (React's double effect in
+// development, or two requests renewing an expired token together) would send the same cookie twice, and the
+// second would be refused and log the person out. So every caller shares one in-flight refresh.
+let refreshing: Promise<User | null> | null = null
+
+export function refresh(): Promise<User | null> {
+  refreshing ??= (async () => {
+    try {
+      const response = await send('/api/auth/refresh', 'POST', undefined, false)
+      if (!response.ok) { accessToken = null; return null }
+      const session: Session = await response.json()
+      accessToken = session.accessToken
+      return session.user
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
 }
 
 export async function login(email: string, password: string): Promise<User> {
