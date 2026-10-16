@@ -3,6 +3,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // Multi-account scenarios (signup → apply → approve → check-in → report) take 10–30 s on a busy machine.
+  timeout: 90_000,
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {

@@ -45,3 +45,19 @@ curl -fsSL https://raw.githubusercontent.com/lov22eee/Volink/<브랜치>/scripts
 ## 자동 반영 (보류)
 
 지금은 main에 합쳐도 서버가 자동으로 바뀌지 않습니다. 반영하려면 서버에서 `server-setup.sh`를 직접 실행합니다. 2026-10-13 사용자 결정: 4~5주차가 끝난 뒤 **A안(서버가 5분마다 깃허브를 확인해 스스로 업데이트)**으로 자동 반영을 만듭니다. A안을 고른 이유는 서버 열쇠를 깃허브에 넣거나 22번 포트를 열 필요가 없기 때문입니다. 대신 반영까지 최대 10분이 걸리고, 재시작하는 10~20초 동안 접속이 끊기며, 빌드에 실패해도 알림이 없습니다(이전 버전이 계속 동작). 발표 당일에는 합치지 않습니다.
+
+## Kakao 지도 키 넣기 (4주차)
+
+1. https://developers.kakao.com → 내 애플리케이션 → 앱 추가 → **JavaScript 키** 복사
+2. 플랫폼 → Web → 사이트 도메인에 `https://3-104-31-169.sslip.io`, `http://127.0.0.1:5173` 등록 (다른 주소에서는 키가 동작하지 않음)
+3. 서버에서 `echo 키 | sudo tee /etc/volink/kakao_js_key` 후 `sudo bash /opt/volink/scripts/aws/server-setup.sh`
+4. 로컬은 `frontend/.env.local`에 `VITE_KAKAO_JS_KEY=키` (커밋 안 됨)
+
+키가 없으면 지도 자리에 좌표의 상대 위치만 그린 그림이 나옵니다.
+
+## 백업과 복원 (7주차)
+
+- 매일 04:10(한국 시간) `scripts/aws/backup.sh`가 DB와 증빙 파일을 `/var/backups/volink`에 7일치 보관합니다(root만 읽기). 기록: `/var/log/volink-backup.log`
+- 지금 바로 백업: `sudo bash /opt/volink/scripts/aws/backup.sh`
+- 복원 방법은 스크립트 맨 위 주석에 있습니다. **현재 데이터를 덮어쓰므로** 시연 전에는 하지 마세요.
+- 서버 디스크가 고장 나면 백업도 함께 사라집니다. 중요해지면 S3 같은 바깥 저장소로 복사해야 합니다(아직 안 함).

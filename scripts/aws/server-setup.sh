@@ -52,6 +52,8 @@ step "backend build"
 id volink >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin volink
 mkdir -p /opt/volink-app
 install -m 644 backend/target/volink-api-*.jar /opt/volink-app/volink-api.jar
+# Private report evidence (week 7): readable only by the API user, never served by Nginx.
+install -d -m 700 -o volink -g volink /var/lib/volink/evidence
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
 Description=Volink API
@@ -64,6 +66,7 @@ EnvironmentFile=$APP/.env
 # dev profile = demo server: creates the 11 demo accounts from DEMO_ACCOUNT_PASSWORD in .env.
 Environment=SPRING_PROFILES_ACTIVE=dev
 Environment=DB_HOST=127.0.0.1
+Environment=VOLINK_EVIDENCE_DIR=/var/lib/volink/evidence
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/volink-app/volink-api.jar
 Restart=always
 RestartSec=5
@@ -76,6 +79,8 @@ systemctl enable volink-api
 systemctl restart volink-api
 
 step "frontend build"
+# Kakao Maps JavaScript key (public, domain-restricted). Without it the site shows a simple position sketch.
+if [ -s /etc/volink/kakao_js_key ]; then export VITE_KAKAO_JS_KEY="$(tr -d '[:space:]' < /etc/volink/kakao_js_key)"; fi
 (cd frontend && npm ci --no-audit --no-fund && npm run build)
 rm -rf /var/www/volink && mkdir -p /var/www/volink && cp -r frontend/dist/. /var/www/volink/
 
@@ -84,7 +89,7 @@ site=/etc/nginx/sites-available/volink
 common="
     root /var/www/volink;
     index index.html;
-    client_max_body_size 1m;
+    client_max_body_size 12m;
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host \$host;
@@ -115,6 +120,13 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect \
     || echo "WARN: HTTPS 인증서 발급 실패. http://$DOMAIN 로는 접속됩니다. 나중에 이 스크립트를 다시 실행하세요."
 fi
+
+step "daily backup"
+# 04:10 KST (19:10 UTC): database + evidence files, kept 7 days in /var/backups/volink (root only).
+cat > /etc/cron.d/volink-backup <<CRON
+10 19 * * * root bash $APP/scripts/aws/backup.sh >> /var/log/volink-backup.log 2>&1
+CRON
+chmod 644 /etc/cron.d/volink-backup
 
 step "check"
 for _ in $(seq 1 60); do

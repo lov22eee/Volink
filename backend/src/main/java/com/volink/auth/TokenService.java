@@ -55,6 +55,17 @@ public class TokenService {
         this.decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
     }
 
+    /** A separate HMAC key for another purpose (e.g. "qr"), derived from the server secret so one secret is enough. */
+    public SecretKey derive(String purpose) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(key);
+            return new SecretKeySpec(mac.doFinal(("volink:" + purpose).getBytes(StandardCharsets.UTF_8)), "HmacSHA256");
+        } catch (java.security.GeneralSecurityException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     public JwtDecoder decoder() {
         return decoder;
     }

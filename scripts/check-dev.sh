@@ -9,7 +9,7 @@ def get(path):
         return json.load(r)
 assert get('/actuator/health')['status']=='UP'
 status=get('/api/project/status')
-assert status['week']==3 and status['database']=='UP'
+assert status['week']==7 and status['database']=='UP'
 assert status['authenticationImplemented'] is True
 catalog=get('/api/demo/catalog')
 assert catalog['demo'] is True
@@ -21,7 +21,7 @@ assert sum(p['role']=='ORGANIZER' for p in catalog['personas'])==2
 assert sum(p['role']=='PARTICIPANT' for p in catalog['personas'])==6
 assert sum(p['role']=='ADMIN' for p in catalog['personas'])==1
 assert all(2<=a['capacity']<=10 and 0<a['durationMinutes']<=180 for a in catalog['activities'])
-assert all(p['coordinateStatus']=='UNVERIFIED' for p in catalog['places'])
+assert all(p['coordinateStatus'] in ('UNVERIFIED', 'ENTERED') for p in catalog['places'])
 assert isinstance(get('/api/activities'), list)
 # Writing without a login token must be refused.
 try:
