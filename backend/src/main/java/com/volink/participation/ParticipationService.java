@@ -178,9 +178,11 @@ public class ParticipationService {
         if (((Number) activity.get("organizer_id")).longValue() != organizerId) throw activityNotFound();
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
                 SELECT p.id, u.display_name AS name, p.status, p.wait_order AS waitOrder,
-                       DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt
-                FROM participations p JOIN users u ON u.id = p.user_id WHERE p.activity_id = ?
-                ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'OFFERED', 'WAITLISTED') = 0, FIELD(p.status, 'APPLIED', 'CONFIRMED', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
+                       DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt,
+                       c.method AS checkInMethod, c.reason AS checkInReason
+                FROM participations p JOIN users u ON u.id = p.user_id LEFT JOIN check_ins c ON c.participation_id = p.id WHERE p.activity_id = ?
+                ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED') = 0,
+                         FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
                 """), activityId);
         rows.forEach(row -> row.put("name", mask((String) row.get("name"))));
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));

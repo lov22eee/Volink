@@ -49,9 +49,9 @@ public class DemoController {
     @GetMapping("/project/status")
     public Map<String, Object> status() {
         jdbc.queryForObject("SELECT 1", Integer.class);
-        return Map.of("project", "Volink", "week", 5, "database", "UP",
+        return Map.of("project", "Volink", "week", 6, "database", "UP",
                 "capabilities", List.of("React UI", "Spring Boot API", "MySQL / Flyway", "Demo catalog",
-                        "JWT signup/login", "Activity creation with risk check", "Admin review of organizations and REVIEW activities", "Radius search with a spatial index", "Admin place coordinates", "Applications, capacity lock, waitlist offers, notifications"),
+                        "JWT signup/login", "Activity creation with risk check", "Admin review of organizations and REVIEW activities", "Radius search with a spatial index", "Admin place coordinates", "Applications, capacity lock, waitlist offers, notifications", "QR + time + location check-in, completion records, no-shows"),
                 "authenticationImplemented", true, "mapIntegrated", false,
                 "notice", "활동 기록은 플랫폼 내부 기록이며 공식 봉사실적으로 인정되지 않습니다.");
     }

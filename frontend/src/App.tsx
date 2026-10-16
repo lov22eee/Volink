@@ -3,8 +3,9 @@ import type { FormEvent, ReactNode } from 'react'
 import type { DisplayCatalog as Catalog } from './data'
 import { activityRules, signupRules, validateActivity, validateSignup } from './rules'
 import type { Errors } from './rules'
+import QRCode from 'qrcode'
 import { api, ApiError, login, logout, preview, refresh } from './api'
-import type { Applicant, AppNotification, LiveActivity, MyParticipation, Participation, PlaceInfo, User, ViewerInfo } from './api'
+import type { Applicant, AppNotification, LiveActivity, MyParticipation, MyRecord, Participation, PlaceInfo, User, ViewerInfo } from './api'
 import { kakaoEnabled, PlaceMap, placesCentre } from './map'
 import type { Origin } from './map'
 
@@ -41,14 +42,16 @@ function ParkArt({ variant = 0 }: { variant?: number }) {
 }
 
 
-type Page = 'explore' | 'detail' | 'live' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications'
-type Route = { page: Page; activityId?: number }
+type Page = 'explore' | 'detail' | 'live' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications' | 'checkin'
+type Route = { page: Page; activityId?: number; token?: string }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
 const categories = ['환경 정화', '생활 지원', '지역 돌봄']
 
 function getRoute(): Route {
-  const path = window.location.hash.replace(/^#\/?/, '')
+  const [path, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?')
+  const checkin = /^checkin\/(\d+)$/.exec(path)
+  if (checkin) return { page: 'checkin', activityId: Number(checkin[1]), token: new URLSearchParams(query).get('t') ?? undefined }
   const example = /^activities\/(\d+)$/.exec(path)
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
@@ -129,7 +132,7 @@ export default function App() {
     { id: 'mine', title: '내 활동', icon: 'users' },
     ...(user?.role === 'ADMIN' ? [{ id: 'admin' as Page, title: '관리', icon: 'shield' as IconName }] : []),
   ]
-  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림' }
+  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림', checkin: '체크인' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
   return <div className="app-shell">
@@ -155,6 +158,7 @@ export default function App() {
         {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
         {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} user={user} onChange={pollUnread} />}
         {route.page === 'notifications' && <Notifications user={user} ready={ready} onChange={pollUnread} />}
+        {route.page === 'checkin' && route.activityId && <CheckIn id={route.activityId} token={route.token} user={user} ready={ready} />}
         {route.page === 'create' && <CreateActivity places={places} user={user} ready={ready} />}
         {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
         {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
@@ -349,7 +353,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   </div>
   return <DetailView item={item} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'}
     note={'개설: ' + activity.organizerName + ' · 신청·확정 안내는 화면 안 알림으로 드립니다. 연락처는 공개하지 않습니다.'} action={action}
-    extra={organizer && <Applicants activityId={activity.id} onChange={() => { loadViewer(); onChange() }} />}>
+    extra={organizer && <><AttendanceQr activityId={activity.id} /><Applicants activityId={activity.id} onChange={() => { loadViewer(); onChange() }} /></>}>
     {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
   </DetailView>
 }
@@ -382,27 +386,31 @@ function offerDeadline(value: string) {
 function Applicants({ activityId, onChange }: { activityId: number; onChange: () => void }) {
   const [data, setData] = useState<{ capacity: number; confirmed: number; items: Applicant[] } | null>(null)
   const [notice, setNotice] = useState('')
+  const [reasons, setReasons] = useState<Record<number, string>>({})
   const load = useCallback(() => api<{ capacity: number; confirmed: number; items: Applicant[] }>('/api/activities/' + activityId + '/participations').then(setData).catch(() => setData(null)), [activityId])
   useEffect(() => { load() }, [load])
-  async function decide(item: Applicant, approve: boolean) {
+  async function run(item: Applicant, action: string, body: object, done: string) {
     try {
-      await api('/api/participations/' + item.id + (approve ? '/approve' : '/reject'), 'POST', {})
-      setNotice(item.name + (approve ? ' 님 참가를 확정했습니다.' : ' 님 신청을 거절했습니다.'))
+      await api('/api/participations/' + item.id + '/' + action, 'POST', body)
+      setNotice(item.name + ' 님 ' + done)
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+      setNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '처리하지 못했습니다.')
     }
     load()
     onChange()
   }
+  const decide = (item: Applicant, approve: boolean) => run(item, approve ? 'approve' : 'reject', {}, approve ? '참가를 확정했습니다.' : '신청을 거절했습니다.')
   if (!data) return null
   return <section className="panel applicants" aria-label="신청자 관리">
     <h2>신청자 <span className="count">{data.items.length}</span></h2>
-    <p className="small-print">확정 {data.confirmed} / {data.capacity}명 · 정원이 차면 승인할 수 없고, 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안합니다. 이름 일부만 보이며 연락처는 공개하지 않습니다.</p>
+    <p className="small-print">확정 {data.confirmed} / {data.capacity}명 · 정원이 차면 승인할 수 없고, 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안합니다. 이름 일부만 보이며 연락처는 공개하지 않습니다. 활동이 끝나면 출석한 사람만 완료를 확인할 수 있고, 출석하지 않은 확정자는 불참으로 기록됩니다.</p>
     {notice && <p className="inline-notice" role="status">{notice}</p>}
     {data.items.length === 0 ? <p className="small-print">아직 신청자가 없습니다.</p> : <ul className="review-list">{data.items.map(item => <li key={item.id}>
-      <div><strong>{item.name}</strong><span>{participationLabel(item)} · 신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</span></div>
-      <span />
-      <div className="button-row">{item.status === 'APPLIED' && <button className="primary-button" onClick={() => decide(item, true)}>승인</button>}{(item.status === 'APPLIED' || item.status === 'WAITLISTED') && <button className="secondary-button" onClick={() => decide(item, false)}>거절</button>}</div>
+      <div><strong>{item.name}</strong><span>{participationLabel(item)}{item.checkInMethod ? ' · ' + (item.checkInMethod === 'QR' ? 'QR·위치 확인' : '수동 확인') : ''} · 신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</span>{item.checkInReason && <small>수동 확인 사유: {item.checkInReason}</small>}</div>
+      {item.status === 'CONFIRMED' ? <label className="reason-field">수동 확인 사유<input aria-label={item.name + ' 수동 확인 사유'} value={reasons[item.id] ?? ''} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} placeholder="QR·위치가 안 될 때만" /></label> : <span />}
+      <div className="button-row">{item.status === 'APPLIED' && <button className="primary-button" onClick={() => decide(item, true)}>승인</button>}{(item.status === 'APPLIED' || item.status === 'WAITLISTED') && <button className="secondary-button" onClick={() => decide(item, false)}>거절</button>}
+        {item.status === 'CONFIRMED' && <button className="secondary-button" onClick={() => run(item, 'manual-check-in', { reason: reasons[item.id] ?? '' }, '출석을 수동으로 확인했습니다.')}>수동 확인</button>}
+        {item.status === 'CHECKED_IN' && <button className="primary-button" onClick={() => run(item, 'complete', {}, '활동 완료를 확인했습니다.')}>완료 확인</button>}</div>
     </li>)}</ul>}
   </section>
 }
@@ -424,6 +432,85 @@ function Notifications({ user, ready, onChange }: { user: User | null; ready: bo
       <div className="button-row notice-actions"><button className="text-button" onClick={async () => { await api('/api/notifications/read-all', 'POST'); onChange(); load() }}>모두 읽음</button></div>
       {items === null ? <p>불러오는 중입니다.</p> : items.length === 0 ? <p className="small-print">아직 알림이 없습니다.</p>
         : <ul className="notice-list">{items.map(item => <li key={item.id} className={item.read ? 'read' : 'unread'}><button onClick={() => open(item)}><strong>{item.title}</strong><span>{item.body}</span><small>{item.createdAt}</small></button></li>)}</ul>}
+    </section>
+  </>
+}
+
+/** After logging in, go back to where the person was headed (e.g. a scanned check-in link). */
+function takeNext() {
+  try {
+    const next = sessionStorage.getItem('volink-next')
+    sessionStorage.removeItem('volink-next')
+    return next
+  } catch { return null }
+}
+
+type QrInfo = { open: boolean; token: string | null; opensAt: string; closesAt: string; validSeconds: number }
+
+/** Organizer: a QR that changes every minute during the check-in window. Scanning it opens the check-in page. */
+function AttendanceQr({ activityId }: { activityId: number }) {
+  const [info, setInfo] = useState<QrInfo | null>(null)
+  const [image, setImage] = useState('')
+  const [left, setLeft] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const load = () => api<QrInfo>('/api/activities/' + activityId + '/qr').then(next => { if (alive) { setInfo(next); setLeft(next.validSeconds) } }).catch(() => {})
+    load()
+    const refresh = window.setInterval(load, 50_000)
+    const tick = window.setInterval(() => setLeft(value => Math.max(0, value - 1)), 1000)
+    return () => { alive = false; window.clearInterval(refresh); window.clearInterval(tick) }
+  }, [activityId])
+  const url = info?.token ? window.location.origin + window.location.pathname + '#/checkin/' + activityId + '?t=' + encodeURIComponent(info.token) : ''
+  useEffect(() => { if (url) QRCode.toDataURL(url, { width: 240, margin: 1 }).then(setImage).catch(() => setImage('')); else setImage('') }, [url])
+  if (!info) return null
+  return <section className="panel attendance" aria-label="출석 QR">
+    <h2>출석 QR</h2>
+    {info.open && image
+      ? <div className="qr-box"><img src={image} alt="체크인 QR" data-url={url} width={240} height={240} /><div><p>참가자가 휴대폰 카메라로 찍으면 체크인 화면이 열립니다. 서버가 시간·QR·위치(200m)를 함께 확인합니다.</p><p className="small-print">{left}초 뒤 새 QR로 바뀝니다. 찍힌 QR은 60초가 지나면 쓸 수 없습니다.</p></div></div>
+      : <p className="small-print">체크인은 {offerDeadline(info.opensAt.slice(0, 16))}부터 {offerDeadline(info.closesAt.slice(0, 16))}까지 열립니다. 그때 이 자리에 QR이 나타납니다.</p>}
+  </section>
+}
+
+/** Participant: opened from the QR. The position is sent once for the distance check and is not stored. */
+function CheckIn({ id, token, user, ready }: { id: number; token?: string; user: User | null; ready: boolean }) {
+  const [activity, setActivity] = useState<LiveActivity | null>(null)
+  const [state, setState] = useState<'idle' | 'locating' | 'done' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+  useEffect(() => { if (ready) api<LiveActivity>('/api/activities/' + id).then(setActivity).catch(() => setActivity(null)) }, [id, ready])
+  useEffect(() => {
+    if (!ready || user) return
+    try { sessionStorage.setItem('volink-next', window.location.hash) } catch { /* private mode: scan the QR again after login */ }
+  }, [ready, user])
+  if (!user) {
+    return <><PageHeading title="체크인" description="QR을 찍은 뒤 로그인하면 바로 체크인 화면으로 돌아옵니다." /><LoginRequired ready={ready} text="체크인하려면 로그인해 주세요." /></>
+  }
+  async function send(lat: number | null, lng: number | null) {
+    try {
+      await api('/api/activities/' + id + '/check-ins', 'POST', { qrToken: token, lat, lng })
+      setState('done')
+      setMessage('체크인했습니다. 즐거운 활동 되세요!')
+    } catch (cause) {
+      setState('error')
+      setMessage(cause instanceof Error ? cause.message : '체크인하지 못했습니다.')
+    }
+  }
+  function start() {
+    setState('locating')
+    setMessage('')
+    if (!navigator.geolocation) { send(null, null); return }
+    navigator.geolocation.getCurrentPosition(position => send(position.coords.latitude, position.coords.longitude), () => send(null, null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+  }
+  return <>
+    <PageHeading title="체크인" description="시간·QR·위치를 함께 확인합니다. 위치는 이번 확인에만 쓰고 저장하지 않습니다." />
+    <section className="panel checkin-panel">
+      <h2>{activity?.title ?? '활동'}</h2>
+      {activity && <p className="small-print">{dateLabel(activity.date)} · {activity.startTime} · {activity.placeName ?? '장소 미정'}</p>}
+      {!token && <p className="form-alert" role="alert">QR 정보가 없습니다. 모집자 화면의 QR을 다시 찍어 주세요.</p>}
+      {state === 'done'
+        ? <p className="success-message" role="status">{message}</p>
+        : <button className="primary-button" disabled={!token || state === 'locating'} onClick={start}>{state === 'locating' ? '위치 확인 중…' : '위치 확인하고 체크인'} <Icon name="pin" size={17} /></button>}
+      {state === 'error' && <p className="form-alert" role="alert">{message}</p>}
+      <p className="small-print">QR·위치 확인은 부정 참여 가능성을 줄이는 방법이며 완벽한 증명은 아닙니다. 안 되면 모집자에게 수동 확인을 요청하세요.</p>
     </section>
   </>
 }
@@ -527,10 +614,12 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   const [tab, setTab] = useState('신청한 활동')
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
   const [applied, setApplied] = useState<MyParticipation[] | null>(null)
+  const [records, setRecords] = useState<MyRecord[] | null>(null)
   const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '개설한 활동': '내가 만든 활동과 공개 상태를 확인하는 공간입니다.', '활동 기록': '출석과 완료가 확인된 활동을 모아 보는 공간입니다. 완료 기록은 7일 안에 이의를 신청할 수 있습니다.' }
   useEffect(() => {
     if (user) api<LiveActivity[]>('/api/me/activities').then(setMine).catch(() => setMine([]))
     if (user) api<MyParticipation[]>('/api/me/participations').then(setApplied).catch(() => setApplied([]))
+    if (user) api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
   }, [user])
   const tabs = <div className="activity-tabs" role="tablist" aria-label="내 활동 구분">{Object.keys(descriptions).map(value => <button key={value} role="tab" id={'tab-' + value} aria-controls="my-activity-panel" aria-selected={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div>
   const states = tab === '신청한 활동' && <section className="panel"><h2>신청 상태 안내</h2><ul className="state-list" aria-label="신청 상태 안내">{applicationStates.map(([name, text]) => <li key={name}><strong>{name}</strong><span>{text}</span></li>)}</ul></section>
@@ -569,7 +658,13 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
               <span>{dateLabel(item.date)} · {item.startTime} · {item.placeName ?? '장소 미정'}</span>
               {item.status === 'OFFERED' && item.offerExpiresAt && <small>{offerDeadline(item.offerExpiresAt)}까지 수락해 주세요</small>}
             </li>)}</ul>
-          : <div className="account-empty"><h2>활동 기록은 준비 중입니다</h2><p>{descriptions[tab]}</p></div>}
+          : records === null ? <p>불러오는 중입니다.</p> : records.length === 0 ? <div className="account-empty"><h2>아직 활동 기록이 없어요</h2><p>{descriptions[tab]}</p></div>
+            : <ul className="my-list">{records.map(item => <li key={item.id}>
+              <span className={'risk-badge ' + (item.status === 'VALID' ? 'low' : 'review')}>{item.status === 'VALID' ? '완료 기록' : item.status === 'HELD' ? '보류' : '무효'}</span>
+              <a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
+              <span>{dateLabel(item.date)} · {item.startTime} · {item.durationMinutes}분 · {item.placeName ?? '장소 미정'} · {item.checkInMethod === 'QR' ? 'QR·위치 출석' : '수동 출석'}</span>
+              <small>완료 확인 {offerDeadline(item.confirmedAt)} · 이의 신청 마감 {offerDeadline(item.appealDeadline)}</small>
+            </li>)}</ul>}
     </section>
     {states}
   </>
@@ -697,7 +792,7 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
         organizationContact: data.get('organizationContact'), agreedNotice: Boolean(data.get('notice')),
       })
       onSession(await login(email, password))
-      window.location.hash = '#/mine'
+      window.location.hash = takeNext() ?? '#/mine'
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
       else setMessage(cause instanceof Error ? cause.message : '요청을 처리하지 못했습니다.')

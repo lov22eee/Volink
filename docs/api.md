@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **3주차 행(2026-10-13)과 4·5주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 6주차 이후 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13)과 4·5·6주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 7주차 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -55,11 +55,11 @@
 | 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
 | 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
 | 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
-| 6 | `GET /api/activities/{id}/qr` | 모집자 | 60초 서명 QR 값 |
-| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | 시간(시작 30분 전~30분 후)·QR·200m 확인, 좌표 저장 안 함 |
-| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | 사유 필수 |
-| 6 | `POST /api/participations/{id}/complete` | 모집자 | 종료 후, 체크인한 사람만. 기록 생성 |
-| 6 | `GET /api/me/records` | 본인 | 활동 기록 |
+| 6 | `GET /api/activities/{id}/qr` | 모집자 | **구현.** `{open, token(열려 있을 때만), opensAt, closesAt, validSeconds:60}`. 값 = `활동번호.발급초.HMAC`. 남의 활동 404 |
+| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | **구현.** 확인 순서: 확정 아니면 403(이미 체크인 409) → 시간 밖 422 `CHECKIN_OUT_OF_TIME` → QR 60초 지남 410 `QR_EXPIRED`, 위조·다른 활동 400 `QR_INVALID` → 위치 없음·장소 좌표 없음·200m 밖 422 `CHECKIN_OUT_OF_RANGE`. 좌표 저장 안 함 |
+| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |
+| 6 | `POST /api/participations/{id}/complete` | 모집자 | **구현.** 종료 전·체크인 안 한 사람 409. `activity_records` 생성·`RECORD_CONFIRMED` 알림 |
+| 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·이의 신청 마감(+7일)·상태 |
 | 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
 | 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
 | 7 | `GET /api/admin/reports` · `POST /api/admin/reports/{id}/resolve` | 관리자 | 보류·재개·무효, 사유 필수 |

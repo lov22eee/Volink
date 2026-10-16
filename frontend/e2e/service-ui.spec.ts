@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 
 const developmentCopy = /졸업작품|경동대학교|1주차|2주차|WEEK|발표|페르소나|API|DB|개발 진행|사용자 흐름/
 
 const examples = '.activity-card[data-kind="example"]'
 // Evidence screenshots of the current week; earlier weeks' files stay as they were.
-const shot = (name: string) => `../docs/screenshots/week-05-${name}.png`
+const shot = (name: string) => `../docs/screenshots/week-06-${name}.png`
 const password = 'example123'
 
 // The demo admin account exists only in the local dev environment; its password lives in the ignored ../.env.
@@ -14,6 +15,14 @@ function demoPassword() {
   const line = readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').find(row => row.startsWith('DEMO_ACCOUNT_PASSWORD='))
   if (!line) throw new Error('Run ./scripts/setup-env.sh so DEMO_ACCOUNT_PASSWORD exists')
   return line.slice('DEMO_ACCOUNT_PASSWORD='.length).trim()
+}
+
+// Local dev DB only: move an activity's time so check-in and completion can be tested now (the API never allows this).
+function moveActivity(id: string, startMinutesFromNow: number) {
+  const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter(row => row.includes('=') && !row.startsWith('#')).map(row => [row.slice(0, row.indexOf('=')), row.slice(row.indexOf('=') + 1).trim()]))
+  const korea = (minutes: number) => new Date(Date.now() + 9 * 3_600_000 + minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ')
+  const sql = `UPDATE activities SET starts_at = '${korea(startMinutesFromNow)}', ends_at = '${korea(startMinutesFromNow + 60)}' WHERE id = ${Number(id)}`
+  execFileSync('docker', ['compose', 'exec', '-T', '-e', 'MYSQL_PWD=' + env.MYSQL_PASSWORD, 'db', 'mysql', '-u', env.MYSQL_USER, env.MYSQL_DATABASE, '-e', sql], { cwd: '..' })
 }
 
 function uniqueEmail(prefix: string) {
@@ -485,4 +494,72 @@ test('applications fill the capacity, the waitlist gets the freed seat as an off
   await page.goto('/#/mine')
   await expect(page.getByRole('listitem').filter({ hasText: title })).toContainText('참가 확정')
   void second
+})
+
+// Week 6: organizer QR → participant scans (opens the check-in page) → time + QR + location → completion → activity record.
+test('a confirmed participant checks in with the QR on site and gets an activity record after the organizer completes it', async ({ page, browser }) => {
+  const place = { lat: 37.81, lng: 127.09 }
+  await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
+  await page.goto('/#/admin')
+  const places = page.getByRole('region', { name: '장소 좌표' })
+  await places.getByLabel('독바위공원 좌표').fill(`${place.lat}, ${place.lng}`)
+  await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
+  await expect(page.getByRole('status')).toContainText('좌표를 저장했습니다')
+  await signOut(page)
+
+  const organizer = await signup(page)
+  const title = '체크인 시험 활동 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.', '10:00', '2')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = (await page.getByRole('link', { name: /만든 활동 보기/ }).getAttribute('href'))!
+  const activityId = link.split('/').pop()!
+  await signOut(page)
+  const member = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '승인' }).click()
+  await expect(page.locator('.seat-line')).toContainText('확정 1')
+  await expect(page.getByRole('region', { name: '출석 QR' })).toContainText('체크인은')
+
+  moveActivity(activityId, 10)
+  await page.reload()
+  const qr = page.getByRole('img', { name: '체크인 QR' })
+  await expect(qr).toBeVisible()
+  const url = (await qr.getAttribute('data-url'))!
+  expect(url).toContain('#/checkin/' + activityId + '?t=')
+  await page.getByRole('region', { name: '출석 QR' }).screenshot({ path: shot('qr') })
+
+  const onSite = await browser.newContext({ geolocation: { latitude: place.lat + 0.0005, longitude: place.lng }, permissions: ['geolocation'] })
+  const phone = await onSite.newPage()
+  await phone.goto(url.replace(/^https?:\/\/[^/]+/, 'http://127.0.0.1:5173'))
+  await expect(phone.getByRole('heading', { name: '로그인이 필요합니다' })).toBeVisible()
+  await phone.getByRole('link', { name: '로그인', exact: true }).first().click()
+  await phone.getByRole('textbox', { name: '이메일', exact: true }).fill(member)
+  await phone.getByRole('textbox', { name: '비밀번호', exact: true }).fill(password)
+  await phone.getByRole('button', { name: '로그인', exact: true }).click()
+  await expect(phone.getByRole('heading', { name: title })).toBeVisible()
+  await phone.getByRole('button', { name: '위치 확인하고 체크인' }).click()
+  await expect(phone.getByRole('status')).toHaveText('체크인했습니다. 즐거운 활동 되세요!')
+  await phone.screenshot({ path: shot('checkin'), fullPage: true })
+
+  await page.reload()
+  const applicants = page.getByRole('region', { name: '신청자 관리' })
+  await expect(applicants).toContainText('출석 완료 · QR·위치 확인')
+  await applicants.getByRole('button', { name: '완료 확인' }).click()
+  await expect(applicants.getByRole('status')).toContainText('활동이 끝난 뒤에')
+  moveActivity(activityId, -90)
+  await applicants.getByRole('button', { name: '완료 확인' }).click()
+  await expect(applicants.getByRole('status')).toContainText('활동 완료를 확인했습니다')
+
+  await phone.goto('http://127.0.0.1:5173/#/mine')
+  await phone.getByRole('tab', { name: '활동 기록' }).click()
+  const record = phone.getByRole('listitem').filter({ hasText: title })
+  await expect(record).toContainText('완료 기록')
+  await expect(record).toContainText('이의 신청 마감')
+  await phone.screenshot({ path: shot('records'), fullPage: true })
+  await onSite.close()
 })
