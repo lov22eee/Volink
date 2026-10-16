@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,10 +27,12 @@ public class ActivityController {
         return activities.create(Long.parseLong(jwt.getSubject()), request);
     }
 
-    /** Week 3: open activities only. Radius/date/category search arrives in week 4. */
+    /** Week 4: optional radius (lat, lng, radiusKm), date, category and type filters. */
     @GetMapping("/api/activities")
-    public List<Map<String, Object>> list() {
-        return activities.listPublic();
+    public List<Map<String, Object>> list(@RequestParam(required = false) Double lat, @RequestParam(required = false) Double lng,
+                                          @RequestParam(required = false) Double radiusKm, @RequestParam(required = false) String date,
+                                          @RequestParam(required = false) String category, @RequestParam(required = false) String type) {
+        return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type));
     }
 
     @GetMapping("/api/activities/{id}")

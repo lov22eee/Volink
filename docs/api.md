@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **2026-10-13 기준 3주차 행은 구현·테스트 완료**(백엔드 통합 테스트), 4주차 이후 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13)과 4주차 행(2026-10-16, 4주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 5주차 이후 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -44,7 +44,9 @@
 | 3 | `GET /api/activities/{id}` | 공개 (비공개는 모집자·관리자) | 상세 |
 | 3 | `GET /api/admin/organizations?status=PENDING` · `POST /api/admin/organizations/{id}/approve` · `.../reject` | 관리자 | 기관 확인, 반려 사유 필수 |
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
-| 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | 반경(기본 3km)·날짜·분야·유형 검색, 가까운 순. REVIEW 미승인·BLOCKED 제외. 내 위치는 저장 안 함 |
+| 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
+| 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
+| 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |
 | 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
 | 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
 | 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
@@ -68,7 +70,7 @@
 
 | 화면 | 쓰는 API | 화면이 받아야 할 값 | 오류·빈 상태 |
 |---|---|---|---|
-| 활동 찾기 | `GET /api/activities` | id, title, category, activityType, placeName, distanceKm, startsAt, durationMinutes, capacity, confirmedCount, waitlistOpen, lat/lng(장소) | 결과 0건 안내, 위치 거부 시 지역 기본값, 실패 시 다시 시도 |
+| 활동 찾기 | `GET /api/activities`, `GET /api/places` | id, title, category, activityType, placeName, distanceKm, date·startTime, durationMinutes, capacity, confirmed, latitude/longitude (대기열 정보는 5주차) | 결과 0건 안내(반경 넓히기), 위치 거부 시 활동 장소 중심, 실패 시 다시 시도 |
 | 활동 상세 | `GET /api/activities/{id}` + 내 신청 상태 | 위 + description, organizer 표시명, myParticipationStatus, 보험 비적용 안내 | 404, 마감·정원 참 |
 | 활동 만들기 | `POST /api/activities`, `GET /api/me` | riskLevel, riskReasons[], status | 칸별 `fieldErrors`, BLOCKED 이유, 기관 미확인 403 |
 | 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { DisplayCatalog as Catalog } from './data'
 import { activityRules, signupRules, validateActivity, validateSignup } from './rules'
 import type { Errors } from './rules'
 import { api, ApiError, login, logout, preview, refresh } from './api'
-import type { LiveActivity, User } from './api'
+import type { LiveActivity, PlaceInfo, User } from './api'
+import { kakaoEnabled, PlaceMap, placesCentre } from './map'
+import type { Origin } from './map'
 
 type IconName = 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield'
 
@@ -57,7 +59,7 @@ function getRoute(): Route {
 type CardItem = {
   key: string; kind: 'example' | 'live'; id: number; title: string; category: string; activityType: string
   placeId: number | null; placeName: string; date: string; startTime: string; durationMinutes: number
-  confirmed: number; capacity: number; href: string; organizationName?: string | null
+  confirmed: number; capacity: number; href: string; organizationName?: string | null; distanceKm?: number
 }
 
 function fromLive(activity: LiveActivity): CardItem {
@@ -71,6 +73,10 @@ export default function App() {
   const [reload, setReload] = useState(0)
   const [user, setUser] = useState<User | null>(null)
   const [ready, setReady] = useState(preview)
+  const [serverPlaces, setServerPlaces] = useState<PlaceInfo[] | null>(null)
+  const places = useMemo<PlaceInfo[]>(() => serverPlaces ?? (catalog?.places ?? []).map(place => ({ ...place, latitude: null, longitude: null })), [serverPlaces, catalog])
+  const reloadPlaces = useCallback(() => { if (!preview) api<PlaceInfo[]>('/api/places').then(setServerPlaces).catch(() => setServerPlaces(null)) }, [])
+  useEffect(reloadPlaces, [reloadPlaces])
 
   useEffect(() => {
     const navigate = () => { setRoute(getRoute()); window.scrollTo(0, 0) }
@@ -134,12 +140,12 @@ export default function App() {
       </header>
       <main id="main-content">
         {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
-        {route.page === 'explore' && <Explore catalog={catalog} />}
+        {route.page === 'explore' && <Explore catalog={catalog} places={places} />}
         {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
         {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} />}
-        {route.page === 'create' && <CreateActivity catalog={catalog} user={user} ready={ready} />}
+        {route.page === 'create' && <CreateActivity places={places} user={user} ready={ready} />}
         {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
-        {route.page === 'admin' && <AdminPage user={user} ready={ready} />}
+        {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
         {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
       </main>
       <footer className="footer"><span>© Volink</span><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 참가 신청은 준비 중입니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></footer>
@@ -159,7 +165,7 @@ function fromExample(activity: Catalog['activities'][number], baseDate: string):
   return { ...activity, key: 'example-' + activity.id, kind: 'example', date: baseDate, href: '#/activities/' + activity.id }
 }
 
-function Explore({ catalog }: { catalog: Catalog | null }) {
+function Explore({ catalog, places }: { catalog: Catalog | null; places: PlaceInfo[] }) {
   const [category, setCategory] = useState('전체')
   const [query, setQuery] = useState('')
   const [date, setDate] = useState('')
@@ -167,13 +173,41 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
   const [view, setView] = useState('list')
   const [placeId, setPlaceId] = useState<number | null>(null)
   const [live, setLive] = useState<LiveActivity[]>([])
+  const [origin, setOrigin] = useState<Origin | null>(null)
+  const [radius, setRadius] = useState(3)
+  const [locating, setLocating] = useState(false)
+  const [notice, setNotice] = useState('')
 
+  // Filters run on the server; the position is sent with this request only and is not stored.
   useEffect(() => {
     if (preview) return
-    api<LiveActivity[]>('/api/activities').then(setLive).catch(() => setLive([]))
-  }, [])
+    const params = new URLSearchParams()
+    if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', String(radius)) }
+    if (date) params.set('date', date)
+    if (category !== '전체') params.set('category', category)
+    if (kind !== 'all') params.set('type', kind)
+    const search = params.toString()
+    api<LiveActivity[]>('/api/activities' + (search ? '?' + search : '')).then(setLive).catch(() => setLive([]))
+  }, [origin, radius, date, category, kind])
 
-  const items = catalog ? [...live.map(fromLive), ...catalog.activities.map(activity => fromExample(activity, catalog.baseDate))] : []
+  function findNearby() {
+    const fallback = placesCentre(places)
+    const useFallback = (reason: string) => {
+      setLocating(false)
+      if (fallback) { setOrigin(fallback); setNotice(reason + ' 활동 장소 중심을 기준으로 찾습니다.') }
+      else setNotice(reason + ' 활동 장소 좌표도 아직 없어 거리로 찾을 수 없습니다.')
+    }
+    if (!navigator.geolocation) { useFallback('이 브라우저는 위치 확인을 지원하지 않습니다.'); return }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(position => {
+      setLocating(false)
+      setNotice('')
+      setOrigin({ lat: position.coords.latitude, lng: position.coords.longitude, label: '내 위치' })
+    }, () => useFallback('위치 권한이 없거나 위치를 확인하지 못했습니다.'), { timeout: 8000, maximumAge: 60000 })
+  }
+
+  const examples = catalog && !origin ? catalog.activities.map(activity => fromExample(activity, catalog.baseDate)) : []
+  const items = catalog || live.length ? [...live.map(fromLive), ...examples] : []
   const activities = items.filter(activity =>
     (category === '전체' || activity.category === category) &&
     (activity.title + ' ' + activity.placeName).includes(query.trim()) &&
@@ -181,6 +215,7 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
     (kind === 'all' || activity.activityType === kind) &&
     (view !== 'map' || placeId === null || activity.placeId === placeId),
   )
+  const filtered = date || query || category !== '전체' || kind !== 'all' || placeId !== null || origin
 
   return <>
     <section className="hero">
@@ -188,20 +223,25 @@ function Explore({ catalog }: { catalog: Catalog | null }) {
       <div className="hero-art"><ParkArt /><div className="floating-note"><span className="floating-icon"><Icon name="leaf" /></span><div><strong>혼자보다, 함께.</strong><span>우리 동네에 변화를 남겨요</span></div></div></div>
     </section>
     <section id="activities" className="activity-section">
-      <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div><span className="location-tag"><Icon name="pin" size={16} />양주</span></div>
+      <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div><span className="location-tag"><Icon name="pin" size={16} />{origin ? origin.label + ' 기준 ' + radius + 'km' : '양주'}</span></div>
       <div className="filter-row"><div className="category-tabs" aria-label="활동 분야">{['전체', ...categories].map(value => <button className={category === value ? 'selected' : ''} key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div><label className="search-box"><Icon name="compass" size={17} /><input aria-label="활동 또는 장소 검색" value={query} onChange={event => setQuery(event.target.value)} placeholder="활동이나 장소를 찾아보세요" /></label></div>
       <div className="secondary-filters">
+        {!preview && (origin
+          ? <label>반경<select aria-label="검색 반경" value={radius} onChange={event => setRadius(Number(event.target.value))}>{[1, 3, 5, 10].map(value => <option key={value} value={value}>{value}km</option>)}</select></label>
+          : <button className="secondary-button nearby-button" onClick={findNearby} disabled={locating}><Icon name="pin" size={15} />{locating ? '위치 확인 중…' : '내 주변 찾기'}</button>)}
         <label>날짜<input aria-label="활동 날짜로 검색" type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
         <label>활동 유형<select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
-        {(date || query || category !== '전체' || kind !== 'all' || placeId !== null) && <button className="text-button" onClick={() => { setDate(''); setQuery(''); setCategory('전체'); setKind('all'); setPlaceId(null) }}>필터 초기화</button>}
+        {filtered && <button className="text-button" onClick={() => { setDate(''); setQuery(''); setCategory('전체'); setKind('all'); setPlaceId(null); setOrigin(null); setNotice('') }}>필터 초기화</button>}
         <div className="view-toggle"><button aria-label="목록으로 보기" aria-pressed={view === 'list'} onClick={() => setView('list')}><Icon name="list" size={17} /></button><button aria-label="지도로 보기" aria-pressed={view === 'map'} onClick={() => setView('map')}><Icon name="pin" size={17} /></button></div>
       </div>
+      {notice && <p className="inline-notice" role="status">{notice}</p>}
+      {origin && <p className="small-print location-note">내 위치는 이번 검색에만 쓰고 저장하지 않습니다. 거리 검색에는 실제 모집 중인 활동만 나옵니다.</p>}
       <div className={view === 'map' ? 'map-list-layout' : undefined}>
         {view === 'map' && <aside className="map-placeholder" aria-label="지도 영역">
-          <div className="map-canvas" aria-hidden="true">{catalog?.places.map((place, index) => <span key={place.id} className={'map-pin' + (placeId === place.id ? ' selected' : '')} style={{ left: [28, 62, 44][index % 3] + '%', top: [34, 52, 72][index % 3] + '%' }}>{index + 1}</span>)}</div>
-          <div className="map-places" role="group" aria-label="장소별로 보기"><button aria-pressed={placeId === null} onClick={() => setPlaceId(null)}>모든 장소</button>{catalog?.places.map((place, index) => <button key={place.id} aria-pressed={placeId === place.id} onClick={() => setPlaceId(place.id)}><span className="map-number">{index + 1}</span>{place.name}</button>)}</div>
-          <p>지도는 준비 중입니다. 번호는 위치를 나타내지 않으며, 장소를 고르면 목록이 바뀝니다.</p></aside>}
-        {!catalog ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div> : activities.length ? <div className="activity-grid">{activities.map(activity => <ActivityCard key={activity.key} item={activity} />)}</div> : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}
+          <PlaceMap places={places} origin={origin} radiusKm={radius} selected={placeId} onSelect={setPlaceId} label="활동 장소 지도" />
+          <div className="map-places" role="group" aria-label="장소별로 보기"><button aria-pressed={placeId === null} onClick={() => setPlaceId(null)}>모든 장소</button>{places.map((place, index) => <button key={place.id} aria-pressed={placeId === place.id} onClick={() => setPlaceId(place.id)}><span className="map-number">{index + 1}</span>{place.name}</button>)}</div>
+          <p>{places.some(place => place.latitude != null) ? '핀을 누르거나 장소를 고르면 목록이 바뀝니다.' : '장소 좌표를 입력하기 전이라 위치를 표시하지 않습니다. 장소를 고르면 목록이 바뀝니다.'}</p></aside>}
+        {!catalog && !live.length ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div> : activities.length ? <div className="activity-grid">{activities.map(activity => <ActivityCard key={activity.key} item={activity} />)}</div> : <div className="empty-state">{origin ? radius + 'km 안에 모집 중인 활동이 없습니다. 반경을 넓혀 보세요.' : '조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.'}</div>}
       </div>
     </section>
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
@@ -233,7 +273,7 @@ function focusFirstError(form: HTMLFormElement, errors: Errors) {
 function ActivityCard({ item }: { item: CardItem }) {
   return <article className="activity-card" data-kind={item.kind}>
     <div className="card-art"><ParkArt variant={item.id - 1} /><span className={'card-label' + (item.kind === 'live' ? ' live' : '')}>{item.kind === 'live' ? '모집 중' : '예시 활동'}</span><span className="duration-tag"><Icon name="clock" size={13} />{item.durationMinutes}분</span></div>
-    <div className="card-body"><span className="category-label">{item.category} · {typeLabel(item)}</span><h3>{item.title}</h3><p className="card-location"><Icon name="pin" size={15} />{item.placeName}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(item.date)} · {item.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{item.confirmed}</strong><span>/ {item.capacity}명</span></div><a className="card-detail" href={item.href} aria-label={item.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
+    <div className="card-body"><span className="category-label">{item.category} · {typeLabel(item)}</span><h3>{item.title}</h3><p className="card-location"><Icon name="pin" size={15} />{item.placeName}{item.distanceKm != null && <span className="distance">{item.distanceKm}km</span>}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(item.date)} · {item.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{item.confirmed}</strong><span>/ {item.capacity}명</span></div><a className="card-detail" href={item.href} aria-label={item.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
   </article>
 }
 
@@ -278,7 +318,7 @@ function LoginRequired({ ready, text }: { ready: boolean; text: string }) {
 
 type CreateResult = { kind: 'published' | 'review'; activity: LiveActivity }
 
-function CreateActivity({ catalog, user, ready }: { catalog: Catalog | null; user: User | null; ready: boolean }) {
+function CreateActivity({ places, user, ready }: { places: PlaceInfo[]; user: User | null; ready: boolean }) {
   const [kind, setKind] = useState<MemberType>('general')
   const [message, setMessage] = useState('')
   const [errors, setErrors] = useState<Errors>({})
@@ -338,7 +378,7 @@ function CreateActivity({ catalog, user, ready }: { catalog: Catalog | null; use
         {kind === 'institution' && !canHost && <p className="inline-notice">{organization?.status === 'PENDING' ? '기관 확인을 기다리고 있습니다. 관리자 확인이 끝나면 기관 주관 활동을 열 수 있습니다.' : organization?.status === 'REJECTED' ? '기관 확인이 반려되었습니다. 사유: ' + (organization.rejectReason ?? '') : '기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다.'}</p>}
         {kind === 'institution' && canHost && <p className="inline-notice">{organization?.name} 이름으로 활동을 엽니다.</p>}
         <label>활동 이름 <span className="field-hint">{r.titleMin}–{r.titleMax}자</span><input name="title" maxLength={r.titleMax} placeholder="예: 공원에서 함께하는 가벼운 플로깅" {...invalid('title', errors)} /><FieldError name="title" errors={errors} /></label>
-        <div className="form-row"><label>분야<select name="category">{categories.map(value => <option key={value}>{value}</option>)}</select></label><label>장소<select aria-label="장소" name="place" defaultValue="" {...invalid('place', errors)}><option value="" disabled>장소를 선택해 주세요</option>{catalog?.places.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}</select><FieldError name="place" errors={errors} /></label></div>
+        <div className="form-row"><label>분야<select name="category">{categories.map(value => <option key={value}>{value}</option>)}</select></label><label>장소<select aria-label="장소" name="place" defaultValue="" {...invalid('place', errors)}><option value="" disabled>장소를 선택해 주세요</option>{places.map(place => <option key={place.id} value={place.id}>{place.name}{place.meetingPoint ? ' · ' + place.meetingPoint : ''}</option>)}</select><FieldError name="place" errors={errors} /></label></div>
         <div className="form-row"><label>활동 날짜 <span className="field-hint">내일 이후 · {r.maxDaysAhead}일 이내</span><input type="date" name="date" {...invalid('date', errors)} /><FieldError name="date" errors={errors} /></label><label>시작 시간 <span className="field-hint">{r.earliestStart} 이후 · {r.latestEnd} 전 종료</span><input type="time" name="time" {...invalid('time', errors)} /><FieldError name="time" errors={errors} /></label></div>
         <div className="form-row"><label>모집 정원 <span className="field-hint">{r.capacityMin}–{r.capacityMax}명</span><input type="number" name="capacity" min={r.capacityMin} max={r.capacityMax} defaultValue={6} {...invalid('capacity', errors)} /><FieldError name="capacity" errors={errors} /></label><label>활동 시간 <span className="field-hint">{r.durationMin}–{r.durationMax}분</span><input type="number" name="duration" min={r.durationMin} max={r.durationMax} defaultValue={90} {...invalid('duration', errors)} /><FieldError name="duration" errors={errors} /></label></div>
         <label>활동 소개 <span className="field-hint">{r.descriptionMin}–{r.descriptionMax}자</span><textarea name="description" maxLength={r.descriptionMax} rows={4} placeholder="함께할 일과 준비물을 알려주세요." {...invalid('description', errors)} /><FieldError name="description" errors={errors} /></label>
@@ -406,7 +446,7 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
 
 type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string }
 
-function AdminPage({ user, ready }: { user: User | null; ready: boolean }) {
+function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null; ready: boolean; places: PlaceInfo[]; onPlacesChanged: () => void }) {
   const [organizations, setOrganizations] = useState<PendingOrganization[]>([])
   const [activities, setActivities] = useState<LiveActivity[]>([])
   const [notice, setNotice] = useState('')
@@ -445,7 +485,45 @@ function AdminPage({ user, ready }: { user: User | null; ready: boolean }) {
           detail={`${item.organizerName} · ${dateLabel(item.date)} ${item.startTime} · ${item.placeName ?? '장소 미정'}`} reasons={item.riskReasons ?? ''}
           onDecide={(approve, reason) => decide('/api/admin/activities/' + item.id, approve, reason)} />)}</ul>}
     </section>
+    <section className="panel" aria-label="장소 좌표">
+      <h2>장소 좌표</h2>
+      <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다. 좌표를 넣어야 거리 검색과 지도에 나옵니다. 현장 이용 허가는 따로 확인해야 합니다.</p>
+      <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); onPlacesChanged() }} />)}</ul>
+    </section>
   </>
+}
+
+function PlaceEditor({ place, onSaved }: { place: PlaceInfo; onSaved: (message: string) => void }) {
+  const [coordinate, setCoordinate] = useState(place.latitude != null ? place.latitude + ', ' + place.longitude : '')
+  const [meetingPoint, setMeetingPoint] = useState(place.meetingPoint ?? '')
+  const [error, setError] = useState('')
+  const [picking, setPicking] = useState(false)
+  const pick = useCallback((lat: number, lng: number) => setCoordinate(lat.toFixed(6) + ', ' + lng.toFixed(6)), [])
+
+  async function save() {
+    const match = /^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/.exec(coordinate)
+    if (!match) { setError('위도, 경도 순서로 붙여넣어 주세요. 예: 37.8, 127.1'); return }
+    try {
+      await api('/api/admin/places/' + place.id, 'PUT', { latitude: Number(match[1]), longitude: Number(match[2]), meetingPoint })
+      setError('')
+      onSaved(place.name + ' 좌표를 저장했습니다.')
+    } catch (cause) {
+      setError(cause instanceof ApiError ? Object.values(cause.fieldErrors).join(' ') || cause.message : '저장하지 못했습니다.')
+    }
+  }
+  const pinned = useMemo(() => {
+    const [lat, lng] = coordinate.split(/[,\s]+/).map(Number)
+    return Number.isFinite(lat) && Number.isFinite(lng) && coordinate ? [{ id: place.id, name: place.name, latitude: lat, longitude: lng }] : []
+  }, [coordinate, place.id, place.name])
+
+  return <li>
+    <div><strong>{place.name}</strong><span>{place.area} · {place.latitude != null ? '좌표 입력됨' : '좌표 없음'}</span></div>
+    <label className="reason-field">좌표 (위도, 경도)<input aria-label={place.name + ' 좌표'} value={coordinate} onChange={event => setCoordinate(event.target.value)} placeholder="위도, 경도 붙여넣기" aria-invalid={error ? true : undefined} /></label>
+    <label className="reason-field">만남 지점<input aria-label={place.name + ' 만남 지점'} value={meetingPoint} maxLength={255} onChange={event => setMeetingPoint(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
+    <div className="button-row">{kakaoEnabled && <button className="secondary-button" type="button" onClick={() => setPicking(value => !value)}>{picking ? '지도 닫기' : '지도에서 고르기'}</button>}<button className="primary-button" type="button" onClick={save}>저장</button></div>
+    {error && <p className="field-error" role="alert">{error}</p>}
+    {picking && <div className="place-picker"><PlaceMap places={pinned} onPick={pick} label={place.name + ' 위치 고르기'} /></div>}
+  </li>
 }
 
 function ReviewItem({ title, detail, reasons, href, onDecide }: { title: string; detail: string; reasons?: string; href?: string; onDecide: (approve: boolean, reason: string) => void }) {
