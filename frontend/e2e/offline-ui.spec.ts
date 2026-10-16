@@ -19,7 +19,7 @@ test('published React artifact has six service screens without backend requests 
   await expect(page.locator('.activity-card')).toHaveCount(1)
   await page.getByRole('link', { name: '우리 동네, 가벼운 플로깅 상세 보기' }).click()
   await expect(page.getByRole('heading', { name: '우리 동네, 가벼운 플로깅' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '참가 신청 · 준비 중' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '예시 활동은 신청을 받지 않습니다' })).toBeDisabled()
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 만들기', exact: true }).click()
   await expect(page.getByLabel('장소', { exact: true }).locator('option')).toHaveCount(4)
   await page.getByRole('link', { name: '내 활동', exact: true }).click()

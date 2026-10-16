@@ -13,6 +13,18 @@ export type LiveActivity = {
   organizationName: string | null; placeId: number | null; placeName: string | null; date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
+  latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number
+}
+export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLISTED' | 'OFFERED' | 'EXPIRED' | 'CANCELLED' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW' | 'HELD' | 'INVALIDATED'
+export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number }
+export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
+export type ViewerInfo = Seats & { participation: Participation | null }
+export type Applicant = Participation & { name: string; appliedAt: string }
+export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string }
+export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
+export type PlaceInfo = {
+  id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null
+  latitude: number | null; longitude: number | null; coordinateStatus?: string
 }
 
 export class ApiError extends Error {
@@ -57,12 +69,24 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
 
 type Session = { accessToken: string; user: User }
 
-export async function refresh(): Promise<User | null> {
-  const response = await send('/api/auth/refresh', 'POST', undefined, false)
-  if (!response.ok) { accessToken = null; return null }
-  const session: Session = await response.json()
-  accessToken = session.accessToken
-  return session.user
+// The refresh cookie is single-use (rotated on every refresh). Two refreshes at once (React's double effect in
+// development, or two requests renewing an expired token together) would send the same cookie twice, and the
+// second would be refused and log the person out. So every caller shares one in-flight refresh.
+let refreshing: Promise<User | null> | null = null
+
+export function refresh(): Promise<User | null> {
+  refreshing ??= (async () => {
+    try {
+      const response = await send('/api/auth/refresh', 'POST', undefined, false)
+      if (!response.ok) { accessToken = null; return null }
+      const session: Session = await response.json()
+      accessToken = session.accessToken
+      return session.user
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
 }
 
 export async function login(email: string, password: string): Promise<User> {

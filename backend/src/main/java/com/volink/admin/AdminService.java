@@ -2,6 +2,7 @@ package com.volink.admin;
 
 import com.volink.activity.ActivityService;
 import com.volink.common.ApiException;
+import com.volink.common.Sql;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,12 +26,12 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> organizations(String status) {
-        return jdbc.queryForList("""
+        return jdbc.queryForList(Sql.kst("""
                 SELECT o.id, o.name, o.contact, o.status, o.reject_reason AS rejectReason,
-                       u.display_name AS managerName, u.email AS managerEmail, DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i') AS requestedAt
+                       u.display_name AS managerName, u.email AS managerEmail, DATE_FORMAT(KST(o.created_at), '%Y-%m-%d %H:%i') AS requestedAt
                 FROM organizations o JOIN users u ON u.id = o.manager_user_id
                 WHERE o.status = ? ORDER BY o.created_at, o.id
-                """, status);
+                """), status);
     }
 
     @Transactional
