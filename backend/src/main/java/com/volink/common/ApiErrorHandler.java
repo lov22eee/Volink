@@ -20,6 +20,16 @@ public class ApiErrorHandler {
         return ResponseEntity.badRequest().body(body("VALIDATION_FAILED", "요청 형식을 확인해 주세요.", Map.of()));
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    ResponseEntity<Map<String, Object>> tooLarge(org.springframework.web.multipart.MaxUploadSizeExceededException error) {
+        return ResponseEntity.badRequest().body(body("VALIDATION_FAILED", "입력 내용을 확인해 주세요.", Map.of("file", "파일은 10MB 이하여야 합니다.")));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+    ResponseEntity<Map<String, Object>> missingFile(org.springframework.web.multipart.support.MissingServletRequestPartException error) {
+        return ResponseEntity.badRequest().body(body("VALIDATION_FAILED", "입력 내용을 확인해 주세요.", Map.of("file", "올릴 파일을 골라 주세요.")));
+    }
+
     public static Map<String, Object> body(String code, String message, Map<String, String> fieldErrors) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("code", code);

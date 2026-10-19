@@ -35,6 +35,13 @@ public class ActivityController {
         return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type));
     }
 
+    /** Member only: interest + distance + time score, with reasons. Must be declared before /{id}. */
+    @GetMapping("/api/activities/recommended")
+    public List<Map<String, Object>> recommended(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Double lat, @RequestParam(required = false) Double lng) {
+        if (jwt == null) throw new com.volink.common.ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "로그인이 필요합니다.");
+        return activities.recommended(Long.parseLong(jwt.getSubject()), lat, lng);
+    }
+
     @GetMapping("/api/activities/{id}")
     public Map<String, Object> detail(@PathVariable long id, @AuthenticationPrincipal Jwt jwt) {
         return activities.detail(id, jwt == null ? null : Long.parseLong(jwt.getSubject()));

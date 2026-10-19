@@ -148,6 +148,46 @@ public class ActivityService {
         return rows;
     }
 
+    /**
+     * Simple recommendation (plan: 거리·시간·관심 분야 점수 합). Open activities the member has not made or applied to.
+     * score = 0.4 × interest (1 if the category is one of the member's interests) + 0.35 × distance (1 at 0 km → 0 at 5 km,
+     * 0.5 for everything when no position is given, 0 for activities without a coordinate) + 0.25 × time (1 tomorrow → 0 after 14 days). The reasons are returned so the screen can explain it.
+     */
+    public List<Map<String, Object>> recommended(long userId, Double lat, Double lng) {
+        boolean near = lat != null && lng != null;
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder(SELECT);
+        if (near) {
+            sql.insert(SELECT.indexOf("ST_Latitude"), "ST_Distance_Sphere(l.location, " + PlaceService.POINT + ") AS distanceMeters, ");
+            args.add(PlaceService.wkt(lat, lng));
+        }
+        sql.insert(SELECT.indexOf("ST_Latitude"), "(SELECT COUNT(*) FROM user_interests i WHERE i.user_id = ? AND i.category_id = a.category_id) AS interested, ");
+        args.add(0, userId); // the interest sub-query is inserted in front of the distance column
+        sql.append(" WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.organizer_id <> ? AND NOT EXISTS (SELECT 1 FROM participations x WHERE x.activity_id = a.id AND x.user_id = ?)");
+        LocalDateTime now = LocalDateTime.now(clock);
+        args.add(now);
+        args.add(userId);
+        args.add(userId);
+        List<Map<String, Object>> rows = jdbc.queryForList(sql.toString(), args.toArray());
+        for (Map<String, Object> row : rows) {
+            boolean interest = ((Number) row.remove("interested")).intValue() > 0;
+            Object meters = row.remove("distanceMeters");
+            // No position from the member: distance is neutral (0.5). Position given but the activity has no coordinate: 0.
+            double distance = !near ? 0.5 : meters == null ? 0 : Math.max(0, 1 - ((Number) meters).doubleValue() / 5000);
+            long days = java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), LocalDate.parse((String) row.get("date")));
+            double time = Math.max(0, 1 - Math.max(0, days - 1) / 13.0);
+            double score = 0.4 * (interest ? 1 : 0) + 0.35 * distance + 0.25 * time;
+            row.put("score", Math.round(score * 100) / 100.0);
+            List<String> reasons = new ArrayList<>();
+            if (interest) reasons.add("관심 분야");
+            if (meters != null) { double km = ((Number) meters).doubleValue() / 1000; row.put("distanceKm", Math.round(km * 10) / 10.0); if (km <= 3) reasons.add(Math.round(km * 10) / 10.0 + "km"); }
+            if (days <= 7) reasons.add(days <= 1 ? "내일" : days + "일 뒤");
+            row.put("reasons", reasons);
+        }
+        rows.sort((x, y) -> Double.compare(((Number) y.get("score")).doubleValue(), ((Number) x.get("score")).doubleValue()));
+        return rows.size() > 6 ? new ArrayList<>(rows.subList(0, 6)) : rows;
+    }
+
     private static String box(double south, double west, double north, double east) {
         String sw = PlaceService.wkt(south, west), ne = PlaceService.wkt(north, east);
         String nw = PlaceService.wkt(north, west), se = PlaceService.wkt(south, east);
