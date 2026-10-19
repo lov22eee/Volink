@@ -76,6 +76,8 @@ systemctl enable volink-api
 systemctl restart volink-api
 
 step "frontend build"
+# Kakao Maps JavaScript key (public, domain-restricted). Without it the site shows a simple position sketch.
+if [ -s /etc/volink/kakao_js_key ]; then export VITE_KAKAO_JS_KEY="$(tr -d '[:space:]' < /etc/volink/kakao_js_key)"; fi
 (cd frontend && npm ci --no-audit --no-fund && npm run build)
 rm -rf /var/www/volink && mkdir -p /var/www/volink && cp -r frontend/dist/. /var/www/volink/
 
