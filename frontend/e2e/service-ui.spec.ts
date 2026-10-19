@@ -6,7 +6,7 @@ const developmentCopy = /졸업작품|경동대학교|1주차|2주차|WEEK|발�
 
 const examples = '.activity-card[data-kind="example"]'
 // Evidence screenshots of the current week; earlier weeks' files stay as they were.
-const shot = (name: string) => `../docs/screenshots/week-04-${name}.png`
+const shot = (name: string) => `../docs/screenshots/week-05-${name}.png`
 const password = 'example123'
 
 // The demo admin account exists only in the local dev environment; its password lives in the ignored ../.env.
@@ -129,7 +129,7 @@ test('standalone detail route shows the planned participation steps without acce
   await expect(page).toHaveURL(/#\/activities\/1$/)
   await expect(page.getByRole('heading', { name: '공원에서 시작하는 작은 변화' })).toBeVisible()
   await expect(page.locator('.participation-steps li')).toHaveText(['참가 신청', '승인 또는 대기', '현장 출석', '활동 완료'])
-  await expect(page.getByRole('button', { name: '참가 신청 · 준비 중' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '예시 활동은 신청을 받지 않습니다' })).toBeDisabled()
   await expect(page.locator('body')).not.toContainText(developmentCopy)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('detail'), fullPage: true })
@@ -421,4 +421,68 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   await expect(stranger.getByRole('status')).toContainText('활동 장소 중심을 기준으로 찾습니다.')
   await expect(stranger.locator('.location-tag')).toContainText('활동 장소 중심 기준 3km')
   await refused.close()
+})
+
+// Week 5: apply → organizer approves up to capacity → waitlist → cancellation offers the seat → accept, with in-app notifications.
+test('applications fill the capacity, the waitlist gets the freed seat as an offer and notifications explain each step', async ({ page }) => {
+  page.on('dialog', dialog => dialog.accept())
+  const organizer = await signup(page)
+  const title = '정원 2명 공원 정리 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.')
+  await page.getByLabel(/모집 정원/).fill('2')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = await page.getByRole('link', { name: /만든 활동 보기/ }).getAttribute('href')
+  await signOut(page)
+
+  const first = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.getByRole('status')).toContainText('신청했습니다')
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+  const second = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+
+  await loginAs(page, organizer, password)
+  await expect(page.getByRole('link', { name: /알림 2개 안 읽음/ })).toBeVisible()
+  await page.goto('/' + link)
+  const applicants = page.getByRole('region', { name: '신청자 관리' })
+  await expect(applicants.getByRole('listitem')).toHaveCount(2)
+  await expect(applicants).not.toContainText('@')
+  await applicants.getByRole('button', { name: '승인' }).first().click()
+  await expect(applicants.getByRole('status')).toContainText('참가를 확정했습니다')
+  await applicants.getByRole('button', { name: '승인' }).first().click()
+  await expect(page.locator('.seat-line')).toContainText('확정 2 / 2명')
+  await applicants.screenshot({ path: shot('applicants') })
+  await signOut(page)
+
+  const third = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /대기 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('대기 1번')
+  await signOut(page)
+
+  await loginAs(page, first, password)
+  await page.goto('/' + link)
+  await expect(page.locator('.my-status')).toHaveText('참가 확정')
+  await page.getByRole('button', { name: '신청 취소' }).click()
+  await expect(page.locator('.my-status')).toHaveText('신청 취소함')
+  await signOut(page)
+
+  await loginAs(page, third, password)
+  await page.getByRole('link', { name: /알림/ }).click()
+  await expect(page.getByRole('button', { name: /빈자리가 생겼어요/ })).toBeVisible()
+  await page.screenshot({ path: shot('notifications'), fullPage: true })
+  await page.getByRole('button', { name: /빈자리가 생겼어요/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('빈자리 제안 받음')
+  await expect(page.getByText(/까지 수락하지 않으면 다음 대기자에게/)).toBeVisible()
+  await page.screenshot({ path: shot('offer'), fullPage: true })
+  await page.getByRole('button', { name: '자리 수락' }).click()
+  await expect(page.locator('.my-status')).toHaveText('참가 확정')
+  await page.goto('/#/mine')
+  await expect(page.getByRole('listitem').filter({ hasText: title })).toContainText('참가 확정')
+  void second
 })
