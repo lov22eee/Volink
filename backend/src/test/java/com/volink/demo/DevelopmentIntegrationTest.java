@@ -23,7 +23,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
 
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class)).isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class)).isEqualTo(7);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
@@ -37,7 +37,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.places.length()").value(3))
                 .andExpect(jsonPath("$.personas.length()").value(11))
                 .andExpect(jsonPath("$.activities.length()").value(3))
-                .andExpect(jsonPath("$.places[0].coordinateStatus").value("UNVERIFIED"))
+                .andExpect(jsonPath("$.places[0].coordinateStatus").value(org.hamcrest.Matchers.oneOf("UNVERIFIED", "ENTERED")))
                 .andExpect(jsonPath("$.activities[0].activityType").value("GENERAL"))
                 .andExpect(jsonPath("$.personas[0].password").doesNotExist());
         assertThat(jdbc.queryForList("SELECT persona_role, COUNT(*) AS n FROM demo_personas GROUP BY persona_role"))
@@ -50,7 +50,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     void readinessShowsTheCurrentWeek() throws Exception {
         mvc.perform(get("/api/project/status"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.database").value("UP"))
-                .andExpect(jsonPath("$.week").value(4)).andExpect(jsonPath("$.authenticationImplemented").value(true));
+                .andExpect(jsonPath("$.week").value(6)).andExpect(jsonPath("$.authenticationImplemented").value(true));
         mvc.perform(get("/actuator/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
     }
 

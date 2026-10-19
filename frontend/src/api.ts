@@ -13,8 +13,16 @@ export type LiveActivity = {
   organizationName: string | null; placeId: number | null; placeName: string | null; date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
-  latitude?: number | null; longitude?: number | null; distanceKm?: number
+  latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number
 }
+export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLISTED' | 'OFFERED' | 'EXPIRED' | 'CANCELLED' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW' | 'HELD' | 'INVALIDATED'
+export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number }
+export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
+export type ViewerInfo = Seats & { participation: Participation | null }
+export type Applicant = Participation & { name: string; appliedAt: string; checkInMethod?: 'QR' | 'MANUAL' | null; checkInReason?: string | null }
+export type MyRecord = { id: number; activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes: number; checkInMethod: 'QR' | 'MANUAL'; confirmedAt: string; appealDeadline: string; status: 'VALID' | 'HELD' | 'INVALIDATED' }
+export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string }
+export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
 export type PlaceInfo = {
   id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null
   latitude: number | null; longitude: number | null; coordinateStatus?: string
