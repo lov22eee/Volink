@@ -62,6 +62,19 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [locating, setLocating] = useState(false)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [filtering, setFiltering] = useState(false)
+  const filterBox = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!filtering) return
+    const close = (event: MouseEvent) => { if (!filterBox.current?.contains(event.target as Node)) setFiltering(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [filtering])
+  const [pageSize, setPageSize] = useState(9)
+  const [page, setPage] = useState(1)
+  // Search as you type (a short pause first so every key is not a request).
+  useEffect(() => { const timer = setTimeout(() => setQ(query.trim()), 300); return () => clearTimeout(timer) }, [query])
   const [q, setQ] = useState('')
   const [source, setSource] = useState<Source>('all')
   const [radius, setRadius] = useState(3)
@@ -152,6 +165,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const { from, to } = range(when)
   const filteredExamples = examples.filter(item => (category === '전체' || item.category === category) && (kind === 'all' || item.activityType === kind)
     && (item.title + item.placeName).includes(q) && (!from || item.date >= from) && (!to || item.date <= to) && (!part || (part === 'AM') === item.startTime < '12:00'))
+  const activeFilters = [when !== 'all', part !== '', category !== '전체', kind !== 'all', youth, origin != null && radius !== 3].filter(Boolean).length
+  useEffect(() => setPage(1), [q, when, part, category, kind, youth, source, origin, pageSize])
   const chosen = inside.find(hit => hit.key === selected) ?? null
   // Bottom list: every recruiting activity (with distance when known) and the 1365 programs found, nearest first.
   const everything = !origin ? [] : [
@@ -162,10 +177,6 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
     ...hits.filter(hit => hit.source === '1365').map(hit => ({ key: hit.key, distance: hit.distanceKm ?? 999, card: undefined as CardItem | undefined, hit })),
   ].sort((a, b) => a.distance - b.distance)
 
-  function search(event: FormEvent) {
-    event.preventDefault()
-    setQ(query.trim())
-  }
 
   return <>
     <section className="hero compact-hero">
@@ -180,21 +191,32 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       {asking && !origin && <LocationAsk locating={locating} notice={notice} onLocate={locate} onPick={picked => { setAsking(false); setNotice(''); setOrigin(picked) }} onSkip={() => setAsking(false)} />}
 
       <div className="finder panel">
-        <div className="finder-top">
-          <form className="finder-search" role="search" onSubmit={search}><Glyph name="search" /><input aria-label="활동 검색" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="플로깅, 도서관, 어르신… 검색" /><button className="primary-button small" type="submit">찾기</button></form>
-          {origin && programsOn && <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
-            <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{value === 'all' ? inside.length : inside.filter(hit => hit.source === value).length}</small></button>)}</div>}
+        <div className="finder-bar">
+          {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
+            <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{value === 'all' ? inside.length : inside.filter(hit => hit.source === value).length}</small></button>)}</div>
+            : <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '모집 중인 활동'}</span>}
+          <div className="finder-tools">
+            {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
+            <button type="button" className={'tool-button' + (searching || q ? ' on' : '')} aria-label="검색" aria-expanded={searching} onClick={() => setSearching(!searching)}><Glyph name="search" size={18} /></button>
+            <span className="filter-anchor" ref={filterBox}>
+              <button type="button" className={'tool-button' + (filtering || activeFilters ? ' on' : '')} aria-label={'필터' + (activeFilters ? ` ${activeFilters}개 켜짐` : '')} aria-expanded={filtering} onClick={() => setFiltering(!filtering)}>
+                <Glyph name="filter" size={18} />{activeFilters > 0 && <span className="tool-count">{activeFilters}</span>}</button>
+              {filtering && <div className="filter-pop" role="dialog" aria-label="필터">
+                {origin && <label className="chip-select"><Glyph name="pin" size={15} /><select aria-label="검색 반경" value={radius} onChange={event => setRadius(Number(event.target.value))}>{rings.map(value => <option key={value} value={value}>{value}km</option>)}</select></label>}
+                <label className="chip-select"><Glyph name="calendar" size={15} /><select aria-label="날짜" value={when} onChange={event => setWhen(event.target.value as When)}><option value="all">모든 날짜</option><option value="today">오늘</option><option value="week">이번 주</option><option value="weekend">주말만</option></select></label>
+                <label className="chip-select"><Glyph name="clock" size={15} /><select aria-label="시간대" value={part} onChange={event => setPart(event.target.value)}><option value="">모든 시간</option><option value="AM">오전</option><option value="PM">오후</option></select></label>
+                <label className="chip-select"><Glyph name="leaf" size={15} /><select aria-label="활동 분야" value={category} onChange={event => setCategory(event.target.value)}><option>전체</option>{categories.map(value => <option key={value}>{value}</option>)}</select></label>
+                <label className="chip-select"><Glyph name="hand" size={15} /><select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
+                {origin && programsOn && <label className={'chip-check' + (youth ? ' on' : '')}><input type="checkbox" checked={youth} onChange={event => setYouth(event.target.checked)} /><Glyph name="users" size={15} />청소년 가능만</label>}
+                <div className="filter-foot"><button type="button" className="text-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>필터 초기화</button>
+                  <button type="button" className="primary-button small" onClick={() => setFiltering(false)}>닫기</button></div>
+              </div>}
+            </span>
+          </div>
         </div>
-        <div className="finder-filters">
-          {origin && <label className="chip-select"><Glyph name="pin" size={15} /><select aria-label="검색 반경" value={radius} onChange={event => setRadius(Number(event.target.value))}>{rings.map(value => <option key={value} value={value}>{value}km</option>)}</select></label>}
-          <label className="chip-select"><Glyph name="calendar" size={15} /><select aria-label="날짜" value={when} onChange={event => setWhen(event.target.value as When)}><option value="all">모든 날짜</option><option value="today">오늘</option><option value="week">이번 주</option><option value="weekend">주말만</option></select></label>
-          <label className="chip-select"><Glyph name="clock" size={15} /><select aria-label="시간대" value={part} onChange={event => setPart(event.target.value)}><option value="">모든 시간</option><option value="AM">오전</option><option value="PM">오후</option></select></label>
-          <label className="chip-select"><Glyph name="leaf" size={15} /><select aria-label="활동 분야" value={category} onChange={event => setCategory(event.target.value)}><option>전체</option>{categories.map(value => <option key={value}>{value}</option>)}</select></label>
-          <label className="chip-select"><Glyph name="hand" size={15} /><select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
-          {origin && programsOn && <label className={'chip-check' + (youth ? ' on' : '')}><input type="checkbox" checked={youth} onChange={event => setYouth(event.target.checked)} /><Glyph name="users" size={15} />청소년 가능만</label>}
-          {(q || when !== 'all' || part || category !== '전체' || kind !== 'all' || youth) && <button className="text-button" onClick={() => { setQuery(''); setQ(''); setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false) }}>필터 초기화</button>}
-          {!origin && !preview && !asking && <button className="secondary-button nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
-        </div>
+        {searching && <div className="finder-search" role="search"><Glyph name="search" />
+          <input aria-label="활동 검색" autoFocus value={query} maxLength={50} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false) } }} placeholder="플로깅, 도서관, 어르신… 치는 대로 찾아요" />
+          {query && <button type="button" className="icon-button" aria-label="검색어 지우기" onClick={() => setQuery('')}><Glyph name="close" size={16} /></button>}</div>}
       </div>
       {origin && <p className="small-print location-note">위치는 이번 검색에만 쓰고 저장하지 않습니다.{programsOn ? ' 1365 활동은 행정안전부 공공데이터를 몇 시간마다 받아와 보여주며, 신청과 최신 모집 상태는 1365에서 확인해 주세요.' : ''}</p>}
 
@@ -219,19 +241,38 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
             </div>
           </div>
         </section>
-        <div className="all-head" id="all-list"><h3>모든 모집글</h3><span className="list-count">가까운 순 · {everything.length}개</span></div>
-        {everything.length ? <div className="activity-grid">{everything.map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
+        <div className="all-head" id="all-list"><h3>모든 모집글</h3><span className="list-count">가까운 순 · {everything.length}개 ·
+          <select aria-label="한 쪽에 보일 개수" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>{[9, 18, 30].map(n => <option key={n} value={n}>{n}개씩</option>)}</select></span></div>
+        {everything.length ? <div className="activity-grid">{everything.slice((page - 1) * pageSize, page * pageSize).map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
           : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onDetail={setProgramDetail} /></div>)}</div>
           : <div className="empty-state">조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</div>}
+        <Pages total={everything.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('all-list')?.scrollIntoView() }} />
       </>
         : <>{(!catalog && !live.length) ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
-          : (live.length + filteredExamples.length) ? <div className="activity-grid">{[...live.map(fromLive), ...filteredExamples].map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
+          : (live.length + filteredExamples.length) ? <>
+            {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
+              <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
+            {/* Examples are not real posts: kept apart from the real list and its pages. */}
+            {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
+              <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
             : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}</>}
     </section>
     {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)}
       onShowOnMap={() => { setSelected('p' + programDetail.programNo); setProgramDetail(null); document.querySelector('.explore-map')?.scrollIntoView({ block: 'center' }) }} />}
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
   </>
+}
+
+/** Page numbers under a list: ‹ 1 2 3 ›, at most 5 numbers around the current page. */
+function Pages({ total, size, page, onPage }: { total: number; size: number; page: number; onPage: (page: number) => void }) {
+  const count = Math.ceil(total / size)
+  if (count <= 1) return null
+  const from = Math.max(1, Math.min(page - 2, count - 4)), to = Math.min(count, from + 4)
+  return <nav className="pages" aria-label="쪽 이동">
+    <button type="button" aria-label="이전 쪽" disabled={page === 1} onClick={() => onPage(page - 1)}>‹</button>
+    {Array.from({ length: to - from + 1 }, (_, i) => from + i).map(n => <button type="button" key={n} aria-current={n === page ? 'page' : undefined} onClick={() => onPage(n)}>{n}</button>)}
+    <button type="button" aria-label="다음 쪽" disabled={page === count} onClick={() => onPage(page + 1)}>›</button>
+  </nav>
 }
 
 function LocationAsk({ locating, notice, onLocate, onPick, onSkip }: { locating: boolean; notice: string; onLocate: () => void; onPick: (origin: Origin) => void; onSkip: () => void }) {
