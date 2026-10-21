@@ -68,7 +68,7 @@ const templates = [
 
 type CreateResult = { kind: 'published' | 'review'; activity: LiveActivity }
 
-export default function CreateActivity({ user, ready }: { user: User | null; ready: boolean }) {
+export default function CreateActivity({ user, ready, editId }: { user: User | null; ready: boolean; editId?: number }) {
   const today = seoulToday()
   const [kind, setKind] = useState<'GENERAL' | 'INSTITUTION'>('GENERAL')
   const [title, setTitle] = useState('')
@@ -90,6 +90,20 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CreateResult | null>(null)
+  // Editing: the saved activity fills the form. With applications only the description and meeting point can change.
+  const [editing, setEditing] = useState<LiveActivity | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const locked = (editing?.applicants ?? 0) > 0
+  useEffect(() => {
+    if (!editId || !user) return
+    api<LiveActivity>('/api/activities/' + editId).then(a => {
+      setSuppliesTouched(true)
+      setEditing(a); setKind(a.activityType); setTitle(a.title); setCategory(a.category); setMeetingPoint(a.meetingPoint ?? '')
+      setPlace({ placeId: a.placeId ?? undefined, name: a.placeName ?? '', address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null,
+        distanceMeters: null, placeClass: 'OPEN', classLabel: '지금 장소' })
+      setDate(a.date); setStart(a.startTime); setDuration(a.durationMinutes); setCapacity(a.capacity); setDescription(a.description); setSupplies(a.supplies ?? []); setSafety(true)
+    }).catch(() => setLoadError('고칠 수 있는 활동을 찾지 못했습니다.'))
+  }, [editId, user])
   const organization = user?.organization
   const canHost = organization?.status === 'APPROVED'
 
@@ -107,6 +121,11 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
 
   function validate(): Errors {
     const found: Errors = {}
+    if (locked) {
+      const text = description.trim()
+      if (text.length < r.descriptionMin || text.length > r.descriptionMax) found.description = `활동 소개는 ${r.descriptionMin}~${r.descriptionMax}자로 적어 주세요.`
+      return found
+    }
     const name = title.trim()
     if (name.length < r.titleMin || name.length > r.titleMax) found.title = `활동 이름은 ${r.titleMin}~${r.titleMax}자로 입력해 주세요.`
     if (!place) found.place = '장소를 골라 주세요.'
@@ -131,16 +150,17 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
     setBlocked('')
     const first = Object.keys(found)[0]
     if (first) { setMessage(''); (form.querySelector(`[name="${first}"]`) as HTMLElement | null)?.focus(); return }
-    if (preview || !user || !place) { setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.'); return }
+    if (preview || !user || (!place && !locked)) { setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.'); return }
     setBusy(true)
     try {
-      const chosen = place.kakaoId
+      const chosen = !place ? {} : place.kakaoId
         ? { place: { kakaoId: place.kakaoId, name: place.name, address: place.address, categoryName: place.categoryName, latitude: place.latitude, longitude: place.longitude, placeClass: place.placeClass, classLabel: place.classLabel, token: place.token } }
         : { placeId: place.placeId }
-      const activity = await api<LiveActivity>('/api/activities', 'POST', {
-        activityType: kind, title: title.trim(), category, ...chosen, meetingPoint, date, time: start, capacity,
-        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety, supplies,
-      })
+      const body = { activityType: kind, title: title.trim(), category, ...chosen, meetingPoint, date, time: start, capacity,
+        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety, supplies }
+      const activity = !editId ? await api<LiveActivity>('/api/activities', 'POST', body)
+        : locked ? await api<LiveActivity>(`/api/activities/${editId}/notes`, 'PATCH', { description: description.trim(), meetingPoint })
+          : await api<LiveActivity>('/api/activities/' + editId, 'PUT', body)
       setResult({ kind: activity.status === 'RECRUITING' ? 'published' : 'review', activity })
       window.scrollTo(0, 0)
     } catch (cause) {
@@ -152,13 +172,27 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
     }
   }
 
-  const heading = <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
+  const heading = editId ? <PageHeading title="활동 수정하기" description={locked ? '신청한 사람이 있어 소개와 만나는 곳만 고칠 수 있어요.' : '바꾼 내용도 등록할 때와 같이 다시 확인합니다.'} />
+    : <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
   if (!preview && !user) return <>{heading}<LoginRequired ready={ready} text="활동을 만들려면 먼저 로그인해 주세요." /></>
+  if (editId && loadError) return <>{heading}<section className="empty-state"><p>{loadError}</p><a className="secondary-button" href="#/mine">내 활동으로</a></section></>
+  if (editId && !editing) return <>{heading}<div className="empty-state">활동을 불러오는 중입니다.</div></>
+  if (locked && !result) return <>{heading}
+    <form className="panel activity-form create-form" noValidate onSubmit={submit}>
+      <p className="inline-notice">신청한 사람이 {editing?.applicants}명 있어 제목·장소·일정·정원은 바꿀 수 없어요. 꼭 바꿔야 하면 활동을 취소해 주세요(신청자 알림은 참가 신청 기능과 함께 제공).</p>
+      <label>만나는 곳<input name="meetingPoint" value={meetingPoint} maxLength={100} onChange={event => setMeetingPoint(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
+      {errors.meetingPoint && <span className="field-error">{errors.meetingPoint}</span>}
+      <label>활동 소개<textarea name="description" value={description} maxLength={r.descriptionMax} rows={5} onChange={event => setDescription(event.target.value)} /></label>
+      {errors.description && <span id="description-error" className="field-error">{errors.description}</span>}
+      {blocked && <div className="form-alert blocked" role="alert"><strong>저장할 수 없는 내용입니다.</strong><span>{blocked}</span></div>}
+      <button className="primary-button" type="submit" disabled={busy}>수정 저장 <Glyph name="arrow" size={17} /></button>
+      {message && <p role="status" className="success-message">{message}</p>}
+    </form></>
   if (result) return <>
     {heading}
     <section className="panel result-panel" role="status">
       <span className={'risk-badge ' + (result.kind === 'published' ? 'low' : 'review')}>{result.kind === 'published' ? '바로 공개' : '관리자 검토'}</span>
-      <h2>{result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
+      <h2>{editId ? (result.kind === 'published' ? '수정한 내용을 저장했습니다' : '수정한 내용은 관리자 확인 후 공개됩니다') : result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
       <p>{result.kind === 'published' ? '활동 찾기 목록에서 이웃들이 볼 수 있습니다.' : '확인이 필요한 내용이 있어 관리자가 확인한 뒤 공개합니다. 그 전에는 나와 관리자만 볼 수 있습니다.'}</p>
       {result.activity.riskReasons && <p className="small-print">검토 이유: {result.activity.riskReasons}</p>}
       <div className="button-row"><a className="primary-button" href={'#/activity/' + result.activity.id}>만든 활동 보기 <Glyph name="arrow" size={17} /></a><button className="secondary-button" onClick={() => { setResult(null); setMessage('') }}>다른 활동 만들기</button></div>
@@ -233,7 +267,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
         {fieldError('safety')}
         {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
         {blocked && <div className="form-alert blocked" role="alert"><strong>등록할 수 없는 활동입니다.</strong><span>{blocked}</span><span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금 등은 열 수 없습니다.</span></div>}
-        <button className="primary-button" type="submit" disabled={busy || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
+        <button className="primary-button" type="submit" disabled={busy || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
         {message && <p role="status" className="success-message">{message}</p>}
       </form>
 

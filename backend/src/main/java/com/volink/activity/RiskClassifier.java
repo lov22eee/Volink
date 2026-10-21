@@ -31,12 +31,13 @@ public class RiskClassifier {
 
     /** placeReview: why the chosen place needs a look (e.g. "요양·복지시설"), or null for an open place. */
     public Result classify(String title, String description, String category, LocalDateTime endsAt, String placeReview) {
-        String text = (title + " " + description).toLowerCase(Locale.ROOT);
+        // Spaces are ignored on both sides: "전기 배관", "전기배관" and "전기  작업" all match.
+        String text = squash(title + " " + description);
         List<String> blocked = new ArrayList<>();
         List<String> review = new ArrayList<>();
         for (Map<String, Object> row : jdbc.queryForList("SELECT keyword, risk_level, reason FROM risk_keywords ORDER BY id")) {
             String keyword = (String) row.get("keyword");
-            if (!text.contains(keyword.toLowerCase(Locale.ROOT))) continue;
+            if (!text.contains(squash(keyword))) continue;
             String reason = "'" + keyword + "' · " + row.get("reason");
             ("BLOCKED".equals(row.get("risk_level")) ? blocked : review).add(reason);
         }
@@ -47,5 +48,9 @@ public class RiskClassifier {
         if (endsAt.toLocalTime().isAfter(SUNSET[endsAt.getMonthValue() - 1])) review.add("해가 진 뒤 끝나는 활동");
         if (placeReview != null) review.add("장소가 " + placeReview + " · 관리자 확인 필요");
         return review.isEmpty() ? new Result("LOW", List.of()) : new Result("REVIEW", review);
+    }
+
+    static String squash(String value) {
+        return value.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
     }
 }
