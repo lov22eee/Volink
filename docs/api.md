@@ -53,6 +53,9 @@
 | 4+ | `POST /api/activities` `{…, place: {kakaoId, name, address, categoryName, latitude, longitude, placeClass, classLabel, token}, meetingPoint, supplies: [{name, provided}]}` | 회원 | **구현.** `placeId` 대신 검색 장소. 서명이 다르거나 3시간이 지나면 400 `place`. REVIEW 장소는 위험도 REVIEW(이유 ‘장소가 ○○’). `meetingPoint` 100자. `supplies` 최대 6개·이름 1~10자·중복 불가(400 `supplies`), 이름도 위험 단어 검사. 활동 조회 응답에 `supplies`(없으면 `[]`)·`meetingPoint`·`placeAddress` |
 | 4+ | `GET /api/volunteer-programs?lat&lng&radiusKm&q&youth&recruiting` | 공개(분당 40회) | **구현.** `{enabled, region, items[]}`. 1365 활동: programNo·title·organization·place·periodStart/End·beginTime/endTime·weekdays·recruitStatus·youthOk·latitude/longitude(없으면 null)·distanceKm·link. 기본 모집중·20km 안. 키 없으면 `enabled:false` |
 | 4+ | `GET /api/admin/volunteer-programs/check?lat&lng` | 관리자 | **구현.** 키 여부·지역·코드·목록 건수·응답 필드 **이름**·오늘 사용 횟수(값은 보여주지 않음) |
+| 4+ | `PUT /api/activities/{id}` (만들기와 같은 본문) | 모집자(남은 404) | **구현(보완 2).** 시작 전·DRAFT/RECRUITING만(아니면 409 `INVALID_STATE`), 신청자가 있으면 409 `HAS_APPLICANTS`. 위험도 재검사: BLOCKED 422(변경 없음), REVIEW면 DRAFT로 다시 숨김. 지금 장소는 `placeId`로 그대로 둘 수 있음 |
+| 4+ | `PATCH /api/activities/{id}/notes` `{description, meetingPoint}` | 모집자 | **구현.** 신청자가 있어도 가능, 위험 단어 검사 |
+| 4+ | `DELETE /api/activities/{id}` | 모집자 | **구현.** 204. 신청자 0명·시작 전만, 상태 DELETED(기록 유지)로 모든 목록·상세에서 숨김 |
 | 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
 | 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
 | 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
