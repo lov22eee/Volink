@@ -23,7 +23,8 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
 
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class)).isEqualTo(5);
+        assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
+                .containsExactly("1", "2", "3", "4", "5", "5.1");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
@@ -111,7 +112,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
                 "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
-                "demo_places", "demo_personas", "demo_activity_templates");
+                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
                 .containsExactlyInAnyOrder(Map.entry("BLOCKED", 15), Map.entry("REVIEW", 17));

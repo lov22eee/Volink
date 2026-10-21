@@ -52,6 +52,12 @@ step "backend build"
 id volink >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin volink
 mkdir -p /opt/volink-app
 install -m 644 backend/target/volink-api-*.jar /opt/volink-app/volink-api.jar
+# Server-only keys (never VITE_ variables): Kakao REST key for place search, data.go.kr key for 1365 programs.
+# Put them with scripts/aws/set-keys.sh; without them place search uses the admin-entered places and 1365 is hidden.
+keys=/etc/volink/api-keys.env
+install -m 600 /dev/null "$keys"
+if [ -s /etc/volink/kakao_rest_key ]; then echo "KAKAO_REST_KEY=$(tr -d '[:space:]' < /etc/volink/kakao_rest_key)" >> "$keys"; fi
+if [ -s /etc/volink/data_go_kr_key ]; then echo "DATA_GO_KR_KEY=$(tr -d '[:space:]' < /etc/volink/data_go_kr_key)" >> "$keys"; fi
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
 Description=Volink API
@@ -61,6 +67,7 @@ Wants=network-online.target
 [Service]
 User=volink
 EnvironmentFile=$APP/.env
+EnvironmentFile=-$keys
 # dev profile = demo server: creates the 11 demo accounts from DEMO_ACCOUNT_PASSWORD in .env.
 Environment=SPRING_PROFILES_ACTIVE=dev
 Environment=DB_HOST=127.0.0.1

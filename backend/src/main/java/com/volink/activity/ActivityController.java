@@ -27,12 +27,14 @@ public class ActivityController {
         return activities.create(Long.parseLong(jwt.getSubject()), request);
     }
 
-    /** Week 4: optional radius (lat, lng, radiusKm), date, category and type filters. */
+    /** Week 4: optional radius (lat, lng, radiusKm up to 20), date or from/to, category, type, q (words) and part (AM/PM). */
     @GetMapping("/api/activities")
     public List<Map<String, Object>> list(@RequestParam(required = false) Double lat, @RequestParam(required = false) Double lng,
                                           @RequestParam(required = false) Double radiusKm, @RequestParam(required = false) String date,
-                                          @RequestParam(required = false) String category, @RequestParam(required = false) String type) {
-        return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type));
+                                          @RequestParam(required = false) String category, @RequestParam(required = false) String type,
+                                          @RequestParam(required = false) String q, @RequestParam(required = false) String from,
+                                          @RequestParam(required = false) String to, @RequestParam(required = false) String part) {
+        return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type, q, from, to, part));
     }
 
     @GetMapping("/api/activities/{id}")

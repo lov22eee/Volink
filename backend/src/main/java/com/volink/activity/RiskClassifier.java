@@ -29,7 +29,8 @@ public class RiskClassifier {
 
     public record Result(String level, List<String> reasons) {}
 
-    public Result classify(String title, String description, String category, LocalDateTime endsAt) {
+    /** placeReview: why the chosen place needs a look (e.g. "요양·복지시설"), or null for an open place. */
+    public Result classify(String title, String description, String category, LocalDateTime endsAt, String placeReview) {
         String text = (title + " " + description).toLowerCase(Locale.ROOT);
         List<String> blocked = new ArrayList<>();
         List<String> review = new ArrayList<>();
@@ -44,6 +45,7 @@ public class RiskClassifier {
                 .stream().findFirst().orElse("LOW");
         if ("REVIEW".equals(baseRisk)) review.add("'" + category + "' 분야 · 대상자 확인 필요");
         if (endsAt.toLocalTime().isAfter(SUNSET[endsAt.getMonthValue() - 1])) review.add("해가 진 뒤 끝나는 활동");
+        if (placeReview != null) review.add("장소가 " + placeReview + " · 관리자 확인 필요");
         return review.isEmpty() ? new Result("LOW", List.of()) : new Result("REVIEW", review);
     }
 }

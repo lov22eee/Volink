@@ -54,3 +54,17 @@ curl -fsSL https://raw.githubusercontent.com/lov22eee/Volink/<브랜치>/scripts
 4. 로컬은 `frontend/.env.local`에 `VITE_KAKAO_JS_KEY=키` (커밋 안 됨)
 
 키가 없으면 지도 자리에 좌표의 상대 위치만 그린 그림이 나옵니다.
+
+## 키 3개 한 번에 넣기 (4주차 보완 · 2026-10-21)
+
+서버(EC2 Instance Connect 창)에서 한 줄:
+
+```bash
+sudo bash /opt/volink/scripts/aws/set-keys.sh
+```
+
+차례로 묻는 것: ① 카카오 JavaScript 키 ② 카카오 REST API 키 ③ 공공데이터포털 일반 인증키(Decoding). 입력해도 화면에 보이지 않고, Enter만 치면 기존 키를 그대로 씁니다. 저장 위치는 `/etc/volink/`(root만 읽기)이며 끝나면 사이트를 다시 만듭니다(몇 분). REST·공공데이터 키는 서버 API에만 들어가고 화면 코드에는 들어가지 않습니다.
+
+- 카카오: 무료 사용량은 계정당 앱 1개만 받으므로 무료 사용량이 있는 기존 앱에 Volink용 JavaScript 키(도메인 2개)·REST API 키(호출 허용 IP `3.104.31.169`)를 추가해 씁니다. 월렛(유료)은 연결하지 않습니다.
+- 공공데이터: ‘행정안전부_봉사참여정보서비스_GW’ 개발계정(자동승인, 기능별 하루 1000회). 승인 직후 1~2시간은 키가 안 먹을 수 있습니다.
+- 넣은 뒤 확인: 활동 만들기 → 장소 돋보기에서 카카오 검색 결과가 나오는지, 활동 찾기에서 위치를 허용해 ‘1365 활동’ 칸이 생기는지 봅니다. 1365가 안 나오면 개발 담당이 관리자 토큰으로 `GET /api/admin/volunteer-programs/check?lat=37.82&lng=127.09`를 호출해 지역·코드·건수·응답 필드 이름(값은 안 보임)을 확인하고 `RegionCodes`·`VolunteerService`를 고칩니다.

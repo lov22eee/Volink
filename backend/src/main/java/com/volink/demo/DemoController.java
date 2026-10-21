@@ -25,7 +25,7 @@ public class DemoController {
         List<Map<String, Object>> places = jdbc.queryForList("""
                 SELECT id, name, area, address_note AS addressNote,
                        coordinate_status AS coordinateStatus
-                FROM demo_places ORDER BY id
+                FROM demo_places WHERE source = 'CURATED' ORDER BY id
                 """);
         List<Map<String, Object>> personas = jdbc.queryForList("""
                 SELECT code, display_name AS displayName, persona_role AS role, scenario

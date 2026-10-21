@@ -10,10 +10,11 @@ export type User = {
 }
 export type LiveActivity = {
   id: number; title: string; description: string; category: string; activityType: 'GENERAL' | 'INSTITUTION'
-  organizationName: string | null; placeId: number | null; placeName: string | null; date: string; startTime: string
+  organizationName: string | null; placeId: number | null; placeName: string | null; placeAddress?: string | null; meetingPoint?: string | null
+  date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
-  latitude?: number | null; longitude?: number | null; distanceKm?: number
+  latitude?: number | null; longitude?: number | null; distanceKm?: number; supplies?: { name: string; provided: boolean }[]
 }
 export type PlaceInfo = {
   id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null
