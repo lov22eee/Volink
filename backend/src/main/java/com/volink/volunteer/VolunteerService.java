@@ -84,10 +84,12 @@ public class VolunteerService {
         String today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))).format(YMD);
         items.removeIf(item -> item.get("periodEnd") != null && ((String) item.get("periodEnd")).replace("-", "").compareTo(today) < 0);
         if (Boolean.TRUE.equals(query.youth())) items.removeIf(item -> !Boolean.TRUE.equals(item.get("youthOk")));
-        if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> !"모집중".equals(item.get("recruitStatus")));
+        // Only programs known to be closed are hidden; an unknown status stays (the link shows the live state).
+        if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
         items.removeIf(item -> item.get("distanceKm") != null && (Double) item.get("distanceKm") > radiusKm);
         items.sort(Comparator.comparing(item -> item.get("distanceKm") == null ? Double.MAX_VALUE : (Double) item.get("distanceKm")));
         result.put("items", items);
+        result.put("found", list.size());
         return result;
     }
 

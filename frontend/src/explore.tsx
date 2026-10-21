@@ -26,6 +26,16 @@ type When = 'all' | 'today' | 'week' | 'weekend'
 type Hit = { key: string; source: 'local' | '1365'; title: string; lat: number | null; lng: number | null; distanceKm: number | null; local?: LiveActivity; program?: Program }
 
 const rings = [1, 3, 5, 10, 20]
+/** Remembers only that location was allowed (never the position), so the next visit opens on the map. */
+const REMEMBER = 'volink.nearby'
+const remembered = () => { try { return localStorage.getItem(REMEMBER) === '1' } catch { return false } }
+const remember = (on: boolean) => { try { if (on) localStorage.setItem(REMEMBER, '1'); else localStorage.removeItem(REMEMBER) } catch { /* private mode */ } }
+
+function km(a: Origin, lat: number, lng: number) {
+  const r = 6371, dLat = (lat - a.lat) * Math.PI / 180, dLng = (lng - a.lng) * Math.PI / 180
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return Math.round(2 * r * Math.asin(Math.sqrt(h)) * 10) / 10
+}
 const seoulDay = (offset = 0) => { const day = new Date(Date.now() + offset * 86_400_000); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(day) }
 
 /** Rough travel time from straight-line distance: walking up to 1.5 km, otherwise driving. Not a route. */
@@ -48,7 +58,7 @@ function range(when: When): { from?: string; to?: string } {
 
 export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [origin, setOrigin] = useState<Origin | null>(null)
-  const [asking, setAsking] = useState(!preview)
+  const [asking, setAsking] = useState(!preview && !remembered())
   const [locating, setLocating] = useState(false)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
@@ -61,16 +71,17 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [kind, setKind] = useState('all')
   const [youth, setYouth] = useState(false)
   const [live, setLive] = useState<LiveActivity[]>([])
+  const [allLive, setAllLive] = useState<LiveActivity[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [programsOn, setProgramsOn] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [programDetail, setProgramDetail] = useState<Program | null>(null)
 
   // Our activities: within 20 km (the widest ring) so the radius can widen without another request.
+  // With a position there are two lists: nearby (top) and every recruiting activity (bottom, nearest first).
   useEffect(() => {
     if (preview) return
     const params = new URLSearchParams()
-    if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', '20') }
     const { from, to } = range(when)
     if (from) params.set('from', from)
     if (to) params.set('to', to)
@@ -78,8 +89,15 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
     if (q) params.set('q', q)
     if (category !== '전체') params.set('category', category)
     if (kind !== 'all') params.set('type', kind)
+    api<LiveActivity[]>('/api/activities?' + params).then(setAllLive).catch(() => setAllLive([]))
+    if (!origin) return
+    params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', '20')
     api<LiveActivity[]>('/api/activities?' + params).then(setLive).catch(() => setLive([]))
   }, [origin, when, part, q, category, kind])
+  useEffect(() => { if (!origin) setLive(allLive) }, [origin, allLive])
+
+  // Location allowed before: go straight to the map.
+  useEffect(() => { if (!preview && remembered()) locate() }, [])
 
   // 1365 programs need a position (they are looked up by region).
   useEffect(() => {
@@ -99,8 +117,9 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       setLocating(false)
       setNotice('')
       setAsking(false)
+      remember(true)
       setOrigin({ lat: position.coords.latitude, lng: position.coords.longitude, label: '내 위치' })
-    }, () => { setLocating(false); setNotice('위치를 확인하지 못했습니다. 지역을 직접 골라 주세요.') }, { timeout: 8000, maximumAge: 60000 })
+    }, () => { setLocating(false); remember(false); setAsking(true); setNotice('위치를 확인하지 못했습니다. 지역을 직접 골라 주세요.') }, { timeout: 8000, maximumAge: 60000 })
   }
 
   const hits = useMemo<Hit[]>(() => {
@@ -129,6 +148,14 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const filteredExamples = examples.filter(item => (category === '전체' || item.category === category) && (kind === 'all' || item.activityType === kind)
     && (item.title + item.placeName).includes(q) && (!from || item.date >= from) && (!to || item.date <= to) && (!part || (part === 'AM') === item.startTime < '12:00'))
   const chosen = inside.find(hit => hit.key === selected) ?? null
+  // Bottom list: every recruiting activity (with distance when known) and the 1365 programs found, nearest first.
+  const everything = !origin ? [] : [
+    ...(source === '1365' ? [] : allLive.map(activity => {
+      const distanceKm = activity.latitude != null && activity.longitude != null ? km(origin, activity.latitude, activity.longitude) : undefined
+      return { key: 'a' + activity.id, distance: distanceKm ?? 999, card: { ...fromLive(activity), distanceKm } as CardItem, hit: undefined as Hit | undefined }
+    })),
+    ...hits.filter(hit => hit.source === '1365').map(hit => ({ key: hit.key, distance: hit.distanceKm ?? 999, card: undefined as CardItem | undefined, hit })),
+  ].sort((a, b) => a.distance - b.distance)
 
   function search(event: FormEvent) {
     event.preventDefault()
@@ -166,22 +193,31 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       </div>
       {origin && <p className="small-print location-note">위치는 이번 검색에만 쓰고 저장하지 않습니다.{programsOn ? ' 1365 활동은 행정안전부 공공데이터를 몇 시간마다 받아와 보여주며, 신청과 최신 모집 상태는 1365에서 확인해 주세요.' : ''}</p>}
 
-      {origin ? <div className="explore-split">
-        <div className="explore-map">
-          <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={selected} onSelect={setSelected}
-            onMoved={centre => setOrigin({ ...centre, label: '지도 중심' })} />
-          {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} onDetail={setProgramDetail} />}
-          <span className="map-legend"><i className="dot local" />동네 활동{programsOn && <><i className="dot program" />1365 활동</>}</span>
-        </div>
-        <div className="explore-list">
+      {origin ? <>
+        <section className="panel nearby-panel" aria-label="내 주변">
+          <div className="nearby-head"><h3>내 주변 {shownRadius}km</h3><span className="list-count">{origin.label} 기준 · 가까운 순 {Math.min(5, inside.length)}개 · <button className="text-button" onClick={() => document.getElementById('all-list')?.scrollIntoView()}>모든 모집글 보기 ↓</button></span></div>
+          {programsOn && programs.length === 0 && <p className="small-print">근처 20km에서 지금 모집 중인 1365 활동을 찾지 못했어요. 지역을 바꾸거나 잠시 뒤 다시 확인해 주세요.</p>}
           {widened && <div className="widen-callout" role="status"><strong>{radius}km 안에는 없어서 {shownRadius}km까지 넓혔어요</strong>
             <span className="ring-steps">{rings.filter(ring => ring >= radius && ring <= shownRadius).map(ring => <span key={ring} className={ring === shownRadius ? 'on' : ''}>{ring}km · {hits.filter(hit => hit.distanceKm != null && hit.distanceKm <= ring).length}개</span>)}</span>
             <small>최대 20km까지만 넓혀요</small></div>}
-          <p className="list-count">{origin.label} {shownRadius}km · {inside.length}개 · 가까운 순</p>
-          {inside.length ? <ul className="hit-list">{inside.map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === selected} onFocus={() => setSelected(hit.key)} onDetail={setProgramDetail} /></li>)}</ul>
-            : <div className="empty-state"><p>20km 안에도 조건에 맞는 활동이 없어요.</p><a className="secondary-button" href="#/create">이 동네에 활동 만들기 <Glyph name="arrow" size={15} /></a></div>}
-        </div>
-      </div>
+          <div className="explore-split">
+            <div className="explore-map">
+              <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={selected} onSelect={setSelected}
+                onMoved={centre => setOrigin({ ...centre, label: '지도 중심' })} />
+              {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} onDetail={setProgramDetail} />}
+              <span className="map-legend"><i className="dot local" />동네 활동{programsOn && <><i className="dot program" />1365 활동</>}</span>
+            </div>
+            <div className="explore-list">
+              {inside.length ? <ul className="hit-list">{inside.slice(0, 5).map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === selected} onFocus={() => setSelected(hit.key)} onDetail={setProgramDetail} /></li>)}</ul>
+                : <div className="empty-state"><p>20km 안에도 조건에 맞는 활동이 없어요.</p><a className="secondary-button" href="#/create">이 동네에 활동 만들기 <Glyph name="arrow" size={15} /></a></div>}
+            </div>
+          </div>
+        </section>
+        <div className="all-head" id="all-list"><h3>모든 모집글</h3><span className="list-count">가까운 순 · {everything.length}개</span></div>
+        {everything.length ? <div className="activity-grid">{everything.map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
+          : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onFocus={() => undefined} onDetail={setProgramDetail} /></div>)}</div>
+          : <div className="empty-state">조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</div>}
+      </>
         : <>{(!catalog && !live.length) ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
           : (live.length + filteredExamples.length) ? <div className="activity-grid">{[...live.map(fromLive), ...filteredExamples].map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
             : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}</>}

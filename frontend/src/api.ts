@@ -15,6 +15,8 @@ export type LiveActivity = {
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
   latitude?: number | null; longitude?: number | null; distanceKm?: number; supplies?: { name: string; provided: boolean }[]
+  /** Only for the organizer: applications that lock the full edit. */
+  applicants?: number
 }
 export type PlaceInfo = {
   id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null

@@ -55,7 +55,7 @@ const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 �
 const maxSupplies = 6
 /** Starting supplies per field until the person changes them. */
 const suppliesFor: Record<string, Supply[]> = {
-  '환경 정화': [{ name: '장갑', provided: false }, { name: '집게', provided: true }, { name: '봉투', provided: true }],
+  '환경 정화': [{ name: '장갑', provided: false }, { name: '편한 신발', provided: false }],
   '생활 지원': [{ name: '장갑', provided: false }],
   '지역 돌봄': [],
 }
@@ -68,7 +68,7 @@ const templates = [
 
 type CreateResult = { kind: 'published' | 'review'; activity: LiveActivity }
 
-export default function CreateActivity({ user, ready }: { user: User | null; ready: boolean }) {
+export default function CreateActivity({ user, ready, editId }: { user: User | null; ready: boolean; editId?: number }) {
   const today = seoulToday()
   const [kind, setKind] = useState<'GENERAL' | 'INSTITUTION'>('GENERAL')
   const [title, setTitle] = useState('')
@@ -90,6 +90,20 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CreateResult | null>(null)
+  // Editing: the saved activity fills the form. With applications only the description and meeting point can change.
+  const [editing, setEditing] = useState<LiveActivity | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const locked = (editing?.applicants ?? 0) > 0
+  useEffect(() => {
+    if (!editId || !user) return
+    api<LiveActivity>('/api/activities/' + editId).then(a => {
+      setSuppliesTouched(true)
+      setEditing(a); setKind(a.activityType); setTitle(a.title); setCategory(a.category); setMeetingPoint(a.meetingPoint ?? '')
+      setPlace({ placeId: a.placeId ?? undefined, name: a.placeName ?? '', address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null,
+        distanceMeters: null, placeClass: 'OPEN', classLabel: '지금 장소' })
+      setDate(a.date); setStart(a.startTime); setDuration(a.durationMinutes); setCapacity(a.capacity); setDescription(a.description); setSupplies(a.supplies ?? []); setSafety(true)
+    }).catch(() => setLoadError('고칠 수 있는 활동을 찾지 못했습니다.'))
+  }, [editId, user])
   const organization = user?.organization
   const canHost = organization?.status === 'APPROVED'
 
@@ -107,6 +121,11 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
 
   function validate(): Errors {
     const found: Errors = {}
+    if (locked) {
+      const text = description.trim()
+      if (text.length < r.descriptionMin || text.length > r.descriptionMax) found.description = `활동 소개는 ${r.descriptionMin}~${r.descriptionMax}자로 적어 주세요.`
+      return found
+    }
     const name = title.trim()
     if (name.length < r.titleMin || name.length > r.titleMax) found.title = `활동 이름은 ${r.titleMin}~${r.titleMax}자로 입력해 주세요.`
     if (!place) found.place = '장소를 골라 주세요.'
@@ -131,16 +150,17 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
     setBlocked('')
     const first = Object.keys(found)[0]
     if (first) { setMessage(''); (form.querySelector(`[name="${first}"]`) as HTMLElement | null)?.focus(); return }
-    if (preview || !user || !place) { setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.'); return }
+    if (preview || !user || (!place && !locked)) { setMessage('입력 내용을 확인했습니다. 현재는 활동을 등록하거나 저장하지 않습니다.'); return }
     setBusy(true)
     try {
-      const chosen = place.kakaoId
+      const chosen = !place ? {} : place.kakaoId
         ? { place: { kakaoId: place.kakaoId, name: place.name, address: place.address, categoryName: place.categoryName, latitude: place.latitude, longitude: place.longitude, placeClass: place.placeClass, classLabel: place.classLabel, token: place.token } }
         : { placeId: place.placeId }
-      const activity = await api<LiveActivity>('/api/activities', 'POST', {
-        activityType: kind, title: title.trim(), category, ...chosen, meetingPoint, date, time: start, capacity,
-        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety, supplies,
-      })
+      const body = { activityType: kind, title: title.trim(), category, ...chosen, meetingPoint, date, time: start, capacity,
+        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety, supplies }
+      const activity = !editId ? await api<LiveActivity>('/api/activities', 'POST', body)
+        : locked ? await api<LiveActivity>(`/api/activities/${editId}/notes`, 'PATCH', { description: description.trim(), meetingPoint })
+          : await api<LiveActivity>('/api/activities/' + editId, 'PUT', body)
       setResult({ kind: activity.status === 'RECRUITING' ? 'published' : 'review', activity })
       window.scrollTo(0, 0)
     } catch (cause) {
@@ -152,13 +172,27 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
     }
   }
 
-  const heading = <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
+  const heading = editId ? <PageHeading title="활동 수정하기" description={locked ? '신청한 사람이 있어 소개와 만나는 곳만 고칠 수 있어요.' : '바꾼 내용도 등록할 때와 같이 다시 확인합니다.'} />
+    : <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
   if (!preview && !user) return <>{heading}<LoginRequired ready={ready} text="활동을 만들려면 먼저 로그인해 주세요." /></>
+  if (editId && loadError) return <>{heading}<section className="empty-state"><p>{loadError}</p><a className="secondary-button" href="#/mine">내 활동으로</a></section></>
+  if (editId && !editing) return <>{heading}<div className="empty-state">활동을 불러오는 중입니다.</div></>
+  if (locked && !result) return <>{heading}
+    <form className="panel activity-form create-form" noValidate onSubmit={submit}>
+      <p className="inline-notice">신청한 사람이 {editing?.applicants}명 있어 제목·장소·일정·정원은 바꿀 수 없어요. 꼭 바꿔야 하면 활동을 취소해 주세요(신청자 알림은 참가 신청 기능과 함께 제공).</p>
+      <label>만나는 곳<input name="meetingPoint" value={meetingPoint} maxLength={100} onChange={event => setMeetingPoint(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
+      {errors.meetingPoint && <span className="field-error">{errors.meetingPoint}</span>}
+      <label>활동 소개<textarea name="description" value={description} maxLength={r.descriptionMax} rows={5} onChange={event => setDescription(event.target.value)} /></label>
+      {errors.description && <span id="description-error" className="field-error">{errors.description}</span>}
+      {blocked && <div className="form-alert blocked" role="alert"><strong>저장할 수 없는 내용입니다.</strong><span>{blocked}</span></div>}
+      <button className="primary-button" type="submit" disabled={busy}>수정 저장 <Glyph name="arrow" size={17} /></button>
+      {message && <p role="status" className="success-message">{message}</p>}
+    </form></>
   if (result) return <>
     {heading}
     <section className="panel result-panel" role="status">
       <span className={'risk-badge ' + (result.kind === 'published' ? 'low' : 'review')}>{result.kind === 'published' ? '바로 공개' : '관리자 검토'}</span>
-      <h2>{result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
+      <h2>{editId ? (result.kind === 'published' ? '수정한 내용을 저장했습니다' : '수정한 내용은 관리자 확인 후 공개됩니다') : result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
       <p>{result.kind === 'published' ? '활동 찾기 목록에서 이웃들이 볼 수 있습니다.' : '확인이 필요한 내용이 있어 관리자가 확인한 뒤 공개합니다. 그 전에는 나와 관리자만 볼 수 있습니다.'}</p>
       {result.activity.riskReasons && <p className="small-print">검토 이유: {result.activity.riskReasons}</p>}
       <div className="button-row"><a className="primary-button" href={'#/activity/' + result.activity.id}>만든 활동 보기 <Glyph name="arrow" size={17} /></a><button className="secondary-button" onClick={() => { setResult(null); setMessage('') }}>다른 활동 만들기</button></div>
@@ -192,7 +226,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
         <div className="field-block"><span className="field-label">일정</span>
           <div className="schedule-cards">
             <div className="schedule-card"><span className="card-head"><Glyph name="calendar" size={15} />날짜와 시작 시간</span>
-              <span className="select-with-icon"><select name="date" aria-label="활동 날짜" value={date} onChange={event => setDate(event.target.value)} {...err('date')}>{dates.map((value, i) => <option key={value} value={value}>{friendlyDate(value)} · {i === 0 ? '내일' : i === 1 ? '모레' : i + 1 + '일 뒤'}</option>)}</select></span>
+              <DatePicker value={date} first={dates[0]} last={dates[dates.length - 1]} today={today} onChange={setDate} invalid={Boolean(errors.date)} />
               <TimeWheel value={start} onChange={setStart} />
             </div>
             <div className="schedule-card"><span className="card-head"><Glyph name="timer" size={15} />활동 시간</span>
@@ -208,8 +242,11 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
           <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
         </div>
 
-        <div className="field-block"><span className="field-label">준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
-          <div className="supply-pick" role="group" aria-label="준비물">
+
+        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
+
+        <div className="field-block"><span className="field-label">챙겨 올 준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
+          <div className="supply-pick" role="group" aria-label="챙겨 올 준비물">
             {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
               const on = supplies.some(item => item.name === name)
               return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
@@ -220,20 +257,14 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
             onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
             <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
               onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
-          {supplies.length > 0 && <><span className="field-hint">그중 모집자가 나눠 주는 것</span>
-            <div className="supply-pick" role="group" aria-label="모집자가 나눠 주는 것">{supplies.map(item =>
-              <button type="button" key={item.name} className={'pick-chip small' + (item.provided ? ' on' : '')} aria-pressed={item.provided}
-                onClick={() => { setSuppliesTouched(true); setSupplies(supplies.map(other => other.name === item.name ? { ...other, provided: !other.provided } : other)) }}>{item.name}</button>)}</div></>}
           {fieldError('supplies')}
         </div>
-
-        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
 
         <label className="check-line"><input type="checkbox" name="safety" checked={safety} onChange={event => setSafety(event.target.checked)} {...err('safety')} />공공장소의 저위험 활동이며, 공식 봉사실적·자원봉사 종합보험이 적용되지 않음을 확인합니다</label>
         {fieldError('safety')}
         {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
         {blocked && <div className="form-alert blocked" role="alert"><strong>등록할 수 없는 활동입니다.</strong><span>{blocked}</span><span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금 등은 열 수 없습니다.</span></div>}
-        <button className="primary-button" type="submit" disabled={busy || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
+        <button className="primary-button" type="submit" disabled={busy || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
         {message && <p role="status" className="success-message">{message}</p>}
       </form>
 
@@ -245,7 +276,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
           <p><Glyph name="pin" size={15} />{place ? place.name + (meetingPoint ? ' · ' + meetingPoint : '') : '장소를 골라 주세요'}</p>
           <p><Glyph name="calendar" size={15} />{friendlyDate(date)} {start} ~ {end}</p>
           <p><Glyph name="users" size={15} />0 / {capacity}명</p>
-          {supplies.length > 0 && <SupplyChips supplies={supplies} />}
+          {supplies.length > 0 && <p className="preview-supplies">챙겨 올 것 <SupplyChips supplies={supplies} /></p>}
         </article>
         <div className={'expect ' + (reviewReasons.length ? 'review' : 'ok')}>
           <strong><Glyph name={reviewReasons.length ? 'alert' : 'check'} size={16} />{reviewReasons.length ? '관리자 확인 후 공개돼요' : '바로 공개될 예정이에요'}</strong>
@@ -271,11 +302,35 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
   const set = (total: number) => setDraft(toTime(Math.min(Math.max(total, toMinutes(r.earliestStart)), latestStart)))
   const hourOf = (h12: number, afternoon: boolean) => (h12 % 12 + (afternoon ? 12 : 0)) * 60
 
+  // PC mouse wheel / trackpad: one notch moves a column by one item (scroll snapping alone skips or sticks).
+  useEffect(() => {
+    if (!open) return
+    const columns = Array.from(box.current?.querySelectorAll<HTMLElement>('.wheel-col') ?? [])
+    const steps = [720, 60, 10]
+    const pending = columns.map(() => 0)
+    const listeners = columns.map((column, index) => {
+      const listener = (event: WheelEvent) => {
+        event.preventDefault()
+        pending[index] += event.deltaY
+        if (Math.abs(pending[index]) < 40) return
+        const direction = Math.sign(pending[index])
+        pending[index] = 0
+        setDraft(current => toTime(Math.min(Math.max(toMinutes(current) + direction * steps[index], toMinutes(r.earliestStart)), latestStart)))
+      }
+      column.addEventListener('wheel', listener, { passive: false })
+      return listener
+    })
+    return () => columns.forEach((column, index) => column.removeEventListener('wheel', listeners[index]))
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
     document.addEventListener('mousedown', close)
-    box.current?.querySelectorAll<HTMLElement>('.wheel-col [aria-selected="true"]').forEach(item => item.scrollIntoView({ block: 'center' }))
+    box.current?.querySelectorAll<HTMLElement>('.wheel-col [aria-selected="true"]').forEach(item => {
+      const column = item.parentElement as HTMLElement
+      column.scrollTo({ top: item.offsetTop - column.clientHeight / 2 + item.offsetHeight / 2, behavior: 'smooth' })
+    })
     return () => document.removeEventListener('mousedown', close)
   }, [open, draft])
 
@@ -296,6 +351,53 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
         {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0'), total: Math.floor(minutes / 60) * 60 + m, selected: minutes % 60 === m })))}
       </div>
       <div className="wheel-foot"><span>{r.earliestStart} ~ {toTime(latestStart)} · 10분 단위</span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
+    </div>}
+  </div>
+}
+
+/** Date as one field: opens a month calendar. Only tomorrow to 60 days ahead can be picked. */
+function DatePicker({ value, first, last, today, onChange, invalid }: { value: string; first: string; last: string; today: string; onChange: (date: string) => void; invalid: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState(value.slice(0, 7))
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const [y, m] = month.split('-').map(Number)
+  const startWeekday = new Date(Date.UTC(y, m - 1, 1)).getUTCDay()
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const shift = (delta: number) => { const d = new Date(Date.UTC(y, m - 1 + delta, 1)); setMonth(d.toISOString().slice(0, 7)) }
+  const ahead = (date: string) => Math.round((new Date(date + 'T12:00:00Z').getTime() - new Date(today + 'T12:00:00Z').getTime()) / 86_400_000)
+  const relative = (date: string) => { const n = ahead(date); return n === 1 ? '내일' : n === 2 ? '모레' : n + '일 뒤' }
+  return <div className="date-picker" ref={box}>
+    <button type="button" name="date" className={'wheel-field' + (invalid ? ' invalid' : '')} aria-label={'활동 날짜 ' + friendlyDate(value)} aria-expanded={open} aria-describedby={invalid ? 'date-error' : undefined}
+      onClick={() => { setMonth(value.slice(0, 7)); setOpen(!open) }}>
+      <Glyph name="calendar" size={16} /><span>{friendlyDate(value)} <small>· {relative(value)}</small></span><span className="chev"><Glyph name="chevron" size={15} /></span>
+    </button>
+    {open && <div className="calendar-pop" role="dialog" aria-label="날짜 고르기">
+      <div className="calendar-head">
+        <button type="button" className="icon-button" aria-label="이전 달" disabled={month <= first.slice(0, 7)} onClick={() => shift(-1)}><span className="flip"><Glyph name="chevron" size={16} /></span></button>
+        <strong>{y}년 {m}월</strong>
+        <button type="button" className="icon-button" aria-label="다음 달" disabled={month >= last.slice(0, 7)} onClick={() => shift(1)}><span className="turn"><Glyph name="chevron" size={16} /></span></button>
+      </div>
+      <div className="calendar-grid">
+        {['일', '월', '화', '수', '목', '금', '토'].map((name, i) => <span key={name} className={'weekday' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '')}>{name}</span>)}
+        {Array.from({ length: startWeekday }, (_, i) => <span key={'blank' + i} />)}
+        {Array.from({ length: days }, (_, i) => {
+          const date = `${month}-${String(i + 1).padStart(2, '0')}`
+          const weekday = (startWeekday + i) % 7
+          const can = date >= first && date <= last
+          return <button type="button" key={date} data-date={date} disabled={!can} aria-pressed={date === value} aria-label={friendlyDate(date)}
+            className={'day' + (weekday === 0 ? ' sun' : weekday === 6 ? ' sat' : '') + (date === today ? ' today' : '')}
+            onClick={() => { onChange(date); setOpen(false) }}>{i + 1}</button>
+        })}
+      </div>
+      <p className="calendar-foot">내일부터 {r.maxDaysAhead}일 안에서 고를 수 있어요</p>
     </div>}
   </div>
 }

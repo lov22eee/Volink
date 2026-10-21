@@ -43,7 +43,7 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 }
 
 
-type Page = 'explore' | 'detail' | 'live' | 'create' | 'mine' | 'login' | 'signup' | 'admin'
+type Page = 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin'
 type Route = { page: Page; activityId?: number }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
@@ -55,6 +55,8 @@ function getRoute(): Route {
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
   if (live) return { page: 'live', activityId: Number(live[1]) }
+  const edit = /^activity\/(\d+)\/edit$/.exec(path)
+  if (edit) return { page: 'edit', activityId: Number(edit[1]) }
   return { page: ['create', 'mine', 'login', 'signup', 'admin'].includes(path) ? path as Page : 'explore' }
 }
 
@@ -121,7 +123,7 @@ export default function App() {
     { id: 'mine', title: '내 활동', icon: 'users' },
     ...(user?.role === 'ADMIN' ? [{ id: 'admin' as Page, title: '관리', icon: 'shield' as IconName }] : []),
   ]
-  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리' }
+  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
   return <div className="app-shell">
@@ -147,6 +149,7 @@ export default function App() {
         {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
         {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} />}
         {route.page === 'create' && <CreateActivity user={user} ready={ready} />}
+        {route.page === 'edit' && route.activityId && <CreateActivity key={'edit-' + route.activityId} user={user} ready={ready} editId={route.activityId} />}
         {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
         {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
         {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
@@ -224,7 +227,31 @@ function LiveDetail({ id, ready }: { id: number; ready: boolean }) {
   return <DetailView item={fromLive(activity)} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'} supplies={activity.supplies}
     note={'개설: ' + activity.organizerName + ' · 참가 신청은 준비 중입니다.'}>
     {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
+    {activity.applicants !== undefined && ['RECRUITING', 'DRAFT'].includes(activity.status) && <OwnerTools activity={activity} />}
   </DetailView>
+}
+
+/** Organizer only: edit, and delete while nobody has applied (the server checks the same). */
+function OwnerTools({ activity }: { activity: LiveActivity }) {
+  const [confirming, setConfirming] = useState(false)
+  const [message, setMessage] = useState('')
+  const applied = (activity.applicants ?? 0) > 0
+  async function remove() {
+    try {
+      await api('/api/activities/' + activity.id, 'DELETE')
+      window.location.hash = '#/mine'
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '삭제하지 못했습니다.')
+    }
+  }
+  return <div className="owner-tools" aria-label="내 활동 관리" role="group">
+    <a className="secondary-button small" href={`#/activity/${activity.id}/edit`}>{applied ? '소개·만나는 곳 고치기' : '수정하기'}</a>
+    {!applied && (confirming
+      ? <><span className="small-print">정말 삭제할까요? 되돌릴 수 없어요.</span><button className="danger-button small" onClick={remove}>삭제</button><button className="text-button" onClick={() => setConfirming(false)}>취소</button></>
+      : <button className="secondary-button small" onClick={() => setConfirming(true)}>삭제</button>)}
+    {applied && <span className="small-print">신청한 사람이 {activity.applicants}명 있어 일정·장소는 바꿀 수 없고 삭제도 할 수 없어요.</span>}
+    {message && <p className="field-error" role="alert">{message}</p>}
+  </div>
 }
 
 function statusLabel(status: string) {
