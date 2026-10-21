@@ -117,6 +117,27 @@ class PlacePickIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/activities").param("part", "NIGHT")).andExpect(status().isBadRequest());
     }
 
+    @Test
+    void suppliesAreSavedValidatedAndCheckedForRiskyWords() throws Exception {
+        String organizer = token(member("GENERAL"));
+        Map<String, Object> body = activity("장갑 끼고 공원 정리하기", "편한 신발을 신고 공원 산책로의 쓰레기를 함께 줍습니다.");
+        body.put("supplies", List.of(Map.of("name", "장갑", "provided", false), Map.of("name", " 집게 ", "provided", true)));
+        long id = createActivity(body, organizer);
+        mvc.perform(get("/api/activities/" + id)).andExpect(jsonPath("$.supplies.length()").value(2))
+                .andExpect(jsonPath("$.supplies[0].name").value("장갑")).andExpect(jsonPath("$.supplies[0].provided").value(false))
+                .andExpect(jsonPath("$.supplies[1].name").value("집게")).andExpect(jsonPath("$.supplies[1].provided").value(true));
+        mvc.perform(get("/api/activities")).andExpect(jsonPath("$[?(@.id == " + id + ")].supplies[0].name").value(org.hamcrest.Matchers.contains("장갑")));
+
+        body.put("supplies", List.of(Map.of("name", "열한글자가넘는준비물이름"), Map.of("name", "물")));
+        perform(post("/api/activities"), body, organizer).andExpect(status().isBadRequest()).andExpect(jsonPath("$.fieldErrors[0].field").value("supplies"));
+        body.put("supplies", List.of(Map.of("name", "물"), Map.of("name", "물")));
+        perform(post("/api/activities"), body, organizer).andExpect(status().isBadRequest());
+        body.put("supplies", List.of("1", "2", "3", "4", "5", "6", "7").stream().map(n -> Map.of("name", "준비물" + n)).toList());
+        perform(post("/api/activities"), body, organizer).andExpect(status().isBadRequest());
+        body.put("supplies", List.of(Map.of("name", "사다리")));
+        perform(post("/api/activities"), body, organizer).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("ACTIVITY_BLOCKED"));
+    }
+
     private static Map<String, Object> picked(JsonNode item, String title) {
         Map<String, Object> body = activity(title, "편한 신발을 신고 함께 모여서 가볍게 정리하는 활동입니다.");
         body.remove("placeId");

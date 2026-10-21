@@ -3,6 +3,8 @@ package com.volink.activity;
 import com.volink.auth.AuthService;
 import com.volink.auth.AuthUser;
 import com.volink.common.ApiException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.volink.place.PlaceSearchService;
 import com.volink.place.PlaceService;
 import java.time.Clock;
@@ -23,7 +25,7 @@ public class ActivityService {
     /** Shared projection. DATETIME columns hold Korean local time; LocalDateTime is bound as-is (no JVM time-zone shift). Participation counts arrive in week 5. */
     static final String SELECT = """
             SELECT a.id, a.title, a.description, c.name AS category, a.activity_type AS activityType,
-                   o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint,
+                   o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint, a.supplies,
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
@@ -45,10 +47,12 @@ public class ActivityService {
     private final Clock clock;
     private final PlaceService places;
     private final PlaceSearchService placeSearch;
+    private final ObjectMapper json;
 
     public ActivityService(JdbcTemplate jdbc, ActivityRules rules, RiskClassifier risk, AuthService auth, Clock clock, PlaceService places,
-                           PlaceSearchService placeSearch) {
+                           PlaceSearchService placeSearch, ObjectMapper json) {
         this.jdbc = jdbc;
+        this.json = json;
         this.places = places;
         this.placeSearch = placeSearch;
         this.rules = rules;
@@ -94,17 +98,22 @@ public class ActivityService {
         String meetingPoint = ActivityRules.trim(request.meetingPoint());
         String title = ActivityRules.trim(request.title());
         String description = ActivityRules.trim(request.description());
-        RiskClassifier.Result result = risk.classify(title, description, category, times[0].endsAt(), placeReview);
+        List<Map<String, Object>> supplies = request.supplies() == null ? List.of() : request.supplies().stream()
+                .map(supply -> Map.<String, Object>of("name", ActivityRules.trim(supply.name()), "provided", Boolean.TRUE.equals(supply.provided()))).toList();
+        // Supply names are checked for risky words too (e.g. a ladder to bring).
+        String supplyText = supplies.stream().map(supply -> " " + supply.get("name")).reduce("", String::concat);
+        RiskClassifier.Result result = risk.classify(title, description + supplyText, category, times[0].endsAt(), placeReview);
         if ("BLOCKED".equals(result.level()))
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ACTIVITY_BLOCKED",
                     "등록할 수 없는 활동입니다. " + String.join(", ", result.reasons()), Map.of("risk", String.join(", ", result.reasons())));
 
         String status = "LOW".equals(result.level()) ? "RECRUITING" : "DRAFT";
         jdbc.update("""
-                INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, meeting_point, title, description,
+                INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, meeting_point, supplies, title, description,
                                        starts_at, ends_at, capacity, risk_level, risk_reasons, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint, title, description,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint,
+                supplies.isEmpty() ? null : write(supplies), title, description,
                 times[0].startsAt(), times[0].endsAt(), request.capacity(),
                 result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status);
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
@@ -168,9 +177,30 @@ public class ActivityService {
         if (type != null) { sql.append(" AND a.activity_type = ?"); args.add(type); }
         if (near) { sql.append(" HAVING distanceMeters <= ? ORDER BY distanceMeters, a.starts_at, a.id"); args.add(radiusKm * 1000); }
         else sql.append(" ORDER BY a.starts_at, a.id");
-        List<Map<String, Object>> rows = jdbc.queryForList(sql.toString(), args.toArray());
+        List<Map<String, Object>> rows = withSupplies(jdbc.queryForList(sql.toString(), args.toArray()));
         if (near) rows.forEach(row -> row.put("distanceKm", Math.round(((Number) row.remove("distanceMeters")).doubleValue() / 100.0) / 10.0));
         return rows;
+    }
+
+    /** The JSON column arrives as text; the API returns it as a list ([] when none). */
+    private List<Map<String, Object>> withSupplies(List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
+            Object raw = row.get("supplies");
+            try {
+                row.put("supplies", raw == null ? List.of() : json.readValue(raw.toString(), List.class));
+            } catch (JsonProcessingException broken) {
+                row.put("supplies", List.of());
+            }
+        }
+        return rows;
+    }
+
+    private String write(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (JsonProcessingException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     private static LocalDate day(String value, String field, Map<String, String> errors) {
@@ -190,7 +220,7 @@ public class ActivityService {
 
     /** Hidden activities (REVIEW pending, rejected) are visible only to their organizer and admins; others get 404. */
     public Map<String, Object> detail(long id, Long viewerId) {
-        Map<String, Object> activity = jdbc.queryForList(SELECT + " WHERE a.id = ?", id).stream().findFirst().orElseThrow(ActivityService::notFound);
+        Map<String, Object> activity = withSupplies(jdbc.queryForList(SELECT + " WHERE a.id = ?", id)).stream().findFirst().orElseThrow(ActivityService::notFound);
         boolean visible = PUBLIC_STATUSES.contains(activity.get("status"))
                 || viewerId != null && (viewerId.equals(((Number) activity.get("organizerId")).longValue()) || auth.findById(viewerId).admin());
         if (!visible) throw notFound();
@@ -198,13 +228,13 @@ public class ActivityService {
     }
 
     public List<Map<String, Object>> listMine(long userId) {
-        return jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons, a.review_note AS reviewNote")
-                + " WHERE a.organizer_id = ? ORDER BY a.created_at DESC, a.id DESC", userId);
+        return withSupplies(jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons, a.review_note AS reviewNote")
+                + " WHERE a.organizer_id = ? ORDER BY a.created_at DESC, a.id DESC", userId));
     }
 
     public List<Map<String, Object>> reviewQueue() {
-        return jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons")
-                + " WHERE a.status = 'DRAFT' AND a.risk_level = 'REVIEW' ORDER BY a.created_at, a.id");
+        return withSupplies(jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons")
+                + " WHERE a.status = 'DRAFT' AND a.risk_level = 'REVIEW' ORDER BY a.created_at, a.id"));
     }
 
     Map<String, Object> mine(long userId, long id) {

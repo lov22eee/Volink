@@ -5,7 +5,8 @@ import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import type { LiveActivity, User } from './api'
 import { categories, LoginRequired, PageHeading } from './App'
-import { Glyph } from './icons'
+import { Glyph, SupplyChips, supplyGlyph } from './icons'
+import type { Supply } from './icons'
 import { classBadge, PlaceField } from './placePicker'
 import type { PlaceResult } from './placePicker'
 import { activityRules } from './rules'
@@ -50,6 +51,15 @@ export function durationsFor(start: string) {
   return options
 }
 
+const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 신발']
+const maxSupplies = 6
+/** Starting supplies per field until the person changes them. */
+const suppliesFor: Record<string, Supply[]> = {
+  '환경 정화': [{ name: '장갑', provided: false }, { name: '집게', provided: true }, { name: '봉투', provided: true }],
+  '생활 지원': [{ name: '장갑', provided: false }],
+  '지역 돌봄': [],
+}
+
 const templates = [
   { name: '공원 플로깅', title: '공원 산책로 함께 걷고 줍기', category: '환경 정화', duration: 90, description: '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
   { name: '동네 화단 가꾸기', title: '동네 화단 물주기와 잡초 뽑기', category: '환경 정화', duration: 60, description: '동네 화단에 물을 주고 잡초를 뽑는 가벼운 활동입니다. 장갑을 챙겨 오시면 좋아요.' },
@@ -71,6 +81,10 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
   const [capacity, setCapacity] = useState(6)
   const [description, setDescription] = useState('')
   const [safety, setSafety] = useState(false)
+  const [supplies, setSupplies] = useState<Supply[]>(suppliesFor[categories[0]])
+  const [suppliesTouched, setSuppliesTouched] = useState(false)
+  const [customSupply, setCustomSupply] = useState('')
+  useEffect(() => { if (!suppliesTouched) setSupplies(suppliesFor[category] ?? []) }, [category, suppliesTouched])
   const [errors, setErrors] = useState<Errors>({})
   const [blocked, setBlocked] = useState('')
   const [message, setMessage] = useState('')
@@ -125,7 +139,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
         : { placeId: place.placeId }
       const activity = await api<LiveActivity>('/api/activities', 'POST', {
         activityType: kind, title: title.trim(), category, ...chosen, meetingPoint, date, time: start, capacity,
-        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety,
+        durationMinutes: duration, description: description.trim(), safetyConfirmed: safety, supplies,
       })
       setResult({ kind: activity.status === 'RECRUITING' ? 'published' : 'review', activity })
       window.scrollTo(0, 0)
@@ -161,7 +175,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
         <div className="form-title"><h2>활동 정보</h2>
           <label className="template-pick"><Glyph name="bolt" size={15} /><select aria-label="자주 하는 활동 불러오기" value="" onChange={event => {
             const picked = templates.find(item => item.name === event.target.value)
-            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
+            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setSuppliesTouched(false); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
           }}><option value="">자주 하는 활동 불러오기</option>{templates.map(item => <option key={item.name}>{item.name}</option>)}</select></label></div>
 
         <label>활동 이름<span className="input-with-count"><input name="title" value={title} maxLength={r.titleMax} onChange={event => setTitle(event.target.value)} placeholder="예: 공원 산책로 함께 걷고 줍기" {...err('title')} /><small>{title.trim().length} / {r.titleMax}</small></span>{fieldError('title')}</label>
@@ -194,6 +208,25 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
           <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
         </div>
 
+        <div className="field-block"><span className="field-label">준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
+          <div className="supply-pick" role="group" aria-label="준비물">
+            {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
+              const on = supplies.some(item => item.name === name)
+              return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
+                onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
+            })}
+          </div>
+          <span className="supply-add"><input aria-label="준비물 직접 추가" value={customSupply} maxLength={10} onChange={event => setCustomSupply(event.target.value)} placeholder="직접 추가 (10자 이내)"
+            onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
+            <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
+              onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
+          {supplies.length > 0 && <><span className="field-hint">그중 모집자가 나눠 주는 것</span>
+            <div className="supply-pick" role="group" aria-label="모집자가 나눠 주는 것">{supplies.map(item =>
+              <button type="button" key={item.name} className={'pick-chip small' + (item.provided ? ' on' : '')} aria-pressed={item.provided}
+                onClick={() => { setSuppliesTouched(true); setSupplies(supplies.map(other => other.name === item.name ? { ...other, provided: !other.provided } : other)) }}>{item.name}</button>)}</div></>}
+          {fieldError('supplies')}
+        </div>
+
         <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
 
         <label className="check-line"><input type="checkbox" name="safety" checked={safety} onChange={event => setSafety(event.target.checked)} {...err('safety')} />공공장소의 저위험 활동이며, 공식 봉사실적·자원봉사 종합보험이 적용되지 않음을 확인합니다</label>
@@ -212,6 +245,7 @@ export default function CreateActivity({ user, ready }: { user: User | null; rea
           <p><Glyph name="pin" size={15} />{place ? place.name + (meetingPoint ? ' · ' + meetingPoint : '') : '장소를 골라 주세요'}</p>
           <p><Glyph name="calendar" size={15} />{friendlyDate(date)} {start} ~ {end}</p>
           <p><Glyph name="users" size={15} />0 / {capacity}명</p>
+          {supplies.length > 0 && <SupplyChips supplies={supplies} />}
         </article>
         <div className={'expect ' + (reviewReasons.length ? 'review' : 'ok')}>
           <strong><Glyph name={reviewReasons.length ? 'alert' : 'check'} size={16} />{reviewReasons.length ? '관리자 확인 후 공개돼요' : '바로 공개될 예정이에요'}</strong>

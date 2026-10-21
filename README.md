@@ -56,8 +56,8 @@ Volink는 지역 주민이 짧은 봉사활동을 직접 열고, 주변 이웃�
 - **시연 계정:** 개발 환경에서만 11명의 시연 인물이 로그인 계정이 됩니다(`{코드}@demo.volink.kr`, 비밀번호는 커밋하지 않는 `.env`의 `DEMO_ACCOUNT_PASSWORD`).
 - **내 주변 찾기(4주차·보완):** 처음 들어오면 ‘내 주변 활동을 찾을까요?’를 한 번 묻고, 내 위치 또는 직접 고른 지역(동네·역·건물 이름 검색)을 기준으로 반경 1·3·5·10·20km 안의 활동을 지도+목록으로 가까운 순으로 보여줍니다. 거리와 대략 이동 시간(걸어서/차로 몇 분, 직선거리 계산)을 표시하고, 고른 반경 안에 없으면 3→5→10→20km로 스스로 넓힙니다. 지도 핀을 누르면 미리보기가 뜨고, Kakao 지도에서 지도를 옮기면 ‘이 지역에서 다시 찾기’가 나옵니다. 내 위치는 그 검색에만 쓰고 저장·기록하지 않습니다.
 - **장소 검색·분류(4주차 보완):** 활동 만들기에서 장소 칸의 돋보기를 누르면 ‘장소 찾기’ 창이 열리고 Kakao 장소 검색 또는 지도 가운데 핀 주변 장소에서 고릅니다. 서버가 Kakao 분류로 공원·카페·식당·도서관·공공기관은 바로 공개, 요양·병원·반려동물·학교 등은 관리자 검토, 주유소·술집 등은 고를 수 없게 나누고(`docs/rules.md` 장소 분류), 결과에 서명해 브라우저가 장소·분류를 바꾸지 못하게 합니다. Kakao REST 키가 없으면 관리자가 좌표를 넣은 장소만 고릅니다.
-- **활동 만들기 화면(4주차 보완):** 장소 칸 하나 + 검색 창, ‘일정’ 카드(날짜 먼저 → 굴리는 시작 시간 선택 06:00~21:30·10분 단위)와 ‘활동 시간’ 카드(22:00 전에 끝나는 길이만 10분 단위로 표시, 끝나는 시각 함께), 정원 드롭다운, 자주 하는 활동 불러오기, 오른쪽 미리보기와 ‘바로 공개/관리자 확인’ 예상 안내.
-- **1365 봉사활동 함께 보기(4주차 보완):** 행정안전부 봉사참여정보서비스(공공데이터포털) 키가 있으면 지도 위치의 시·군·구 1365 활동을 받아 ‘1365 활동’으로 같은 지도·목록에 보여주고 ‘1365에서 신청 ↗’로 넘깁니다. 신청·실적·보험은 1365 기준이며 Volink는 정보만 보여줍니다. 담당자 이름·전화·이메일 등 연락처는 저장·표시하지 않습니다. 키가 없으면 이 부분은 보이지 않습니다.
+- **활동 만들기 화면(4주차 보완):** 장소 칸 하나 + 검색 창, ‘일정’ 카드(날짜 먼저 → 굴리는 시작 시간 선택 06:00~21:30·10분 단위)와 ‘활동 시간’ 카드(22:00 전에 끝나는 길이만 10분 단위로 표시, 끝나는 시각 함께), 정원 드롭다운, **준비물 버튼**(장갑·집게·봉투·물·모자·편한 신발을 눌러 켜고, 직접 추가, 그중 모집자가 나눠 주는 것 표시 · 최대 6개 · 분야별 기본값), 자주 하는 활동 불러오기, 오른쪽 미리보기와 ‘바로 공개/관리자 확인’ 예상 안내. 활동 상세에는 ‘챙겨 올 것 / 모집자가 준비해요’ 칩, 목록 카드에는 2개 + 나머지 개수로 보입니다. 준비물 이름도 위험 단어 검사에 들어갑니다(예: 사다리 → 등록 불가).
+- **1365 봉사활동 함께 보기(4주차 보완):** 행정안전부 봉사참여정보서비스(공공데이터포털) 키가 있으면 지도 위치의 시·군·구 1365 활동을 받아 ‘1365 활동’으로 같은 지도·목록에 보여주고, ‘자세히’를 누르면 Volink 안에서 요약 창(기관·장소·기간·모집·분야 + 1365에서 신청하기·지도에서 보기·링크 복사)을, ‘1365에서 신청 ↗’은 새 탭으로 1365 그 활동 페이지를 엽니다. 신청·실적·보험은 1365 기준이며 Volink는 정보만 보여줍니다. 담당자 이름·전화·이메일 등 연락처는 저장·표시하지 않습니다. 키가 없으면 이 부분은 보이지 않습니다.
 - **공간 인덱스:** 활동 위치를 `activity_locations.location`(POINT, SRID 4326)에 두고 공간 인덱스로 먼저 좁힌 뒤 구면 거리로 정확히 거릅니다. 검토 중(REVIEW)·반려 활동은 거리 검색에도 나오지 않습니다.
 - **장소 좌표 입력:** 관리자 화면 ‘장소 좌표’에서 지도 앱의 좌표(위도, 경도)를 붙여넣고 만남 지점을 적으면 그 장소의 기존·새 활동이 지도와 거리 검색에 나옵니다. 처리 내용은 `admin_actions`에 남습니다.
 - **지도:** Kakao 지도 키(`VITE_KAKAO_JS_KEY`)가 있으면 Kakao 지도에 핀·검색 반경을 그립니다. 키가 없으면 좌표의 상대 위치만 그린 간단한 그림으로 대신합니다(실제 지도 아님).
@@ -73,7 +73,7 @@ Volink는 지역 주민이 짧은 봉사활동을 직접 열고, 주변 이웃�
 
 ![Volink 4주차 내 주변 찾기](docs/screenshots/week-04-nearby.png)
 
-더 보기: [활동 만들기](docs/screenshots/week-04-create.png) · [장소 찾기 창](docs/screenshots/week-04-place-dialog.png) · [시간 선택](docs/screenshots/week-04-create-errors.png) · [반경 자동 넓히기](docs/screenshots/week-04-widen.png) · [위치 묻기](docs/screenshots/week-04-ask.png) · [관리자 장소 좌표](docs/screenshots/week-04-admin-places.png) · [홈](docs/screenshots/week-04-home.png) · [공개 완료](docs/screenshots/week-04-published.png) · [모바일](docs/screenshots/week-04-mobile.png) · 이전 주차 캡처는 `docs/screenshots/week-01-*`~`week-03-*`에 보관
+더 보기: [활동 만들기](docs/screenshots/week-04-create.png) · [장소 찾기 창](docs/screenshots/week-04-place-dialog.png) · [시간 선택](docs/screenshots/week-04-create-errors.png) · [반경 자동 넓히기](docs/screenshots/week-04-widen.png) · [준비물 칩](docs/screenshots/week-04-detail-supplies.png) · [위치 묻기](docs/screenshots/week-04-ask.png) · [관리자 장소 좌표](docs/screenshots/week-04-admin-places.png) · [홈](docs/screenshots/week-04-home.png) · [공개 완료](docs/screenshots/week-04-published.png) · [모바일](docs/screenshots/week-04-mobile.png) · 이전 주차 캡처는 `docs/screenshots/week-01-*`~`week-03-*`에 보관
 
 ## 개발환경
 
@@ -285,7 +285,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 
 ※ 3주차 ☑는 실제 MySQL 백엔드 테스트 25개와 브라우저 테스트 16개로 확인했습니다(2026-10-13). 2주차 ‘장소 확정’은 좌표를 받지 못해 아직 ☐이며 4주차 거리 검색 전에 필요합니다.
 
-※ 4주차 보완 ☑는 실제 MySQL 백엔드 테스트 52개와 브라우저 테스트 18개로 확인했습니다(2026-10-21). Kakao·data.go.kr 실제 응답은 이 환경에서 접속이 막혀 확인하지 못해 ‘Kakao 지도 표시’는 ☐입니다.
+※ 4주차 보완 ☑는 실제 MySQL 백엔드 테스트 53개와 브라우저 테스트 18개로 확인했습니다(2026-10-21). Kakao·data.go.kr 실제 응답은 이 환경에서 접속이 막혀 확인하지 못해 ‘Kakao 지도 표시’는 ☐입니다.
 
 ※ 4주차 ☑는 실제 MySQL 백엔드 테스트 29개(위치 검색 4개 추가)와 브라우저 테스트 17개로 확인했습니다(2026-10-16, 4주차 브랜치). 실제 좌표·Kakao 키가 없어 Kakao 지도 표시와 배포 서버 반영은 ☐입니다. 공간 인덱스 사용은 `EXPLAIN`(range · `sx_activity_location`)으로 확인했습니다.
 
@@ -374,9 +374,10 @@ git push origin main
 ### 4주차 보완 · 2026-10-21 · 박용빈 (main 기준 · 5~7주차 PR은 그대로 대기)
 
 - **완료사항:** V5.1(`demo_places`에 검색 장소 저장: source CURATED/KAKAO·kakao_place_id·category_name·place_class OPEN/REVIEW, `activities.meeting_point`, `volunteer_programs` 1365 캐시). 서버: Kakao 로컬 REST 연동(`KakaoLocalClient`, 키 없으면 꺼짐), 장소 분류(`PlaceClassifier`), 서명된 장소 선택(`PlaceSearchService`, 3시간 유효·HMAC), `GET /api/places/search`·`/api/places/nearby`(분당 40회 제한), 활동 개설에 `place`·`meetingPoint`(REVIEW 장소는 관리자 검토, 이유 ‘장소가 ○○’), 활동 검색에 `q`·`from`·`to`·`part`·반경 최대 20km, 1365 연동(`VolunteerService`: 위치→시·군·구 코드→목록 3시간 캐시→새 상세만 저장→Kakao로 위치 찾기, 하루 900회 제한, XML 외부 개체 차단, 연락처 미저장), `GET /api/volunteer-programs`, 관리자 점검 `GET /api/admin/volunteer-programs/check`(필드 이름만). 화면: 새 활동 찾기(위치 묻기·지역 직접 고르기·지도+목록·핀 미리보기·반경 자동 넓히기·출처/청소년 필터·필터 초기화), 새 활동 만들기(장소 찾기 창·일정 카드·굴리는 시간 선택·22시 전 길이만·미리보기), 아이콘 세트(`icons.tsx`). 배포: `scripts/aws/set-keys.sh`(키 3개를 화면에 안 보이게 입력 → `/etc/volink` root 전용), `server-setup.sh`가 서버 전용 키를 `/etc/volink/api-keys.env`로 API에 전달.
-- **실행·테스트 결과:** `./mvnw clean test` 52/52 통과(기존 29 + 장소 분류 13 + 장소 선택·검색 5 + 1365 3 + 파싱 2) · `npm run ui:export` 통과 · Playwright 18/18 통과 (2026-10-21, [검증 기록](docs/verification-week-04.md)). Kakao·data.go.kr는 테스트에서 가짜 응답으로 대신했습니다.
+- **추가(같은 날):** 준비물 버튼·칩(V5.1에 `activities.supplies` JSON 추가 · 아직 어디에도 적용 전이라 V5.1을 고쳤음), 1365 ‘자세히’ 요약 창.
+- **실행·테스트 결과:** `./mvnw clean test` 53/53 통과(기존 29 + 장소 분류 13 + 장소 선택·검색·준비물 6 + 1365 3 + 파싱 2) · `npm run ui:export` 통과 · Playwright 18/18 통과 (2026-10-21, [검증 기록](docs/verification-week-04.md)). Kakao·data.go.kr는 테스트에서 가짜 응답으로 대신했습니다.
 - **DB·환경·설치 변경:** V5.1 추가. 새 의존성 없음. 서버 파일(선택): `/etc/volink/kakao_js_key`, `/etc/volink/kakao_rest_key`, `/etc/volink/data_go_kr_key` → `sudo bash /opt/volink/scripts/aws/set-keys.sh`로 넣습니다. 로컬은 환경변수 `KAKAO_REST_KEY`·`DATA_GO_KR_KEY`(커밋 금지). 로컬 개발 DB에 5~7주차 V6~V8이 이미 적용돼 있으면 이 브랜치는 시작하지 못하므로 별도 DB(예: `--MYSQL_DATABASE=volink_w4`)로 확인했습니다.
-- **미완료·알려진 문제:** 이 개발 환경에서는 dapi.kakao.com·apis.data.go.kr 접속이 막혀 실제 Kakao 검색·지도와 1365 응답을 확인하지 못했습니다. 1365 응답 항목 이름(예: `actPlace`, `progrmSttusSe`)과 경기·서울 시·군·구 코드, 1365 상세 링크 주소는 확인 필요 — 배포 후 관리자로 `/api/admin/volunteer-programs/check?lat=37.82&lng=127.09`를 열어 `listCount`·필드 이름을 보고 다르면 `VolunteerService`·`RegionCodes`를 고칩니다. 1365 ‘조건 저장·새 활동 알림’은 5주차 알림과 함께 합니다. 준비물 칸은 DB 칸이 없어 소개글에 적습니다.
+- **미완료·알려진 문제:** 이 개발 환경에서는 dapi.kakao.com·apis.data.go.kr 접속이 막혀 실제 Kakao 검색·지도와 1365 응답을 확인하지 못했습니다. 1365 응답 항목 이름(예: `actPlace`, `progrmSttusSe`)과 경기·서울 시·군·구 코드, 1365 상세 링크 주소는 확인 필요 — 배포 후 관리자로 `/api/admin/volunteer-programs/check?lat=37.82&lng=127.09`를 열어 `listCount`·필드 이름을 보고 다르면 `VolunteerService`·`RegionCodes`를 고칩니다. 1365 ‘조건 저장·새 활동 알림’은 5주차 알림과 함께 합니다. 신청할 때 ‘준비물 확인했어요’ 체크는 5주차 신청 기능과 함께 합니다.
 - **다음 작업:** 서버에 키 3개 입력 → 위 점검 → 5주차 PR에 main을 합쳐(V5.1 → V6 순서) 이어서 진행.
 - **계획서와 다르게 정한 것:** 계획서 범위 제외의 ‘1365 실적 연계’는 하지 않습니다. 1365 활동은 정보만 보여주고 신청·실적은 1365로 넘깁니다. 장소는 고정 후보 3곳 대신 Kakao 검색 장소도 허용하되, 장소 분류로 공공장소·주간·저위험 원칙을 유지합니다.
 

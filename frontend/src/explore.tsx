@@ -7,7 +7,8 @@ import type { LiveActivity } from './api'
 import { ActivityCard, categories, fromExample, fromLive, Icon, ParkArt } from './App'
 import type { CardItem } from './App'
 import type { DisplayCatalog as Catalog } from './data'
-import { Glyph } from './icons'
+import { createPortal } from 'react-dom'
+import { Glyph, SupplyChips } from './icons'
 import { kakaoEnabled, loadKakao } from './map'
 import type { Origin } from './map'
 import { searchPlaces } from './placePicker'
@@ -63,6 +64,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [programs, setPrograms] = useState<Program[]>([])
   const [programsOn, setProgramsOn] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [programDetail, setProgramDetail] = useState<Program | null>(null)
 
   // Our activities: within 20 km (the widest ring) so the radius can widen without another request.
   useEffect(() => {
@@ -168,7 +170,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
         <div className="explore-map">
           <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={selected} onSelect={setSelected}
             onMoved={centre => setOrigin({ ...centre, label: '지도 중심' })} />
-          {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} />}
+          {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} onDetail={setProgramDetail} />}
           <span className="map-legend"><i className="dot local" />동네 활동{programsOn && <><i className="dot program" />1365 활동</>}</span>
         </div>
         <div className="explore-list">
@@ -176,7 +178,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
             <span className="ring-steps">{rings.filter(ring => ring >= radius && ring <= shownRadius).map(ring => <span key={ring} className={ring === shownRadius ? 'on' : ''}>{ring}km · {hits.filter(hit => hit.distanceKm != null && hit.distanceKm <= ring).length}개</span>)}</span>
             <small>최대 20km까지만 넓혀요</small></div>}
           <p className="list-count">{origin.label} {shownRadius}km · {inside.length}개 · 가까운 순</p>
-          {inside.length ? <ul className="hit-list">{inside.map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === selected} onFocus={() => setSelected(hit.key)} /></li>)}</ul>
+          {inside.length ? <ul className="hit-list">{inside.map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === selected} onFocus={() => setSelected(hit.key)} onDetail={setProgramDetail} /></li>)}</ul>
             : <div className="empty-state"><p>20km 안에도 조건에 맞는 활동이 없어요.</p><a className="secondary-button" href="#/create">이 동네에 활동 만들기 <Glyph name="arrow" size={15} /></a></div>}
         </div>
       </div>
@@ -184,6 +186,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           : (live.length + filteredExamples.length) ? <div className="activity-grid">{[...live.map(fromLive), ...filteredExamples].map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
             : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}</>}
     </section>
+    {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)}
+      onShowOnMap={() => { setSelected('p' + programDetail.programNo); setProgramDetail(null); document.querySelector('.explore-map')?.scrollIntoView({ block: 'center' }) }} />}
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
   </>
 }
@@ -221,7 +225,7 @@ function when1365(program: Program) {
   return [period, program.weekdays, program.beginTime && program.endTime ? program.beginTime + ' ~ ' + program.endTime : null].filter(Boolean).join(' · ')
 }
 
-function HitCard({ hit, active, onFocus }: { hit: Hit; active: boolean; onFocus: () => void }) {
+function HitCard({ hit, active, onFocus, onDetail }: { hit: Hit; active: boolean; onFocus: () => void; onDetail?: (program: Program) => void }) {
   const distance = hit.distanceKm != null && <span className="distance">{hit.distanceKm}km · {travel(hit.distanceKm)}</span>
   if (hit.local) {
     const a = hit.local
@@ -231,6 +235,7 @@ function HitCard({ hit, active, onFocus }: { hit: Hit; active: boolean; onFocus:
       <h3>{a.title}</h3>
       <p><Glyph name="pin" size={14} />{card.placeName} {distance}</p>
       <p><Glyph name="calendar" size={14} />{card.date.slice(5).replace('-', '/')} {a.startTime} · {a.durationMinutes}분 · <Glyph name="users" size={14} />{a.confirmed} / {a.capacity}명</p>
+      {a.supplies && a.supplies.length > 0 && <SupplyChips supplies={a.supplies} limit={2} />}
       <div className="hit-foot"><small>공식 봉사실적·보험 없음</small><a className="primary-button small" href={card.href}>자세히 보기 <Glyph name="arrow" size={14} /></a></div>
     </article>
   }
@@ -240,15 +245,45 @@ function HitCard({ hit, active, onFocus }: { hit: Hit; active: boolean; onFocus:
     <h3>{p.title}</h3>
     <p><Glyph name="pin" size={14} />{p.place ?? '장소 정보 없음'} {distance}</p>
     <p><Glyph name="calendar" size={14} />{when1365(p) || '일정은 1365에서 확인'}</p>
-    <div className="hit-foot"><small>모집: {p.organization ?? '1365'} · 실적 인정은 1365 기준</small><a className="link-out" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청 <Glyph name="external" size={14} /></a></div>
+    <div className="hit-foot"><small>모집: {p.organization ?? '1365'} · 실적 인정은 1365 기준</small><span className="hit-actions">{onDetail && <button className="secondary-button small" onClick={() => onDetail(p)}>자세히</button>}<a className="link-out" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청 <Glyph name="external" size={14} /></a></span></div>
   </article>
 }
 
-function PreviewSheet({ hit, onClose }: { hit: Hit; onClose: () => void }) {
+function PreviewSheet({ hit, onClose, onDetail }: { hit: Hit; onClose: () => void; onDetail: (program: Program) => void }) {
   return <div className="preview-sheet" role="dialog" aria-label={hit.title + ' 미리보기'}>
     <button className="icon-button" onClick={onClose} aria-label="미리보기 닫기"><Glyph name="close" size={16} /></button>
-    <HitCard hit={hit} active={false} onFocus={() => undefined} />
+    <HitCard hit={hit} active={false} onFocus={() => undefined} onDetail={onDetail} />
   </div>
+}
+
+/** 1365 program summary inside Volink. Applying, approval and hours all happen on 1365; nothing is sent from here. */
+function ProgramDialog({ program: p, onClose, onShowOnMap }: { program: Program; onClose: () => void; onShowOnMap: () => void }) {
+  const [copied, setCopied] = useState('')
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [onClose])
+  const rows: [string, string | null][] = [
+    ['모집 기관', p.organization], ['장소', p.place ? p.place + (p.distanceKm != null ? ` (${p.distanceKm}km)` : '') : null], ['기간', when1365(p) || null],
+    ['모집', [p.capacity != null ? p.capacity + '명' : null, p.recruitStatus, p.youthOk ? '청소년 가능' : p.youthOk === false ? '청소년 불가' : null].filter(Boolean).join(' · ') || null],
+    ['분야', p.field], ['모집 마감', p.recruitEnd],
+  ]
+  return createPortal(<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="place-dialog program-dialog" role="dialog" aria-modal="true" aria-labelledby="program-title">
+      <div className="dialog-head"><span className="source program">1365 활동</span><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button></div>
+      <h2 id="program-title">{p.title}</h2>
+      <dl className="program-facts">{rows.filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      <p className="program-note"><Glyph name="info" size={16} />신청·승인·봉사시간 인정은 1365에서 해요. 1365 로그인이 필요하고, Volink는 내 정보를 1365에 보내지 않아요.</p>
+      <div className="button-row program-actions">
+        <a className="apply-1365" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청하기 <Glyph name="external" size={16} /></a>
+        {p.latitude != null && <button type="button" className="secondary-button" onClick={onShowOnMap}><Glyph name="map" size={16} />지도에서 보기</button>}
+        <button type="button" className="secondary-button" onClick={() => navigator.clipboard?.writeText(p.link).then(() => setCopied('링크를 복사했어요.'), () => setCopied('복사하지 못했어요. 신청 버튼을 눌러 주세요.'))}><Glyph name="link" size={16} />링크 복사</button>
+      </div>
+      {copied && <p className="small-print" role="status">{copied}</p>}
+      <p className="small-print">정보 출처: 행정안전부 공공데이터(1365) · 몇 시간마다 갱신 · 최신 모집 상태는 1365에서 확인해 주세요.</p>
+    </div>
+  </div>, document.body)
 }
 
 const pinSvg = (colour: string, big: boolean) => `<svg width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`

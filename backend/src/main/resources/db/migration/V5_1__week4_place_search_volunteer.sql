@@ -20,8 +20,11 @@ ALTER TABLE demo_places
     ADD CONSTRAINT ck_place_source CHECK (source IN ('CURATED', 'KAKAO')),
     ADD CONSTRAINT ck_place_class CHECK (place_class IN ('OPEN', 'REVIEW'));
 
--- Where to meet inside the place (e.g. "정문 안내판 앞"). Optional.
-ALTER TABLE activities ADD COLUMN meeting_point VARCHAR(100) NULL AFTER place_id;
+-- Where to meet inside the place (e.g. "정문 안내판 앞") and what to bring, both optional.
+-- supplies: JSON array of {"name": "장갑", "provided": false} (at most 6, name 1-10 chars); provided = the organizer brings it.
+ALTER TABLE activities
+    ADD COLUMN meeting_point VARCHAR(100) NULL AFTER place_id,
+    ADD COLUMN supplies JSON NULL AFTER meeting_point;
 
 -- 1365 programs (행정안전부 봉사참여정보서비스) shown next to our activities. Only public program fields are kept:
 -- the API also returns the person in charge, phone, fax, address and e-mail, which are never stored or shown.

@@ -7,6 +7,8 @@ import { api, ApiError, login, logout, preview, refresh } from './api'
 import type { LiveActivity, PlaceInfo, User } from './api'
 import { kakaoEnabled, PlaceMap } from './map'
 import CreateActivity from './create'
+import { SupplyChips } from './icons'
+import type { Supply } from './icons'
 import Explore from './explore'
 
 type IconName = 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield'
@@ -195,12 +197,12 @@ export function ActivityCard({ item }: { item: CardItem }) {
   </article>
 }
 
-function DetailView({ item, description, badge, note, children }: { item: CardItem; description: string; badge: string; note: string; children?: ReactNode }) {
+function DetailView({ item, description, badge, note, supplies = [], children }: { item: CardItem; description: string; badge: string; note: string; supplies?: Supply[]; children?: ReactNode }) {
   return <>
     <a href="#/explore" className="back-link">← 활동 목록으로</a>
     <div className="detail-layout">
       <article className="panel detail-content"><div className="detail-art"><ParkArt variant={item.id - 1} /></div><div className="detail-tags"><span className="outline-badge">{badge}</span><span>{item.category} · {typeLabel(item)}{item.organizationName ? ' · ' + item.organizationName : ''}</span></div><h1>{item.title}</h1>{children}<p className="detail-description">{description}</p><h2>참여 순서</h2><ol className="participation-steps"><li>참가 신청</li><li>승인 또는 대기</li><li>현장 출석</li><li>활동 완료</li></ol><p className="small-print">{note}</p></article>
-      <aside className="panel detail-booking"><h2>활동 정보</h2><dl><div><dt><Icon name="pin" size={17} />장소</dt><dd>{item.placeName}</dd></div><div><dt><Icon name="clock" size={17} />일시</dt><dd>{dateLabel(item.date)} · {item.startTime}</dd></div><div><dt><Icon name="clock" size={17} />활동 시간</dt><dd>{item.durationMinutes}분</dd></div><div><dt><Icon name="users" size={17} />참여 인원</dt><dd>{item.confirmed} / {item.capacity}명</dd></div></dl><button disabled className="primary-button">참가 신청 · 준비 중</button><p className="small-print">위험한 물건은 직접 처리하지 않습니다. 사고가 나면 먼저 119에 신고해 주세요.</p></aside>
+      <aside className="panel detail-booking"><h2>활동 정보</h2><dl><div><dt><Icon name="pin" size={17} />장소</dt><dd>{item.placeName}</dd></div><div><dt><Icon name="clock" size={17} />일시</dt><dd>{dateLabel(item.date)} · {item.startTime}</dd></div><div><dt><Icon name="clock" size={17} />활동 시간</dt><dd>{item.durationMinutes}분</dd></div><div><dt><Icon name="users" size={17} />참여 인원</dt><dd>{item.confirmed} / {item.capacity}명</dd></div></dl>{supplies.length > 0 && <div className="supply-block">{supplies.some(s => !s.provided) && <><h3>챙겨 올 것</h3><SupplyChips supplies={supplies.filter(s => !s.provided)} /></>}{supplies.some(s => s.provided) && <><h3>모집자가 준비해요</h3><SupplyChips supplies={supplies.filter(s => s.provided)} /></>}</div>}<button disabled className="primary-button">참가 신청 · 준비 중</button><p className="small-print">위험한 물건은 직접 처리하지 않습니다. 사고가 나면 먼저 119에 신고해 주세요.</p></aside>
     </div>
   </>
 }
@@ -219,7 +221,7 @@ function LiveDetail({ id, ready }: { id: number; ready: boolean }) {
   if (missing || preview) return <NotFound />
   if (!activity) return <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
   const hidden = activity.status !== 'RECRUITING'
-  return <DetailView item={fromLive(activity)} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'}
+  return <DetailView item={fromLive(activity)} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'} supplies={activity.supplies}
     note={'개설: ' + activity.organizerName + ' · 참가 신청은 준비 중입니다.'}>
     {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
   </DetailView>
