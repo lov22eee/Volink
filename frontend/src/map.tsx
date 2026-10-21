@@ -12,7 +12,7 @@ const kakaoKey = import.meta.env.VITE_KAKAO_JS_KEY
 export const kakaoEnabled = Boolean(kakaoKey)
 let loading: Promise<any> | null = null
 
-function loadKakao(): Promise<any> {
+export function loadKakao(): Promise<any> {
   if (window.kakao?.maps?.LatLng) return Promise.resolve(window.kakao)
   loading ??= new Promise((resolve, reject) => {
     const script = document.createElement('script')

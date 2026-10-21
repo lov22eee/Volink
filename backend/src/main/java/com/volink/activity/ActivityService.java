@@ -3,6 +3,7 @@ package com.volink.activity;
 import com.volink.auth.AuthService;
 import com.volink.auth.AuthUser;
 import com.volink.common.ApiException;
+import com.volink.place.PlaceSearchService;
 import com.volink.place.PlaceService;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -22,7 +23,7 @@ public class ActivityService {
     /** Shared projection. DATETIME columns hold Korean local time; LocalDateTime is bound as-is (no JVM time-zone shift). Participation counts arrive in week 5. */
     static final String SELECT = """
             SELECT a.id, a.title, a.description, c.name AS category, a.activity_type AS activityType,
-                   o.name AS organizationName, a.place_id AS placeId, p.name AS placeName,
+                   o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint,
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
@@ -43,10 +44,13 @@ public class ActivityService {
     private final AuthService auth;
     private final Clock clock;
     private final PlaceService places;
+    private final PlaceSearchService placeSearch;
 
-    public ActivityService(JdbcTemplate jdbc, ActivityRules rules, RiskClassifier risk, AuthService auth, Clock clock, PlaceService places) {
+    public ActivityService(JdbcTemplate jdbc, ActivityRules rules, RiskClassifier risk, AuthService auth, Clock clock, PlaceService places,
+                           PlaceSearchService placeSearch) {
         this.jdbc = jdbc;
         this.places = places;
+        this.placeSearch = placeSearch;
         this.rules = rules;
         this.risk = risk;
         this.auth = auth;
@@ -64,7 +68,7 @@ public class ActivityService {
         String category = ActivityRules.trim(request.category());
         Long categoryId = jdbc.queryForList("SELECT id FROM categories WHERE name = ?", Long.class, category).stream().findFirst().orElse(null);
         if (categoryId == null) errors.putIfAbsent("category", "분야를 선택해 주세요.");
-        if (request.placeId() != null && !places.exists(request.placeId()))
+        if (request.place() == null && request.placeId() != null && !places.exists(request.placeId()))
             errors.putIfAbsent("place", "장소를 선택해 주세요.");
         boolean institution = "INSTITUTION".equals(request.activityType());
         if (!institution && request.activityType() != null && !"GENERAL".equals(request.activityType()))
@@ -79,31 +83,43 @@ public class ActivityService {
                 throw new ApiException(HttpStatus.FORBIDDEN, "ORGANIZATION_NOT_APPROVED", "기관 확인이 끝난 기관회원만 기관 주관 활동을 열 수 있습니다.");
         }
 
+        // A searched place is checked (signature) and stored only now, after every other field passed.
+        Long placeId = request.placeId();
+        String placeReview = null;
+        if (request.place() != null) {
+            PlaceSearchService.Stored stored = placeSearch.store(request.place());
+            placeId = stored.id();
+            if ("REVIEW".equals(stored.placeClass())) placeReview = stored.classLabel();
+        }
+        String meetingPoint = ActivityRules.trim(request.meetingPoint());
         String title = ActivityRules.trim(request.title());
         String description = ActivityRules.trim(request.description());
-        RiskClassifier.Result result = risk.classify(title, description, category, times[0].endsAt());
+        RiskClassifier.Result result = risk.classify(title, description, category, times[0].endsAt(), placeReview);
         if ("BLOCKED".equals(result.level()))
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "ACTIVITY_BLOCKED",
                     "등록할 수 없는 활동입니다. " + String.join(", ", result.reasons()), Map.of("risk", String.join(", ", result.reasons())));
 
         String status = "LOW".equals(result.level()) ? "RECRUITING" : "DRAFT";
         jdbc.update("""
-                INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, title, description,
+                INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, meeting_point, title, description,
                                        starts_at, ends_at, capacity, risk_level, risk_reasons, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, request.placeId(), title, description,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint, title, description,
                 times[0].startsAt(), times[0].endsAt(), request.capacity(),
                 result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status);
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        places.locate(id, request.placeId());
+        places.locate(id, placeId);
         log(id, userId, null, status, "개설 · 위험도 " + result.level());
         return mine(userId, id);
     }
 
     /** Search filters (all optional). With lat+lng only activities within radiusKm are returned, nearest first. */
-    public record Search(Double lat, Double lng, Double radiusKm, String date, String category, String type) {
+    /** 4주차 보완: q (words in the title, description or place), from/to (date range), part (AM = starts before noon, PM = from noon). */
+    public record Search(Double lat, Double lng, Double radiusKm, String date, String category, String type,
+                         String q, String from, String to, String part) {
         public static final double DEFAULT_RADIUS_KM = 3;
-        public static Search none() { return new Search(null, null, null, null, null, null); }
+        public static final double MAX_RADIUS_KM = 20;
+        public static Search none() { return new Search(null, null, null, null, null, null, null, null, null, null); }
     }
 
     /**
@@ -116,11 +132,12 @@ public class ActivityService {
         if (near && (search.lat() == null || search.lng() == null || search.lat() < -90 || search.lat() > 90 || search.lng() < -180 || search.lng() > 180))
             errors.put("location", "위치를 확인할 수 없습니다. 다시 시도해 주세요.");
         double radiusKm = search.radiusKm() == null ? Search.DEFAULT_RADIUS_KM : search.radiusKm();
-        if (radiusKm < 0.5 || radiusKm > 10) errors.put("radiusKm", "검색 반경은 0.5~10km로 정해 주세요.");
-        LocalDate date = null;
-        if (search.date() != null && !search.date().isBlank()) {
-            try { date = LocalDate.parse(search.date().trim()); } catch (DateTimeParseException e) { errors.put("date", "날짜 형식을 확인해 주세요."); }
-        }
+        if (radiusKm < 0.5 || radiusKm > Search.MAX_RADIUS_KM) errors.put("radiusKm", "검색 반경은 0.5~20km로 정해 주세요.");
+        LocalDate date = day(search.date(), "date", errors), from = day(search.from(), "from", errors), to = day(search.to(), "to", errors);
+        String q = search.q() == null ? "" : search.q().trim();
+        if (q.length() > 50) errors.put("q", "검색어는 50자 이내로 입력해 주세요.");
+        String part = search.part() == null || search.part().isBlank() ? null : search.part().trim();
+        if (part != null && !part.equals("AM") && !part.equals("PM")) errors.put("part", "시간대를 확인해 주세요.");
         String type = search.type() == null || search.type().isBlank() ? null : search.type().trim();
         if (type != null && !type.equals("GENERAL") && !type.equals("INSTITUTION")) errors.put("type", "활동 유형을 확인해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
@@ -139,6 +156,14 @@ public class ActivityService {
         sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ?");
         args.add(LocalDateTime.now(clock));
         if (date != null) { sql.append(" AND a.starts_at >= ? AND a.starts_at < ?"); args.add(date.atStartOfDay()); args.add(date.plusDays(1).atStartOfDay()); }
+        if (from != null) { sql.append(" AND a.starts_at >= ?"); args.add(from.atStartOfDay()); }
+        if (to != null) { sql.append(" AND a.starts_at < ?"); args.add(to.plusDays(1).atStartOfDay()); }
+        if (part != null) sql.append(part.equals("AM") ? " AND HOUR(a.starts_at) < 12" : " AND HOUR(a.starts_at) >= 12");
+        if (!q.isEmpty()) {
+            String like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+            sql.append(" AND (a.title LIKE ? OR a.description LIKE ? OR p.name LIKE ?)");
+            args.add(like); args.add(like); args.add(like);
+        }
         if (search.category() != null && !search.category().isBlank()) { sql.append(" AND c.name = ?"); args.add(search.category().trim()); }
         if (type != null) { sql.append(" AND a.activity_type = ?"); args.add(type); }
         if (near) { sql.append(" HAVING distanceMeters <= ? ORDER BY distanceMeters, a.starts_at, a.id"); args.add(radiusKm * 1000); }
@@ -146,6 +171,11 @@ public class ActivityService {
         List<Map<String, Object>> rows = jdbc.queryForList(sql.toString(), args.toArray());
         if (near) rows.forEach(row -> row.put("distanceKm", Math.round(((Number) row.remove("distanceMeters")).doubleValue() / 100.0) / 10.0));
         return rows;
+    }
+
+    private static LocalDate day(String value, String field, Map<String, String> errors) {
+        if (value == null || value.isBlank()) return null;
+        try { return LocalDate.parse(value.trim()); } catch (DateTimeParseException e) { errors.put(field, "날짜 형식을 확인해 주세요."); return null; }
     }
 
     private static String box(double south, double west, double north, double east) {

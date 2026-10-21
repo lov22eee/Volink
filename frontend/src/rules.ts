@@ -1,4 +1,4 @@
-// Week-2 input rules shared by the screens. The server must re-check the same rules (docs/rules.md).
+// Week-2 input rules shared by the screens (the activity form checks them in create.tsx). The server must re-check the same rules (docs/rules.md).
 export const activityRules = {
   titleMin: 5, titleMax: 100,
   capacityMin: 2, capacityMax: 10,
@@ -13,35 +13,6 @@ export const signupRules = { nameMax: 40, passwordMin: 8, passwordMax: 72, minim
 export type Errors = Record<string, string>
 
 const text = (data: FormData, key: string) => String(data.get(key) ?? '').trim()
-const minutes = (time: string) => { const [h, m] = time.split(':').map(Number); return h * 60 + m }
-
-export function validateActivity(data: FormData, now = new Date()): Errors {
-  const r = activityRules
-  const errors: Errors = {}
-  const title = text(data, 'title')
-  if (title.length < r.titleMin || title.length > r.titleMax) errors.title = `활동 이름은 ${r.titleMin}~${r.titleMax}자로 입력해 주세요.`
-  if (!text(data, 'place')) errors.place = '장소를 선택해 주세요.'
-  const date = text(data, 'date')
-  const time = text(data, 'time')
-  const duration = Number(text(data, 'duration'))
-  if (!date) errors.date = '활동 날짜를 선택해 주세요.'
-  if (!time) errors.time = '시작 시간을 입력해 주세요.'
-  if (date && time) {
-    const start = new Date(`${date}T${time}:00+09:00`)
-    const hoursAhead = (start.getTime() - now.getTime()) / 3_600_000
-    if (hoursAhead < r.minLeadHours) errors.date = `활동은 지금부터 ${r.minLeadHours}시간 이후로 정해 주세요.`
-    else if (hoursAhead > r.maxDaysAhead * 24) errors.date = `활동은 ${r.maxDaysAhead}일 이내로 정해 주세요.`
-    if (minutes(time) < minutes(r.earliestStart)) errors.time = `시작 시간은 ${r.earliestStart} 이후로 정해 주세요.`
-    else if (Number.isInteger(duration) && minutes(time) + duration > minutes(r.latestEnd)) errors.time = `활동은 ${r.latestEnd} 전에 끝나야 합니다.`
-  }
-  const capacity = Number(text(data, 'capacity'))
-  if (!Number.isInteger(capacity) || capacity < r.capacityMin || capacity > r.capacityMax) errors.capacity = `모집 정원은 ${r.capacityMin}~${r.capacityMax}명입니다.`
-  if (!Number.isInteger(duration) || duration < r.durationMin || duration > r.durationMax) errors.duration = `활동 시간은 ${r.durationMin}~${r.durationMax}분입니다.`
-  const description = text(data, 'description')
-  if (description.length < r.descriptionMin || description.length > r.descriptionMax) errors.description = `활동 소개는 ${r.descriptionMin}~${r.descriptionMax}자로 적어 주세요.`
-  if (data.getAll('safety').length < 2) errors.safety = '안전 안내 두 항목을 모두 확인해 주세요.'
-  return errors
-}
 
 export function ageOn(birthDate: string, today: Date) {
   const [y, m, d] = birthDate.split('-').map(Number)

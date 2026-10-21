@@ -47,6 +47,12 @@
 | 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
 | 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
 | 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |
+| 4+ | `GET /api/activities?…&q&from&to&part` | 공개 | **구현(2026-10-21 보완).** `q` 제목·소개·장소 이름 검색(50자), `from`·`to` 날짜 범위, `part`=AM(정오 전 시작)/PM, 반경 최대 **20km** |
+| 4+ | `GET /api/places/search?query&lat&lng` | 공개(분당 40회) | **구현.** `{mode: KAKAO\|LOCAL, items[]}`. 항목: kakaoId·name·address·categoryName·latitude·longitude·distanceMeters·`placeClass`(OPEN/REVIEW/BLOCKED)·`classLabel`·`token`(BLOCKED는 없음). Kakao REST 키가 없으면 LOCAL: 관리자 등록 장소(`placeId`) |
+| 4+ | `GET /api/places/nearby?lat&lng` | 공개(분당 40회) | **구현.** 지도 핀 주변 약 150m 장소(관광·문화·공공기관·카페·음식점·병원 분류), 형식은 위와 같음 |
+| 4+ | `POST /api/activities` `{…, place: {kakaoId, name, address, categoryName, latitude, longitude, placeClass, classLabel, token}, meetingPoint}` | 회원 | **구현.** `placeId` 대신 검색 장소. 서명이 다르거나 3시간이 지나면 400 `place`. REVIEW 장소는 위험도 REVIEW(이유 ‘장소가 ○○’). `meetingPoint` 100자 |
+| 4+ | `GET /api/volunteer-programs?lat&lng&radiusKm&q&youth&recruiting` | 공개(분당 40회) | **구현.** `{enabled, region, items[]}`. 1365 활동: programNo·title·organization·place·periodStart/End·beginTime/endTime·weekdays·recruitStatus·youthOk·latitude/longitude(없으면 null)·distanceKm·link. 기본 모집중·20km 안. 키 없으면 `enabled:false` |
+| 4+ | `GET /api/admin/volunteer-programs/check?lat&lng` | 관리자 | **구현.** 키 여부·지역·코드·목록 건수·응답 필드 **이름**·오늘 사용 횟수(값은 보여주지 않음) |
 | 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
 | 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
 | 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
@@ -70,7 +76,7 @@
 
 | 화면 | 쓰는 API | 화면이 받아야 할 값 | 오류·빈 상태 |
 |---|---|---|---|
-| 활동 찾기 | `GET /api/activities`, `GET /api/places` | id, title, category, activityType, placeName, distanceKm, date·startTime, durationMinutes, capacity, confirmed, latitude/longitude (대기열 정보는 5주차) | 결과 0건 안내(반경 넓히기), 위치 거부 시 활동 장소 중심, 실패 시 다시 시도 |
+| 활동 찾기 | `GET /api/activities`, `GET /api/volunteer-programs`, `GET /api/places/search`(지역 고르기) | id, title, category, activityType, placeName, distanceKm, date·startTime, durationMinutes, capacity, confirmed, latitude/longitude (대기열 정보는 5주차) | 결과 0건 안내(반경 넓히기), 위치 거부 시 활동 장소 중심, 실패 시 다시 시도 |
 | 활동 상세 | `GET /api/activities/{id}` + 내 신청 상태 | 위 + description, organizer 표시명, myParticipationStatus, 보험 비적용 안내 | 404, 마감·정원 참 |
 | 활동 만들기 | `POST /api/activities`, `GET /api/me` | riskLevel, riskReasons[], status | 칸별 `fieldErrors`, BLOCKED 이유, 기관 미확인 403 |
 | 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |

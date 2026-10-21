@@ -33,12 +33,12 @@ public class PlaceService {
         return jdbc.queryForList("""
                 SELECT id, name, area, address_note AS addressNote, meeting_point AS meetingPoint,
                        latitude, longitude, coordinate_status AS coordinateStatus
-                FROM demo_places ORDER BY id
+                FROM demo_places WHERE source = 'CURATED' ORDER BY id
                 """);
     }
 
     public boolean exists(long id) {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM demo_places WHERE id = ?", Integer.class, id) > 0;
+        return jdbc.queryForObject("SELECT COUNT(*) FROM demo_places WHERE id = ? AND source = 'CURATED'", Integer.class, id) > 0;
     }
 
     public record CoordinateRequest(BigDecimal latitude, BigDecimal longitude, String meetingPoint, String reason) {}
@@ -55,7 +55,7 @@ public class PlaceService {
         String reason = request.reason() == null || request.reason().isBlank() ? "장소 좌표 입력" : request.reason().trim();
         if (reason.length() > 500) errors.put("reason", "사유는 500자 이내로 입력해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
-        String from = jdbc.queryForList("SELECT coordinate_status FROM demo_places WHERE id = ? FOR UPDATE", String.class, id)
+        String from = jdbc.queryForList("SELECT coordinate_status FROM demo_places WHERE id = ? AND source = 'CURATED' FOR UPDATE", String.class, id)
                 .stream().findFirst().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "장소를 찾을 수 없습니다."));
 
         jdbc.update("""
