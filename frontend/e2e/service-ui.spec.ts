@@ -551,6 +551,12 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await expect(detail).toHaveCount(0)
   await expect(page.getByRole('dialog', { name: '예시 1365 활동 미리보기' })).toBeVisible()
   await page.getByRole('button', { name: '미리보기 닫기' }).click()
+  // Hovering a card only highlights its pin: no preview opens, and nothing stays open after the mouse leaves.
+  await card.hover()
+  await expect(card).toHaveClass(/active/)
+  await page.mouse.move(5, 5)
+  await expect(card).not.toHaveClass(/active/)
+  await expect(page.getByRole('dialog', { name: /미리보기/ })).toHaveCount(0)
   await sources.getByRole('button', { name: /동네 활동/ }).click()
   await expect(card).toHaveCount(0)
   await sources.getByRole('button', { name: /1365 활동/ }).click()

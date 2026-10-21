@@ -75,6 +75,9 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [programs, setPrograms] = useState<Program[]>([])
   const [programsOn, setProgramsOn] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  // Hovering a card only highlights its pin; the preview opens when a pin is clicked.
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [myPosition, setMyPosition] = useState<Origin | null>(null)
   const [programDetail, setProgramDetail] = useState<Program | null>(null)
 
   // Our activities: within 20 km (the widest ring) so the radius can widen without another request.
@@ -118,7 +121,9 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       setNotice('')
       setAsking(false)
       remember(true)
-      setOrigin({ lat: position.coords.latitude, lng: position.coords.longitude, label: '내 위치' })
+      const mine = { lat: position.coords.latitude, lng: position.coords.longitude, label: '내 위치' }
+      setMyPosition(mine)
+      setOrigin(mine)
     }, () => { setLocating(false); remember(false); setAsking(true); setNotice('위치를 확인하지 못했습니다. 지역을 직접 골라 주세요.') }, { timeout: 8000, maximumAge: 60000 })
   }
 
@@ -202,20 +207,21 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
             <small>최대 20km까지만 넓혀요</small></div>}
           <div className="explore-split">
             <div className="explore-map">
-              <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={selected} onSelect={setSelected}
+              <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={hovered ?? selected} onSelect={setSelected}
+                onHome={myPosition ? () => setOrigin(myPosition) : undefined}
                 onMoved={centre => setOrigin({ ...centre, label: '지도 중심' })} />
               {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} onDetail={setProgramDetail} />}
               <span className="map-legend"><i className="dot local" />동네 활동{programsOn && <><i className="dot program" />1365 활동</>}</span>
             </div>
             <div className="explore-list">
-              {inside.length ? <ul className="hit-list">{inside.slice(0, 5).map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === selected} onFocus={() => setSelected(hit.key)} onDetail={setProgramDetail} /></li>)}</ul>
+              {inside.length ? <ul className="hit-list">{inside.slice(0, 5).map(hit => <li key={hit.key}><HitCard hit={hit} active={hit.key === (hovered ?? selected)} onHover={on => setHovered(on ? hit.key : null)} onDetail={setProgramDetail} /></li>)}</ul>
                 : <div className="empty-state"><p>20km 안에도 조건에 맞는 활동이 없어요.</p><a className="secondary-button" href="#/create">이 동네에 활동 만들기 <Glyph name="arrow" size={15} /></a></div>}
             </div>
           </div>
         </section>
         <div className="all-head" id="all-list"><h3>모든 모집글</h3><span className="list-count">가까운 순 · {everything.length}개</span></div>
         {everything.length ? <div className="activity-grid">{everything.map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
-          : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onFocus={() => undefined} onDetail={setProgramDetail} /></div>)}</div>
+          : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onDetail={setProgramDetail} /></div>)}</div>
           : <div className="empty-state">조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</div>}
       </>
         : <>{(!catalog && !live.length) ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
@@ -261,12 +267,13 @@ function when1365(program: Program) {
   return [period, program.weekdays, program.beginTime && program.endTime ? program.beginTime + ' ~ ' + program.endTime : null].filter(Boolean).join(' · ')
 }
 
-function HitCard({ hit, active, onFocus, onDetail }: { hit: Hit; active: boolean; onFocus: () => void; onDetail?: (program: Program) => void }) {
+function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean; onHover?: (on: boolean) => void; onDetail?: (program: Program) => void }) {
+  const hover = onHover ? { onMouseEnter: () => onHover(true), onMouseLeave: () => onHover(false), onFocus: () => onHover(true), onBlur: () => onHover(false) } : {}
   const distance = hit.distanceKm != null && <span className="distance">{hit.distanceKm}km · {travel(hit.distanceKm)}</span>
   if (hit.local) {
     const a = hit.local
     const card = fromLive(a)
-    return <article className={'hit-card' + (active ? ' active' : '')} onMouseEnter={onFocus}>
+    return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
       <div className="hit-tags"><span className="source local">동네 활동</span><span className="tag">{a.category}</span>{Number(a.startTime.slice(0, 2)) < 12 ? <span className="tag">오전</span> : <span className="tag">오후</span>}</div>
       <h3>{a.title}</h3>
       <p><Glyph name="pin" size={14} />{card.placeName} {distance}</p>
@@ -276,7 +283,7 @@ function HitCard({ hit, active, onFocus, onDetail }: { hit: Hit; active: boolean
     </article>
   }
   const p = hit.program!
-  return <article className={'hit-card' + (active ? ' active' : '')} onMouseEnter={onFocus}>
+  return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
     <div className="hit-tags"><span className="source program">1365 활동</span>{p.youthOk && <span className="tag">청소년 가능</span>}{p.recruitStatus && <span className="tag">{p.recruitStatus}</span>}</div>
     <h3>{p.title}</h3>
     <p><Glyph name="pin" size={14} />{p.place ?? '장소 정보 없음'} {distance}</p>
@@ -288,7 +295,7 @@ function HitCard({ hit, active, onFocus, onDetail }: { hit: Hit; active: boolean
 function PreviewSheet({ hit, onClose, onDetail }: { hit: Hit; onClose: () => void; onDetail: (program: Program) => void }) {
   return <div className="preview-sheet" role="dialog" aria-label={hit.title + ' 미리보기'}>
     <button className="icon-button" onClick={onClose} aria-label="미리보기 닫기"><Glyph name="close" size={16} /></button>
-    <HitCard hit={hit} active={false} onFocus={() => undefined} onDetail={onDetail} />
+    <HitCard hit={hit} active={false} onDetail={onDetail} />
   </div>
 }
 
@@ -322,13 +329,23 @@ function ProgramDialog({ program: p, onClose, onShowOnMap }: { program: Program;
   </div>, document.body)
 }
 
+/** "You are here": a dot with a white ring, a soft pulse and a label (drawn by Kakao as an overlay). */
+function meMarker(label: string) {
+  const box = document.createElement('div')
+  box.className = 'me-marker'
+  box.innerHTML = '<span class="me-pulse"></span><span class="me-dot"></span><span class="me-label"></span>'
+  box.querySelector('.me-label')!.textContent = label
+  return box
+}
+
 const pinSvg = (colour: string, big: boolean) => `<svg width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`
 
 /** Kakao map with coloured pins (green = ours, blue = 1365); dragging shows "이 지역에서 다시 찾기". Without a key: a position sketch. */
-function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved }: { origin: Origin; radiusKm: number; hits: Hit[]; selected: string | null; onSelect: (key: string) => void; onMoved: (centre: { lat: number; lng: number }) => void }) {
+function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHome }: { origin: Origin; radiusKm: number; hits: Hit[]; selected: string | null; onSelect: (key: string) => void; onMoved: (centre: { lat: number; lng: number }) => void; onHome?: () => void }) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
   const drawn = useRef<any[]>([])
+  const area = useRef<any[]>([])
   const [moved, setMoved] = useState(false)
   const [failed, setFailed] = useState(!kakaoEnabled)
   const select = useRef(onSelect)
@@ -349,32 +366,45 @@ function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved }: { o
   }, [])
   useEffect(() => setMoved(false), [origin])
 
+  // Search area: the radius circle and "my position", then zoom so the whole circle fits (changes with origin/radius only).
+  useEffect(() => {
+    const kakao = window.kakao
+    if (!map.current || !kakao?.maps) return
+    area.current.forEach(item => item.setMap(null))
+    const centre = new kakao.maps.LatLng(origin.lat, origin.lng)
+    const circle = new kakao.maps.Circle({ map: map.current, center: centre, radius: radiusKm * 1000, strokeWeight: 3, strokeColor: '#245e48', strokeOpacity: 0.85,
+      strokeStyle: 'shortdash', fillColor: '#245e48', fillOpacity: 0.08 })
+    const me = new kakao.maps.CustomOverlay({ map: map.current, position: centre, content: meMarker(origin.label), yAnchor: 0.5, zIndex: 5 })
+    area.current = [circle, me]
+    map.current.setBounds(circle.getBounds(), 16, 16, 16, 16)
+  }, [radiusKm, origin, ready])
+
+  // Pins: green = ours, blue = 1365; the hovered or selected one is drawn larger and on top.
   useEffect(() => {
     const kakao = window.kakao
     if (!map.current || !kakao?.maps) return
     drawn.current.forEach(item => item.setMap(null))
     drawn.current = []
-    const centre = new kakao.maps.LatLng(origin.lat, origin.lng)
-    drawn.current.push(new kakao.maps.Circle({ map: map.current, center: centre, radius: radiusKm * 1000, strokeWeight: 2, strokeColor: '#245e48', strokeOpacity: 0.6, fillColor: '#245e48', fillOpacity: 0.07 }))
-    drawn.current.push(new kakao.maps.CustomOverlay({ map: map.current, position: centre, content: '<span class="map-origin">●</span>' }))
     for (const hit of hits) {
       if (hit.lat == null || hit.lng == null) continue
       const content = document.createElement('button')
       content.type = 'button'
-      content.className = 'kakao-pin'
+      content.className = 'kakao-pin' + (hit.key === selected ? ' on' : '')
       content.setAttribute('aria-label', hit.title)
       content.innerHTML = pinSvg(hit.source === 'local' ? '#245e48' : '#2f62a8', hit.key === selected)
       content.onclick = () => select.current(hit.key)
-      drawn.current.push(new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(hit.lat, hit.lng), content, yAnchor: 1, clickable: true }))
+      drawn.current.push(new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(hit.lat, hit.lng), content, yAnchor: 1, clickable: true, zIndex: hit.key === selected ? 4 : 1 }))
     }
-    map.current.setLevel(radiusKm <= 1 ? 5 : radiusKm <= 3 ? 6 : radiusKm <= 5 ? 7 : radiusKm <= 10 ? 8 : 9)
-    map.current.setCenter(centre)
-  }, [hits, selected, radiusKm, origin, ready])
+  }, [hits, selected, ready])
 
   if (failed) return <SketchHits origin={origin} hits={hits} selected={selected} onSelect={onSelect} />
   return <div className="pin-map explore">
     <div ref={box} className="kakao-map" role="img" aria-label="활동 지도" />
     {moved && <button className="map-pill" onClick={() => { const c = map.current?.getCenter(); if (c) onMoved({ lat: c.getLat(), lng: c.getLng() }) }}><Glyph name="refresh" size={14} />이 지역에서 다시 찾기</button>}
+    <button type="button" className="map-home" aria-label="내 위치로" title="내 위치로" onClick={() => {
+      if (onHome && origin.label !== '내 위치') onHome()
+      else { const circle = area.current[0]; if (circle) map.current?.setBounds(circle.getBounds(), 16, 16, 16, 16); setMoved(false) }
+    }}><Glyph name="target" size={18} /></button>
   </div>
 }
 
@@ -385,7 +415,7 @@ function SketchHits({ origin, hits, selected, onSelect }: { origin: Origin; hits
   const x = (lng: number) => east === west ? 50 : 10 + (lng - west) / (east - west) * 80
   const y = (lat: number) => north === south ? 50 : 10 + (north - lat) / (north - south) * 80
   return <div className="map-canvas explore-sketch" role="img" aria-label="활동 위치 그림 (지도 아님)">
-    <span className="map-origin-pin" style={{ left: x(origin.lng) + '%', top: y(origin.lat) + '%' }} title={origin.label} />
+    <span className="me-marker sketch" style={{ left: x(origin.lng) + '%', top: y(origin.lat) + '%' }}><span className="me-pulse" /><span className="me-dot" /><span className="me-label">{origin.label}</span></span>
     {points.map(hit => <button key={hit.key} type="button" className={'sketch-pin ' + (hit.source === '1365' ? 'program' : 'local') + (selected === hit.key ? ' selected' : '')} style={{ left: x(Number(hit.lng)) + '%', top: y(Number(hit.lat)) + '%' }} aria-label={hit.title + ' 위치'} onClick={() => onSelect(hit.key)}><Glyph name="pin" size={selected === hit.key ? 30 : 24} /></button>)}
     <span className="sketch-note">지도 키가 없어 위치만 그린 그림입니다.</span>
   </div>
