@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 export type GlyphName = 'pin' | 'calendar' | 'clock' | 'timer' | 'users' | 'leaf' | 'hand' | 'search' | 'map' | 'check' | 'bolt'
   | 'sun' | 'arrow' | 'close' | 'target' | 'refresh' | 'external' | 'building' | 'alert' | 'chevron'
-  | 'glove' | 'tongs' | 'bag' | 'water' | 'hat' | 'shoe' | 'plus' | 'link' | 'info'
+  | 'glove' | 'tongs' | 'bag' | 'water' | 'hat' | 'shoe' | 'plus' | 'link' | 'info' | 'filter'
 
 const paths: Record<GlyphName, ReactNode> = {
   pin: <><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z" /><circle cx="12" cy="10" r="2.2" /></>,
@@ -33,6 +33,7 @@ const paths: Record<GlyphName, ReactNode> = {
   shoe: <path d="M3 17h18v-2l-6-2-3-4H7v6H3Z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   link: <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />,
+  filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5m0-8v.5" /></>,
   alert: <><path d="M12 4 3 20h18Z" /><path d="M12 10v4m0 3v.5" /></>,
 }

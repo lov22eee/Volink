@@ -95,6 +95,13 @@ async function fillActivity(page: Page, title: string, description: string, time
   await page.getByRole('checkbox', { name: /공공장소의 저위험 활동/ }).check()
 }
 
+// Lists show 9 per page, so a new post is found through the search box (it filters as you type).
+async function searchFor(page: Page, words: string) {
+  const box = page.getByRole('textbox', { name: '활동 검색' })
+  if (!(await box.isVisible())) await page.getByRole('button', { name: '검색', exact: true }).click()
+  await box.fill(words)
+}
+
 // Korean calendar date N days from now, used so date rules stay valid whenever the suite runs.
 function seoulDate(days: number) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))
@@ -116,14 +123,21 @@ test('service home renders database examples without presentation or development
 test('search words, time of day and activity type narrow examples and can reset', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator(examples)).toHaveCount(3)
+  // Filters live behind the filter icon; the count of active ones shows on it.
+  await page.getByRole('button', { name: '필터', exact: true }).click()
   await page.getByLabel('활동 분야').selectOption('생활 지원')
-  await expect(page.getByText('조건에 맞는 활동이 없습니다.', { exact: false })).toBeVisible()
+  await expect(page.locator(examples)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '필터 1개 켜짐' })).toBeVisible()
+  await page.screenshot({ path: shot('filters') })
   await page.getByRole('button', { name: '필터 초기화' }).click()
+  await page.getByRole('button', { name: '닫기', exact: true }).click()
+  // Search opens from the magnifier and filters as you type.
+  await page.getByRole('button', { name: '검색', exact: true }).click()
   await page.getByRole('textbox', { name: '활동 검색' }).fill('플로깅')
-  await page.getByRole('button', { name: '찾기', exact: true }).click()
   await expect(page.locator(examples)).toHaveCount(1)
-  await page.getByRole('button', { name: '필터 초기화' }).click()
+  await page.getByRole('button', { name: '검색어 지우기' }).click()
   await expect(page.locator(examples)).toHaveCount(3)
+  await page.getByRole('button', { name: '필터', exact: true }).click()
   const { activities } = await (await page.request.get('/api/demo/catalog')).json()
   await page.getByLabel('시간대').selectOption('PM')
   await expect(page.locator(examples)).toHaveCount(activities.filter((item: { startTime: string }) => item.startTime >= '12:00').length)
@@ -132,7 +146,7 @@ test('search words, time of day and activity type narrow examples and can reset'
   await expect(page.locator(examples)).toHaveCount(0)
   await page.getByLabel('활동 유형', { exact: true }).selectOption('GENERAL')
   await expect(page.locator(examples)).toHaveCount(3)
-  await expect(page.locator('.category-label').first()).toContainText('자율 활동')
+  await expect(page.locator(examples + ' .category-label').first()).toContainText('자율 활동')
   await page.getByRole('button', { name: '필터 초기화' }).click()
 })
 
@@ -378,6 +392,7 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await expect(page.locator('.detail-tags')).toContainText('모집 중')
   await expect(page.locator('.detail-booking')).toContainText('10:00')
   await page.goto('/')
+  await searchFor(page, title)
   const card = page.locator('.activity-card[data-kind="live"]', { hasText: title })
   await expect(card).toBeVisible()
   await expect(card).toContainText('모집 중')
@@ -389,6 +404,8 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('blocked'), fullPage: true })
   await page.goto('/')
+  await searchFor(page, '사다리 청소 모임')
+  await expect(page.getByText('조건에 맞는 활동이 없습니다', { exact: false }).or(page.locator('.activity-card').first())).toBeVisible()
   await expect(page.locator('.activity-card', { hasText: '사다리 청소 모임' })).toHaveCount(0)
 })
 
@@ -406,6 +423,8 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('mine'), fullPage: true })
   await page.goto('/')
+  await searchFor(page, title)
+  await expect(page.getByText('조건에 맞는 활동이 없습니다', { exact: false }).or(page.locator('.activity-card').first())).toBeVisible()
   await expect(page.locator('.activity-card', { hasText: title })).toHaveCount(0)
   await signOut(page)
 
@@ -420,6 +439,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await item.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
   await page.goto('/')
+  await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toBeVisible()
 })
 
@@ -447,6 +467,7 @@ test('an institution member can host an activity only after the admin approves t
   await page.getByRole('button', { name: '활동 등록' }).click()
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
   await page.goto('/')
+  await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toContainText('기관 주관 활동')
 })
 
@@ -482,11 +503,14 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   await expect(visitor.locator('.location-tag')).toContainText('내 위치 기준')
   // Top: map + nearest five. Bottom: every recruiting activity with its distance.
   await expect(visitor.getByRole('region', { name: '내 주변' }).locator('.hit-card').first()).toContainText('0.9km · 걸어서 12분')
+  await searchFor(visitor, title)
   const card = visitor.locator('#all-list + .activity-grid .activity-card').filter({ hasText: title })
   await expect(card.locator('.distance')).toHaveText('0.9km')
   await expect(visitor.locator(examples)).toHaveCount(0)
   await expect(visitor.getByText('위치는 이번 검색에만 쓰고 저장하지 않습니다.', { exact: false })).toBeVisible()
+  await visitor.getByRole('button', { name: '필터', exact: true }).click()
   await visitor.getByLabel('검색 반경').selectOption('1')
+  await visitor.getByRole('button', { name: '닫기', exact: true }).click()
   await expect(card).toHaveCount(1)
   await expect(visitor.getByRole('img', { name: /활동 위치 그림|활동 지도/ })).toBeVisible()
   await visitor.getByRole('button', { name: title + ' 위치' }).first().click()
@@ -505,6 +529,7 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   await walker.goto('http://127.0.0.1:5173/')
   await walker.getByRole('button', { name: '내 위치로 찾기' }).click()
   await expect(walker.getByRole('status').filter({ hasText: '넓혔어요' })).toContainText('3km 안에는 없어서 5km까지 넓혔어요')
+  await searchFor(walker, title)
   await expect(walker.locator('#all-list + .activity-grid .activity-card').filter({ hasText: title })).toHaveCount(1)
   await walker.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await walker.getByRole('region', { name: '내 주변' }).screenshot({ path: shot('widen') })
@@ -522,6 +547,7 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   await ask.getByRole('button', { name: '찾기', exact: true }).click()
   await ask.getByRole('button', { name: /독바위공원/ }).click()
   await expect(stranger.locator('.location-tag')).toContainText('독바위공원 기준 3km')
+  await searchFor(stranger, title)
   await expect(stranger.locator('#all-list + .activity-grid .activity-card').filter({ hasText: title })).toHaveCount(1)
   await refused.close()
 })
@@ -551,6 +577,12 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await expect(detail).toHaveCount(0)
   await expect(page.getByRole('dialog', { name: '예시 1365 활동 미리보기' })).toBeVisible()
   await page.getByRole('button', { name: '미리보기 닫기' }).click()
+  // Hovering a card only highlights its pin: no preview opens, and nothing stays open after the mouse leaves.
+  await card.hover()
+  await expect(card).toHaveClass(/active/)
+  await page.mouse.move(5, 5)
+  await expect(card).not.toHaveClass(/active/)
+  await expect(page.getByRole('dialog', { name: /미리보기/ })).toHaveCount(0)
   await sources.getByRole('button', { name: /동네 활동/ }).click()
   await expect(card).toHaveCount(0)
   await sources.getByRole('button', { name: /1365 활동/ }).click()
