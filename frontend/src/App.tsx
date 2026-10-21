@@ -10,8 +10,9 @@ import CreateActivity from './create'
 import { SupplyChips } from './icons'
 import type { Supply } from './icons'
 import Explore from './explore'
+import Home from './home'
 
-type IconName = 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield'
+type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -24,6 +25,7 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></>,
     users: <><circle cx="9" cy="8" r="3" /><path d="M3 20v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5" /></>,
     building: <><path d="M5 21V3h14v18M3 21h18M10 21v-4h4v4M9 7h1m4 0h1M9 11h1m4 0h1" /></>,
+    home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
     shield: <><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z" /><path d="m9 12 2 2 4-4" /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
@@ -43,7 +45,7 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 }
 
 
-type Page = 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin'
+type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin'
 type Route = { page: Page; activityId?: number }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
@@ -57,7 +59,7 @@ function getRoute(): Route {
   if (live) return { page: 'live', activityId: Number(live[1]) }
   const edit = /^activity\/(\d+)\/edit$/.exec(path)
   if (edit) return { page: 'edit', activityId: Number(edit[1]) }
-  return { page: ['create', 'mine', 'login', 'signup', 'admin'].includes(path) ? path as Page : 'explore' }
+  return { page: ['explore', 'create', 'mine', 'login', 'signup', 'admin'].includes(path) ? path as Page : 'home' }
 }
 
 // One card shape for example templates and real (saved) activities.
@@ -114,21 +116,22 @@ export default function App() {
   async function signOut() {
     await logout()
     setUser(null)
-    window.location.hash = '#/explore'
+    window.location.hash = '#/home'
   }
 
   const navigation: { id: Page; title: string; icon: IconName }[] = [
+    { id: 'home', title: '홈', icon: 'home' },
     { id: 'explore', title: '활동 찾기', icon: 'compass' },
     { id: 'create', title: '활동 만들기', icon: 'plus' },
     { id: 'mine', title: '내 활동', icon: 'users' },
     ...(user?.role === 'ADMIN' ? [{ id: 'admin' as Page, title: '관리', icon: 'shield' as IconName }] : []),
   ]
-  const titles: Record<Page, string> = { explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리' }
+  const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <a href="#/explore" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={25} /></span>volink<span className="brand-dot">.</span></a>
+      <a href="#/home" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={25} /></span>volink<span className="brand-dot">.</span></a>
       <p className="brand-caption">우리 동네의 작은 변화</p>
       <nav aria-label="주요 메뉴">{navigation.map(item => {
         const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore')
@@ -145,6 +148,7 @@ export default function App() {
       </header>
       <main id="main-content">
         {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
+        {route.page === 'home' && <Home user={user} catalog={catalog} />}
         {route.page === 'explore' && <Explore catalog={catalog} />}
         {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
         {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} />}

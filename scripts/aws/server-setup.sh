@@ -20,12 +20,13 @@ if [ -z "${VOLINK_FRESH:-}" ]; then
 fi
 
 step "packages"
+# Ubuntu may be installing its own security updates; wait for them (up to 15 min) instead of failing.
 if ! swapon --show | grep -q /swapfile; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   grep -q /swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
-apt-get update -q
-apt-get install -yq git curl unzip python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
+apt-get -o DPkg::Lock::Timeout=900 update -q
+apt-get -o DPkg::Lock::Timeout=900 install -yq git curl unzip python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
 systemctl enable --now docker
 if [ "$(/opt/node/bin/node -v 2>/dev/null)" != "$NODE_VERSION" ]; then
   tmp=$(mktemp -d)
