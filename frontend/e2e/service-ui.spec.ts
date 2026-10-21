@@ -223,16 +223,10 @@ test('create form requires login, shows field errors and only offers times that 
   await page.screenshot({ path: shot('place-dialog') })
   await dialog.getByRole('button', { name: '이 장소로 정하기' }).click()
   await expect(page.getByRole('button', { name: /옥정중앙공원/ })).toContainText('만나는 곳: 정문 안내판 앞')
-  // Supplies: 환경 정화 starts with 장갑 (bring) and 집게·봉투 (provided). One supply is in one row only.
-  const bring = page.getByRole('group', { name: '참가자가 챙겨 올 것' })
-  const provided = page.getByRole('group', { name: '모집자가 준비해서 나눠 줄 것' })
-  await expect(bring.getByRole('button', { pressed: true })).toHaveText(['장갑'])
-  await expect(provided.getByRole('button', { pressed: true })).toHaveText(['집게', '봉투'])
+  // Supplies to bring (below the description): 환경 정화 starts with 장갑·편한 신발; add one by hand.
+  const bring = page.getByRole('group', { name: '챙겨 올 준비물' })
+  await expect(bring.getByRole('button', { pressed: true })).toHaveText(['장갑', '편한 신발'])
   await bring.getByRole('button', { name: '물' }).click()
-  await provided.getByRole('button', { name: '물' }).click()
-  await expect(bring.getByRole('button', { name: '물' })).toHaveAttribute('aria-pressed', 'false')
-  await bring.getByRole('button', { name: '물' }).click()
-  await expect(provided.getByRole('button', { name: '물' })).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('textbox', { name: '준비물 직접 추가' }).fill('손전등')
   await page.getByRole('button', { name: '추가', exact: true }).click()
   await expect(bring.getByRole('button', { name: '손전등' })).toHaveAttribute('aria-pressed', 'true')
@@ -247,7 +241,7 @@ test('create form requires login, shows field errors and only offers times that 
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
   await page.getByRole('link', { name: '만든 활동 보기' }).click()
   await expect(page.locator('.detail-booking')).toContainText('옥정중앙공원 · 정문 안내판 앞')
-  await expect(page.locator('.supply-block')).toContainText('챙겨 올 것장갑물손전등모집자가 준비해요집게봉투')
+  await expect(page.locator('.supply-block')).toHaveText('챙겨 올 것장갑편한 신발물손전등')
   await page.locator('.detail-booking').screenshot({ path: shot('detail-supplies') })
   // The organizer can edit (the risk check runs again) and delete while nobody has applied.
   const tools = page.getByRole('group', { name: '내 활동 관리' })

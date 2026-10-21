@@ -55,7 +55,7 @@ const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 �
 const maxSupplies = 6
 /** Starting supplies per field until the person changes them. */
 const suppliesFor: Record<string, Supply[]> = {
-  '환경 정화': [{ name: '장갑', provided: false }, { name: '집게', provided: true }, { name: '봉투', provided: true }],
+  '환경 정화': [{ name: '장갑', provided: false }, { name: '편한 신발', provided: false }],
   '생활 지원': [{ name: '장갑', provided: false }],
   '지역 돌봄': [],
 }
@@ -242,27 +242,23 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
         </div>
 
-        <div className="field-block"><span className="field-label">준비물 <span className="field-hint">선택 · 모두 합쳐 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
-          {([[false, '참가자가 챙겨 올 것'], [true, '모집자가 준비해서 나눠 줄 것']] as [boolean, string][]).map(([provided, label]) =>
-            <div key={label} className="supply-row"><span className="supply-row-label">{label}</span>
-              <div className="supply-pick" role="group" aria-label={label}>
-                {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
-                  const item = supplies.find(other => other.name === name)
-                  const on = item?.provided === provided
-                  // One supply sits in one row only: picking it here takes it out of the other row.
-                  return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '') + (provided ? ' provided' : '')} aria-pressed={on} disabled={!item && supplies.length >= maxSupplies}
-                    onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(other => other.name !== name) : item ? supplies.map(other => other.name === name ? { ...other, provided } : other) : [...supplies, { name, provided }]) }}>
-                    <Glyph name={supplyGlyph(name)} size={14} />{name}</button>
-                })}
-              </div></div>)}
+
+        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
+
+        <div className="field-block"><span className="field-label">챙겨 올 준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
+          <div className="supply-pick" role="group" aria-label="챙겨 올 준비물">
+            {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
+              const on = supplies.some(item => item.name === name)
+              return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
+                onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
+            })}
+          </div>
           <span className="supply-add"><input aria-label="준비물 직접 추가" value={customSupply} maxLength={10} onChange={event => setCustomSupply(event.target.value)} placeholder="직접 추가 (10자 이내)"
             onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
             <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
               onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
           {fieldError('supplies')}
         </div>
-
-        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
 
         <label className="check-line"><input type="checkbox" name="safety" checked={safety} onChange={event => setSafety(event.target.checked)} {...err('safety')} />공공장소의 저위험 활동이며, 공식 봉사실적·자원봉사 종합보험이 적용되지 않음을 확인합니다</label>
         {fieldError('safety')}
@@ -280,8 +276,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <p><Glyph name="pin" size={15} />{place ? place.name + (meetingPoint ? ' · ' + meetingPoint : '') : '장소를 골라 주세요'}</p>
           <p><Glyph name="calendar" size={15} />{friendlyDate(date)} {start} ~ {end}</p>
           <p><Glyph name="users" size={15} />0 / {capacity}명</p>
-          {supplies.some(item => !item.provided) && <p className="preview-supplies">챙겨 올 것 <SupplyChips supplies={supplies.filter(item => !item.provided)} /></p>}
-          {supplies.some(item => item.provided) && <p className="preview-supplies">모집자가 준비 <SupplyChips supplies={supplies.filter(item => item.provided)} /></p>}
+          {supplies.length > 0 && <p className="preview-supplies">챙겨 올 것 <SupplyChips supplies={supplies} /></p>}
         </article>
         <div className={'expect ' + (reviewReasons.length ? 'review' : 'ok')}>
           <strong><Glyph name={reviewReasons.length ? 'alert' : 'check'} size={16} />{reviewReasons.length ? '관리자 확인 후 공개돼요' : '바로 공개될 예정이에요'}</strong>
