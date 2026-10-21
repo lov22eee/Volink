@@ -196,6 +196,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       {origin ? <>
         <section className="panel nearby-panel" aria-label="내 주변">
           <div className="nearby-head"><h3>내 주변 {shownRadius}km</h3><span className="list-count">{origin.label} 기준 · 가까운 순 {Math.min(5, inside.length)}개 · <button className="text-button" onClick={() => document.getElementById('all-list')?.scrollIntoView()}>모든 모집글 보기 ↓</button></span></div>
+          {programsOn && programs.length === 0 && <p className="small-print">근처 20km에서 지금 모집 중인 1365 활동을 찾지 못했어요. 지역을 바꾸거나 잠시 뒤 다시 확인해 주세요.</p>}
           {widened && <div className="widen-callout" role="status"><strong>{radius}km 안에는 없어서 {shownRadius}km까지 넓혔어요</strong>
             <span className="ring-steps">{rings.filter(ring => ring >= radius && ring <= shownRadius).map(ring => <span key={ring} className={ring === shownRadius ? 'on' : ''}>{ring}km · {hits.filter(hit => hit.distanceKm != null && hit.distanceKm <= ring).length}개</span>)}</span>
             <small>최대 20km까지만 넓혀요</small></div>}

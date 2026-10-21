@@ -1,6 +1,9 @@
 package com.volink.volunteer;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -44,7 +47,9 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
     private volatile LocalDate day;
 
     public DataGoKrVolunteerApi(@Value("${volink.data-go-kr.key:}") String key, Clock clock) {
-        this.key = key.trim();
+        // Works with either key from the portal: the "Encoding" one (with %2B…) is decoded once, so it is not encoded twice.
+        String trimmed = key.trim();
+        this.key = trimmed.contains("%") ? URLDecoder.decode(trimmed, StandardCharsets.UTF_8) : trimmed;
         this.clock = clock;
         SimpleClientHttpRequestFactory timeouts = new SimpleClientHttpRequestFactory();
         timeouts.setConnectTimeout(Duration.ofSeconds(3));
@@ -60,8 +65,14 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
     @Override
     public List<Map<String, String>> areaList(String provinceCode, String cityCode, String keyword, int rows) {
         if (!enabled() || !spend("area")) return List.of();
-        String uri = BASE + "/getVltrAreaList?serviceKey={key}&pageNo=1&numOfRows={rows}&schSido={sido}&schSign1={sign}&keyword={keyword}";
-        return items(call(uri, key, rows, provinceCode, cityCode == null ? "" : cityCode, keyword == null ? "" : keyword));
+        // Optional filters are left out when empty (an empty schSign1/keyword can make the gateway answer with nothing).
+        StringBuilder uri = new StringBuilder(BASE + "/getVltrAreaList?serviceKey={key}&pageNo=1&numOfRows={rows}&schSido={sido}");
+        List<Object> values = new ArrayList<>(List.of(key, rows, provinceCode));
+        if (cityCode != null && !cityCode.isBlank()) { uri.append("&schSign1={sign}"); values.add(cityCode); }
+        if (keyword != null && !keyword.isBlank()) { uri.append("&keyword={keyword}"); values.add(keyword); }
+        List<Map<String, String>> found = items(call(uri.toString(), values.toArray()));
+        log.info("1365 list {}/{}: {} items", provinceCode, cityCode, found.size());
+        return found;
     }
 
     @Override
@@ -100,6 +111,13 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
     /** Every <item> under the response as field → text. A gateway error (bad key, quota) has no items and is logged by its code only. */
     static List<Map<String, String>> items(String xml) {
         if (xml == null || xml.isBlank()) return List.of();
+        String body = xml.strip();
+        if (body.startsWith("{")) return jsonItems(body);
+        if (!body.startsWith("<")) {
+            // Plain-text gateway answers such as "SERVICE KEY IS NOT REGISTERED ERROR." or "Unauthorized".
+            log.warn("1365 API answered with text: {}", body.length() > 80 ? body.substring(0, 80) : body);
+            return List.of();
+        }
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             // No DTDs or external entities (XXE): the response is data from another server.
@@ -125,6 +143,30 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
             return items;
         } catch (Exception error) {
             log.warn("1365 response could not be read: {}", error.getClass().getSimpleName());
+            return List.of();
+        }
+    }
+
+    /** Some data.go.kr gateways answer in JSON: response.body.items.item (one object or a list). */
+    static List<Map<String, String>> jsonItems(String json) {
+        try {
+            JsonNode root = new ObjectMapper().readTree(json);
+            String code = root.path("response").path("header").path("resultCode").asText("");
+            if (!code.isEmpty() && !code.equals("00") && !code.equals("0") && !code.equals("0000")) {
+                log.warn("1365 API answered with code {}", code);
+                return List.of();
+            }
+            JsonNode item = root.path("response").path("body").path("items").path("item");
+            List<Map<String, String>> items = new ArrayList<>();
+            for (JsonNode node : item.isArray() ? item : List.of(item)) {
+                if (!node.isObject()) continue;
+                Map<String, String> fields = new LinkedHashMap<>();
+                node.fields().forEachRemaining(entry -> fields.put(entry.getKey(), entry.getValue().asText().trim()));
+                items.add(fields);
+            }
+            return items;
+        } catch (Exception error) {
+            log.warn("1365 JSON response could not be read: {}", error.getClass().getSimpleName());
             return List.of();
         }
     }

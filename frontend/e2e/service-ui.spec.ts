@@ -66,6 +66,14 @@ async function pickPlace(page: Page, name: string, meetingPoint = '') {
   await expect(dialog).toHaveCount(0)
 }
 
+// Date through the calendar: next month until the day shows, then the day.
+async function pickDate(page: Page, date: string) {
+  await page.getByRole('button', { name: /^활동 날짜/ }).click()
+  const calendar = page.getByRole('dialog', { name: '날짜 고르기' })
+  for (let i = 0; i < 3 && !(await calendar.locator(`[data-date="${date}"]`).count()); i++) await calendar.getByRole('button', { name: '다음 달' }).click()
+  await calendar.locator(`[data-date="${date}"]`).click()
+}
+
 // Start time through the wheel: "오전|오후", hour, minute.
 async function pickTime(page: Page, time: string) {
   const [h, m] = time.split(':').map(Number)
@@ -81,7 +89,7 @@ async function fillActivity(page: Page, title: string, description: string, time
   await page.goto('/#/create')
   await page.getByLabel(/활동 이름/).fill(title)
   await pickPlace(page, curated[place - 1])
-  await page.getByLabel('활동 날짜').selectOption(seoulDate(7))
+  await pickDate(page, seoulDate(7))
   if (time !== '10:00') await pickTime(page, time)
   await page.getByLabel(/활동 소개/).fill(description)
   await page.getByRole('checkbox', { name: /공공장소의 저위험 활동/ }).check()
@@ -170,9 +178,15 @@ test('create form requires login, shows field errors and only offers times that 
   await expect(page.locator('#place-error')).toHaveText('장소를 골라 주세요.')
   await expect(page.locator('#description-error')).toHaveText('활동 소개는 20~2000자로 적어 주세요.')
   await expect(page.locator('#safety-error')).toHaveText('안전 안내를 확인해 주세요.')
-  // Dates: tomorrow to 60 days ahead only. Capacity: 2-10 only.
-  await expect(page.getByLabel('활동 날짜').locator('option')).toHaveCount(60)
-  await expect(page.getByLabel('활동 날짜').locator('option').first()).toContainText('내일')
+  // Dates: a calendar where only tomorrow to 60 days ahead can be picked. Capacity: 2-10 only.
+  await page.getByRole('button', { name: /^활동 날짜/ }).click()
+  const calendar = page.getByRole('dialog', { name: '날짜 고르기' })
+  await expect(calendar.locator(`[data-date="${seoulDate(0)}"]`)).toBeDisabled()
+  await expect(calendar.locator(`[data-date="${seoulDate(1)}"]`)).toBeEnabled()
+  await page.screenshot({ path: shot('calendar') })
+  await calendar.locator(`[data-date="${seoulDate(1)}"]`).click()
+  await expect(page.getByRole('button', { name: /^활동 날짜/ })).toContainText('내일')
+  await pickDate(page, seoulDate(3))
   await expect(page.locator('select[name=capacity] option')).toHaveText(['2명', '3명', '4명', '5명', '6명', '7명', '8명', '9명', '10명'])
   // The wheel cannot go past 21:30, and a late start keeps only lengths that end by 22:00.
   await page.getByRole('button', { name: /^시작 시간/ }).click()
@@ -190,6 +204,13 @@ test('create form requires login, shows field errors and only offers times that 
   await page.screenshot({ path: shot('create-errors'), fullPage: true })
   await pickTime(page, '10:00')
   await expect(page.locator('.expect')).toContainText('바로 공개될 예정이에요')
+  // PC mouse wheel: one notch over the hour column moves one hour.
+  await page.getByRole('button', { name: /^시작 시간/ }).click()
+  await page.getByRole('listbox', { name: '시', exact: true }).hover()
+  await page.mouse.wheel(0, 120)
+  await expect(page.getByRole('listbox', { name: '시', exact: true }).getByRole('option', { selected: true })).toHaveText('11')
+  await page.getByRole('dialog', { name: '시작 시간 고르기' }).getByRole('button', { name: '완료' }).click()
+  await expect(page.getByRole('button', { name: /^시작 시간/ })).toContainText('오전 11:00')
 
   await page.getByLabel('자주 하는 활동 불러오기').selectOption('공원 플로깅')
   await expect(page.getByLabel(/활동 이름/)).toHaveValue('공원 산책로 함께 걷고 줍기')
@@ -202,14 +223,19 @@ test('create form requires login, shows field errors and only offers times that 
   await page.screenshot({ path: shot('place-dialog') })
   await dialog.getByRole('button', { name: '이 장소로 정하기' }).click()
   await expect(page.getByRole('button', { name: /옥정중앙공원/ })).toContainText('만나는 곳: 정문 안내판 앞')
-  // Supplies: 환경 정화 starts with 장갑 (bring) and 집게·봉투 (provided); add one by hand.
-  const supplies = page.getByRole('group', { name: '준비물', exact: true })
-  await expect(supplies.getByRole('button', { pressed: true })).toHaveText(['장갑', '집게', '봉투'])
-  await supplies.getByRole('button', { name: '물' }).click()
+  // Supplies: 환경 정화 starts with 장갑 (bring) and 집게·봉투 (provided). One supply is in one row only.
+  const bring = page.getByRole('group', { name: '참가자가 챙겨 올 것' })
+  const provided = page.getByRole('group', { name: '모집자가 준비해서 나눠 줄 것' })
+  await expect(bring.getByRole('button', { pressed: true })).toHaveText(['장갑'])
+  await expect(provided.getByRole('button', { pressed: true })).toHaveText(['집게', '봉투'])
+  await bring.getByRole('button', { name: '물' }).click()
+  await provided.getByRole('button', { name: '물' }).click()
+  await expect(bring.getByRole('button', { name: '물' })).toHaveAttribute('aria-pressed', 'false')
+  await bring.getByRole('button', { name: '물' }).click()
+  await expect(provided.getByRole('button', { name: '물' })).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('textbox', { name: '준비물 직접 추가' }).fill('손전등')
   await page.getByRole('button', { name: '추가', exact: true }).click()
-  await expect(supplies.getByRole('button', { name: '손전등' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('group', { name: '모집자가 나눠 주는 것' }).getByRole('button', { pressed: true })).toHaveText(['집게', '봉투'])
+  await expect(bring.getByRole('button', { name: '손전등' })).toHaveAttribute('aria-pressed', 'true')
   await page.getByLabel('활동 유형', { exact: true }).selectOption('INSTITUTION')
   await expect(page.getByRole('button', { name: '활동 등록' })).toBeDisabled()
   await expect(page.locator('.inline-notice')).toContainText('기관 확인이 완료된 기관회원')

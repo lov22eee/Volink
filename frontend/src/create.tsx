@@ -226,7 +226,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
         <div className="field-block"><span className="field-label">일정</span>
           <div className="schedule-cards">
             <div className="schedule-card"><span className="card-head"><Glyph name="calendar" size={15} />날짜와 시작 시간</span>
-              <span className="select-with-icon"><select name="date" aria-label="활동 날짜" value={date} onChange={event => setDate(event.target.value)} {...err('date')}>{dates.map((value, i) => <option key={value} value={value}>{friendlyDate(value)} · {i === 0 ? '내일' : i === 1 ? '모레' : i + 1 + '일 뒤'}</option>)}</select></span>
+              <DatePicker value={date} first={dates[0]} last={dates[dates.length - 1]} today={today} onChange={setDate} invalid={Boolean(errors.date)} />
               <TimeWheel value={start} onChange={setStart} />
             </div>
             <div className="schedule-card"><span className="card-head"><Glyph name="timer" size={15} />활동 시간</span>
@@ -242,22 +242,23 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
         </div>
 
-        <div className="field-block"><span className="field-label">준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
-          <div className="supply-pick" role="group" aria-label="준비물">
-            {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
-              const on = supplies.some(item => item.name === name)
-              return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
-                onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
-            })}
-          </div>
+        <div className="field-block"><span className="field-label">준비물 <span className="field-hint">선택 · 모두 합쳐 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
+          {([[false, '참가자가 챙겨 올 것'], [true, '모집자가 준비해서 나눠 줄 것']] as [boolean, string][]).map(([provided, label]) =>
+            <div key={label} className="supply-row"><span className="supply-row-label">{label}</span>
+              <div className="supply-pick" role="group" aria-label={label}>
+                {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
+                  const item = supplies.find(other => other.name === name)
+                  const on = item?.provided === provided
+                  // One supply sits in one row only: picking it here takes it out of the other row.
+                  return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '') + (provided ? ' provided' : '')} aria-pressed={on} disabled={!item && supplies.length >= maxSupplies}
+                    onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(other => other.name !== name) : item ? supplies.map(other => other.name === name ? { ...other, provided } : other) : [...supplies, { name, provided }]) }}>
+                    <Glyph name={supplyGlyph(name)} size={14} />{name}</button>
+                })}
+              </div></div>)}
           <span className="supply-add"><input aria-label="준비물 직접 추가" value={customSupply} maxLength={10} onChange={event => setCustomSupply(event.target.value)} placeholder="직접 추가 (10자 이내)"
             onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
             <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
               onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
-          {supplies.length > 0 && <><span className="field-hint">그중 모집자가 나눠 주는 것</span>
-            <div className="supply-pick" role="group" aria-label="모집자가 나눠 주는 것">{supplies.map(item =>
-              <button type="button" key={item.name} className={'pick-chip small' + (item.provided ? ' on' : '')} aria-pressed={item.provided}
-                onClick={() => { setSuppliesTouched(true); setSupplies(supplies.map(other => other.name === item.name ? { ...other, provided: !other.provided } : other)) }}>{item.name}</button>)}</div></>}
           {fieldError('supplies')}
         </div>
 
@@ -279,7 +280,8 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <p><Glyph name="pin" size={15} />{place ? place.name + (meetingPoint ? ' · ' + meetingPoint : '') : '장소를 골라 주세요'}</p>
           <p><Glyph name="calendar" size={15} />{friendlyDate(date)} {start} ~ {end}</p>
           <p><Glyph name="users" size={15} />0 / {capacity}명</p>
-          {supplies.length > 0 && <SupplyChips supplies={supplies} />}
+          {supplies.some(item => !item.provided) && <p className="preview-supplies">챙겨 올 것 <SupplyChips supplies={supplies.filter(item => !item.provided)} /></p>}
+          {supplies.some(item => item.provided) && <p className="preview-supplies">모집자가 준비 <SupplyChips supplies={supplies.filter(item => item.provided)} /></p>}
         </article>
         <div className={'expect ' + (reviewReasons.length ? 'review' : 'ok')}>
           <strong><Glyph name={reviewReasons.length ? 'alert' : 'check'} size={16} />{reviewReasons.length ? '관리자 확인 후 공개돼요' : '바로 공개될 예정이에요'}</strong>
@@ -305,11 +307,35 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
   const set = (total: number) => setDraft(toTime(Math.min(Math.max(total, toMinutes(r.earliestStart)), latestStart)))
   const hourOf = (h12: number, afternoon: boolean) => (h12 % 12 + (afternoon ? 12 : 0)) * 60
 
+  // PC mouse wheel / trackpad: one notch moves a column by one item (scroll snapping alone skips or sticks).
+  useEffect(() => {
+    if (!open) return
+    const columns = Array.from(box.current?.querySelectorAll<HTMLElement>('.wheel-col') ?? [])
+    const steps = [720, 60, 10]
+    const pending = columns.map(() => 0)
+    const listeners = columns.map((column, index) => {
+      const listener = (event: WheelEvent) => {
+        event.preventDefault()
+        pending[index] += event.deltaY
+        if (Math.abs(pending[index]) < 40) return
+        const direction = Math.sign(pending[index])
+        pending[index] = 0
+        setDraft(current => toTime(Math.min(Math.max(toMinutes(current) + direction * steps[index], toMinutes(r.earliestStart)), latestStart)))
+      }
+      column.addEventListener('wheel', listener, { passive: false })
+      return listener
+    })
+    return () => columns.forEach((column, index) => column.removeEventListener('wheel', listeners[index]))
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
     document.addEventListener('mousedown', close)
-    box.current?.querySelectorAll<HTMLElement>('.wheel-col [aria-selected="true"]').forEach(item => item.scrollIntoView({ block: 'center' }))
+    box.current?.querySelectorAll<HTMLElement>('.wheel-col [aria-selected="true"]').forEach(item => {
+      const column = item.parentElement as HTMLElement
+      column.scrollTo({ top: item.offsetTop - column.clientHeight / 2 + item.offsetHeight / 2, behavior: 'smooth' })
+    })
     return () => document.removeEventListener('mousedown', close)
   }, [open, draft])
 
@@ -330,6 +356,53 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
         {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0'), total: Math.floor(minutes / 60) * 60 + m, selected: minutes % 60 === m })))}
       </div>
       <div className="wheel-foot"><span>{r.earliestStart} ~ {toTime(latestStart)} · 10분 단위</span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
+    </div>}
+  </div>
+}
+
+/** Date as one field: opens a month calendar. Only tomorrow to 60 days ahead can be picked. */
+function DatePicker({ value, first, last, today, onChange, invalid }: { value: string; first: string; last: string; today: string; onChange: (date: string) => void; invalid: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState(value.slice(0, 7))
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const [y, m] = month.split('-').map(Number)
+  const startWeekday = new Date(Date.UTC(y, m - 1, 1)).getUTCDay()
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const shift = (delta: number) => { const d = new Date(Date.UTC(y, m - 1 + delta, 1)); setMonth(d.toISOString().slice(0, 7)) }
+  const ahead = (date: string) => Math.round((new Date(date + 'T12:00:00Z').getTime() - new Date(today + 'T12:00:00Z').getTime()) / 86_400_000)
+  const relative = (date: string) => { const n = ahead(date); return n === 1 ? '내일' : n === 2 ? '모레' : n + '일 뒤' }
+  return <div className="date-picker" ref={box}>
+    <button type="button" name="date" className={'wheel-field' + (invalid ? ' invalid' : '')} aria-label={'활동 날짜 ' + friendlyDate(value)} aria-expanded={open} aria-describedby={invalid ? 'date-error' : undefined}
+      onClick={() => { setMonth(value.slice(0, 7)); setOpen(!open) }}>
+      <Glyph name="calendar" size={16} /><span>{friendlyDate(value)} <small>· {relative(value)}</small></span><span className="chev"><Glyph name="chevron" size={15} /></span>
+    </button>
+    {open && <div className="calendar-pop" role="dialog" aria-label="날짜 고르기">
+      <div className="calendar-head">
+        <button type="button" className="icon-button" aria-label="이전 달" disabled={month <= first.slice(0, 7)} onClick={() => shift(-1)}><span className="flip"><Glyph name="chevron" size={16} /></span></button>
+        <strong>{y}년 {m}월</strong>
+        <button type="button" className="icon-button" aria-label="다음 달" disabled={month >= last.slice(0, 7)} onClick={() => shift(1)}><span className="turn"><Glyph name="chevron" size={16} /></span></button>
+      </div>
+      <div className="calendar-grid">
+        {['일', '월', '화', '수', '목', '금', '토'].map((name, i) => <span key={name} className={'weekday' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '')}>{name}</span>)}
+        {Array.from({ length: startWeekday }, (_, i) => <span key={'blank' + i} />)}
+        {Array.from({ length: days }, (_, i) => {
+          const date = `${month}-${String(i + 1).padStart(2, '0')}`
+          const weekday = (startWeekday + i) % 7
+          const can = date >= first && date <= last
+          return <button type="button" key={date} data-date={date} disabled={!can} aria-pressed={date === value} aria-label={friendlyDate(date)}
+            className={'day' + (weekday === 0 ? ' sun' : weekday === 6 ? ' sat' : '') + (date === today ? ' today' : '')}
+            onClick={() => { onChange(date); setOpen(false) }}>{i + 1}</button>
+        })}
+      </div>
+      <p className="calendar-foot">내일부터 {r.maxDaysAhead}일 안에서 고를 수 있어요</p>
     </div>}
   </div>
 }

@@ -14,6 +14,11 @@ class VolunteerParsingTest {
         String xxe = "<?xml version=\"1.0\"?><!DOCTYPE r [<!ENTITY x SYSTEM \"file:///etc/passwd\">]><response><body><items><item><a>&x;</a></item></items></body></response>";
         assertThat(DataGoKrVolunteerApi.items(xxe)).isEmpty();
         assertThat(DataGoKrVolunteerApi.items("not xml")).isEmpty();
+        String json = "{\"response\":{\"header\":{\"resultCode\":\"00\"},\"body\":{\"items\":{\"item\":[{\"progrmRegistNo\":\"7\",\"progrmSj\":\"제목\"}]}}}}";
+        assertThat(DataGoKrVolunteerApi.items(json)).hasSize(1).first().satisfies(item -> assertThat(item.get("progrmRegistNo")).isEqualTo("7"));
+        String one = "{\"response\":{\"body\":{\"items\":{\"item\":{\"progrmRegistNo\":\"8\"}}}}}";
+        assertThat(DataGoKrVolunteerApi.items(one)).hasSize(1);
+        assertThat(DataGoKrVolunteerApi.items("SERVICE KEY IS NOT REGISTERED ERROR.")).isEmpty();
     }
 
     @Test
