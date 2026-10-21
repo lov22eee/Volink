@@ -22,6 +22,15 @@ class VolunteerParsingTest {
     }
 
     @Test
+    void decodesKoreanAsUtf8OrTheDeclaredCharset() throws Exception {
+        String xml = "<response><body><items><item><progrmSj>도서관 서가 정리</progrmSj></item></items></body></response>";
+        assertThat(DataGoKrVolunteerApi.items(DataGoKrVolunteerApi.decode(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                .first().satisfies(item -> assertThat(item.get("progrmSj")).isEqualTo("도서관 서가 정리"));
+        String euc = "<?xml version=\"1.0\" encoding=\"EUC-KR\"?>" + xml;
+        assertThat(DataGoKrVolunteerApi.decode(euc.getBytes("EUC-KR"))).contains("도서관 서가 정리");
+    }
+
+    @Test
     void formatsTimesWeekdaysAndStatus() {
         assertThat(VolunteerService.hour("9")).isEqualTo("09:00");
         assertThat(VolunteerService.hour("0930")).isEqualTo("09:30");

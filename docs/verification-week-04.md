@@ -59,3 +59,8 @@
 
 - 배포 서버에서 1365 카드가 보이지 않음 → 원인 후보를 코드에서 막음(Encoding 키 이중 인코딩, 빈 `schSign1`·`keyword` 전송, JSON·글자 응답, 상태 미상 활동 숨김). 실제 원인은 서버 기록(`journalctl -u volink-api | grep 1365`)으로 확인 필요.
 - `./mvnw clean test` 57/57 · Playwright 18/18(달력·준비물 두 줄·마우스 휠 단계 추가) · `npm run ui:export` 통과.
+
+## 4주차 보완 3 · 2026-10-21
+
+- 배포 서버: 1365 46건 수신 확인(사용자 화면 캡처). 한글 깨짐 발견 → UTF-8 해석 수정, V5.3으로 캐시 비움.
+- `./mvnw clean test` **58/58**(한글 UTF-8·EUC-KR 해석 1개 추가) · Playwright **18/18** · `npm run ui:export` 통과.
