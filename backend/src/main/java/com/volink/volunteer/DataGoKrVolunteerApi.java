@@ -101,10 +101,24 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
 
     private String call(String uri, Object... variables) {
         try {
-            return http.get().uri(uri, variables).retrieve().body(String.class);
+            // The gateway sends no charset, and Spring would then read the text as ISO-8859-1 (Korean turns into "ê°..."):
+            // take the bytes and decode them ourselves.
+            return decode(http.get().uri(uri, variables).retrieve().body(byte[].class));
         } catch (RuntimeException error) {
             log.warn("1365 request failed: {}", error.getClass().getSimpleName());
             return null;
+        }
+    }
+
+    /** UTF-8 unless the XML declaration names another encoding (e.g. EUC-KR). */
+    static String decode(byte[] body) {
+        if (body == null) return null;
+        String head = new String(body, 0, Math.min(body.length, 100), StandardCharsets.US_ASCII);
+        java.util.regex.Matcher declared = java.util.regex.Pattern.compile("encoding=[\"']([A-Za-z0-9_-]+)[\"']").matcher(head);
+        try {
+            return new String(body, declared.find() ? java.nio.charset.Charset.forName(declared.group(1)) : StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException unknown) {
+            return new String(body, StandardCharsets.UTF_8);
         }
     }
 

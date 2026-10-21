@@ -127,3 +127,5 @@
 .calendar-grid .day:disabled{color:#cfd5cb}.calendar-grid .day[aria-pressed=true]{background:var(--green);color:#fff;font-weight:700}
 .calendar-grid .day.today::after{content:"";position:absolute;left:50%;bottom:4px;width:4px;height:4px;border-radius:50%;background:#c2562f;transform:translateX(-50%)}
 .calendar-foot{font-size:11px;color:var(--muted);margin:8px 0 0;text-align:center}
+.hit-foot{flex-wrap:wrap}.hit-foot small{flex:1 1 160px;min-width:0}.hit-actions{flex-shrink:0;margin-left:auto}.hit-actions .secondary-button{white-space:nowrap}
+.hit-card h3{overflow-wrap:anywhere}
