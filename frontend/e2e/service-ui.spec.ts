@@ -50,7 +50,7 @@ async function loginAs(page: Page, email: string, secret: string) {
 
 async function signOut(page: Page) {
   await page.getByRole('button', { name: '로그아웃' }).click()
-  await expect(page).toHaveURL(/#\/explore$/)
+  await expect(page).toHaveURL(/#\/home$/)
   await expect(page.getByRole('navigation', { name: '계정 메뉴' }).getByRole('link', { name: '로그인' })).toBeVisible()
 }
 
@@ -107,21 +107,25 @@ function seoulDate(days: number) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))
 }
 
-test('service home renders database examples without presentation or development content', async ({ page }) => {
+test('home shows real counts, recruiting posts and how to take part, then leads to the search', async ({ page }) => {
   await page.goto('/')
+  await expect(page.getByRole('heading', { name: /가까운 곳에서/ })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
+  const { length } = await (await page.request.get('/api/activities')).json()
+  await expect(page.getByRole('region', { name: '지금 모집 현황' })).toContainText(`지금 모집 중인 동네 활동${length}개`)
+  await expect(page.getByRole('region', { name: '참여 방법' }).getByRole('listitem')).toHaveCount(4)
+  await expect(page.getByRole('region', { name: '참여 방법' })).toContainText('1365 활동에만 해당돼요')
+  await expect(page.locator('body')).not.toContainText(developmentCopy)
+  await page.screenshot({ path: shot('home'), fullPage: true })
+  await page.getByRole('link', { name: '내 주변 활동 찾기' }).click()
+  await expect(page).toHaveURL(/#\/explore$/)
   await expect(page.locator(examples)).toHaveCount(3)
   await expect(page.getByText('공원에서 시작하는 작은 변화', { exact: true })).toBeVisible()
-  await expect(page.locator('body')).not.toContainText(developmentCopy)
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(3)
   await expect(page.getByText('예시 활동', { exact: true })).toHaveCount(3)
-  await page.getByRole('button', { name: '주변 활동 살펴보기' }).click()
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
-  await page.screenshot({ path: shot('home'), fullPage: true })
 })
 
 test('search words, time of day and activity type narrow examples and can reset', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/#/explore')
   await expect(page.locator(examples)).toHaveCount(3)
   // Filters live behind the filter icon; the count of active ones shows on it.
   await page.getByRole('button', { name: '필터', exact: true }).click()
@@ -151,7 +155,7 @@ test('search words, time of day and activity type narrow examples and can reset'
 })
 
 test('explore asks for a location once and can be skipped', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/#/explore')
   const ask = page.getByRole('region', { name: '위치 고르기' })
   await expect(ask).toContainText('위치는 찾을 때만 쓰고 저장하지 않아요.')
   await ask.getByRole('button', { name: '지역 직접 고르기' }).click()
@@ -165,7 +169,7 @@ test('explore asks for a location once and can be skipped', async ({ page }) => 
 })
 
 test('standalone detail route shows the planned participation steps without accepting applications', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/#/explore')
   await page.getByRole('link', { name: '공원에서 시작하는 작은 변화 상세 보기' }).click()
   await expect(page).toHaveURL(/#\/activities\/1$/)
   await expect(page.getByRole('heading', { name: '공원에서 시작하는 작은 변화' })).toBeVisible()
@@ -345,7 +349,7 @@ test('signup checks every rule on screen, then creates an institution member wai
 
 test('API failure stays visible, can recover and never uses fabricated fallback data', async ({ page }) => {
   await page.route('**/api/**', route => route.fulfill({ status: 503, body: 'unavailable' }))
-  await page.goto('/')
+  await page.goto('/#/explore')
   await expect(page.getByRole('alert')).toContainText('활동 정보를 불러오지 못했습니다.')
   await expect(page.locator(examples)).toHaveCount(0)
   await page.unroute('**/api/**')
@@ -356,7 +360,7 @@ test('API failure stays visible, can recover and never uses fabricated fallback 
 
 test('all six service screens work on mobile without horizontal overflow or presentation content', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const path of ['explore', 'activities/1', 'create', 'mine', 'login', 'signup']) {
+  for (const path of ['home', 'explore', 'activities/1', 'create', 'mine', 'login', 'signup']) {
     await page.goto('/#/' + path)
     await expect(page.locator('body')).not.toContainText(developmentCopy)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -391,7 +395,7 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.locator('.detail-tags')).toContainText('모집 중')
   await expect(page.locator('.detail-booking')).toContainText('10:00')
-  await page.goto('/')
+  await page.goto('/#/explore')
   await searchFor(page, title)
   const card = page.locator('.activity-card[data-kind="live"]', { hasText: title })
   await expect(card).toBeVisible()
@@ -403,7 +407,7 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await expect(page.getByRole('alert')).toContainText('사다리')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('blocked'), fullPage: true })
-  await page.goto('/')
+  await page.goto('/#/explore')
   await searchFor(page, '사다리 청소 모임')
   await expect(page.getByText('조건에 맞는 활동이 없습니다', { exact: false }).or(page.locator('.activity-card').first())).toBeVisible()
   await expect(page.locator('.activity-card', { hasText: '사다리 청소 모임' })).toHaveCount(0)
@@ -422,7 +426,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await expect(page.getByRole('tabpanel')).toContainText('관리자 검토 중')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('mine'), fullPage: true })
-  await page.goto('/')
+  await page.goto('/#/explore')
   await searchFor(page, title)
   await expect(page.getByText('조건에 맞는 활동이 없습니다', { exact: false }).or(page.locator('.activity-card').first())).toBeVisible()
   await expect(page.locator('.activity-card', { hasText: title })).toHaveCount(0)
@@ -438,7 +442,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await page.screenshot({ path: shot('admin'), fullPage: true })
   await item.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
-  await page.goto('/')
+  await page.goto('/#/explore')
   await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toBeVisible()
 })
@@ -466,7 +470,7 @@ test('an institution member can host an activity only after the admin approves t
   await expect(page.locator('.inline-notice')).toContainText('테스트 기관 이름으로 활동을 엽니다.')
   await page.getByRole('button', { name: '활동 등록' }).click()
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()
-  await page.goto('/')
+  await page.goto('/#/explore')
   await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toContainText('기관 주관 활동')
 })
@@ -498,7 +502,7 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   // About 0.9 km south of the place, so it is inside 1 km and 3 km.
   const nearby = await browser.newContext({ geolocation: { latitude: place.lat - 0.0081, longitude: place.lng }, permissions: ['geolocation'] })
   const visitor = await nearby.newPage()
-  await visitor.goto('http://127.0.0.1:5173/')
+  await visitor.goto('http://127.0.0.1:5173/#/explore')
   await visitor.getByRole('button', { name: '내 위치로 찾기' }).click()
   await expect(visitor.locator('.location-tag')).toContainText('내 위치 기준')
   // Top: map + nearest five. Bottom: every recruiting activity with its distance.
@@ -507,7 +511,6 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   const card = visitor.locator('#all-list + .activity-grid .activity-card').filter({ hasText: title })
   await expect(card.locator('.distance')).toHaveText('0.9km')
   await expect(visitor.locator(examples)).toHaveCount(0)
-  await expect(visitor.getByText('위치는 이번 검색에만 쓰고 저장하지 않습니다.', { exact: false })).toBeVisible()
   await visitor.getByRole('button', { name: '필터', exact: true }).click()
   await visitor.getByLabel('검색 반경').selectOption('1')
   await visitor.getByRole('button', { name: '닫기', exact: true }).click()
@@ -526,7 +529,7 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   // About 4 km away: nothing inside 3 km, so the search widens to 5 km by itself.
   const further = await browser.newContext({ geolocation: { latitude: place.lat - 0.036, longitude: place.lng }, permissions: ['geolocation'] })
   const walker = await further.newPage()
-  await walker.goto('http://127.0.0.1:5173/')
+  await walker.goto('http://127.0.0.1:5173/#/explore')
   await walker.getByRole('button', { name: '내 위치로 찾기' }).click()
   await expect(walker.getByRole('status').filter({ hasText: '넓혔어요' })).toContainText('3km 안에는 없어서 5km까지 넓혔어요')
   await searchFor(walker, title)
@@ -538,7 +541,7 @@ test('admin enters a place coordinate and nearby search shows distance, falling 
   // Location refused: pick an area by name instead (admin-entered places without a Kakao key).
   const refused = await browser.newContext({ permissions: [] })
   const stranger = await refused.newPage()
-  await stranger.goto('http://127.0.0.1:5173/')
+  await stranger.goto('http://127.0.0.1:5173/#/explore')
   const ask = stranger.getByRole('region', { name: '위치 고르기' })
   await ask.getByRole('button', { name: '내 위치로 찾기' }).click()
   await expect(ask.getByRole('status')).toContainText('지역을 직접 골라 주세요.')
@@ -560,7 +563,7 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await page.route('**/api/volunteer-programs**', route => route.fulfill({ json: { enabled: true, region: '경기도 양주시', items: [
     { programNo: 'T1', title: '예시 1365 활동', organization: '예시 기관', place: '예시 장소', field: null, periodStart: seoulDate(3), periodEnd: seoulDate(3), beginTime: '09:00', endTime: '12:00', weekdays: '토', recruitStatus: '모집중', recruitEnd: null, capacity: 4, youthOk: true, latitude: 37.812, longitude: 127.09, distanceKm: 0.2, link: 'https://www.1365.go.kr/' },
   ] } }))
-  await page.goto('http://127.0.0.1:5173/')
+  await page.goto('http://127.0.0.1:5173/#/explore')
   await page.getByRole('button', { name: '내 위치로 찾기' }).click()
   const card = page.getByRole('region', { name: '내 주변' }).locator('.hit-card').filter({ hasText: '예시 1365 활동' })
   const sources = page.getByRole('group', { name: '활동 출처' })
@@ -573,10 +576,13 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await expect(detail).toContainText('예시 기관')
   await expect(detail).toContainText('신청·승인·봉사시간 인정은 1365에서 해요.')
   await expect(detail.getByRole('link', { name: /1365에서 신청하기/ })).toHaveAttribute('href', 'https://www.1365.go.kr/')
-  await detail.getByRole('button', { name: '지도에서 보기' }).click()
+  // 약도: inside the dialog, the address on top, a map below and a link for directions.
+  await detail.getByRole('button', { name: '약도' }).click()
+  const sketch = detail.getByRole('region', { name: '약도' })
+  await expect(sketch).toContainText('예시 장소')
+  await expect(sketch.getByRole('link', { name: /길찾기/ })).toHaveAttribute('href', /^https:\/\/map\.kakao\.com\/link\/to\/.+,37\.812,127\.09$/)
+  await detail.getByRole('button', { name: '닫기' }).click()
   await expect(detail).toHaveCount(0)
-  await expect(page.getByRole('dialog', { name: '예시 1365 활동 미리보기' })).toBeVisible()
-  await page.getByRole('button', { name: '미리보기 닫기' }).click()
   // Hovering a card only highlights its pin: no preview opens, and nothing stays open after the mouse leaves.
   await card.hover()
   await expect(card).toHaveClass(/active/)

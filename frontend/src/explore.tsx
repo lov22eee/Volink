@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, preview } from './api'
 import type { LiveActivity } from './api'
-import { ActivityCard, categories, fromExample, fromLive, Icon, ParkArt } from './App'
+import { ActivityCard, categories, fromExample, fromLive, Icon } from './App'
 import type { CardItem } from './App'
 import type { DisplayCatalog as Catalog } from './data'
 import { createPortal } from 'react-dom'
@@ -22,16 +22,16 @@ export type Program = {
 }
 
 type Source = 'all' | 'local' | '1365'
-type When = 'all' | 'today' | 'week' | 'weekend'
+export type When = 'all' | 'today' | 'week' | 'weekend'
 type Hit = { key: string; source: 'local' | '1365'; title: string; lat: number | null; lng: number | null; distanceKm: number | null; local?: LiveActivity; program?: Program }
 
 const rings = [1, 3, 5, 10, 20]
 /** Remembers only that location was allowed (never the position), so the next visit opens on the map. */
 const REMEMBER = 'volink.nearby'
-const remembered = () => { try { return localStorage.getItem(REMEMBER) === '1' } catch { return false } }
+export const remembered = () => { try { return localStorage.getItem(REMEMBER) === '1' } catch { return false } }
 const remember = (on: boolean) => { try { if (on) localStorage.setItem(REMEMBER, '1'); else localStorage.removeItem(REMEMBER) } catch { /* private mode */ } }
 
-function km(a: Origin, lat: number, lng: number) {
+export function km(a: Origin, lat: number, lng: number) {
   const r = 6371, dLat = (lat - a.lat) * Math.PI / 180, dLng = (lng - a.lng) * Math.PI / 180
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
   return Math.round(2 * r * Math.asin(Math.sqrt(h)) * 10) / 10
@@ -44,7 +44,7 @@ export function travel(km: number) {
   return '차로 ' + Math.round(km / 25 * 60 + 3) + '분'
 }
 
-function range(when: When): { from?: string; to?: string } {
+export function range(when: When): { from?: string; to?: string } {
   const today = seoulDay()
   if (when === 'today') return { from: today, to: today }
   if (when === 'week') return { from: today, to: seoulDay(6) }
@@ -179,10 +179,6 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
 
 
   return <>
-    <section className="hero compact-hero">
-      <div className="hero-copy"><span className="eyebrow"><span className="tiny-dot" />작은 실천, 가까운 연결</span><h1>가까운 곳에서,<br />함께 만드는 <em>변화.</em></h1><p>잠깐의 시간으로 우리 동네를 조금 더 좋게.<br />동네 활동과 1365 봉사활동을 한 번에 찾아보세요.</p><button className="primary-button" onClick={() => document.getElementById('activities')?.scrollIntoView()}>주변 활동 살펴보기 <Icon name="arrow" size={18} /></button><span className="hero-note">2–10명 함께 · 3시간 이내</span></div>
-      <div className="hero-art"><ParkArt /><div className="floating-note"><span className="floating-icon"><Icon name="leaf" /></span><div><strong>혼자보다, 함께.</strong><span>우리 동네에 변화를 남겨요</span></div></div></div>
-    </section>
     <section id="activities" className="activity-section">
       <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div>
         {!preview && <span className="location-tag"><Glyph name="pin" size={16} />{origin ? origin.label + ' 기준 ' + shownRadius + 'km' : '위치 미정'}{origin && <button className="text-button" onClick={() => { setAsking(true); setOrigin(null) }}>바꾸기</button>}</span>}
@@ -190,7 +186,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
 
       {asking && !origin && <LocationAsk locating={locating} notice={notice} onLocate={locate} onPick={picked => { setAsking(false); setNotice(''); setOrigin(picked) }} onSkip={() => setAsking(false)} />}
 
-      <div className="finder panel">
+      <div className="finder">
         <div className="finder-bar">
           {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
             <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{value === 'all' ? inside.length : inside.filter(hit => hit.source === value).length}</small></button>)}</div>
@@ -218,7 +214,6 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           <input aria-label="활동 검색" autoFocus value={query} maxLength={50} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false) } }} placeholder="플로깅, 도서관, 어르신… 치는 대로 찾아요" />
           {query && <button type="button" className="icon-button" aria-label="검색어 지우기" onClick={() => setQuery('')}><Glyph name="close" size={16} /></button>}</div>}
       </div>
-      {origin && <p className="small-print location-note">위치는 이번 검색에만 쓰고 저장하지 않습니다.{programsOn ? ' 1365 활동은 행정안전부 공공데이터를 몇 시간마다 받아와 보여주며, 신청과 최신 모집 상태는 1365에서 확인해 주세요.' : ''}</p>}
 
       {origin ? <>
         <section className="panel nearby-panel" aria-label="내 주변">
@@ -257,8 +252,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
               <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
             : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}</>}
     </section>
-    {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)}
-      onShowOnMap={() => { setSelected('p' + programDetail.programNo); setProgramDetail(null); document.querySelector('.explore-map')?.scrollIntoView({ block: 'center' }) }} />}
+    {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)} />}
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
   </>
 }
@@ -316,9 +310,9 @@ function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean
     const card = fromLive(a)
     return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
       <div className="hit-tags"><span className="source local">동네 활동</span><span className="tag">{a.category}</span>{Number(a.startTime.slice(0, 2)) < 12 ? <span className="tag">오전</span> : <span className="tag">오후</span>}</div>
-      <h3>{a.title}</h3>
-      <p><Glyph name="pin" size={14} />{card.placeName} {distance}</p>
-      <p><Glyph name="calendar" size={14} />{card.date.slice(5).replace('-', '/')} {a.startTime} · {a.durationMinutes}분 · <Glyph name="users" size={14} />{a.confirmed} / {a.capacity}명</p>
+      <h3 title={a.title}>{a.title}</h3>
+      <p><Glyph name="pin" size={14} /><span className="clip">{card.placeName}</span>{distance}</p>
+      <p><Glyph name="calendar" size={14} /><span className="clip">{card.date.slice(5).replace('-', '/')} {a.startTime} · {a.durationMinutes}분 · {a.confirmed} / {a.capacity}명</span></p>
       {a.supplies && a.supplies.length > 0 && <SupplyChips supplies={a.supplies} limit={2} />}
       <div className="hit-foot"><small>공식 봉사실적·보험 없음</small><a className="primary-button small" href={card.href}>자세히 보기 <Glyph name="arrow" size={14} /></a></div>
     </article>
@@ -326,9 +320,9 @@ function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean
   const p = hit.program!
   return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
     <div className="hit-tags"><span className="source program">1365 활동</span>{p.youthOk && <span className="tag">청소년 가능</span>}{p.recruitStatus && <span className="tag">{p.recruitStatus}</span>}</div>
-    <h3>{p.title}</h3>
-    <p><Glyph name="pin" size={14} />{p.place ?? '장소 정보 없음'} {distance}</p>
-    <p><Glyph name="calendar" size={14} />{when1365(p) || '일정은 1365에서 확인'}</p>
+    <h3 title={p.title}>{p.title}</h3>
+    <p><Glyph name="pin" size={14} /><span className="clip">{p.place ?? '장소 정보 없음'}</span>{distance}</p>
+    <p><Glyph name="calendar" size={14} /><span className="clip">{when1365(p) || '일정은 1365에서 확인'}</span></p>
     <div className="hit-foot"><small>모집: {p.organization ?? '1365'} · 실적 인정은 1365 기준</small><span className="hit-actions">{onDetail && <button className="secondary-button small" onClick={() => onDetail(p)}>자세히</button>}<a className="link-out" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청 <Glyph name="external" size={14} /></a></span></div>
   </article>
 }
@@ -341,7 +335,8 @@ function PreviewSheet({ hit, onClose, onDetail }: { hit: Hit; onClose: () => voi
 }
 
 /** 1365 program summary inside Volink. Applying, approval and hours all happen on 1365; nothing is sent from here. */
-function ProgramDialog({ program: p, onClose, onShowOnMap }: { program: Program; onClose: () => void; onShowOnMap: () => void }) {
+function ProgramDialog({ program: p, onClose }: { program: Program; onClose: () => void }) {
+  const [mapOpen, setMapOpen] = useState(false)
   const [copied, setCopied] = useState('')
   useEffect(() => {
     const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
@@ -361,13 +356,38 @@ function ProgramDialog({ program: p, onClose, onShowOnMap }: { program: Program;
       <p className="program-note"><Glyph name="info" size={16} />신청·승인·봉사시간 인정은 1365에서 해요. 1365 로그인이 필요하고, Volink는 내 정보를 1365에 보내지 않아요.</p>
       <div className="button-row program-actions">
         <a className="apply-1365" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청하기 <Glyph name="external" size={16} /></a>
-        {p.latitude != null && <button type="button" className="secondary-button" onClick={onShowOnMap}><Glyph name="map" size={16} />지도에서 보기</button>}
+        {p.latitude != null && <button type="button" className="secondary-button" aria-expanded={mapOpen} onClick={() => setMapOpen(!mapOpen)}><Glyph name="map" size={16} />약도</button>}
         <button type="button" className="secondary-button" onClick={() => navigator.clipboard?.writeText(p.link).then(() => setCopied('링크를 복사했어요.'), () => setCopied('복사하지 못했어요. 신청 버튼을 눌러 주세요.'))}><Glyph name="link" size={16} />링크 복사</button>
       </div>
+      {mapOpen && p.latitude != null && <section className="sketch-map" aria-label="약도">
+        <p className="sketch-address"><Glyph name="pin" size={16} /><span><strong>{p.place ?? '장소'}</strong>{p.organization ? <small>모집 기관: {p.organization}</small> : null}</span>
+          <a className="secondary-button small" href={`https://map.kakao.com/link/to/${encodeURIComponent(p.place ?? p.title)},${p.latitude},${p.longitude}`} target="_blank" rel="noopener noreferrer">길찾기 <Glyph name="external" size={14} /></a></p>
+        <MiniMap lat={Number(p.latitude)} lng={Number(p.longitude)} label={p.place ?? p.title} />
+        <p className="small-print">위치는 장소 이름으로 찾은 대략적인 위치예요. 정확한 만남 장소는 1365 상세에서 확인해 주세요.</p>
+      </section>}
       {copied && <p className="small-print" role="status">{copied}</p>}
       <p className="small-print">정보 출처: 행정안전부 공공데이터(1365) · 몇 시간마다 갱신 · 최신 모집 상태는 1365에서 확인해 주세요.</p>
     </div>
   </div>, document.body)
+}
+
+/** Small fixed map with one marker for the 1365 dialog. Without a map key: a note instead of a fake map. */
+function MiniMap({ lat, lng, label }: { lat: number; lng: number; label: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(!kakaoEnabled)
+  useEffect(() => {
+    if (!kakaoEnabled) return
+    let cancelled = false
+    loadKakao().then(kakao => {
+      if (cancelled || !box.current) return
+      const position = new kakao.maps.LatLng(lat, lng)
+      const map = new kakao.maps.Map(box.current, { center: position, level: 3 })
+      new kakao.maps.Marker({ map, position, title: label })
+    }).catch(() => setFailed(true))
+    return () => { cancelled = true }
+  }, [lat, lng, label])
+  if (failed) return <div className="mini-map empty"><Glyph name="map" size={24} /><span>지도 키가 없어 약도를 그릴 수 없어요. 길찾기로 확인해 주세요.</span></div>
+  return <div ref={box} className="mini-map" role="img" aria-label={label + ' 약도'} />
 }
 
 /** "You are here": a dot with a white ring, a soft pulse and a label (drawn by Kakao as an overlay). */
