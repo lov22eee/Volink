@@ -140,7 +140,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
     }, () => { setLocating(false); remember(false); setAsking(true); setNotice('위치를 확인하지 못했습니다. 지역을 직접 골라 주세요.') }, { timeout: 8000, maximumAge: 60000 })
   }
 
-  const hits = useMemo<Hit[]>(() => {
+  // Every hit for the current filters; the source tabs only narrow what is shown, so their counts never hide each other.
+  const allHits = useMemo<Hit[]>(() => {
     const filterProgram = (program: Program) => {
       if (category !== '전체' || kind === 'INSTITUTION' || kind === 'GENERAL') return false
       if (when !== 'all' || part) {
@@ -152,14 +153,17 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       return true
     }
     return [
-      ...(source === '1365' ? [] : live.map(activity => ({ key: 'a' + activity.id, source: 'local' as const, title: activity.title, lat: activity.latitude ?? null, lng: activity.longitude ?? null, distanceKm: activity.distanceKm ?? null, local: activity }))),
-      ...(source === 'local' ? [] : programs.filter(filterProgram).map(program => ({ key: 'p' + program.programNo, source: '1365' as const, title: program.title, lat: program.latitude, lng: program.longitude, distanceKm: program.distanceKm, program }))),
+      ...live.map(activity => ({ key: 'a' + activity.id, source: 'local' as const, title: activity.title, lat: activity.latitude ?? null, lng: activity.longitude ?? null, distanceKm: activity.distanceKm ?? null, local: activity })),
+      ...programs.filter(filterProgram).map(program => ({ key: 'p' + program.programNo, source: '1365' as const, title: program.title, lat: program.latitude, lng: program.longitude, distanceKm: program.distanceKm, program })),
     ].sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999))
-  }, [live, programs, source, category, kind, when, part])
+  }, [live, programs, category, kind, when, part])
+  const hits = source === 'all' ? allHits : allHits.filter(hit => hit.source === source)
 
   // Widen by itself when nothing is inside the chosen radius.
-  const shownRadius = origin ? rings.find(ring => ring >= radius && hits.some(hit => hit.distanceKm != null && hit.distanceKm <= ring)) ?? radius : radius
-  const inside = origin ? hits.filter(hit => hit.distanceKm == null || hit.distanceKm <= shownRadius) : hits
+  const radiusFor = (list: Hit[]) => origin ? rings.find(ring => ring >= radius && list.some(hit => hit.distanceKm != null && hit.distanceKm <= ring)) ?? radius : radius
+  const near = (list: Hit[]) => { const ring = radiusFor(list); return origin ? list.filter(hit => hit.distanceKm == null || hit.distanceKm <= ring) : list }
+  const shownRadius = radiusFor(hits)
+  const inside = near(hits)
   const widened = origin && shownRadius > radius
   const examples = !origin && catalog ? catalog.activities.map(activity => fromExample(activity, catalog.baseDate)) : []
   const { from, to } = range(when)
@@ -189,7 +193,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       <div className="finder">
         <div className="finder-bar">
           {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
-            <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{value === 'all' ? inside.length : inside.filter(hit => hit.source === value).length}</small></button>)}</div>
+            <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{near(value === 'all' ? allHits : allHits.filter(hit => hit.source === value)).length}</small></button>)}</div>
             : <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '모집 중인 활동'}</span>}
           <div className="finder-tools">
             {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}

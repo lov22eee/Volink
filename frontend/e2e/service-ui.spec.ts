@@ -591,6 +591,9 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await expect(page.getByRole('dialog', { name: /미리보기/ })).toHaveCount(0)
   await sources.getByRole('button', { name: /동네 활동/ }).click()
   await expect(card).toHaveCount(0)
+  // Picking one source must not zero the other tab's count.
+  await expect(sources.getByRole('button', { name: /1365 활동/ }).locator('small')).toHaveText('1')
+  await expect(sources.getByRole('button', { name: /전체/ }).locator('small')).not.toHaveText('0')
   await sources.getByRole('button', { name: /1365 활동/ }).click()
   await expect(card).toHaveCount(1)
   await expect(page.locator('.hit-card .source.local')).toHaveCount(0)
