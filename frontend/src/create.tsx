@@ -231,7 +231,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
               <TimeWheel value={start} onChange={setStart} />
             </div>
             <div className="schedule-card"><span className="card-head"><Glyph name="timer" size={15} />활동 시간</span>
-              <span className="select-with-icon"><select name="duration" aria-label="활동 시간" value={duration} onChange={event => setDuration(Number(event.target.value))}>{durations.map(value => <option key={value} value={value}>{durationLabel(value)} · {toTime(toMinutes(start) + value)} 종료</option>)}</select></span>
+              <DurationWheel value={duration} start={start} options={durations} onChange={setDuration} />
               <span className="end-line"><Glyph name="clock" size={15} />{r.latestEnd} 전에 끝나는 시간만 보여요</span>
             </div>
           </div>
@@ -352,6 +352,69 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
         {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0'), total: Math.floor(minutes / 60) * 60 + m, selected: minutes % 60 === m })))}
       </div>
       <div className="wheel-foot"><span>{r.earliestStart} ~ {toTime(latestStart)} · 10분 단위</span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
+    </div>}
+  </div>
+}
+
+/** Activity length like the start-time wheel: hours and minutes, with the end time. Only lengths ending by 22:00 can be picked. */
+function DurationWheel({ value, start, options, onChange }: { value: number; start: string; options: number[]; onChange: (minutes: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const box = useRef<HTMLDivElement>(null)
+  const allowed = (total: number) => options.includes(total)
+  const first = options[0] ?? r.durationMin, last = options[options.length - 1] ?? r.durationMin
+  const clamp = (total: number) => Math.min(Math.max(total, first), last)
+  const endOf = (minutes: number) => toTime(toMinutes(start) + minutes)
+
+  // PC mouse wheel: one notch moves a column by one item (an hour or 10 minutes).
+  useEffect(() => {
+    if (!open) return
+    const columns = Array.from(box.current?.querySelectorAll<HTMLElement>('.wheel-col') ?? [])
+    const steps = [60, 10]
+    const pending = columns.map(() => 0)
+    const listeners = columns.map((column, index) => {
+      const listener = (event: WheelEvent) => {
+        event.preventDefault()
+        pending[index] += event.deltaY
+        if (Math.abs(pending[index]) < 40) return
+        const direction = Math.sign(pending[index])
+        pending[index] = 0
+        setDraft(current => clamp(current + direction * steps[index]))
+      }
+      column.addEventListener('wheel', listener, { passive: false })
+      return listener
+    })
+    return () => columns.forEach((column, index) => column.removeEventListener('wheel', listeners[index]))
+  }, [open, first, last])
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    box.current?.querySelectorAll<HTMLElement>('.wheel-col [aria-selected="true"]').forEach(item => {
+      const column = item.parentElement as HTMLElement
+      column.scrollTo({ top: item.offsetTop - column.clientHeight / 2 + item.offsetHeight / 2, behavior: 'smooth' })
+    })
+    return () => document.removeEventListener('mousedown', close)
+  }, [open, draft])
+
+  const hours = [0, 1, 2, 3]
+  // An hour keeps the chosen minutes when it can, otherwise the closest allowed length in that hour.
+  const inHour = (h: number) => allowed(h * 60 + draft % 60) ? h * 60 + draft % 60 : options.filter(minutes => Math.floor(minutes / 60) === h).sort((a, b) => Math.abs(a % 60 - draft % 60) - Math.abs(b % 60 - draft % 60))[0] ?? -1
+  const column = (label: string, items: { key: string; text: string; total: number; selected: boolean }[]) =>
+    <div className="wheel-col" role="listbox" aria-label={label}>{items.map(item =>
+      <button type="button" role="option" key={item.key} aria-selected={item.selected} disabled={!allowed(item.total)} onClick={() => setDraft(item.total)}>{item.text}</button>)}</div>
+
+  return <div className="time-wheel" ref={box}>
+    <button type="button" name="duration" className="wheel-field" aria-label={'활동 시간 ' + durationLabel(value) + ' · ' + endOf(value) + ' 종료'} aria-expanded={open} onClick={() => { setDraft(value); setOpen(!open) }}>
+      <Glyph name="timer" size={16} /><span>{durationLabel(value)} <small>· {endOf(value)} 종료</small></span><span className="chev"><Glyph name="chevron" size={15} /></span>
+    </button>
+    {open && <div className="wheel-pop" role="dialog" aria-label="활동 시간 고르기">
+      <div className="wheels two"><span className="wheel-band" />
+        {column('시간', hours.map(h => ({ key: 'h' + h, text: h + '시간', total: inHour(h), selected: Math.floor(draft / 60) === h })))}
+        {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0') + '분', total: Math.floor(draft / 60) * 60 + m, selected: draft % 60 === m })))}
+      </div>
+      <div className="wheel-foot"><span>{start} 시작 → <strong>{endOf(draft)} 종료</strong></span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
     </div>}
   </div>
 }
