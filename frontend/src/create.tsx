@@ -5,9 +5,10 @@ import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import type { LiveActivity, User } from './api'
 import { categories, LoginRequired, PageHeading } from './App'
-import { Glyph, SupplyChips, supplyGlyph } from './icons'
+import { Glyph, supplyGlyph } from './icons'
+import type { GlyphName } from './icons'
 import type { Supply } from './icons'
-import { classBadge, PlaceField } from './placePicker'
+import { PlaceField } from './placePicker'
 import type { PlaceResult } from './placePicker'
 import { activityRules } from './rules'
 import type { Errors } from './rules'
@@ -33,6 +34,37 @@ function friendlyDate(date: string) {
   return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(date + 'T12:00:00+09:00'))
 }
 
+type WordHit = { keyword: string; level: 'BLOCKED' | 'REVIEW'; reason: string }
+type WordCheck = { title: WordHit[]; description: WordHit[]; supplies: WordHit[] }
+type FieldStatus = { level: 'BLOCKED' | 'REVIEW'; reasons: string[] }
+const safetyText = '높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없어요. 어르신·아이 돌봄 같은 활동, 어떤 곳인지 알 수 없는 장소, 해가 진 뒤 끝나는 활동은 관리자가 확인한 뒤 공개돼요.'
+
+/** Risk words of one field → the strongest level, with each word and why. */
+function fromWords(hits: WordHit[]): FieldStatus | null {
+  if (!hits.length) return null
+  const blocked = hits.filter(hit => hit.level === 'BLOCKED')
+  const shown = blocked.length ? blocked : hits
+  return { level: blocked.length ? 'BLOCKED' : 'REVIEW', reasons: shown.map(hit => `‘${hit.keyword}’ · ${hit.reason}`) }
+}
+
+/** Under a field: (!) 검토 후 승인 예정이에요 / (⊘) 모집을 올릴 수 없어요. Pointing at (or focusing) the icon shows why. */
+function FieldRisk({ field, status }: { field: string; status: FieldStatus | null }) {
+  if (!status) return null
+  const blocked = status.level === 'BLOCKED'
+  const id = 'risk-' + field.replace(/\s/g, '')
+  return <span className={'field-risk ' + (blocked ? 'blocked' : 'review')}>
+    <span className="risk-tip" tabIndex={0} role="button" aria-label={blocked ? '올릴 수 없는 이유' : '검토 이유'} data-field={field} aria-describedby={id}>
+      <Glyph name={blocked ? 'ban' : 'notice'} size={16} />
+      <span className="risk-bubble" role="tooltip" id={id}>
+        {blocked && <strong>안전하게 함께해요</strong>}
+        {status.reasons.map(reason => <span key={reason}>{reason}</span>)}
+        {blocked && <span className="risk-safety">{safetyText}</span>}
+      </span>
+    </span>
+    {blocked ? '모집을 올릴 수 없어요.' : '검토 후 승인 예정이에요.'}
+  </span>
+}
+
 export function durationLabel(minutes: number) {
   const h = Math.floor(minutes / 60), m = minutes % 60
   return (h ? h + '시간' : '') + (h && m ? ' ' : '') + (m ? m + '분' : '')
@@ -53,12 +85,6 @@ export function durationsFor(start: string) {
 
 const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 신발']
 const maxSupplies = 6
-/** Starting supplies per field until the person changes them. */
-const suppliesFor: Record<string, Supply[]> = {
-  '환경 정화': [{ name: '장갑', provided: false }, { name: '편한 신발', provided: false }],
-  '생활 지원': [{ name: '장갑', provided: false }],
-  '지역 돌봄': [],
-}
 
 const templates = [
   { name: '공원 플로깅', title: '공원 산책로 함께 걷고 줍기', category: '환경 정화', duration: 90, description: '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
@@ -81,10 +107,9 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   const [capacity, setCapacity] = useState(6)
   const [description, setDescription] = useState('')
   const [safety, setSafety] = useState(false)
-  const [supplies, setSupplies] = useState<Supply[]>(suppliesFor[categories[0]])
-  const [suppliesTouched, setSuppliesTouched] = useState(false)
+  // Nothing is ticked at first: the organizer turns on what people should bring.
+  const [supplies, setSupplies] = useState<Supply[]>([])
   const [customSupply, setCustomSupply] = useState('')
-  useEffect(() => { if (!suppliesTouched) setSupplies(suppliesFor[category] ?? []) }, [category, suppliesTouched])
   const [errors, setErrors] = useState<Errors>({})
   const [blocked, setBlocked] = useState('')
   const [message, setMessage] = useState('')
@@ -97,7 +122,6 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   useEffect(() => {
     if (!editId || !user) return
     api<LiveActivity>('/api/activities/' + editId).then(a => {
-      setSuppliesTouched(true)
       setEditing(a); setKind(a.activityType); setTitle(a.title); setCategory(a.category); setMeetingPoint(a.meetingPoint ?? '')
       setPlace({ placeId: a.placeId ?? undefined, name: a.placeName ?? '', address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null,
         distanceMeters: null, placeClass: 'OPEN', classLabel: '지금 장소' })
@@ -113,11 +137,29 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   const end = toTime(toMinutes(start) + duration)
   const dates = useMemo(() => Array.from({ length: r.maxDaysAhead }, (_, i) => addDays(today, i + 1)), [today])
   const afterSunset = toMinutes(end) > toMinutes(sunset[Number(date.slice(5, 7)) - 1])
-  const reviewReasons = [
-    place?.placeClass === 'REVIEW' && '장소: ' + place.classLabel,
-    afterSunset && '해가 진 뒤(' + sunset[Number(date.slice(5, 7)) - 1] + ' 이후) 끝나요',
-    category === '지역 돌봄' && '지역 돌봄 분야',
-  ].filter(Boolean) as string[]
+  // Per-field status shown under each field: risk words come from the server while typing (nothing is saved).
+  const [words, setWords] = useState<WordCheck>({ title: [], description: [], supplies: [] })
+  const supplyNames = supplies.map(item => item.name).join('|')
+  useEffect(() => {
+    if (preview || !user) return
+    let current = true
+    const timer = setTimeout(() => {
+      api<WordCheck>('/api/activities/check', 'POST', { title, description, supplies: supplyNames ? supplyNames.split('|') : [] })
+        .then(found => { if (current) setWords(found) }).catch(() => undefined)
+    }, 400)
+    return () => { current = false; clearTimeout(timer) }
+  }, [title, description, supplyNames, user])
+  const status = {
+    title: fromWords(words.title),
+    category: category === '지역 돌봄' ? { level: 'REVIEW', reasons: ['지역 돌봄 분야는 만나는 분이 누구인지 관리자가 확인해요.'] } as FieldStatus : null,
+    place: place?.placeClass === 'REVIEW' ? { level: 'REVIEW', reasons: ['지도에서 어떤 곳인지 알 수 없는 장소라 관리자가 확인해요.'] } as FieldStatus : null,
+    schedule: afterSunset ? { level: 'REVIEW', reasons: ['해가 진 뒤(' + sunset[Number(date.slice(5, 7)) - 1] + ' 이후) 끝나는 활동은 관리자가 확인해요.'] } as FieldStatus : null,
+    description: fromWords(words.description),
+    supplies: fromWords(words.supplies),
+  }
+  const statuses = Object.values(status).filter(Boolean) as FieldStatus[]
+  const willBlock = statuses.some(item => item.level === 'BLOCKED')
+  const willReview = statuses.some(item => item.level === 'REVIEW')
 
   function validate(): Errors {
     const found: Errors = {}
@@ -204,25 +246,31 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   const fieldError = (name: string) => errors[name] ? <span id={name + '-error'} className="field-error">{errors[name]}</span> : null
   return <>
     {heading}
-    <div className="create-layout">
+    <div className="create-layout single">
       <form className="panel activity-form create-form" noValidate onSubmit={submit} onChange={() => { setMessage(''); setBlocked('') }}>
         <div className="form-title"><h2>활동 정보</h2>
           <label className="template-pick"><Glyph name="bolt" size={15} /><select aria-label="자주 하는 활동 불러오기" value="" onChange={event => {
             const picked = templates.find(item => item.name === event.target.value)
-            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setSuppliesTouched(false); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
+            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
           }}><option value="">자주 하는 활동 불러오기</option>{templates.map(item => <option key={item.name}>{item.name}</option>)}</select></label></div>
 
-        <label>활동 이름<span className="input-with-count"><input name="title" value={title} maxLength={r.titleMax} onChange={event => setTitle(event.target.value)} placeholder="예: 공원 산책로 함께 걷고 줍기" {...err('title')} /><small>{title.trim().length} / {r.titleMax}</small></span>{fieldError('title')}</label>
+        <label>활동 이름<span className="input-with-count"><input name="title" value={title} maxLength={r.titleMax} onChange={event => setTitle(event.target.value)} placeholder="예: 공원 산책로 함께 걷고 줍기" {...err('title')} /><small>{title.trim().length} / {r.titleMax}</small></span>{fieldError('title')}<FieldRisk field="활동 이름" status={status.title} /></label>
 
         <div className="form-row">
-          <label>분야<span className="select-with-icon"><Glyph name="leaf" size={16} /><select name="category" aria-label="분야" value={category} onChange={event => setCategory(event.target.value)}>{categories.map(value => <option key={value}>{value}</option>)}</select></span></label>
+          <div className="field-block"><span className="field-label">분야</span>
+            <ChoiceField name="category" label="분야" icon="leaf" value={category} onChange={setCategory}
+              options={categories.map(value => ({ value, text: value, icon: categoryGlyph[value] ?? 'leaf', hint: categoryHint[value] }))} />
+            <FieldRisk field="분야" status={status.category} /></div>
           {/* Only institution members choose; a personal account always opens 자율 활동. */}
-          {user?.memberType === 'INSTITUTION' && <label>활동 유형<span className="select-with-icon"><Glyph name="hand" size={16} /><select name="activityType" aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value as 'GENERAL' | 'INSTITUTION')}><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></span></label>}
+          {user?.memberType === 'INSTITUTION' && <div className="field-block"><span className="field-label">활동 유형</span>
+            <ChoiceField name="activityType" label="활동 유형" icon="hand" value={kind} onChange={value => setKind(value as 'GENERAL' | 'INSTITUTION')}
+              options={[{ value: 'GENERAL', text: '자율 활동', icon: 'users', hint: '내 이름으로 열어요' }, { value: 'INSTITUTION', text: '기관 주관 활동', icon: 'building', hint: '확인된 기관 이름으로 열어요' }]} /></div>}
         </div>
         {kind === 'INSTITUTION' && <p className="inline-notice">{canHost ? organization?.name + ' 이름으로 활동을 엽니다.' : organization?.status === 'PENDING' ? '기관 확인을 기다리고 있습니다. 관리자 확인이 끝나면 기관 주관 활동을 열 수 있습니다.' : '기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다.'}</p>}
 
         <PlaceField value={place} meetingPoint={meetingPoint} error={errors.place} onChange={(picked, meeting) => { setPlace(picked); setMeetingPoint(meeting); setErrors(({ place: _, ...rest }) => rest) }} />
         {fieldError('meetingPoint')}
+        <FieldRisk field="장소" status={status.place} />
 
         <div className="field-block"><span className="field-label">일정</span>
           <div className="schedule-cards">
@@ -235,58 +283,47 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
               <span className="end-line"><Glyph name="clock" size={15} />{r.latestEnd} 전에 끝나는 시간만 보여요</span>
             </div>
           </div>
-          <span className="schedule-summary"><Glyph name={afterSunset ? 'alert' : 'sun'} size={15} /><strong>{friendlyDate(date)} {start} ~ {end}</strong>{afterSunset ? ' · 해가 진 뒤 끝나서 관리자가 확인해요' : ' · 해 지기 전에 끝나요'}</span>
+          <span className="schedule-summary"><Glyph name="sun" size={15} /><strong>{friendlyDate(date)} {start} ~ {end}</strong>{afterSunset ? '' : ' · 해 지기 전에 끝나요'}</span>
           {fieldError('date')}{fieldError('time')}{fieldError('duration')}
+          <FieldRisk field="일정" status={status.schedule} />
         </div>
 
         <div className="form-row">
-          <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
+          <div className="field-block"><span className="field-label">모집 정원 <span className="field-hint">나를 빼고 · 나 포함 최대 {r.capacityMax + 1}명</span></span>
+            <ChoiceField name="capacity" label="모집 정원" icon="users" value={String(capacity)} onChange={value => setCapacity(Number(value))} grid
+              display={value => value + '명 · 나 포함 ' + (Number(value) + 1) + '명'}
+              options={Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => ({ value: String(value), text: value + '명' }))} />
+            {fieldError('capacity')}</div>
         </div>
 
 
-        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}</label>
+        <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}<FieldRisk field="활동 소개" status={status.description} /></label>
 
         <div className="field-block"><span className="field-label">챙겨 올 준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
           <div className="supply-pick" role="group" aria-label="챙겨 올 준비물">
             {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
               const on = supplies.some(item => item.name === name)
               return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
-                onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
+                onClick={() => { setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
             })}
           </div>
           <span className="supply-add"><input aria-label="준비물 직접 추가" value={customSupply} maxLength={10} onChange={event => setCustomSupply(event.target.value)} placeholder="직접 추가 (10자 이내)"
             onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
             <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
-              onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
+              onClick={() => { setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
           {fieldError('supplies')}
+          <FieldRisk field="준비물" status={status.supplies} />
         </div>
 
         <label className="check-line"><input type="checkbox" name="safety" checked={safety} onChange={event => setSafety(event.target.checked)} {...err('safety')} />공공장소의 저위험 활동이며, 공식 봉사실적·자원봉사 종합보험이 적용되지 않음을 확인합니다</label>
         {fieldError('safety')}
         {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
         {blocked && <div className="form-alert blocked" role="alert"><strong>등록할 수 없는 활동입니다.</strong><span>{blocked}</span><span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금 등은 열 수 없습니다.</span></div>}
-        <button className="primary-button" type="submit" disabled={busy || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
+        {!willBlock && !willReview && <p className="field-risk ok" role="status"><Glyph name="check" size={16} />바로 공개될 예정이에요.</p>}
+        <button className="primary-button" type="submit" disabled={busy || willBlock || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
         {message && <p role="status" className="success-message">{message}</p>}
       </form>
 
-      <aside className="create-aside">
-        <span className="aside-label">미리보기</span>
-        <article className="preview-card">
-          <span className="category-label">{category} · {kind === 'INSTITUTION' ? '기관 주관 활동' : '자율 활동'}</span>
-          <h3>{title.trim() || '활동 이름'}</h3>
-          <p><Glyph name="pin" size={15} />{place ? place.name + (meetingPoint ? ' · ' + meetingPoint : '') : '장소를 골라 주세요'}</p>
-          <p><Glyph name="calendar" size={15} />{friendlyDate(date)} {start} ~ {end}</p>
-          <p><Glyph name="users" size={15} />0 / {capacity}명</p>
-          {supplies.length > 0 && <p className="preview-supplies">챙겨 올 것 <SupplyChips supplies={supplies} /></p>}
-        </article>
-        <div className={'expect ' + (reviewReasons.length ? 'review' : 'ok')}>
-          <strong><Glyph name={reviewReasons.length ? 'alert' : 'check'} size={16} />{reviewReasons.length ? '관리자 확인 후 공개돼요' : '바로 공개될 예정이에요'}</strong>
-          <span>{reviewReasons.length ? reviewReasons.join(' · ') : (place ? '장소: ' + place.classLabel + ' · ' : '') + '해 지기 전 종료'}</span>
-          <small>위험한 단어가 있는지는 등록할 때 한 번 더 확인합니다.</small>
-        </div>
-        {place && <p className="small-print">장소 분류: {place.classLabel} · {classBadge[place.placeClass].text}</p>}
-        <div className="help-card"><h3>안전하게 함께해요</h3><p>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없습니다. 어르신·아이 돌봄 같은 활동, 지도에서 종류를 알 수 없는 장소, 해가 진 뒤 끝나는 활동은 확인 후 공개됩니다.</p></div>
-      </aside>
     </div>
   </>
 }
@@ -352,6 +389,42 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
         {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0'), total: Math.floor(minutes / 60) * 60 + m, selected: minutes % 60 === m })))}
       </div>
       <div className="wheel-foot"><span>{r.earliestStart} ~ {toTime(latestStart)} · 10분 단위</span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
+    </div>}
+  </div>
+}
+
+const categoryGlyph: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
+const categoryHint: Record<string, string> = { '환경 정화': '공원·거리 정리, 화단 가꾸기', '생활 지원': '나눔 장터, 물품 정리 돕기', '지역 돌봄': '이웃과 함께하는 활동 · 관리자 확인 후 공개' }
+
+type Choice = { value: string; text: string; icon?: GlyphName; hint?: string }
+
+/** A field that opens a small panel of choices, styled like the date and time fields (instead of a plain select). */
+function ChoiceField({ name, label, icon, value, options, onChange, grid, display }: {
+  name: string; label: string; icon: GlyphName; value: string; options: Choice[]; onChange: (value: string) => void; grid?: boolean; display?: (value: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    box.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus()
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const current = options.find(option => option.value === value)
+  const shown = display ? display(value) : current?.text ?? value
+  return <div className="choice-field" ref={box}>
+    <button type="button" name={name} className="wheel-field" aria-label={label + ' ' + shown} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(!open)}>
+      <Glyph name={current?.icon ?? icon} size={16} /><span>{shown}</span><span className="chev"><Glyph name="chevron" size={15} /></span>
+    </button>
+    {open && <div className={'choice-pop' + (grid ? ' grid' : '')} role="listbox" aria-label={label}>
+      {options.map(option => <button type="button" role="option" key={option.value} aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false) }}>
+        {option.icon && <span className="choice-icon"><Glyph name={option.icon} size={16} /></span>}
+        <span className="choice-text"><strong>{option.text}</strong>{option.hint && <small>{option.hint}</small>}</span>
+        {!grid && option.value === value && <span className="choice-check"><Glyph name="check" size={16} /></span>}
+      </button>)}
     </div>}
   </div>
 }

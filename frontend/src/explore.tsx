@@ -9,7 +9,7 @@ import type { CardItem } from './App'
 import type { DisplayCatalog as Catalog } from './data'
 import { createPortal } from 'react-dom'
 import { Glyph, SupplyChips } from './icons'
-import { kakaoEnabled, loadKakao } from './map'
+import { kakaoEnabled, loadKakao, pinSvg } from './map'
 import type { Origin } from './map'
 import { searchPlaces } from './placePicker'
 import { remember, remembered } from './location'
@@ -414,7 +414,6 @@ function meMarker(label: string) {
   return box
 }
 
-const pinSvg = (colour: string, big: boolean) => `<svg width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`
 
 /** Kakao map with coloured pins (green = ours, blue = 1365); dragging shows "이 지역에서 다시 찾기". Without a key: a position sketch. */
 function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHome }: { origin: Origin; radiusKm: number; hits: Hit[]; selected: string | null; onSelect: (key: string) => void; onMoved: (centre: { lat: number; lng: number }) => void; onHome?: () => void }) {

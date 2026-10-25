@@ -10,6 +10,9 @@ declare global {
 
 const kakaoKey = import.meta.env.VITE_KAKAO_JS_KEY
 export const kakaoEnabled = Boolean(kakaoKey)
+
+/** Map pin drawn as an SVG string for Kakao overlays (bigger when picked). */
+export const pinSvg = (colour: string, big: boolean) => `<svg width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`
 let loading: Promise<any> | null = null
 
 export function loadKakao(): Promise<any> {

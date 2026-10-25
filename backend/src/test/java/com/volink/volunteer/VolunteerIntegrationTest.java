@@ -86,6 +86,29 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         assertThat(volunteer.calls).contains("area:6110000/3080000/", "area:6110000/3090000/");
     }
 
+    @Test
+    void newDetailsAreFetchedSideBySide() throws Exception {
+        kakao.enabled = true;
+        volunteer.enabled = true;
+        kakao.region = new KakaoLocal.Region("경기도", "양주시");
+        String end = TODAY.plusDays(30).toString().replace("-", "");
+        List<Map<String, String>> list = new java.util.ArrayList<>();
+        Map<String, Map<String, String>> details = new java.util.HashMap<>();
+        for (int i = 1; i <= 8; i++) {
+            list.add(Map.of("progrmRegistNo", "S-" + i, "progrmSj", "동시 " + i, "progrmSttusSe", "2"));
+            details.put("S-" + i, Map.of("progrmRegistNo", "S-" + i, "progrmSj", "동시 " + i, "progrmEndde", end));
+        }
+        volunteer.list = list;
+        volunteer.details = details;
+        volunteer.detailDelayMs = 400;
+        long started = System.nanoTime();
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.82").param("lng", "127.09").param("q", "동시"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(8));
+        // One after another this would take 8 × 0.4 s = 3.2 s.
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(1600);
+        assertThat(volunteer.calls.stream().filter(call -> call.startsWith("detail:S-")).count()).isEqualTo(8);
+    }
+
     private static Map<String, String> fields(String... pairs) {
         Map<String, String> map = new java.util.LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) map.put(pairs[i], pairs[i + 1]);

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import { Glyph } from './icons'
-import { kakaoEnabled, loadKakao } from './map'
+import { kakaoEnabled, loadKakao, pinSvg } from './map'
 import { currentPosition, decline, declined, remember, remembered } from './location'
 
 export type PlaceResult = {
@@ -63,6 +63,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
   const [busy, setBusy] = useState(false)
   const [centre, setCentre] = useState<{ lat: number; lng: number } | null>(initial?.latitude != null ? { lat: initial.latitude, lng: Number(initial.longitude) } : null)
   const dialog = useRef<HTMLDivElement>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
   // A new place starts where the user is: asked once (the same answer as 활동 찾기), then used without asking.
   const [asking, setAsking] = useState(!initial && !preview && !remembered() && !declined())
   const [locating, setLocating] = useState(false)
@@ -121,7 +122,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
     if (item.latitude != null) setCentre({ lat: Number(item.latitude), lng: Number(item.longitude) })
   }
 
-  const same = (a: PlaceResult | null, b: PlaceResult) => a != null && (a.kakaoId ?? 'p' + a.placeId) === (b.kakaoId ?? 'p' + b.placeId)
+  const same = (a: PlaceResult | null, b: PlaceResult) => a != null && keyOf(a) === keyOf(b)
   return createPortal(<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <div className="place-dialog" role="dialog" aria-modal="true" aria-labelledby="place-dialog-title" ref={dialog}>
       <div className="dialog-head"><h2 id="place-dialog-title">장소 찾기</h2><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button></div>
@@ -139,7 +140,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
           <ul className="place-results" aria-label="검색 결과">{items.map(item => {
             const badge = classBadge[item.placeClass]
             return <li key={item.kakaoId ?? 'p' + item.placeId}>
-              <button type="button" className={same(chosen, item) ? 'selected' : ''} aria-pressed={same(chosen, item)} disabled={item.placeClass === 'BLOCKED'} onClick={() => choose(item)}>
+              <button type="button" className={same(chosen, item) ? 'selected' : ''} onMouseEnter={() => setHovered(keyOf(item))} onMouseLeave={() => setHovered(null)} aria-pressed={same(chosen, item)} disabled={item.placeClass === 'BLOCKED'} onClick={() => choose(item)}>
                 <span><strong>{item.name}</strong><small>{item.classLabel} · {item.address}{item.distanceMeters != null ? ' · ' + distance(item.distanceMeters) : ''}</small></span>
                 <span className={'place-badge ' + badge.tone}>{badge.text}</span>
               </button>
@@ -149,11 +150,11 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
           {chosen?.placeClass === 'REVIEW' && <p className="small-print">{chosen.classLabel}에서 하는 활동은 관리자가 확인한 뒤 공개돼요.</p>}
         </div>
         {kakaoEnabled && mode !== 'LOCAL'
-          ? <PinMap centre={centre} chosen={chosen} onNearby={point => run(() => api<SearchResult>(`/api/places/nearby?lat=${point.lat.toFixed(6)}&lng=${point.lng.toFixed(6)}`), '이 근처에서 고를 수 있는 장소를 찾지 못했습니다. 지도를 조금 옮겨 보세요.')} />
+          ? <PinMap centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose} onNearby={point => run(() => api<SearchResult>(`/api/places/nearby?lat=${point.lat.toFixed(6)}&lng=${point.lng.toFixed(6)}`), '이 근처에서 고를 수 있는 장소를 찾지 못했습니다. 지도를 조금 옮겨 보세요.')} />
           : <div className="pin-map empty"><Glyph name="map" size={28} /><p>{mode === 'LOCAL' ? '지금은 관리자가 등록한 장소만 고를 수 있어요.' : '지도 키가 없어 목록으로만 고를 수 있어요.'}</p></div>}
       </div>
       <div className="dialog-foot">
-        <span className="small-print"><Glyph name="map" size={15} /> 지도를 움직인 뒤 ‘이 근처 장소 찾기’를 누르면 가운데 핀 주변 장소가 나와요.</span>
+        <span className="small-print"><Glyph name="map" size={15} /> 지도를 한 번 누르면 그곳으로 옮겨 주변 장소를 찾아요. 지도 위 핀을 눌러 바로 고를 수도 있어요.</span>
         <div className="button-row"><button type="button" className="secondary-button" onClick={onClose}>취소</button>
           <button type="button" className="primary-button" disabled={!chosen} onClick={() => chosen && onPick(chosen, meeting.trim())}>이 장소로 정하기</button></div>
       </div>
@@ -161,10 +162,25 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
   </div>, document.body)
 }
 
-/** Kakao map with a fixed centre pin. Moving the map changes the point used by "이 근처 장소 찾기". */
-function PinMap({ centre, chosen, onNearby }: { centre: { lat: number; lng: number } | null; chosen: PlaceResult | null; onNearby: (point: { lat: number; lng: number }) => void }) {
+const keyOf = (place: PlaceResult) => place.kakaoId ?? 'p' + place.placeId
+
+/**
+ * Kakao map with a fixed centre pin and the found places as pins (green = open, amber = needs a look; blocked places are not drawn).
+ * One click on the map moves there and finds the places around it; clicking a pin picks that place.
+ * Double-click stays Kakao's zoom.
+ */
+function PinMap({ centre, chosen, items, hovered, onChoose, onNearby }: {
+  centre: { lat: number; lng: number } | null; chosen: PlaceResult | null; items: PlaceResult[]; hovered: string | null
+  onChoose: (place: PlaceResult) => void; onNearby: (point: { lat: number; lng: number }) => void
+}) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
+  const drawn = useRef<any[]>([])
+  const nearby = useRef(onNearby)
+  const choose = useRef(onChoose)
+  nearby.current = onNearby
+  choose.current = onChoose
+  const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let cancelled = false
@@ -172,12 +188,41 @@ function PinMap({ centre, chosen, onNearby }: { centre: { lat: number; lng: numb
       if (cancelled || !box.current) return
       const start = centre ?? { lat: 37.8, lng: 127.08 }
       map.current = new kakao.maps.Map(box.current, { center: new kakao.maps.LatLng(start.lat, start.lng), level: 3 })
+      // A single click waits a moment so that a double-click (zoom) is not also taken as "move here".
+      let timer: ReturnType<typeof setTimeout> | undefined
+      kakao.maps.event.addListener(map.current, 'click', (event: any) => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          const point = event.latLng
+          map.current.panTo(point)
+          nearby.current({ lat: point.getLat(), lng: point.getLng() })
+        }, 250)
+      })
+      kakao.maps.event.addListener(map.current, 'dblclick', () => clearTimeout(timer))
+      setReady(true)
     }).catch(() => setFailed(true))
     return () => { cancelled = true }
   }, [])
   useEffect(() => {
     if (map.current && centre && window.kakao) map.current.panTo(new window.kakao.maps.LatLng(centre.lat, centre.lng))
   }, [centre])
+  useEffect(() => {
+    const kakao = window.kakao
+    if (!ready || !map.current || !kakao?.maps) return
+    drawn.current.forEach(item => item.setMap(null))
+    drawn.current = []
+    for (const item of items) {
+      if (item.latitude == null || item.longitude == null || item.placeClass === 'BLOCKED') continue
+      const big = keyOf(item) === hovered || (chosen != null && keyOf(chosen) === keyOf(item))
+      const content = document.createElement('button')
+      content.type = 'button'
+      content.className = 'kakao-pin' + (big ? ' on' : '')
+      content.setAttribute('aria-label', item.name + ' 고르기')
+      content.innerHTML = pinSvg(item.placeClass === 'REVIEW' ? '#c08a1e' : '#245e48', big)
+      content.onclick = event => { event.stopPropagation(); choose.current(item) }
+      drawn.current.push(new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(Number(item.latitude), Number(item.longitude)), content, yAnchor: 1, clickable: true, zIndex: big ? 4 : 1 }))
+    }
+  }, [items, hovered, chosen, ready])
   if (failed) return <div className="pin-map empty"><Glyph name="map" size={28} /><p>지도를 불러오지 못했습니다. 목록에서 골라 주세요.</p></div>
   return <div className="pin-map">
     <div ref={box} className="kakao-map" role="img" aria-label="장소 고르기 지도" />

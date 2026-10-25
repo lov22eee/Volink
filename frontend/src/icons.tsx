@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 
 export type GlyphName = 'pin' | 'calendar' | 'clock' | 'timer' | 'users' | 'leaf' | 'hand' | 'search' | 'map' | 'check' | 'bolt'
-  | 'sun' | 'arrow' | 'close' | 'target' | 'refresh' | 'external' | 'building' | 'alert' | 'chevron'
+  | 'sun' | 'arrow' | 'close' | 'target' | 'refresh' | 'external' | 'building' | 'alert' | 'notice' | 'ban' | 'chevron'
   | 'glove' | 'tongs' | 'bag' | 'water' | 'hat' | 'shoe' | 'plus' | 'link' | 'info' | 'filter'
 
 const paths: Record<GlyphName, ReactNode> = {
@@ -36,6 +36,8 @@ const paths: Record<GlyphName, ReactNode> = {
   filter: <path d="M4 6h16M7 12h10M10 18h4" />,
   info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5m0-8v.5" /></>,
   alert: <><path d="M12 4 3 20h18Z" /><path d="M12 10v4m0 3v.5" /></>,
+  notice: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5v5.5m0 3v.5" /></>,
+  ban: <><circle cx="12" cy="12" r="8.5" /><path d="m6 6 12 12" /></>,
 }
 
 export function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {

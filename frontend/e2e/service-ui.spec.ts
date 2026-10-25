@@ -85,6 +85,11 @@ async function pickTime(page: Page, time: string) {
   await wheel.getByRole('button', { name: '완료' }).click()
 }
 
+async function chooseType(page: Page, text: string) {
+  await page.getByRole('button', { name: /^활동 유형/ }).click()
+  await page.getByRole('listbox', { name: '활동 유형' }).getByRole('option', { name: new RegExp(text) }).click()
+}
+
 async function fillActivity(page: Page, title: string, description: string, time = '10:00', place = 1) {
   await page.goto('/#/create')
   await page.getByLabel(/활동 이름/).fill(title)
@@ -205,7 +210,14 @@ test('create form requires login, shows field errors and only offers times that 
   await calendar.locator(`[data-date="${seoulDate(1)}"]`).click()
   await expect(page.getByRole('button', { name: /^활동 날짜/ })).toContainText('내일')
   await pickDate(page, seoulDate(3))
-  await expect(page.locator('select[name=capacity] option')).toHaveText(['2명', '3명', '4명', '5명', '6명', '7명', '8명', '9명', '10명'])
+  // 모집 정원: others only, 1~9 (2~10 with the organizer), picked from a panel like the date/time fields.
+  await page.getByRole('button', { name: /^모집 정원/ }).click()
+  await expect(page.getByRole('listbox', { name: '모집 정원' }).getByRole('option')).toHaveText(['1명', '2명', '3명', '4명', '5명', '6명', '7명', '8명', '9명'])
+  await page.getByRole('listbox', { name: '모집 정원' }).getByRole('option', { name: '9명' }).click()
+  await expect(page.getByRole('button', { name: /^모집 정원/ })).toContainText('9명 · 나 포함 10명')
+  await page.getByRole('button', { name: /^분야/ }).click()
+  await expect(page.getByRole('listbox', { name: '분야' }).getByRole('option')).toHaveCount(3)
+  await page.getByRole('listbox', { name: '분야' }).getByRole('option', { name: /환경 정화/ }).click()
   // The wheel cannot go past 21:30, and a late start keeps only lengths that end by 22:00.
   await page.getByRole('button', { name: /^시작 시간/ }).click()
   const wheel = page.getByRole('dialog', { name: '시작 시간 고르기' })
@@ -233,11 +245,16 @@ test('create form requires login, shows field errors and only offers times that 
   await lengths.getByRole('listbox', { name: '시간' }).getByRole('option', { name: '1시간' }).click()
   await lengths.getByRole('listbox', { name: '분' }).getByRole('option', { name: '30분' }).click()
   await lengths.getByRole('button', { name: '완료' }).click()
-  await expect(page.locator('.expect')).toContainText('관리자 확인 후 공개돼요')
+  // Ends after sunset: under 일정, (!) 검토 후 승인 예정이에요, and pointing at the icon tells why.
+  const late = page.locator('[data-field="일정"]')
+  await expect(page.locator('.field-risk.review')).toContainText('검토 후 승인 예정이에요.')
+  await expect(page.locator('.field-risk.ok')).toHaveCount(0)
+  await late.hover()
+  await expect(page.getByRole('tooltip')).toContainText('해가 진 뒤')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('create-errors'), fullPage: true })
   await pickTime(page, '10:00')
-  await expect(page.locator('.expect')).toContainText('바로 공개될 예정이에요')
+  await expect(page.locator('.field-risk.ok')).toContainText('바로 공개될 예정이에요.')
   // PC mouse wheel: one notch over the hour column moves one hour.
   await page.getByRole('button', { name: /^시작 시간/ }).click()
   await page.getByRole('listbox', { name: '시', exact: true }).hover()
@@ -257,15 +274,15 @@ test('create form requires login, shows field errors and only offers times that 
   await page.screenshot({ path: shot('place-dialog') })
   await dialog.getByRole('button', { name: '이 장소로 정하기' }).click()
   await expect(page.getByRole('button', { name: /옥정중앙공원/ })).toContainText('만나는 곳: 정문 안내판 앞')
-  // Supplies to bring (below the description): 환경 정화 starts with 장갑·편한 신발; add one by hand.
+  // Supplies to bring (below the description): nothing is ticked at first; tick some and add one by hand.
   const bring = page.getByRole('group', { name: '챙겨 올 준비물' })
-  await expect(bring.getByRole('button', { pressed: true })).toHaveText(['장갑', '편한 신발'])
-  await bring.getByRole('button', { name: '물' }).click()
+  await expect(bring.getByRole('button', { pressed: true })).toHaveCount(0)
+  for (const name of ['장갑', '편한 신발', '물']) await bring.getByRole('button', { name }).click()
   await page.getByRole('textbox', { name: '준비물 직접 추가' }).fill('손전등')
   await page.getByRole('button', { name: '추가', exact: true }).click()
   await expect(bring.getByRole('button', { name: '손전등' })).toHaveAttribute('aria-pressed', 'true')
   // A personal account has no type to choose: it always opens 자율 활동.
-  await expect(page.getByLabel('활동 유형', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^활동 유형/ })).toHaveCount(0)
   await page.getByRole('checkbox', { name: /공공장소의 저위험 활동/ }).check()
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('create'), fullPage: true })
@@ -282,8 +299,9 @@ test('create form requires login, shows field errors and only offers times that 
   await expect(page.getByLabel(/활동 이름/)).toHaveValue('공원 산책로 함께 걷고 줍기')
   await page.getByLabel(/활동 이름/).fill('공원 산책로 함께 걷고 줍기 (수정)')
   await page.getByLabel(/활동 소개/).fill('전기 배관 작업을 함께 할 분을 찾습니다. 공구는 나눠 드려요.')
-  await page.getByRole('button', { name: '수정 저장' }).click()
-  await expect(page.getByRole('alert')).toContainText('배관')
+  // The form says so under 활동 소개 while typing, and saving is not possible.
+  await expect(page.locator('.field-risk.blocked')).toContainText('모집을 올릴 수 없어요.')
+  await expect(page.getByRole('button', { name: '수정 저장' })).toBeDisabled()
   await page.getByLabel(/활동 소개/).fill('공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다.')
   await page.getByRole('button', { name: '수정 저장' }).click()
   await expect(page.getByRole('heading', { name: '수정한 내용을 저장했습니다' })).toBeVisible()
@@ -416,9 +434,12 @@ test('a low-risk activity is published to the list and a blocked activity is ref
   await expect(card).toContainText('모집 중')
 
   await fillActivity(page, '사다리 청소 모임', '건물 외벽 창문을 사다리에 올라가서 함께 닦는 활동입니다.')
-  await page.getByRole('button', { name: '활동 등록' }).click()
-  await expect(page.getByRole('alert')).toContainText('등록할 수 없는 활동입니다.')
-  await expect(page.getByRole('alert')).toContainText('사다리')
+  // Under the title: (⊘) 모집을 올릴 수 없어요, the bubble shows the word and the safety guide, and 등록 is off.
+  await expect(page.locator('.field-risk.blocked').first()).toContainText('모집을 올릴 수 없어요.')
+  await page.locator('[data-field="활동 이름"]').hover()
+  await expect(page.getByRole('tooltip').filter({ visible: true })).toContainText('안전하게 함께해요')
+  await expect(page.getByRole('tooltip').filter({ visible: true })).toContainText('사다리')
+  await expect(page.getByRole('button', { name: '활동 등록' })).toBeDisabled()
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('blocked'), fullPage: true })
   await page.goto('/#/explore')
@@ -464,7 +485,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
 test('an institution member can host an activity only after the admin approves the organization', async ({ page }) => {
   const email = await signup(page, { institution: true })
   await page.goto('/#/create')
-  await page.getByLabel('활동 유형', { exact: true }).selectOption('INSTITUTION')
+  await chooseType(page, '기관 주관 활동')
   await expect(page.locator('.inline-notice')).toContainText('기관 확인을 기다리고 있습니다.')
   await expect(page.getByRole('button', { name: '활동 등록' })).toBeDisabled()
   await signOut(page)
@@ -480,7 +501,7 @@ test('an institution member can host an activity only after the admin approves t
   await expect(page.getByLabel('내 정보')).toContainText('기관 확인 완료')
   const title = '기관과 함께하는 공원 정화 ' + Date.now().toString().slice(-6)
   await fillActivity(page, title, '기관 담당자와 함께 공원의 가벼운 쓰레기를 정리하는 활동입니다.')
-  await page.getByLabel('활동 유형', { exact: true }).selectOption('INSTITUTION')
+  await chooseType(page, '기관 주관 활동')
   await expect(page.locator('.inline-notice')).toContainText('테스트 기관 이름으로 활동을 엽니다.')
   await page.getByRole('button', { name: '활동 등록' }).click()
   await expect(page.getByRole('heading', { name: '활동이 공개되었습니다' })).toBeVisible()

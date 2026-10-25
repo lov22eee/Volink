@@ -16,7 +16,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import jakarta.annotation.PreDestroy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +31,8 @@ import org.springframework.stereotype.Service;
  * Flow: point → region (Kakao) → region codes → program list (cached 3 h per region and keyword) → detail of programs
  * not seen before (stored, without personal contact fields) → coordinate from the place text (Kakao) → nearest first.
  * At most {@link #NEW_DETAILS} new details per search keep the daily quota (1000 calls per operation) safe.
+ * The outside calls of one search (regions, lists, details) run side by side on a small pool instead of one after another,
+ * so a district seen for the first time takes about as long as its slowest call, not the sum of all of them.
  */
 @Service
 public class VolunteerService {
@@ -42,6 +50,13 @@ public class VolunteerService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final Map<String, Cached> lists = new ConcurrentHashMap<>();
+    private final Map<String, Object> listLocks = new ConcurrentHashMap<>();
+    /** Bounded so one search never opens more than a handful of connections to Kakao or data.go.kr at once. */
+    private final ExecutorService calls = Executors.newFixedThreadPool(8, task -> {
+        Thread thread = new Thread(task, "volunteer-call");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private record Cached(Instant at, List<Map<String, String>> items) {}
 
@@ -50,6 +65,28 @@ public class VolunteerService {
         this.kakao = kakao;
         this.jdbc = jdbc;
         this.clock = clock;
+    }
+
+    @PreDestroy
+    void stop() {
+        calls.shutdownNow();
+    }
+
+    /** Runs every task on the pool and returns the answers in the same order. */
+    private <T> List<T> together(List<Callable<T>> tasks) {
+        List<Future<T>> futures = tasks.stream().map(calls::submit).toList();
+        List<T> answers = new ArrayList<>();
+        for (Future<T> future : futures) {
+            try {
+                answers.add(future.get());
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                answers.add(null);
+            } catch (ExecutionException failed) {
+                answers.add(null);
+            }
+        }
+        return answers;
     }
 
     public record Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting) {}
@@ -64,28 +101,34 @@ public class VolunteerService {
         result.put("enabled", api.enabled() && kakao.enabled());
         if (!api.enabled() || !kakao.enabled()) { result.put("items", List.of()); return result; }
 
-        Optional<KakaoLocal.Region> region = kakao.region(query.lat(), query.lng());
+        List<Optional<KakaoLocal.Region>> regions = regions(query.lat(), query.lng());
+        Optional<KakaoLocal.Region> region = regions.get(0);
         result.put("region", region.map(r -> (r.province() + " " + r.city()).trim()).orElse(null));
-        List<RegionCodes.Codes> areas = areas(region, query.lat(), query.lng());
+        List<RegionCodes.Codes> areas = areas(regions);
         if (areas.isEmpty()) { result.put("items", List.of()); return result; }
 
         // The centre's district first (it gets the detail budget first), then the neighbours the 3 km ring reaches.
         List<Map<String, String>> list = new ArrayList<>();
-        for (RegionCodes.Codes codes : areas) list.addAll(list(codes, q));
-        int fetched = 0;
-        List<Map<String, Object>> items = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (List<Map<String, String>> part : together(areas.stream().<Callable<List<Map<String, String>>>>map(codes -> () -> list(codes, q)).toList()))
+            if (part != null) list.addAll(part);
+        List<String> numbers = new ArrayList<>();
+        Map<String, Map<String, String>> entries = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
         for (Map<String, String> entry : list) {
             String no = first(entry, "progrmRegistNo");
-            if (no == null || !seen.add(no)) continue;
+            if (no == null || entries.containsKey(no)) continue;
+            entries.put(no, entry);
+            numbers.add(no);
             Map<String, Object> stored = stored(no);
-            if ((stored == null || stale(stored)) && fetched < NEW_DETAILS) {
-                fetched++;
-                Map<String, Object> refreshed = fetch(no, entry, query.lat(), query.lng());
-                if (refreshed != null) stored = refreshed;
-            }
-            if (stored != null) items.add(view(stored, query.lat(), query.lng()));
+            if (stored != null) rows.put(no, stored);
+            if ((stored == null || stale(stored)) && missing.size() < NEW_DETAILS) missing.add(no);
         }
+        // New or old details: fetched side by side.
+        List<Map<String, Object>> refreshed = together(missing.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), query.lat(), query.lng())).toList());
+        for (int i = 0; i < missing.size(); i++) if (refreshed.get(i) != null) rows.put(missing.get(i), refreshed.get(i));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (String no : numbers) if (rows.containsKey(no)) items.add(view(rows.get(no), query.lat(), query.lng()));
         String today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))).format(YMD);
         items.removeIf(item -> item.get("periodEnd") != null && ((String) item.get("periodEnd")).replace("-", "").compareTo(today) < 0);
         if (Boolean.TRUE.equals(query.youth())) items.removeIf(item -> !Boolean.TRUE.equals(item.get("youthOk")));
@@ -98,16 +141,21 @@ public class VolunteerService {
         return result;
     }
 
-    /** A point near a district border also needs the next district: look 3 km north, south, east and west (at most 4 districts). */
-    private List<RegionCodes.Codes> areas(Optional<KakaoLocal.Region> centre, double lat, double lng) {
-        java.util.LinkedHashSet<RegionCodes.Codes> areas = new java.util.LinkedHashSet<>();
-        centre.flatMap(r -> RegionCodes.of(r.province(), r.city())).ifPresent(areas::add);
-        if (areas.isEmpty()) return List.of();
+    /** The centre's region, then the regions 3 km north, south, east and west (a point near a border also needs the next district). */
+    private List<Optional<KakaoLocal.Region>> regions(double lat, double lng) {
         double dLat = RING_KM / 111.0, dLng = RING_KM / (111.0 * Math.cos(Math.toRadians(lat)));
-        double[][] around = {{lat + dLat, lng}, {lat - dLat, lng}, {lat, lng + dLng}, {lat, lng - dLng}};
-        for (double[] point : around) {
-            if (areas.size() >= MAX_AREAS) break;
-            kakao.region(point[0], point[1]).flatMap(r -> RegionCodes.of(r.province(), r.city())).ifPresent(areas::add);
+        double[][] points = {{lat, lng}, {lat + dLat, lng}, {lat - dLat, lng}, {lat, lng + dLng}, {lat, lng - dLng}};
+        List<Optional<KakaoLocal.Region>> found = together(java.util.Arrays.stream(points).<Callable<Optional<KakaoLocal.Region>>>map(point -> () -> kakao.region(point[0], point[1])).toList());
+        return found.stream().map(region -> region == null ? Optional.<KakaoLocal.Region>empty() : region).toList();
+    }
+
+    /** Districts to ask 1365 about: the centre's first, at most {@link #MAX_AREAS}; none when the centre is unknown. */
+    private List<RegionCodes.Codes> areas(List<Optional<KakaoLocal.Region>> regions) {
+        java.util.LinkedHashSet<RegionCodes.Codes> areas = new java.util.LinkedHashSet<>();
+        for (Optional<KakaoLocal.Region> region : regions) {
+            Optional<RegionCodes.Codes> codes = region.flatMap(r -> RegionCodes.of(r.province(), r.city()));
+            if (areas.isEmpty() && codes.isEmpty()) return List.of();
+            if (areas.size() < MAX_AREAS) codes.ifPresent(areas::add);
         }
         return List.copyOf(areas);
     }
@@ -116,7 +164,7 @@ public class VolunteerService {
         String cacheKey = codes.province() + "|" + codes.city() + "|" + q;
         Cached cached = lists.get(cacheKey);
         if (cached != null && cached.at().plus(LIST_CACHE).isAfter(clock.instant())) return cached.items();
-        synchronized (lists) {
+        synchronized (listLocks.computeIfAbsent(cacheKey, ignored -> new Object())) {
             cached = lists.get(cacheKey);
             if (cached != null && cached.at().plus(LIST_CACHE).isAfter(clock.instant())) return cached.items();
             List<Map<String, String>> items = api.areaList(codes.province(), codes.city(), q, LIST_ROWS);

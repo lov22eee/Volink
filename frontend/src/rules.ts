@@ -1,7 +1,7 @@
 // Week-2 input rules shared by the screens (the activity form checks them in create.tsx). The server must re-check the same rules (docs/rules.md).
 export const activityRules = {
   titleMin: 5, titleMax: 100,
-  capacityMin: 2, capacityMax: 10,
+  capacityMin: 1, capacityMax: 9,
   durationMin: 30, durationMax: 180,
   descriptionMin: 20, descriptionMax: 2000,
   earliestStart: '06:00', latestEnd: '22:00',
