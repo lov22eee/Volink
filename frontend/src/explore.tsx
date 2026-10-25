@@ -12,6 +12,7 @@ import { Glyph, SupplyChips } from './icons'
 import { kakaoEnabled, loadKakao } from './map'
 import type { Origin } from './map'
 import { searchPlaces } from './placePicker'
+import { remember, remembered } from './location'
 import type { PlaceResult } from './placePicker'
 
 export type Program = {
@@ -26,10 +27,8 @@ export type When = 'all' | 'today' | 'week' | 'weekend'
 type Hit = { key: string; source: 'local' | '1365'; title: string; lat: number | null; lng: number | null; distanceKm: number | null; local?: LiveActivity; program?: Program }
 
 const rings = [1, 3, 5, 10, 20]
-/** Remembers only that location was allowed (never the position), so the next visit opens on the map. */
-const REMEMBER = 'volink.nearby'
-export const remembered = () => { try { return localStorage.getItem(REMEMBER) === '1' } catch { return false } }
-const remember = (on: boolean) => { try { if (on) localStorage.setItem(REMEMBER, '1'); else localStorage.removeItem(REMEMBER) } catch { /* private mode */ } }
+// Remembers only that location was allowed (never the position), so the next visit opens on the map.
+export { remembered } from './location'
 
 export function km(a: Origin, lat: number, lng: number) {
   const r = 6371, dLat = (lat - a.lat) * Math.PI / 180, dLng = (lng - a.lng) * Math.PI / 180

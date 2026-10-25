@@ -6,6 +6,7 @@ import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import { Glyph } from './icons'
 import { kakaoEnabled, loadKakao } from './map'
+import { currentPosition, decline, declined, remember, remembered } from './location'
 
 export type PlaceResult = {
   placeId?: number; kakaoId?: string; name: string; address: string; categoryName: string
@@ -62,17 +63,33 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
   const [busy, setBusy] = useState(false)
   const [centre, setCentre] = useState<{ lat: number; lng: number } | null>(initial?.latitude != null ? { lat: initial.latitude, lng: Number(initial.longitude) } : null)
   const dialog = useRef<HTMLDivElement>(null)
+  // A new place starts where the user is: asked once (the same answer as 활동 찾기), then used without asking.
+  const [asking, setAsking] = useState(!initial && !preview && !remembered() && !declined())
+  const [locating, setLocating] = useState(false)
+
+  async function startHere() {
+    setAsking(false)
+    setLocating(true)
+    const here = await currentPosition()
+    setLocating(false)
+    if (!here) { remember(false); setMessage('위치를 확인하지 못했어요. 장소 이름으로 검색해 주세요.'); return }
+    remember(true)
+    setCentre(here)
+    if (kakaoEnabled) run(() => api<SearchResult>(`/api/places/nearby?lat=${here.lat.toFixed(6)}&lng=${here.lng.toFixed(6)}`), '내 주변에서 고를 수 있는 장소를 찾지 못했습니다. 장소 이름으로 검색해 보세요.', here)
+    else run(() => searchPlaces('공원', here), '', here)
+  }
 
   useEffect(() => {
     dialog.current?.querySelector<HTMLInputElement>('input')?.focus()
     const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', close)
     // Without a map key the server usually has no Kakao key either: show the admin-entered places right away.
-    if (!initial && !kakaoEnabled) run(() => searchPlaces('공원', null), '')
+    if (!initial && !preview && remembered()) startHere()
+    else if (!initial && !kakaoEnabled) run(() => searchPlaces('공원', null), '')
     return () => window.removeEventListener('keydown', close)
   }, [])
 
-  async function run(request: () => Promise<SearchResult>, empty: string) {
+  async function run(request: () => Promise<SearchResult>, empty: string, keepCentre?: { lat: number; lng: number }) {
     // The offline preview has no server: nothing is sent.
     if (preview) { setMessage('미리보기에서는 장소 검색을 쓸 수 없습니다.'); return }
     setBusy(true)
@@ -83,7 +100,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
       setItems(result.items)
       if (!result.items.length) setMessage(empty || '찾은 장소가 없습니다. 다른 이름으로 검색해 보세요.')
       const first = result.items.find(item => item.latitude != null)
-      if (first && !chosen) setCentre({ lat: Number(first.latitude), lng: Number(first.longitude) })
+      if (first && !chosen && !keepCentre) setCentre({ lat: Number(first.latitude), lng: Number(first.longitude) })
     } catch (cause) {
       setMessage(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '장소를 찾지 못했습니다.')
     } finally {
@@ -112,6 +129,10 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
         <Glyph name="search" /><input aria-label="장소 이름이나 주소" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="장소 이름이나 주소 (예: 옥정호수공원)" />
         <button className="primary-button small" type="submit" disabled={busy}>검색</button>
       </form>
+      {asking && <div className="place-ask" role="group" aria-label="내 위치에서 시작"><Glyph name="pin" size={16} /><span>내 위치 주변 장소부터 볼까요? <small>위치는 저장하지 않아요</small></span>
+        <button type="button" className="primary-button small" onClick={startHere}>내 위치로</button>
+        <button type="button" className="text-button" onClick={() => { decline(); setAsking(false) }}>괜찮아요</button></div>}
+      {locating && <p className="small-print" role="status">내 위치를 확인하는 중이에요…</p>}
       <div className="dialog-body">
         <div className="dialog-results">
           {message && <p className="inline-notice" role="status">{message}</p>}
