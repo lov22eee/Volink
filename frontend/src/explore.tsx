@@ -87,6 +87,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [allLive, setAllLive] = useState<LiveActivity[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [programsOn, setProgramsOn] = useState(false)
+  const [programsLoading, setProgramsLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   // Hovering a card only highlights its pin; the preview opens when a pin is clicked.
   const [hovered, setHovered] = useState<string | null>(null)
@@ -105,10 +106,14 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
     if (q) params.set('q', q)
     if (category !== '전체') params.set('category', category)
     if (kind !== 'all') params.set('type', kind)
-    api<LiveActivity[]>('/api/activities?' + params).then(setAllLive).catch(() => setAllLive([]))
-    if (!origin) return
-    params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', '20')
-    api<LiveActivity[]>('/api/activities?' + params).then(setLive).catch(() => setLive([]))
+    let current = true
+    api<LiveActivity[]>('/api/activities?' + params).then(list => current && setAllLive(list)).catch(() => current && setAllLive([]))
+    if (origin) {
+      const near = new URLSearchParams(params)
+      near.set('lat', origin.lat.toFixed(6)); near.set('lng', origin.lng.toFixed(6)); near.set('radiusKm', '20')
+      api<LiveActivity[]>('/api/activities?' + near).then(list => current && setLive(list)).catch(() => current && setLive([]))
+    }
+    return () => { current = false }
   }, [origin, when, part, q, category, kind])
   useEffect(() => { if (!origin) setLive(allLive) }, [origin, allLive])
 
@@ -117,13 +122,19 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
 
   // 1365 programs need a position (they are looked up by region).
   useEffect(() => {
-    if (preview || !origin) { setPrograms([]); return }
+    // A new centre drops the old list at once, and a late answer for an old centre is ignored.
+    setPrograms([])
+    if (preview || !origin) { setProgramsLoading(false); return }
+    let current = true
+    setProgramsLoading(true)
     const params = new URLSearchParams({ lat: origin.lat.toFixed(6), lng: origin.lng.toFixed(6), radiusKm: '20' })
     if (q) params.set('q', q)
     if (youth) params.set('youth', 'true')
     api<{ enabled: boolean; items: Program[] }>('/api/volunteer-programs?' + params)
-      .then(result => { setProgramsOn(result.enabled); setPrograms(result.items) })
-      .catch(() => { setProgramsOn(false); setPrograms([]) })
+      .then(result => { if (current) { setProgramsOn(result.enabled); setPrograms(result.items) } })
+      .catch(() => { if (current) { setProgramsOn(false); setPrograms([]) } })
+      .finally(() => { if (current) setProgramsLoading(false) })
+    return () => { current = false }
   }, [origin, q, youth])
 
   function locate() {
@@ -222,7 +233,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
       {origin ? <>
         <section className="panel nearby-panel" aria-label="내 주변">
           <div className="nearby-head"><h3>내 주변 {shownRadius}km</h3><span className="list-count">{origin.label} 기준 · 가까운 순 {Math.min(5, inside.length)}개 · <button className="text-button" onClick={() => document.getElementById('all-list')?.scrollIntoView()}>모든 모집글 보기 ↓</button></span></div>
-          {programsOn && programs.length === 0 && <p className="small-print">근처 20km에서 지금 모집 중인 1365 활동을 찾지 못했어요. 지역을 바꾸거나 잠시 뒤 다시 확인해 주세요.</p>}
+          {programsLoading && <p className="small-print" role="status">이 지역의 1365 활동을 불러오는 중이에요…</p>}
+          {programsOn && !programsLoading && programs.length === 0 && <p className="small-print">근처 20km에서 지금 모집 중인 1365 활동을 찾지 못했어요. 지역을 바꾸거나 잠시 뒤 다시 확인해 주세요.</p>}
           {widened && <div className="widen-callout" role="status"><strong>{radius}km 안에는 없어서 {shownRadius}km까지 넓혔어요</strong>
             <span className="ring-steps">{rings.filter(ring => ring >= radius && ring <= shownRadius).map(ring => <span key={ring} className={ring === shownRadius ? 'on' : ''}>{ring}km · {hits.filter(hit => hit.distanceKm != null && hit.distanceKm <= ring).length}개</span>)}</span>
             <small>최대 20km까지만 넓혀요</small></div>}

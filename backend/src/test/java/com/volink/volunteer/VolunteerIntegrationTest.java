@@ -64,6 +64,28 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM volunteer_programs WHERE program_no IN ('T-1','T-2','T-3')", Integer.class)).isEqualTo(3);
     }
 
+    @Test
+    void aCentreNearABorderAlsoShowsTheNextDistrict() throws Exception {
+        kakao.enabled = true;
+        volunteer.enabled = true;
+        // 강북구 at the centre, 도봉구 just north of it (like 창동 seen from 수유).
+        kakao.regionAt = (lat, lng) -> lat > 37.64 ? new KakaoLocal.Region("서울특별시", "도봉구") : new KakaoLocal.Region("서울특별시", "강북구");
+        String end = TODAY.plusDays(30).toString().replace("-", "");
+        volunteer.byCity = Map.of(
+                "3080000", List.of(Map.of("progrmRegistNo", "B-1", "progrmSj", "강북 활동", "progrmSttusSe", "2")),
+                "3090000", List.of(Map.of("progrmRegistNo", "B-2", "progrmSj", "도봉 활동", "progrmSttusSe", "2")));
+        volunteer.details = Map.of(
+                "B-1", Map.of("progrmRegistNo", "B-1", "progrmSj", "강북 활동", "actPlace", "강북 장소", "progrmEndde", end),
+                "B-2", Map.of("progrmRegistNo", "B-2", "progrmSj", "도봉 활동", "actPlace", "도봉 장소", "progrmEndde", end));
+        kakao.located.put("강북 장소", new KakaoLocal.Place(null, "강북 장소", null, null, "서울 강북구", 37.630, 127.025, null));
+        kakao.located.put("도봉 장소", new KakaoLocal.Place(null, "도봉 장소", null, null, "서울 도봉구", 37.650, 127.030, null));
+
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.632").param("lng", "127.026"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.region").value("서울특별시 강북구"))
+                .andExpect(jsonPath("$.items[*].title").value(org.hamcrest.Matchers.contains("강북 활동", "도봉 활동")));
+        assertThat(volunteer.calls).contains("area:6110000/3080000/", "area:6110000/3090000/");
+    }
+
     private static Map<String, String> fields(String... pairs) {
         Map<String, String> map = new java.util.LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) map.put(pairs[i], pairs[i + 1]);
