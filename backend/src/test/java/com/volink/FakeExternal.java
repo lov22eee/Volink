@@ -35,9 +35,12 @@ public class FakeExternal {
         public List<Map<String, String>> list = new ArrayList<>();
         public Map<String, Map<String, String>> details = new HashMap<>();
         public Map<String, List<Map<String, String>>> byCity = new HashMap<>();
-        public List<String> calls = new ArrayList<>();
+        /** Pretends each detail answer takes this long (data.go.kr is often slow). */
+        public long detailDelayMs;
+        // Searches call side by side, so the call log must take concurrent adds.
+        public List<String> calls = java.util.Collections.synchronizedList(new ArrayList<>());
 
-        public void reset() { enabled = false; list = new ArrayList<>(); byCity = new HashMap<>(); details = new HashMap<>(); calls = new ArrayList<>(); }
+        public void reset() { enabled = false; list = new ArrayList<>(); byCity = new HashMap<>(); detailDelayMs = 0; details = new HashMap<>(); calls = java.util.Collections.synchronizedList(new ArrayList<>()); }
         @Override public boolean enabled() { return enabled; }
         @Override public List<Map<String, String>> areaList(String province, String city, String keyword, int rows) {
             calls.add("area:" + province + "/" + city + "/" + keyword);
@@ -45,6 +48,7 @@ public class FakeExternal {
         }
         @Override public Optional<Map<String, String>> detail(String programNo) {
             calls.add("detail:" + programNo);
+            if (detailDelayMs > 0) try { Thread.sleep(detailDelayMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             return Optional.ofNullable(details.get(programNo));
         }
     }
