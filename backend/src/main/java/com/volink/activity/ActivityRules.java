@@ -60,7 +60,8 @@ public class ActivityRules {
             if (out != null && duration != null) out[0] = new Checked(start, start.plus(Duration.ofMinutes(duration)));
         }
         Integer capacity = request.capacity();
-        if (capacity == null || capacity < 2 || capacity > 10) errors.put("capacity", "모집 정원은 2~10명입니다.");
+        // Plan: an activity is 2~10 people including the organizer, so 1~9 others (user decision 2026-10-25).
+        if (capacity == null || capacity < 1 || capacity > 9) errors.put("capacity", "모집 정원은 나를 빼고 1~9명입니다(나 포함 최대 10명).");
         if (duration == null || duration < 30 || duration > 180) errors.put("duration", "활동 시간은 30~180분입니다.");
         String description = trim(request.description());
         if (description.length() < 20 || description.length() > 2000) errors.put("description", "활동 소개는 20~2000자로 적어 주세요.");

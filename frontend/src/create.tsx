@@ -6,6 +6,7 @@ import { api, ApiError, preview } from './api'
 import type { LiveActivity, User } from './api'
 import { categories, LoginRequired, PageHeading } from './App'
 import { Glyph, supplyGlyph } from './icons'
+import type { GlyphName } from './icons'
 import type { Supply } from './icons'
 import { PlaceField } from './placePicker'
 import type { PlaceResult } from './placePicker'
@@ -84,12 +85,6 @@ export function durationsFor(start: string) {
 
 const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 신발']
 const maxSupplies = 6
-/** Starting supplies per field until the person changes them. */
-const suppliesFor: Record<string, Supply[]> = {
-  '환경 정화': [{ name: '장갑', provided: false }, { name: '편한 신발', provided: false }],
-  '생활 지원': [{ name: '장갑', provided: false }],
-  '지역 돌봄': [],
-}
 
 const templates = [
   { name: '공원 플로깅', title: '공원 산책로 함께 걷고 줍기', category: '환경 정화', duration: 90, description: '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
@@ -112,10 +107,9 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   const [capacity, setCapacity] = useState(6)
   const [description, setDescription] = useState('')
   const [safety, setSafety] = useState(false)
-  const [supplies, setSupplies] = useState<Supply[]>(suppliesFor[categories[0]])
-  const [suppliesTouched, setSuppliesTouched] = useState(false)
+  // Nothing is ticked at first: the organizer turns on what people should bring.
+  const [supplies, setSupplies] = useState<Supply[]>([])
   const [customSupply, setCustomSupply] = useState('')
-  useEffect(() => { if (!suppliesTouched) setSupplies(suppliesFor[category] ?? []) }, [category, suppliesTouched])
   const [errors, setErrors] = useState<Errors>({})
   const [blocked, setBlocked] = useState('')
   const [message, setMessage] = useState('')
@@ -128,7 +122,6 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   useEffect(() => {
     if (!editId || !user) return
     api<LiveActivity>('/api/activities/' + editId).then(a => {
-      setSuppliesTouched(true)
       setEditing(a); setKind(a.activityType); setTitle(a.title); setCategory(a.category); setMeetingPoint(a.meetingPoint ?? '')
       setPlace({ placeId: a.placeId ?? undefined, name: a.placeName ?? '', address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null,
         distanceMeters: null, placeClass: 'OPEN', classLabel: '지금 장소' })
@@ -258,15 +251,20 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
         <div className="form-title"><h2>활동 정보</h2>
           <label className="template-pick"><Glyph name="bolt" size={15} /><select aria-label="자주 하는 활동 불러오기" value="" onChange={event => {
             const picked = templates.find(item => item.name === event.target.value)
-            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setSuppliesTouched(false); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
+            if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
           }}><option value="">자주 하는 활동 불러오기</option>{templates.map(item => <option key={item.name}>{item.name}</option>)}</select></label></div>
 
         <label>활동 이름<span className="input-with-count"><input name="title" value={title} maxLength={r.titleMax} onChange={event => setTitle(event.target.value)} placeholder="예: 공원 산책로 함께 걷고 줍기" {...err('title')} /><small>{title.trim().length} / {r.titleMax}</small></span>{fieldError('title')}<FieldRisk field="활동 이름" status={status.title} /></label>
 
         <div className="form-row">
-          <label>분야<span className="select-with-icon"><Glyph name="leaf" size={16} /><select name="category" aria-label="분야" value={category} onChange={event => setCategory(event.target.value)}>{categories.map(value => <option key={value}>{value}</option>)}</select></span><FieldRisk field="분야" status={status.category} /></label>
+          <div className="field-block"><span className="field-label">분야</span>
+            <ChoiceField name="category" label="분야" icon="leaf" value={category} onChange={setCategory}
+              options={categories.map(value => ({ value, text: value, icon: categoryGlyph[value] ?? 'leaf', hint: categoryHint[value] }))} />
+            <FieldRisk field="분야" status={status.category} /></div>
           {/* Only institution members choose; a personal account always opens 자율 활동. */}
-          {user?.memberType === 'INSTITUTION' && <label>활동 유형<span className="select-with-icon"><Glyph name="hand" size={16} /><select name="activityType" aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value as 'GENERAL' | 'INSTITUTION')}><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></span></label>}
+          {user?.memberType === 'INSTITUTION' && <div className="field-block"><span className="field-label">활동 유형</span>
+            <ChoiceField name="activityType" label="활동 유형" icon="hand" value={kind} onChange={value => setKind(value as 'GENERAL' | 'INSTITUTION')}
+              options={[{ value: 'GENERAL', text: '자율 활동', icon: 'users', hint: '내 이름으로 열어요' }, { value: 'INSTITUTION', text: '기관 주관 활동', icon: 'building', hint: '확인된 기관 이름으로 열어요' }]} /></div>}
         </div>
         {kind === 'INSTITUTION' && <p className="inline-notice">{canHost ? organization?.name + ' 이름으로 활동을 엽니다.' : organization?.status === 'PENDING' ? '기관 확인을 기다리고 있습니다. 관리자 확인이 끝나면 기관 주관 활동을 열 수 있습니다.' : '기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다.'}</p>}
 
@@ -291,7 +289,11 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
         </div>
 
         <div className="form-row">
-          <label>모집 정원 <span className="field-hint">나를 빼고</span><span className="select-with-icon"><Glyph name="users" size={16} /><select name="capacity" aria-label="모집 정원" value={capacity} onChange={event => setCapacity(Number(event.target.value))}>{Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => <option key={value} value={value}>{value}명</option>)}</select></span>{fieldError('capacity')}</label>
+          <div className="field-block"><span className="field-label">모집 정원 <span className="field-hint">나를 빼고 · 나 포함 최대 {r.capacityMax + 1}명</span></span>
+            <ChoiceField name="capacity" label="모집 정원" icon="users" value={String(capacity)} onChange={value => setCapacity(Number(value))} grid
+              display={value => value + '명 · 나 포함 ' + (Number(value) + 1) + '명'}
+              options={Array.from({ length: r.capacityMax - r.capacityMin + 1 }, (_, i) => r.capacityMin + i).map(value => ({ value: String(value), text: value + '명' }))} />
+            {fieldError('capacity')}</div>
         </div>
 
 
@@ -302,13 +304,13 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
             {[...presetSupplies, ...supplies.map(item => item.name).filter(name => !presetSupplies.includes(name))].map(name => {
               const on = supplies.some(item => item.name === name)
               return <button type="button" key={name} className={'pick-chip' + (on ? ' on' : '')} aria-pressed={on} disabled={!on && supplies.length >= maxSupplies}
-                onClick={() => { setSuppliesTouched(true); setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
+                onClick={() => { setSupplies(on ? supplies.filter(item => item.name !== name) : [...supplies, { name, provided: false }]) }}><Glyph name={supplyGlyph(name)} size={14} />{name}</button>
             })}
           </div>
           <span className="supply-add"><input aria-label="준비물 직접 추가" value={customSupply} maxLength={10} onChange={event => setCustomSupply(event.target.value)} placeholder="직접 추가 (10자 이내)"
             onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); (event.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click() } }} />
             <button type="button" className="secondary-button small" disabled={!customSupply.trim() || supplies.length >= maxSupplies || supplies.some(item => item.name === customSupply.trim())}
-              onClick={() => { setSuppliesTouched(true); setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
+              onClick={() => { setSupplies([...supplies, { name: customSupply.trim(), provided: false }]); setCustomSupply('') }}><Glyph name="plus" size={14} />추가</button></span>
           {fieldError('supplies')}
           <FieldRisk field="준비물" status={status.supplies} />
         </div>
@@ -387,6 +389,42 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
         {column('분', [0, 10, 20, 30, 40, 50].map(m => ({ key: 'm' + m, text: String(m).padStart(2, '0'), total: Math.floor(minutes / 60) * 60 + m, selected: minutes % 60 === m })))}
       </div>
       <div className="wheel-foot"><span>{r.earliestStart} ~ {toTime(latestStart)} · 10분 단위</span><button type="button" className="primary-button small" onClick={() => { onChange(draft); setOpen(false) }}>완료</button></div>
+    </div>}
+  </div>
+}
+
+const categoryGlyph: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
+const categoryHint: Record<string, string> = { '환경 정화': '공원·거리 정리, 화단 가꾸기', '생활 지원': '나눔 장터, 물품 정리 돕기', '지역 돌봄': '이웃과 함께하는 활동 · 관리자 확인 후 공개' }
+
+type Choice = { value: string; text: string; icon?: GlyphName; hint?: string }
+
+/** A field that opens a small panel of choices, styled like the date and time fields (instead of a plain select). */
+function ChoiceField({ name, label, icon, value, options, onChange, grid, display }: {
+  name: string; label: string; icon: GlyphName; value: string; options: Choice[]; onChange: (value: string) => void; grid?: boolean; display?: (value: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', escape)
+    box.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus()
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape) }
+  }, [open])
+  const current = options.find(option => option.value === value)
+  const shown = display ? display(value) : current?.text ?? value
+  return <div className="choice-field" ref={box}>
+    <button type="button" name={name} className="wheel-field" aria-label={label + ' ' + shown} aria-expanded={open} aria-haspopup="listbox" onClick={() => setOpen(!open)}>
+      <Glyph name={current?.icon ?? icon} size={16} /><span>{shown}</span><span className="chev"><Glyph name="chevron" size={15} /></span>
+    </button>
+    {open && <div className={'choice-pop' + (grid ? ' grid' : '')} role="listbox" aria-label={label}>
+      {options.map(option => <button type="button" role="option" key={option.value} aria-selected={option.value === value} onClick={() => { onChange(option.value); setOpen(false) }}>
+        {option.icon && <span className="choice-icon"><Glyph name={option.icon} size={16} /></span>}
+        <span className="choice-text"><strong>{option.text}</strong>{option.hint && <small>{option.hint}</small>}</span>
+        {!grid && option.value === value && <span className="choice-check"><Glyph name="check" size={16} /></span>}
+      </button>)}
     </div>}
   </div>
 }

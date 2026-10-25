@@ -24,7 +24,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3");
+                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
@@ -64,9 +64,10 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
 
     @Test
     @Transactional
-    void capacityCannotBeOutsideTwoToTen() {
+    void capacityCannotBeOutsideOneToTen() {
+        // V5.4: capacity counts others only (1~9 by the server rule); the DB still allows 10 for activities saved before.
         long user = user();
-        for (int capacity : new int[]{1, 11}) {
+        for (int capacity : new int[]{0, 11}) {
             assertCheckViolation(() -> insertActivity(user, capacity, "2026-10-10 10:00:00", "2026-10-10 11:00:00"));
         }
     }

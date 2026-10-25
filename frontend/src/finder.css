@@ -186,3 +186,16 @@
 .risk-bubble::after{content:'';position:absolute;left:12px;top:100%;border:6px solid transparent;border-top-color:#1d3326}
 .risk-bubble strong{font-size:13px}.risk-safety{opacity:.8}
 .risk-tip:hover .risk-bubble,.risk-tip:focus .risk-bubble{display:flex}
+/* Choice fields (분야·모집 정원·활동 유형): same look as the date/time fields, a small panel instead of a native select. */
+.choice-field{position:relative}
+.choice-field .wheel-field small{color:var(--muted)}
+.choice-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:20;min-width:100%;background:#fff;border:1px solid #dfe6d7;border-radius:14px;box-shadow:0 12px 30px #1d33261f;padding:6px;display:flex;flex-direction:column;gap:2px}
+.choice-pop button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 11px;border-radius:9px;text-align:left;font-size:13px;color:#263b32}
+.choice-pop button:hover,.choice-pop button:focus-visible{background:#f3f7ef;outline:none}
+.choice-pop button[aria-selected=true]{background:#eef4e8}
+.choice-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#eef4e8;color:var(--green);flex-shrink:0}
+.choice-text{display:flex;flex-direction:column;gap:2px}.choice-text small{font-size:11px;color:var(--muted);font-weight:400}
+.choice-check{margin-left:auto;color:var(--green)}
+.choice-pop.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px;width:260px;min-width:0}
+.choice-pop.grid button{justify-content:center;border:1px solid #e3e9dc;padding:9px 0}.choice-pop.grid .choice-text{align-items:center}
+.choice-pop.grid button[aria-selected=true]{background:var(--green);border-color:var(--green)}.choice-pop.grid button[aria-selected=true] strong{color:#fff}

@@ -92,7 +92,7 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
                 .andExpect(status().isUnauthorized());
         String token = token(member("GENERAL"));
         Map<String, Object> bad = activity("짧음", "짧은 소개");
-        bad.put("capacity", 11);
+        bad.put("capacity", 10); // 10 others + the organizer would be 11 people
         bad.put("durationMinutes", 20);
         bad.put("date", TODAY.toString());
         bad.put("time", "05:30");
@@ -105,6 +105,10 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         late.put("durationMinutes", 90);
         perform(post("/api/activities"), late, token).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[0].message").value("활동은 22:00 전에 끝나야 합니다."));
+        // 1 other person (2 with the organizer) is the smallest activity.
+        Map<String, Object> pair = activity("둘이서 하는 공원 정리", "공원 산책로 주변의 가벼운 쓰레기를 둘이서 함께 정리합니다.");
+        pair.put("capacity", 1);
+        perform(post("/api/activities"), pair, token).andExpect(status().isCreated());
     }
 
     @Test
