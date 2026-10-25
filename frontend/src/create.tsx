@@ -285,7 +285,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <small>위험한 단어가 있는지는 등록할 때 한 번 더 확인합니다.</small>
         </div>
         {place && <p className="small-print">장소 분류: {place.classLabel} · {classBadge[place.placeClass].text}</p>}
-        <div className="help-card"><h3>안전하게 함께해요</h3><p>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없습니다. 요양·병원·반려동물·학교 같은 장소, 해가 진 뒤 끝나는 활동은 확인 후 공개됩니다.</p></div>
+        <div className="help-card"><h3>안전하게 함께해요</h3><p>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없습니다. 어르신·아이 돌봄 같은 활동, 지도에서 종류를 알 수 없는 장소, 해가 진 뒤 끝나는 활동은 확인 후 공개됩니다.</p></div>
       </aside>
     </div>
   </>
