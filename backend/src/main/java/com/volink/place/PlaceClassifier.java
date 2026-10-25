@@ -6,7 +6,8 @@ import java.util.Locale;
 /**
  * Decides from Kakao's category (and, for risky words, the place name) whether an activity there is published as usual (OPEN),
  * checked by an admin first (REVIEW) or refused (BLOCKED). First matching rule wins; BLOCKED rules come first.
- * Anything not recognised is REVIEW: an unknown kind of place is never published without a look.
+ * Known kinds of place are public and busy, so they open (the activity's own words are still checked for risk);
+ * only a place Kakao cannot tell us about is REVIEW (user decision 2026-10-25).
  */
 public final class PlaceClassifier {
     public enum Level { OPEN, REVIEW, BLOCKED }
@@ -20,13 +21,13 @@ public final class PlaceClassifier {
             new Rule(Level.BLOCKED, "술집·유흥시설", List.of("술집", "주점", "호프", "유흥", "나이트", "단란"), true),
             new Rule(Level.BLOCKED, "숙박업소", List.of("모텔", "여관"), true),
             new Rule(Level.BLOCKED, "위험 시설", List.of("사격", "카지노", "성인용품", "군부대", "교도소", "공사현장"), true),
-            new Rule(Level.REVIEW, "요양·복지시설", List.of("요양", "노인복지", "복지관", "복지시설", "장애인", "아동센터", "보육"), true),
-            new Rule(Level.REVIEW, "병원·약국", List.of("병원", "의원", "의료", "약국", "보건"), true),
-            new Rule(Level.REVIEW, "반려동물 시설", List.of("반려", "애견", "애완", "동물"), true),
-            new Rule(Level.REVIEW, "학교·어린이집", List.of("학교", "어린이집", "유치원", "학원"), true),
-            new Rule(Level.REVIEW, "종교시설", List.of("종교", "교회", "성당", "사찰"), false),
-            new Rule(Level.REVIEW, "주거·숙박시설", List.of("아파트", "주거", "숙박", "호텔", "펜션", "캠핑"), false),
-            new Rule(Level.REVIEW, "물가·산업시설", List.of("수영", "물놀이", "해수욕", "계곡", "저수지", "공장", "산업", "주차장"), false),
+            new Rule(Level.OPEN, "요양·복지시설", List.of("요양", "노인복지", "복지관", "복지시설", "장애인", "아동센터", "보육"), true),
+            new Rule(Level.OPEN, "병원·약국", List.of("병원", "의원", "의료", "약국", "보건"), true),
+            new Rule(Level.OPEN, "반려동물 시설", List.of("반려", "애견", "애완", "동물"), true),
+            new Rule(Level.OPEN, "학교·어린이집", List.of("학교", "어린이집", "유치원", "학원"), true),
+            new Rule(Level.OPEN, "종교시설", List.of("종교", "교회", "성당", "사찰"), false),
+            new Rule(Level.OPEN, "주거·숙박시설", List.of("아파트", "주거", "숙박", "호텔", "펜션", "캠핑"), false),
+            new Rule(Level.OPEN, "물가·산업시설", List.of("수영", "물놀이", "해수욕", "계곡", "저수지", "공장", "산업", "주차장"), false),
             new Rule(Level.OPEN, "공원", List.of("공원", "광장", "산책", "둘레길", "수목원", "하천", "천변"), false),
             new Rule(Level.OPEN, "도서관·문화시설", List.of("도서관", "문화", "박물관", "미술관", "전시"), false),
             new Rule(Level.OPEN, "공공기관", List.of("공공기관", "행정", "주민센터", "복합청사", "시청", "구청", "자원봉사센터"), false),
@@ -46,9 +47,9 @@ public final class PlaceClassifier {
             for (String word : rule.words())
                 if (category.contains(word) || rule.nameToo() && place.contains(word.trim())) return new Result(rule.level(), rule.label());
         return switch (group) {
-            case "HP8", "PM9" -> new Result(Level.REVIEW, "병원·약국");
-            case "SC4", "PS3", "AC5" -> new Result(Level.REVIEW, "학교·어린이집");
-            case "AD5" -> new Result(Level.REVIEW, "주거·숙박시설");
+            case "HP8", "PM9" -> new Result(Level.OPEN, "병원·약국");
+            case "SC4", "PS3", "AC5" -> new Result(Level.OPEN, "학교·어린이집");
+            case "AD5" -> new Result(Level.OPEN, "주거·숙박시설");
             case "AT4" -> new Result(Level.OPEN, "관광명소");
             case "CT1" -> new Result(Level.OPEN, "도서관·문화시설");
             case "PO3" -> new Result(Level.OPEN, "공공기관");

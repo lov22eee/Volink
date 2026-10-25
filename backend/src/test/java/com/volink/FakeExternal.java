@@ -18,13 +18,15 @@ public class FakeExternal {
         public boolean enabled;
         public List<Place> results = new ArrayList<>();
         public Region region;
+        /** When set, the region depends on the point (district borders). */
+        public java.util.function.BiFunction<Double, Double, Region> regionAt;
         public Map<String, Place> located = new HashMap<>();
 
-        public void reset() { enabled = false; results = new ArrayList<>(); region = null; located = new HashMap<>(); }
+        public void reset() { enabled = false; results = new ArrayList<>(); region = null; regionAt = null; located = new HashMap<>(); }
         @Override public boolean enabled() { return enabled; }
         @Override public List<Place> keyword(String query, Double lat, Double lng) { return results; }
         @Override public List<Place> nearby(double lat, double lng) { return results; }
-        @Override public Optional<Region> region(double lat, double lng) { return Optional.ofNullable(region); }
+        @Override public Optional<Region> region(double lat, double lng) { return Optional.ofNullable(regionAt != null ? regionAt.apply(lat, lng) : region); }
         @Override public Optional<Place> locate(String text, Double lat, Double lng) { return Optional.ofNullable(located.get(text)); }
     }
 
@@ -32,13 +34,14 @@ public class FakeExternal {
         public boolean enabled;
         public List<Map<String, String>> list = new ArrayList<>();
         public Map<String, Map<String, String>> details = new HashMap<>();
+        public Map<String, List<Map<String, String>>> byCity = new HashMap<>();
         public List<String> calls = new ArrayList<>();
 
-        public void reset() { enabled = false; list = new ArrayList<>(); details = new HashMap<>(); calls = new ArrayList<>(); }
+        public void reset() { enabled = false; list = new ArrayList<>(); byCity = new HashMap<>(); details = new HashMap<>(); calls = new ArrayList<>(); }
         @Override public boolean enabled() { return enabled; }
         @Override public List<Map<String, String>> areaList(String province, String city, String keyword, int rows) {
             calls.add("area:" + province + "/" + city + "/" + keyword);
-            return list;
+            return byCity.getOrDefault(city, list);
         }
         @Override public Optional<Map<String, String>> detail(String programNo) {
             calls.add("detail:" + programNo);

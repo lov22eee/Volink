@@ -32,6 +32,8 @@ public class VolunteerService {
     static final Duration DETAIL_REFRESH = Duration.ofHours(12);
     static final int LIST_ROWS = 50;
     static final int NEW_DETAILS = 20;
+    static final double RING_KM = 3;
+    static final int MAX_AREAS = 4;
     static final String LINK = "https://www.1365.go.kr/vols/P9210/partcptn/timeCptn.do?type=show&progrmRegistNo=";
     private static final DateTimeFormatter YMD = DateTimeFormatter.BASIC_ISO_DATE;
 
@@ -63,16 +65,19 @@ public class VolunteerService {
         if (!api.enabled() || !kakao.enabled()) { result.put("items", List.of()); return result; }
 
         Optional<KakaoLocal.Region> region = kakao.region(query.lat(), query.lng());
-        Optional<RegionCodes.Codes> codes = region.flatMap(r -> RegionCodes.of(r.province(), r.city()));
         result.put("region", region.map(r -> (r.province() + " " + r.city()).trim()).orElse(null));
-        if (codes.isEmpty()) { result.put("items", List.of()); return result; }
+        List<RegionCodes.Codes> areas = areas(region, query.lat(), query.lng());
+        if (areas.isEmpty()) { result.put("items", List.of()); return result; }
 
-        List<Map<String, String>> list = list(codes.get(), q);
+        // The centre's district first (it gets the detail budget first), then the neighbours the 3 km ring reaches.
+        List<Map<String, String>> list = new ArrayList<>();
+        for (RegionCodes.Codes codes : areas) list.addAll(list(codes, q));
         int fetched = 0;
         List<Map<String, Object>> items = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
         for (Map<String, String> entry : list) {
             String no = first(entry, "progrmRegistNo");
-            if (no == null) continue;
+            if (no == null || !seen.add(no)) continue;
             Map<String, Object> stored = stored(no);
             if ((stored == null || stale(stored)) && fetched < NEW_DETAILS) {
                 fetched++;
@@ -91,6 +96,20 @@ public class VolunteerService {
         result.put("items", items);
         result.put("found", list.size());
         return result;
+    }
+
+    /** A point near a district border also needs the next district: look 3 km north, south, east and west (at most 4 districts). */
+    private List<RegionCodes.Codes> areas(Optional<KakaoLocal.Region> centre, double lat, double lng) {
+        java.util.LinkedHashSet<RegionCodes.Codes> areas = new java.util.LinkedHashSet<>();
+        centre.flatMap(r -> RegionCodes.of(r.province(), r.city())).ifPresent(areas::add);
+        if (areas.isEmpty()) return List.of();
+        double dLat = RING_KM / 111.0, dLng = RING_KM / (111.0 * Math.cos(Math.toRadians(lat)));
+        double[][] around = {{lat + dLat, lng}, {lat - dLat, lng}, {lat, lng + dLng}, {lat, lng - dLng}};
+        for (double[] point : around) {
+            if (areas.size() >= MAX_AREAS) break;
+            kakao.region(point[0], point[1]).flatMap(r -> RegionCodes.of(r.province(), r.city())).ifPresent(areas::add);
+        }
+        return List.copyOf(areas);
     }
 
     private List<Map<String, String>> list(RegionCodes.Codes codes, String q) {

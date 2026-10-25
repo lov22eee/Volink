@@ -19,7 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** 4주차 보완: place search, classification by Kakao category, signed choices and the new explore filters (docs/test-cases.md P-01..P-06). */
 class PlacePickIntegrationTest extends ApiTestSupport {
     static final KakaoLocal.Place PARK = new KakaoLocal.Place("9001", "옥정호수공원", "여행 > 공원 > 도시근린공원", "AT4", "경기 양주시 옥정동 1", 37.8201, 127.0901, 120);
-    static final KakaoLocal.Place CARE = new KakaoLocal.Place("9002", "옥정 행복요양병원", "의료,건강 > 병원 > 요양병원", "HP8", "경기 양주시 옥정동 2", 37.8211, 127.0911, 350);
+    /** A kind of place the classifier does not know: the only kind that waits for an admin. */
+    static final KakaoLocal.Place CARE = new KakaoLocal.Place("9002", "옥정 생활용품점", "가정,생활 > 생활용품", "", "경기 양주시 옥정동 2", 37.8211, 127.0911, 350);
     static final KakaoLocal.Place GAS = new KakaoLocal.Place("9003", "SK 옥정주유소", "교통,수송 > 자동차 > 주유,가스 > 주유소", "OL7", "경기 양주시 옥정동 3", 37.8221, 127.0921, 520);
 
     @Autowired FakeExternal.Kakao kakao;
@@ -45,7 +46,7 @@ class PlacePickIntegrationTest extends ApiTestSupport {
                 .andExpect(jsonPath("$.mode").value("KAKAO"))
                 .andExpect(jsonPath("$.items[0].placeClass").value("OPEN")).andExpect(jsonPath("$.items[0].classLabel").value("공원"))
                 .andExpect(jsonPath("$.items[0].token").exists())
-                .andExpect(jsonPath("$.items[1].placeClass").value("REVIEW")).andExpect(jsonPath("$.items[1].classLabel").value("요양·복지시설"))
+                .andExpect(jsonPath("$.items[1].placeClass").value("REVIEW")).andExpect(jsonPath("$.items[1].classLabel").value("확인이 필요한 장소"))
                 .andExpect(jsonPath("$.items[2].placeClass").value("BLOCKED")).andExpect(jsonPath("$.items[2].token").doesNotExist());
         mvc.perform(get("/api/places/nearby").param("lat", "37.82").param("lng", "127.09")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(3));
@@ -53,7 +54,7 @@ class PlacePickIntegrationTest extends ApiTestSupport {
     }
 
     @Test
-    void anOpenPlacePublishesAndAReviewPlaceGoesToAnAdmin() throws Exception {
+    void anOpenPlacePublishesAndAnUnknownPlaceGoesToAnAdmin() throws Exception {
         kakao.enabled = true;
         kakao.results = List.of(PARK, CARE);
         JsonNode items = json.readTree(mvc.perform(get("/api/places/search").param("query", "옥정")).andReturn().getResponse().getContentAsString()).get("items");
@@ -74,7 +75,7 @@ class PlacePickIntegrationTest extends ApiTestSupport {
         long reviewId = createActivity(picked(items.get(1), "병원 앞 화단 가꾸기"), organizer);
         mvc.perform(get("/api/me/activities").header("Authorization", "Bearer " + organizer))
                 .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].status").value(org.hamcrest.Matchers.contains("DRAFT")))
-                .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].riskReasons").value(org.hamcrest.Matchers.contains(containsString("요양·복지시설"))));
+                .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].riskReasons").value(org.hamcrest.Matchers.contains(containsString("확인이 필요한 장소"))));
     }
 
     @Test
