@@ -36,6 +36,14 @@ public class ActivityController {
         return activities.update(Long.parseLong(jwt.getSubject()), id, request);
     }
 
+    public record CheckRequest(String title, String description, java.util.List<String> supplies) {}
+
+    /** While typing: which risk words each field has, so the form can say "검토 후 승인" or "올릴 수 없어요" under that field. Nothing is saved. */
+    @PostMapping("/api/activities/check")
+    public Map<String, Object> check(@RequestBody CheckRequest request) {
+        return activities.check(request);
+    }
+
     public record NotesRequest(String description, String meetingPoint) {}
 
     /** Organizer only: description and meeting point, allowed after people applied. */

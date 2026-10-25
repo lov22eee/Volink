@@ -15,6 +15,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** 4주차 보완 2: spacing-insensitive risk words, organizer edit/delete locked by applications (docs/test-cases.md E-01..E-05). */
 class ActivityEditIntegrationTest extends ApiTestSupport {
     @Test
+    void theFormCanAskWhichFieldHasARiskWordWithoutSaving() throws Exception {
+        String organizer = token(member("GENERAL"));
+        perform(post("/api/activities/check"), Map.of("title", "어르신 말벗 산책", "description", "전기 배관 주변을 정리합니다.", "supplies", java.util.List.of("장갑", "사다리")), organizer)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title[0].keyword").value("어르신")).andExpect(jsonPath("$.title[0].level").value("REVIEW"))
+                .andExpect(jsonPath("$.description[*].level").value(org.hamcrest.Matchers.hasItem("BLOCKED")))
+                .andExpect(jsonPath("$.supplies[0].keyword").value("사다리"));
+        perform(post("/api/activities/check"), Map.of("title", "공원 산책로 함께 걷고 줍기", "description", "천천히 걸으며 쓰레기를 줍습니다."), organizer)
+                .andExpect(jsonPath("$.title.length()").value(0)).andExpect(jsonPath("$.description.length()").value(0));
+        mvc.perform(post("/api/activities/check").contentType("application/json").content("{}")).andExpect(status().isUnauthorized());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activities WHERE title = '어르신 말벗 산책'", Integer.class)).isZero();
+    }
+
+    @Test
     void riskWordsMatchWithoutSpaces() throws Exception {
         String organizer = token(member("GENERAL"));
         perform(post("/api/activities"), activity("전기 배관 작업 도와주세요", "안녕하세요. 전기 배관 작업 도와주실 분들을 모집합니다."), organizer)

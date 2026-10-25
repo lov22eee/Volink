@@ -62,6 +62,17 @@ public class ActivityService {
     }
 
     @Transactional
+    /** Risk words per field while the organizer types (the same words the save checks; long input is cut, not refused). */
+    public Map<String, Object> check(ActivityController.CheckRequest request) {
+        java.util.function.Function<String, String> cut = text -> text == null ? "" : text.length() > 2000 ? text.substring(0, 2000) : text;
+        String supplies = request.supplies() == null ? "" : String.join(" ", request.supplies().stream().limit(10).map(name -> cut.apply(name)).toList());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("title", risk.words(cut.apply(request.title())));
+        result.put("description", risk.words(cut.apply(request.description())));
+        result.put("supplies", risk.words(supplies));
+        return result;
+    }
+
     public Map<String, Object> create(long userId, ActivityRequest request) {
         return save(userId, request, null);
     }

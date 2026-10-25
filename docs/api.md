@@ -89,3 +89,10 @@
 | 회원가입 | `POST /api/auth/signup` | 생성된 회원, 기관 상태 PENDING | `UNDER_AGE`, `EMAIL_TAKEN`, 칸별 오류 |
 
 화면 입력 규칙과 서버 검증 문구는 [rules.md](rules.md)로 맞춥니다.
+
+
+## 활동 입력 중 위험 단어 확인 (2026-10-25)
+
+`POST /api/activities/check` · 로그인 필요 · 저장하지 않음
+
+요청 `{ title, description, supplies: [이름] }` → 응답 `{ title: [hit], description: [hit], supplies: [hit] }`, hit = `{ keyword, level: BLOCKED|REVIEW, reason }`. 저장 시 검사(`RiskClassifier`)와 같은 단어표·띄어쓰기 무시 비교이며, 화면이 칸 밑에 ‘검토 후 승인 예정 / 모집을 올릴 수 없어요’를 보여줄 때만 씁니다. 긴 입력은 2000자로 잘라 봅니다.
