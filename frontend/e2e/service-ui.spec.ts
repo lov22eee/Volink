@@ -248,10 +248,8 @@ test('create form requires login, shows field errors and only offers times that 
   await page.getByRole('textbox', { name: '준비물 직접 추가' }).fill('손전등')
   await page.getByRole('button', { name: '추가', exact: true }).click()
   await expect(bring.getByRole('button', { name: '손전등' })).toHaveAttribute('aria-pressed', 'true')
-  await page.getByLabel('활동 유형', { exact: true }).selectOption('INSTITUTION')
-  await expect(page.getByRole('button', { name: '활동 등록' })).toBeDisabled()
-  await expect(page.locator('.inline-notice')).toContainText('기관 확인이 완료된 기관회원')
-  await page.getByLabel('활동 유형', { exact: true }).selectOption('GENERAL')
+  // A personal account has no type to choose: it always opens 자율 활동.
+  await expect(page.getByLabel('활동 유형', { exact: true })).toHaveCount(0)
   await page.getByRole('checkbox', { name: /공공장소의 저위험 활동/ }).check()
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
   await page.screenshot({ path: shot('create'), fullPage: true })
