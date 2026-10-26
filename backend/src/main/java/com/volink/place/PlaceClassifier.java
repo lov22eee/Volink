@@ -6,8 +6,9 @@ import java.util.Locale;
 /**
  * Decides from Kakao's category (and, for risky words, the place name) whether an activity there is published as usual (OPEN),
  * checked by an admin first (REVIEW) or refused (BLOCKED). First matching rule wins; BLOCKED rules come first.
- * Known kinds of place are public and busy, so they open (the activity's own words are still checked for risk);
- * only a place Kakao cannot tell us about is REVIEW (user decision 2026-10-25).
+ * Every place Kakao names with a kind is OPEN unless a BLOCKED rule matches (user decision 2026-10-26: named places are
+ * public and busy, and the activity's own words are still checked for risk). Only a spot without a kind, i.e. a street,
+ * alley or empty lot picked straight on the map, is REVIEW.
  */
 public final class PlaceClassifier {
     public enum Level { OPEN, REVIEW, BLOCKED }
@@ -36,7 +37,17 @@ public final class PlaceClassifier {
             new Rule(Level.OPEN, "음식점", List.of("음식점"), false),
             new Rule(Level.OPEN, "체육시설", List.of("운동장", "체육", "스포츠"), false));
 
+    /** Label of a spot picked on the map (no Kakao place there). */
+    public static final String UNNAMED = "이름 없는 장소(길·골목·공터)";
+
     private PlaceClassifier() {}
+
+    /** "교통,수송 > 지하철,전철 > 수도권1호선" → "지하철,전철": the second level reads best as a kind. */
+    private static String kindOf(String categoryName) {
+        String[] parts = categoryName == null ? new String[0] : categoryName.split(">");
+        String kind = parts.length > 1 ? parts[1].trim() : parts.length == 1 ? parts[0].trim() : "";
+        return kind.isEmpty() ? "기타 장소" : kind;
+    }
 
     public static Result classify(String categoryName, String categoryGroup, String name) {
         String category = (categoryName == null ? "" : categoryName).toLowerCase(Locale.ROOT) + " ";
@@ -55,7 +66,7 @@ public final class PlaceClassifier {
             case "PO3" -> new Result(Level.OPEN, "공공기관");
             case "CE7" -> new Result(Level.OPEN, "카페");
             case "FD6" -> new Result(Level.OPEN, "음식점");
-            default -> new Result(Level.REVIEW, "확인이 필요한 장소");
+            default -> category.isBlank() && group.isEmpty() ? new Result(Level.REVIEW, UNNAMED) : new Result(Level.OPEN, kindOf(categoryName));
         };
     }
 }

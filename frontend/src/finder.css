@@ -199,3 +199,4 @@
 .choice-pop.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px;width:260px;min-width:0}
 .choice-pop.grid button{justify-content:center;border:1px solid #e3e9dc;padding:9px 0}.choice-pop.grid .choice-text{align-items:center}
 .choice-pop.grid button[aria-selected=true]{background:var(--green);border-color:var(--green)}.choice-pop.grid button[aria-selected=true] strong{color:#fff}
+.picked-tag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:99px;background:#fff6e5;color:#9a6a12;font-size:11px;font-weight:700;vertical-align:1px}

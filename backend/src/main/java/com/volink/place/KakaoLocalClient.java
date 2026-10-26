@@ -72,6 +72,19 @@ public class KakaoLocalClient implements KakaoLocal {
     }
 
     @Override
+    public Optional<String> addressAt(double lat, double lng) {
+        if (!enabled) return Optional.empty();
+        JsonNode body = get("/v2/local/geo/coord2address.json?x={x}&y={y}", lng, lat);
+        if (body == null) return Optional.empty();
+        for (JsonNode doc : body.path("documents")) {
+            String road = doc.path("road_address").path("address_name").asText("");
+            String lot = doc.path("address").path("address_name").asText("");
+            if (!road.isBlank() || !lot.isBlank()) return Optional.of(road.isBlank() ? lot : road);
+        }
+        return Optional.empty();
+    }
+
+    @Override
     public Optional<Place> locate(String text, Double nearLat, Double nearLng) {
         if (!enabled || text == null || text.isBlank()) return Optional.empty();
         List<Place> byName = keyword(text, nearLat, nearLng);

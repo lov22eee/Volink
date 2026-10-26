@@ -21,12 +21,14 @@ public class FakeExternal {
         /** When set, the region depends on the point (district borders). */
         public java.util.function.BiFunction<Double, Double, Region> regionAt;
         public Map<String, Place> located = new HashMap<>();
+        public String address;
 
-        public void reset() { enabled = false; results = new ArrayList<>(); region = null; regionAt = null; located = new HashMap<>(); }
+        public void reset() { enabled = false; results = new ArrayList<>(); region = null; regionAt = null; located = new HashMap<>(); address = null; }
         @Override public boolean enabled() { return enabled; }
         @Override public List<Place> keyword(String query, Double lat, Double lng) { return results; }
         @Override public List<Place> nearby(double lat, double lng) { return results; }
         @Override public Optional<Region> region(double lat, double lng) { return Optional.ofNullable(regionAt != null ? regionAt.apply(lat, lng) : region); }
+        @Override public Optional<String> addressAt(double lat, double lng) { return Optional.ofNullable(address); }
         @Override public Optional<Place> locate(String text, Double lat, Double lng) { return Optional.ofNullable(located.get(text)); }
     }
 

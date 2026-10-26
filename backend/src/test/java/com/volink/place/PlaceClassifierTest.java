@@ -21,7 +21,10 @@ class PlaceClassifierTest {
             "교육,학문 > 학교 > 초등학교|SC4|옥정초등학교|OPEN|학교·어린이집",
             "교통,수송 > 자동차 > 주유,가스 > 주유소|OL7|SK주유소|BLOCKED|주유소·충전소",
             "음식점 > 술집 > 호프,요리주점|FD6|동네호프|BLOCKED|술집·유흥시설",
-            "가정,생활 > 생활용품|| 생활용품점|REVIEW|확인이 필요한 장소",
+            "가정,생활 > 생활용품|| 생활용품점|OPEN|생활용품",
+            "교통,수송 > 지하철,전철 > 수도권1호선|SW8|양주역|OPEN|지하철,전철",
+            "가정,생활 > 편의점|CS2|GS25 옥정점|OPEN|편의점",
+            "||ㅇㅇ로 12 근처|REVIEW|이름 없는 장소(길·골목·공터)",
     })
     void classifiesByCategory(String category, String group, String name, String level, String label) {
         PlaceClassifier.Result result = PlaceClassifier.classify(category, group, name);

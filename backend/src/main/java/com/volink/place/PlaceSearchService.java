@@ -60,6 +60,32 @@ public class PlaceSearchService {
         return result("KAKAO", kakao.nearby(lat, lng).stream().map(this::view).toList());
     }
 
+    /**
+     * A spot picked straight on the map (a street, alley or empty lot): named by its address, always REVIEW, signed like a
+     * search result. The id "p:<lat>,<lng>" (5 decimals, about 1 m) lets the same spot be stored once.
+     */
+    public Map<String, Object> point(double lat, double lng) {
+        double la = BigDecimal.valueOf(lat).setScale(5, RoundingMode.HALF_UP).doubleValue();
+        double ln = BigDecimal.valueOf(lng).setScale(5, RoundingMode.HALF_UP).doubleValue();
+        String id = String.format(java.util.Locale.ROOT, "p:%.5f,%.5f", la, ln);
+        String address = kakao.addressAt(la, ln).orElse(null);
+        String name = address == null ? "지도에서 고른 위치" : address + " 근처";
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("kakaoId", id);
+        row.put("name", name);
+        row.put("address", address);
+        row.put("categoryName", "");
+        row.put("latitude", la);
+        row.put("longitude", ln);
+        row.put("distanceMeters", 0);
+        row.put("placeClass", PlaceClassifier.Level.REVIEW.name());
+        row.put("classLabel", PlaceClassifier.UNNAMED);
+        row.put("picked", true);
+        Choice choice = new Choice(id, name, address, "", la, ln, PlaceClassifier.Level.REVIEW.name(), PlaceClassifier.UNNAMED, null);
+        row.put("token", sign(choice, clock.instant().plus(TOKEN_TTL).getEpochSecond()));
+        return row;
+    }
+
     private static Map<String, Object> result(String mode, List<Map<String, Object>> items) {
         return Map.of("mode", mode, "items", items);
     }
@@ -118,7 +144,7 @@ public class PlaceSearchService {
                 VALUES (?, ?, ?, ?, ?, 'ENTERED', 'KAKAO', ?, ?, ?)
                 ON DUPLICATE KEY UPDATE name = VALUES(name), area = VALUES(area), latitude = VALUES(latitude), longitude = VALUES(longitude),
                                         category_name = VALUES(category_name), place_class = VALUES(place_class)
-                """, name, cut(choice.address(), 100), "카카오 장소 검색: " + cut(choice.categoryName(), 200),
+                """, name, cut(choice.address(), 100), choice.kakaoId().startsWith("p:") ? "지도에서 직접 고른 위치" : "카카오 장소 검색: " + cut(choice.categoryName(), 200),
                 BigDecimal.valueOf(choice.latitude()), BigDecimal.valueOf(choice.longitude()), choice.kakaoId(), cut(choice.categoryName(), 200), choice.placeClass());
         long id = jdbc.queryForObject("SELECT id FROM demo_places WHERE kakao_place_id = ?", Long.class, choice.kakaoId());
         return new Stored(id, choice.placeClass(), choice.classLabel());
