@@ -6,8 +6,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Server copy of frontend/src/rules.ts activityRules; field keys and messages match the form. */
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class ActivityRules {
     static final LocalTime EARLIEST_START = LocalTime.of(6, 0);
     static final LocalTime LATEST_END = LocalTime.of(22, 0);
+    static final int MAX_SUPPLIES = 6;
     private final Clock clock;
 
     public ActivityRules(Clock clock) {
@@ -27,7 +30,19 @@ public class ActivityRules {
         Map<String, String> errors = new LinkedHashMap<>();
         String title = trim(request.title());
         if (title.length() < 5 || title.length() > 100) errors.put("title", "활동 이름은 5~100자로 입력해 주세요.");
-        if (request.placeId() == null) errors.put("place", "장소를 선택해 주세요.");
+        if (request.placeId() == null && request.place() == null) errors.put("place", "장소를 선택해 주세요.");
+        if (trim(request.meetingPoint()).length() > 100) errors.put("meetingPoint", "만나는 곳은 100자 이내로 적어 주세요.");
+        if (request.supplies() != null) {
+            Set<String> names = new HashSet<>();
+            if (request.supplies().size() > MAX_SUPPLIES) errors.put("supplies", "준비물은 " + MAX_SUPPLIES + "개까지 고를 수 있습니다.");
+            else for (ActivityRequest.Supply supply : request.supplies()) {
+                String name = supply == null ? "" : trim(supply.name());
+                if (name.isEmpty() || name.length() > 10 || !names.add(name) || name.chars().anyMatch(Character::isISOControl)) {
+                    errors.put("supplies", "준비물 이름은 1~10자로, 겹치지 않게 적어 주세요.");
+                    break;
+                }
+            }
+        }
         LocalDate date = parse(request.date(), LocalDate::parse);
         LocalTime time = parse(request.time(), LocalTime::parse);
         Integer duration = request.durationMinutes();
@@ -45,11 +60,12 @@ public class ActivityRules {
             if (out != null && duration != null) out[0] = new Checked(start, start.plus(Duration.ofMinutes(duration)));
         }
         Integer capacity = request.capacity();
-        if (capacity == null || capacity < 2 || capacity > 10) errors.put("capacity", "모집 정원은 2~10명입니다.");
+        // Plan: an activity is 2~10 people including the organizer, so 1~9 others (user decision 2026-10-25).
+        if (capacity == null || capacity < 1 || capacity > 9) errors.put("capacity", "모집 정원은 나를 빼고 1~9명입니다(나 포함 최대 10명).");
         if (duration == null || duration < 30 || duration > 180) errors.put("duration", "활동 시간은 30~180분입니다.");
         String description = trim(request.description());
         if (description.length() < 20 || description.length() > 2000) errors.put("description", "활동 소개는 20~2000자로 적어 주세요.");
-        if (!Boolean.TRUE.equals(request.safetyConfirmed())) errors.put("safety", "안전 안내 두 항목을 모두 확인해 주세요.");
+        if (!Boolean.TRUE.equals(request.safetyConfirmed())) errors.put("safety", "안전 안내를 확인해 주세요.");
         return errors;
     }
 

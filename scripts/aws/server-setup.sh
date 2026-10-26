@@ -20,12 +20,13 @@ if [ -z "${VOLINK_FRESH:-}" ]; then
 fi
 
 step "packages"
+# Ubuntu may be installing its own security updates; wait for them (up to 15 min) instead of failing.
 if ! swapon --show | grep -q /swapfile; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   grep -q /swapfile /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
-apt-get update -q
-apt-get install -yq git curl unzip python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
+apt-get -o DPkg::Lock::Timeout=900 update -q
+apt-get -o DPkg::Lock::Timeout=900 install -yq git curl unzip python3 openjdk-21-jdk-headless docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
 systemctl enable --now docker
 if [ "$(/opt/node/bin/node -v 2>/dev/null)" != "$NODE_VERSION" ]; then
   tmp=$(mktemp -d)
@@ -52,6 +53,12 @@ step "backend build"
 id volink >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin volink
 mkdir -p /opt/volink-app
 install -m 644 backend/target/volink-api-*.jar /opt/volink-app/volink-api.jar
+# Server-only keys (never VITE_ variables): Kakao REST key for place search, data.go.kr key for 1365 programs.
+# Put them with scripts/aws/set-keys.sh; without them place search uses the admin-entered places and 1365 is hidden.
+keys=/etc/volink/api-keys.env
+install -m 600 /dev/null "$keys"
+if [ -s /etc/volink/kakao_rest_key ]; then echo "KAKAO_REST_KEY=$(tr -d '[:space:]' < /etc/volink/kakao_rest_key)" >> "$keys"; fi
+if [ -s /etc/volink/data_go_kr_key ]; then echo "DATA_GO_KR_KEY=$(tr -d '[:space:]' < /etc/volink/data_go_kr_key)" >> "$keys"; fi
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
 Description=Volink API
@@ -61,6 +68,7 @@ Wants=network-online.target
 [Service]
 User=volink
 EnvironmentFile=$APP/.env
+EnvironmentFile=-$keys
 # dev profile = demo server: creates the 11 demo accounts from DEMO_ACCOUNT_PASSWORD in .env.
 Environment=SPRING_PROFILES_ACTIVE=dev
 Environment=DB_HOST=127.0.0.1

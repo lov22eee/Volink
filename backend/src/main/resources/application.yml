@@ -33,6 +33,12 @@ volink:
     # Base64 HS256 key of 32+ bytes. Empty = random per process (local development only).
     jwt-secret: ${JWT_SECRET:}
     cookie-secure: ${AUTH_COOKIE_SECURE:true}
+  kakao:
+    # Kakao Local REST API key (server only; never a VITE_ variable). Empty = place search falls back to admin-entered places.
+    rest-key: ${KAKAO_REST_KEY:}
+  data-go-kr:
+    # data.go.kr "일반 인증키 (Decoding)" for 1365 봉사참여정보서비스. Empty = 1365 programs are not shown.
+    key: ${DATA_GO_KR_KEY:}
   demo:
     # Local/demo environment only: password for the 11 demo accounts. Empty = no demo accounts are created.
     account-password: ${DEMO_ACCOUNT_PASSWORD:}

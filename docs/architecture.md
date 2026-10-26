@@ -225,3 +225,17 @@ flowchart LR
 | `GET /api/demo/catalog` | 장소·시연 계정 정의·활동 시안 조회 | dev/test 전용·읽기 전용 |
 
 3주차에 회원가입·로그인·리프레시·로그아웃, 내 정보·관심 분야, 활동 개설·공개 목록·상세·내 활동, 관리자 기관 확인·검토 활동 처리를 구현했습니다. 전체 목록과 이후 주차 API는 [api.md](api.md)를 봅니다. V4로 `activities.place_id`(시연 장소 후보, 4주차 실제 좌표로 교체 예정)·`risk_reasons`·`review_note`와 `refresh_tokens`(해시만 저장)를 추가했습니다.
+
+## 4주차 보완 · 외부 연결 (2026-10-21)
+
+```mermaid
+flowchart LR
+    B[브라우저] -->|/api/places/search · nearby| S[Spring Boot]
+    B -->|/api/volunteer-programs| S
+    B -. JS 키(도메인 제한) .-> KM[Kakao 지도]
+    S -->|REST 키 · 서버 전용| KL[Kakao 로컬 API]
+    S -->|일반 인증키 · 서버 전용| DG[data.go.kr 봉사참여정보서비스]
+    S --> DB[(MySQL: demo_places KAKAO · volunteer_programs)]
+```
+
+검색 장소는 활동을 등록할 때만 `demo_places`(source=KAKAO)에 저장하고, 1365 상세는 공개 항목만 `volunteer_programs`에 캐시합니다. 두 외부 API 키가 없으면 각각 등록 장소 검색·1365 숨김으로 동작합니다.
