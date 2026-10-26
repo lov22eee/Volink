@@ -212,9 +212,17 @@ function PinMap({ centre, chosen, items, hovered, onChoose, onNearby }: {
     }).catch(() => setFailed(true))
     return () => { cancelled = true }
   }, [])
+  // Move to the chosen place (or the latest search). Also runs once the map is ready: a position found before Kakao finished
+  // loading used to leave the map at the default spot. A picked place is shown close up and brought into view on narrow screens.
   useEffect(() => {
-    if (map.current && centre && window.kakao) map.current.panTo(new window.kakao.maps.LatLng(centre.lat, centre.lng))
-  }, [centre])
+    if (!ready || !map.current || !centre || !window.kakao) return
+    const target = new window.kakao.maps.LatLng(centre.lat, centre.lng)
+    if (chosen && chosen.latitude != null && Number(chosen.latitude) === centre.lat && Number(chosen.longitude) === centre.lng) {
+      if (map.current.getLevel() > 3) map.current.setLevel(3)
+      map.current.setCenter(target)
+      box.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    } else map.current.panTo(target)
+  }, [centre, ready])
   useEffect(() => {
     const kakao = window.kakao
     if (!ready || !map.current || !kakao?.maps) return
