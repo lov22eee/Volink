@@ -21,6 +21,10 @@ class PlaceClassifierTest {
             "교육,학문 > 학교 > 초등학교|SC4|옥정초등학교|OPEN|학교·어린이집",
             "교통,수송 > 자동차 > 주유,가스 > 주유소|OL7|SK주유소|BLOCKED|주유소·충전소",
             "음식점 > 술집 > 호프,요리주점|FD6|동네호프|BLOCKED|술집·유흥시설",
+            // Branch names ending in 양주점·광주점 are not bars; a bar named so still has a 술집 category.
+            "음식점 > 카페 > 커피전문점|CE7|코베티 양주점|OPEN|카페",
+            "음식점 > 한식|FD6|광주점 김밥|OPEN|음식점",
+            "가정,생활 > 생활용품||행복 단란주점|BLOCKED|술집·유흥시설",
             "가정,생활 > 생활용품|| 생활용품점|OPEN|생활용품",
             "교통,수송 > 지하철,전철 > 수도권1호선|SW8|양주역|OPEN|지하철,전철",
             "가정,생활 > 편의점|CS2|GS25 옥정점|OPEN|편의점",
