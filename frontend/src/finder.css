@@ -200,3 +200,4 @@
 .choice-pop.grid button{justify-content:center;border:1px solid #e3e9dc;padding:9px 0}.choice-pop.grid .choice-text{align-items:center}
 .choice-pop.grid button[aria-selected=true]{background:var(--green);border-color:var(--green)}.choice-pop.grid button[aria-selected=true] strong{color:#fff}
 .picked-tag{display:inline-block;margin-right:6px;padding:1px 7px;border-radius:99px;background:#fff6e5;color:#9a6a12;font-size:11px;font-weight:700;vertical-align:1px}
+.picked-dot{display:block;width:16px;height:16px;border-radius:50%;background:#d6452f;border:3px solid #fff;box-shadow:0 0 0 4px #d6452f40,0 2px 6px #0004}

@@ -241,7 +241,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
             <div className="explore-map">
               <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={hovered ?? selected} onSelect={setSelected}
                 onHome={myPosition ? () => setOrigin(myPosition) : undefined}
-                onMoved={centre => setOrigin({ ...centre, label: '지도 중심' })} />
+                onMoved={(centre, label) => setOrigin({ ...centre, label })} />
               {chosen && <PreviewSheet hit={chosen} onClose={() => setSelected(null)} onDetail={setProgramDetail} />}
               <span className="map-legend"><i className="dot local" />동네 활동{programsOn && <><i className="dot program" />1365 활동</>}</span>
             </div>
@@ -416,12 +416,15 @@ function meMarker(label: string) {
 
 
 /** Kakao map with coloured pins (green = ours, blue = 1365); dragging shows "이 지역에서 다시 찾기". Without a key: a position sketch. */
-function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHome }: { origin: Origin; radiusKm: number; hits: Hit[]; selected: string | null; onSelect: (key: string) => void; onMoved: (centre: { lat: number; lng: number }) => void; onHome?: () => void }) {
+function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHome }: { origin: Origin; radiusKm: number; hits: Hit[]; selected: string | null; onSelect: (key: string) => void; onMoved: (centre: { lat: number; lng: number }, label: string) => void; onHome?: () => void }) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<any>(null)
   const drawn = useRef<any[]>([])
   const area = useRef<any[]>([])
   const [moved, setMoved] = useState(false)
+  // A spot the user clicked: a red dot, and "이 위치에서 다시 찾기" searches around it instead of the map centre.
+  const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null)
+  const dot = useRef<any>(null)
   const [failed, setFailed] = useState(!kakaoEnabled)
   const select = useRef(onSelect)
   select.current = onSelect
@@ -434,12 +437,26 @@ function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHom
       if (cancelled || !box.current) return
       map.current = new kakao.maps.Map(box.current, { center: new kakao.maps.LatLng(origin.lat, origin.lng), level: 6 })
       kakao.maps.event.addListener(map.current, 'dragend', () => setMoved(true))
+      // One click drops the dot (after a short wait, so a double-click stays Kakao's zoom).
+      let timer: ReturnType<typeof setTimeout> | undefined
+      kakao.maps.event.addListener(map.current, 'click', (event: any) => {
+        clearTimeout(timer)
+        timer = setTimeout(() => { setPicked({ lat: event.latLng.getLat(), lng: event.latLng.getLng() }); setMoved(true) }, 250)
+      })
+      kakao.maps.event.addListener(map.current, 'dblclick', () => clearTimeout(timer))
       setReady(true)
     }).catch(() => setFailed(true))
     return () => { cancelled = true }
     // The map is created once; later origin changes only move it (below).
   }, [])
-  useEffect(() => setMoved(false), [origin])
+  useEffect(() => { setMoved(false); setPicked(null) }, [origin])
+  useEffect(() => {
+    const kakao = window.kakao
+    dot.current?.setMap(null)
+    dot.current = null
+    if (!picked || !map.current || !kakao?.maps) return
+    dot.current = new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(picked.lat, picked.lng), content: '<span class="picked-dot" aria-hidden="true"></span>', yAnchor: 0.5, zIndex: 6 })
+  }, [picked, ready])
 
   // Search area: the radius circle and "my position", then zoom so the whole circle fits (changes with origin/radius only).
   useEffect(() => {
@@ -475,7 +492,11 @@ function ExploreMap({ origin, radiusKm, hits, selected, onSelect, onMoved, onHom
   if (failed) return <SketchHits origin={origin} hits={hits} selected={selected} onSelect={onSelect} />
   return <div className="pin-map explore">
     <div ref={box} className="kakao-map" role="img" aria-label="활동 지도" />
-    {moved && <button className="map-pill" onClick={() => { const c = map.current?.getCenter(); if (c) onMoved({ lat: c.getLat(), lng: c.getLng() }) }}><Glyph name="refresh" size={14} />이 지역에서 다시 찾기</button>}
+    {moved && <button className="map-pill" onClick={() => {
+      if (picked) { onMoved(picked, '찍은 위치'); return }
+      const c = map.current?.getCenter()
+      if (c) onMoved({ lat: c.getLat(), lng: c.getLng() }, '지도 중심')
+    }}><Glyph name="refresh" size={14} />{picked ? '이 위치에서 다시 찾기' : '이 지역에서 다시 찾기'}</button>}
     <button type="button" className="map-home" aria-label="내 위치로" title="내 위치로" onClick={() => {
       if (onHome && origin.label !== '내 위치') onHome()
       else { const circle = area.current[0]; if (circle) map.current?.setBounds(circle.getBounds(), 16, 16, 16, 16); setMoved(false) }
