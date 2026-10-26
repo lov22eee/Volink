@@ -19,6 +19,9 @@ public interface KakaoLocal {
     /** Best coordinate for a free-text place or address (used for 1365 programs, which have no coordinates). */
     Optional<Place> locate(String text, Double nearLat, Double nearLng);
 
+    /** Road address (or lot address) at a point, for a spot picked on the map without a place name. */
+    Optional<String> addressAt(double lat, double lng);
+
     record Place(String id, String name, String categoryName, String categoryGroup, String address, double latitude, double longitude, Integer distanceMeters) {}
 
     record Region(String province, String city) {}

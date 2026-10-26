@@ -12,6 +12,8 @@ export type PlaceResult = {
   placeId?: number; kakaoId?: string; name: string; address: string; categoryName: string
   latitude: number | null; longitude: number | null; distanceMeters: number | null
   placeClass: 'OPEN' | 'REVIEW' | 'BLOCKED'; classLabel: string; token?: string; meetingPoint?: string | null
+  /** A spot picked straight on the map (street, alley, empty lot): no place there, so an admin takes a look. */
+  picked?: boolean
 }
 type SearchResult = { mode: 'KAKAO' | 'LOCAL'; items: PlaceResult[] }
 
@@ -141,7 +143,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
             const badge = classBadge[item.placeClass]
             return <li key={item.kakaoId ?? 'p' + item.placeId}>
               <button type="button" className={same(chosen, item) ? 'selected' : ''} onMouseEnter={() => setHovered(keyOf(item))} onMouseLeave={() => setHovered(null)} aria-pressed={same(chosen, item)} disabled={item.placeClass === 'BLOCKED'} onClick={() => choose(item)}>
-                <span><strong>{item.name}</strong><small>{item.classLabel} · {item.address}{item.distanceMeters != null ? ' · ' + distance(item.distanceMeters) : ''}</small></span>
+                <span><strong>{item.picked && <span className="picked-tag">찍은 위치</span>}{item.name}</strong><small>{item.classLabel}{item.address && !item.picked ? ' · ' + item.address : ''}{item.distanceMeters != null ? ' · ' + distance(item.distanceMeters) : ''}</small></span>
                 <span className={'place-badge ' + badge.tone}>{badge.text}</span>
               </button>
             </li>
@@ -150,16 +152,23 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
           {chosen?.placeClass === 'REVIEW' && <p className="small-print">{chosen.classLabel}에서 하는 활동은 관리자가 확인한 뒤 공개돼요.</p>}
         </div>
         {kakaoEnabled && mode !== 'LOCAL'
-          ? <PinMap centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose} onNearby={point => run(() => api<SearchResult>(`/api/places/nearby?lat=${point.lat.toFixed(6)}&lng=${point.lng.toFixed(6)}`), '이 근처에서 고를 수 있는 장소를 찾지 못했습니다. 지도를 조금 옮겨 보세요.')} />
+          ? <PinMap centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose} onNearby={point => run(() => pointAndAround(point), '')} />
           : <div className="pin-map empty"><Glyph name="map" size={28} /><p>{mode === 'LOCAL' ? '지금은 관리자가 등록한 장소만 고를 수 있어요.' : '지도 키가 없어 목록으로만 고를 수 있어요.'}</p></div>}
       </div>
       <div className="dialog-foot">
-        <span className="small-print"><Glyph name="map" size={15} /> 지도를 한 번 누르면 그곳으로 옮겨 주변 장소를 찾아요. 지도 위 핀을 눌러 바로 고를 수도 있어요.</span>
+        <span className="small-print"><Glyph name="map" size={15} /> 지도를 한 번 누르면 그 지점(길·골목·공터)과 주변 장소가 나와요. 이름 있는 장소는 바로 공개, 찍은 위치는 관리자 확인 후 공개돼요.</span>
         <div className="button-row"><button type="button" className="secondary-button" onClick={onClose}>취소</button>
           <button type="button" className="primary-button" disabled={!chosen} onClick={() => chosen && onPick(chosen, meeting.trim())}>이 장소로 정하기</button></div>
       </div>
     </div>
   </div>, document.body)
+}
+
+/** A map click: the clicked spot itself (named by its address, checked by an admin) first, then the named places around it. */
+async function pointAndAround(point: { lat: number; lng: number }): Promise<SearchResult> {
+  const at = `lat=${point.lat.toFixed(6)}&lng=${point.lng.toFixed(6)}`
+  const [spot, around] = await Promise.all([api<PlaceResult>('/api/places/point?' + at), api<SearchResult>('/api/places/nearby?' + at)])
+  return { ...around, items: [spot, ...around.items.filter(item => item.kakaoId !== spot.kakaoId)] }
 }
 
 const keyOf = (place: PlaceResult) => place.kakaoId ?? 'p' + place.placeId

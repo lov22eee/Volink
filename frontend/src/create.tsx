@@ -152,7 +152,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   const status = {
     title: fromWords(words.title),
     category: category === '지역 돌봄' ? { level: 'REVIEW', reasons: ['지역 돌봄 분야는 만나는 분이 누구인지 관리자가 확인해요.'] } as FieldStatus : null,
-    place: place?.placeClass === 'REVIEW' ? { level: 'REVIEW', reasons: ['지도에서 어떤 곳인지 알 수 없는 장소라 관리자가 확인해요.'] } as FieldStatus : null,
+    place: place?.placeClass === 'REVIEW' ? { level: 'REVIEW', reasons: ['지도에서 직접 찍은 길·골목·공터는 어떤 곳인지 알 수 없어 관리자가 확인해요. 근처의 이름 있는 장소를 고르면 바로 공개돼요.'] } as FieldStatus : null,
     schedule: afterSunset ? { level: 'REVIEW', reasons: ['해가 진 뒤(' + sunset[Number(date.slice(5, 7)) - 1] + ' 이후) 끝나는 활동은 관리자가 확인해요.'] } as FieldStatus : null,
     description: fromWords(words.description),
     supplies: fromWords(words.supplies),

@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** 4주차 보완: place search, classification by Kakao category, signed choices and the new explore filters (docs/test-cases.md P-01..P-06). */
 class PlacePickIntegrationTest extends ApiTestSupport {
     static final KakaoLocal.Place PARK = new KakaoLocal.Place("9001", "옥정호수공원", "여행 > 공원 > 도시근린공원", "AT4", "경기 양주시 옥정동 1", 37.8201, 127.0901, 120);
-    /** A kind of place the classifier does not know: the only kind that waits for an admin. */
+    /** A named place of a kind without its own rule: open like every named place (2026-10-26). */
     static final KakaoLocal.Place CARE = new KakaoLocal.Place("9002", "옥정 생활용품점", "가정,생활 > 생활용품", "", "경기 양주시 옥정동 2", 37.8211, 127.0911, 350);
     static final KakaoLocal.Place GAS = new KakaoLocal.Place("9003", "SK 옥정주유소", "교통,수송 > 자동차 > 주유,가스 > 주유소", "OL7", "경기 양주시 옥정동 3", 37.8221, 127.0921, 520);
 
@@ -46,7 +46,7 @@ class PlacePickIntegrationTest extends ApiTestSupport {
                 .andExpect(jsonPath("$.mode").value("KAKAO"))
                 .andExpect(jsonPath("$.items[0].placeClass").value("OPEN")).andExpect(jsonPath("$.items[0].classLabel").value("공원"))
                 .andExpect(jsonPath("$.items[0].token").exists())
-                .andExpect(jsonPath("$.items[1].placeClass").value("REVIEW")).andExpect(jsonPath("$.items[1].classLabel").value("확인이 필요한 장소"))
+                .andExpect(jsonPath("$.items[1].placeClass").value("OPEN")).andExpect(jsonPath("$.items[1].classLabel").value("생활용품"))
                 .andExpect(jsonPath("$.items[2].placeClass").value("BLOCKED")).andExpect(jsonPath("$.items[2].token").doesNotExist());
         mvc.perform(get("/api/places/nearby").param("lat", "37.82").param("lng", "127.09")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(3));
@@ -72,17 +72,26 @@ class PlacePickIntegrationTest extends ApiTestSupport {
         // It is not offered in the admin coordinate list (that list is the curated places only).
         mvc.perform(get("/api/places")).andExpect(jsonPath("$.length()").value(3));
 
-        long reviewId = createActivity(picked(items.get(1), "병원 앞 화단 가꾸기"), organizer);
+        // A named place of any other kind opens too; only a spot picked on the map (a street, an empty lot) waits for an admin.
+        long otherId = createActivity(picked(items.get(1), "생활용품점 앞 화단 가꾸기"), organizer);
+        mvc.perform(get("/api/activities/" + otherId)).andExpect(jsonPath("$.status").value("RECRUITING"));
+        kakao.address = "경기 양주시 옥정동로 12";
+        JsonNode spot = json.readTree(mvc.perform(get("/api/places/point").param("lat", "37.8203456").param("lng", "127.0904321"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("경기 양주시 옥정동로 12 근처"))
+                .andExpect(jsonPath("$.placeClass").value("REVIEW")).andExpect(jsonPath("$.kakaoId").value("p:37.82035,127.09043"))
+                .andReturn().getResponse().getContentAsString());
+        long reviewId = createActivity(picked(spot, "골목 화단 가꾸기"), organizer);
         mvc.perform(get("/api/me/activities").header("Authorization", "Bearer " + organizer))
                 .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].status").value(org.hamcrest.Matchers.contains("DRAFT")))
-                .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].riskReasons").value(org.hamcrest.Matchers.contains(containsString("확인이 필요한 장소"))));
+                .andExpect(jsonPath("$[?(@.id == " + reviewId + ")].riskReasons").value(org.hamcrest.Matchers.contains(containsString("이름 없는 장소"))));
     }
 
     @Test
     void aChangedOrExpiredChoiceIsRefused() throws Exception {
         kakao.enabled = true;
-        kakao.results = List.of(CARE);
-        JsonNode care = json.readTree(mvc.perform(get("/api/places/search").param("query", "요양")).andReturn().getResponse().getContentAsString()).get("items").get(0);
+        // A spot on the map is REVIEW; turning it into OPEN in the browser breaks the signature.
+        kakao.address = "경기 양주시 옥정동 2";
+        JsonNode care = json.readTree(mvc.perform(get("/api/places/point").param("lat", "37.8211").param("lng", "127.0911")).andReturn().getResponse().getContentAsString());
         String organizer = token(member("GENERAL"));
         Map<String, Object> body = picked(care, "화단 가꾸기 함께 해요");
         @SuppressWarnings("unchecked") Map<String, Object> place = (Map<String, Object>) body.get("place");

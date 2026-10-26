@@ -40,6 +40,14 @@ public class PlaceController {
         return search.nearby(lat, lng);
     }
 
+    /** A spot picked on the map without a place there (street, alley, empty lot): its address, signed, always REVIEW. */
+    @GetMapping("/api/places/point")
+    public Map<String, Object> point(@RequestParam(required = false) Double lat, @RequestParam(required = false) Double lng, HttpServletRequest request) {
+        PlaceSearchService.requireCoordinate(lat, lng);
+        limiter.check(request);
+        return search.point(lat, lng);
+    }
+
     /** Public: place names and coordinates for the map and the create form. */
     @GetMapping("/api/places")
     public List<Map<String, Object>> list() {
