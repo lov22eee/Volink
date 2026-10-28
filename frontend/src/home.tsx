@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { api, preview } from './api'
 import type { LiveActivity, User } from './api'
-import { categories, fromExample, fromLive, Icon } from './App'
+import { categories, fromExample, fromLive, Icon, waitOpen } from './App'
 import type { CardItem } from './App'
 import { CategoryCover, CategoryMosaic } from './covers'
 import type { DisplayCatalog as Catalog } from './data'
@@ -24,7 +24,7 @@ function shortDate(value: string) {
 
 export function ActivityTile({ item }: { item: CardItem }) {
   const left = Math.max(0, item.capacity - item.confirmed)
-  const status = item.kind === 'example' ? { text: '예시 활동', tone: 'muted' } : left > 0 ? { text: '모집 중', tone: 'open' } : { text: '대기 가능', tone: 'wait' }
+  const status = item.kind === 'example' ? { text: '예시 활동', tone: 'muted' } : left > 0 ? { text: '모집 중', tone: 'open' } : { text: waitOpen(item) ? '대기 가능' : '정원 마감', tone: 'wait' }
   return <a className="tile" href={item.href} data-kind={item.kind}>
     <span className="tile-cover"><CategoryCover category={item.category} seed={item.id} /></span>
     <span className="tile-meta"><span className="tile-cat">{item.category}</span><span aria-hidden="true">·</span><span className={'tile-status ' + status.tone}>{status.text}</span></span>

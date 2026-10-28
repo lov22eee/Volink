@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, preview } from './api'
 import type { LiveActivity } from './api'
-import { ActivityCard, categories, fromExample, fromLive, Icon } from './App'
+import { ActivityCard, categories, fromExample, fromLive } from './App'
 import type { CardItem } from './App'
 import type { DisplayCatalog as Catalog } from './data'
 import { createPortal } from 'react-dom'
+import { CategoryCover } from './covers'
 import { Glyph, SupplyChips } from './icons'
 import { kakaoEnabled, loadKakao, pinSvg } from './map'
 import type { Origin } from './map'
@@ -62,7 +63,6 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [locating, setLocating] = useState(false)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
-  const [searching, setSearching] = useState(false)
   const [filtering, setFiltering] = useState(false)
   const filterBox = useRef<HTMLSpanElement>(null)
   useEffect(() => {
@@ -194,41 +194,43 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   ].sort((a, b) => a.distance - b.distance)
 
 
+  const resetFilters = () => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }
+  const searchBox = useRef<HTMLInputElement>(null)
+
   return <>
-    <section id="activities" className="activity-section">
-      <div className="section-heading"><div><span className="eyebrow"><span className="tiny-dot" />활동 찾기</span><h2>우리 동네의 작은 실천</h2><p>지도와 목록에서 가까운 동네 활동과 1365 봉사활동을 함께 찾아요.</p></div>
+    <section id="activities" className="activity-section explore-v2">
+      <div className="page-head explore-head"><div><span className="page-eyebrow">FIND YOUR VOLUNTEER ACTIVITY</span><h1>우리 동네 활동 찾기</h1><p>가까운 곳에서 나에게 맞는 봉사활동을 발견하세요.</p></div>
         {!preview && <span className="location-tag"><Glyph name="pin" size={16} />{origin ? origin.label + ' 기준 ' + shownRadius + 'km' : '위치 미정'}{origin && <button className="text-button" onClick={() => { setAsking(true); setOrigin(null) }}>바꾸기</button>}</span>}
       </div>
 
-      {asking && !origin && <LocationAsk locating={locating} notice={notice} onLocate={locate} onPick={picked => { setAsking(false); setNotice(''); setOrigin(picked) }} onSkip={() => setAsking(false)} />}
-
       <div className="finder">
+        {/* Search as you type; the round button only puts the cursor in the box. */}
+        <div className="search-row" role="search">
+          <label className="search-pill"><input ref={searchBox} aria-label="활동 검색" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setQuery('') }} placeholder="활동명이나 장소 검색" />
+            {query && <button type="button" className="icon-button" aria-label="검색어 지우기" onClick={() => setQuery('')}><Glyph name="close" size={16} /></button>}</label>
+          <button type="button" className="search-go" aria-label="검색" onClick={() => searchBox.current?.focus()}><Glyph name="search" size={20} /></button>
+          <span className="filter-anchor" ref={filterBox}>
+            <button type="button" className={'tool-button' + (filtering || activeFilters ? ' on' : '')} aria-label={'필터' + (activeFilters ? ` ${activeFilters}개 켜짐` : '')} aria-expanded={filtering} onClick={() => setFiltering(!filtering)}>
+              <Glyph name="filter" size={18} />{activeFilters > 0 && <span className="tool-count">{activeFilters}</span>}</button>
+            {filtering && <div className="filter-pop" role="dialog" aria-label="필터">
+              {origin && <label className="chip-select"><Glyph name="pin" size={15} /><select aria-label="검색 반경" value={radius} onChange={event => setRadius(Number(event.target.value))}>{rings.map(value => <option key={value} value={value}>{value}km</option>)}</select></label>}
+              <label className="chip-select"><Glyph name="calendar" size={15} /><select aria-label="날짜" value={when} onChange={event => setWhen(event.target.value as When)}><option value="all">모든 날짜</option><option value="today">오늘</option><option value="week">이번 주</option><option value="weekend">주말만</option></select></label>
+              <label className="chip-select"><Glyph name="clock" size={15} /><select aria-label="시간대" value={part} onChange={event => setPart(event.target.value)}><option value="">모든 시간</option><option value="AM">오전</option><option value="PM">오후</option></select></label>
+              <label className="chip-select"><Glyph name="leaf" size={15} /><select aria-label="활동 분야" value={category} onChange={event => setCategory(event.target.value)}><option>전체</option>{categories.map(value => <option key={value}>{value}</option>)}</select></label>
+              <label className="chip-select"><Glyph name="hand" size={15} /><select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
+              {origin && programsOn && <label className={'chip-check' + (youth ? ' on' : '')}><input type="checkbox" checked={youth} onChange={event => setYouth(event.target.checked)} /><Glyph name="users" size={15} />청소년 가능만</label>}
+              <div className="filter-foot"><button type="button" className="text-button" onClick={resetFilters}>필터 초기화</button>
+                <button type="button" className="primary-button small" onClick={() => setFiltering(false)}>닫기</button></div>
+            </div>}
+          </span>
+        </div>
+        <div className="cat-chips" role="group" aria-label="분야로 거르기">{['전체', ...categories].map(value => <button type="button" key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div>
         <div className="finder-bar">
           {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
             <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{near(value === 'all' ? allHits : allHits.filter(hit => hit.source === value)).length}</small></button>)}</div>
-            : <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '모집 중인 활동'}</span>}
-          <div className="finder-tools">
-            {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
-            <button type="button" className={'tool-button' + (searching || q ? ' on' : '')} aria-label="검색" aria-expanded={searching} onClick={() => setSearching(!searching)}><Glyph name="search" size={18} /></button>
-            <span className="filter-anchor" ref={filterBox}>
-              <button type="button" className={'tool-button' + (filtering || activeFilters ? ' on' : '')} aria-label={'필터' + (activeFilters ? ` ${activeFilters}개 켜짐` : '')} aria-expanded={filtering} onClick={() => setFiltering(!filtering)}>
-                <Glyph name="filter" size={18} />{activeFilters > 0 && <span className="tool-count">{activeFilters}</span>}</button>
-              {filtering && <div className="filter-pop" role="dialog" aria-label="필터">
-                {origin && <label className="chip-select"><Glyph name="pin" size={15} /><select aria-label="검색 반경" value={radius} onChange={event => setRadius(Number(event.target.value))}>{rings.map(value => <option key={value} value={value}>{value}km</option>)}</select></label>}
-                <label className="chip-select"><Glyph name="calendar" size={15} /><select aria-label="날짜" value={when} onChange={event => setWhen(event.target.value as When)}><option value="all">모든 날짜</option><option value="today">오늘</option><option value="week">이번 주</option><option value="weekend">주말만</option></select></label>
-                <label className="chip-select"><Glyph name="clock" size={15} /><select aria-label="시간대" value={part} onChange={event => setPart(event.target.value)}><option value="">모든 시간</option><option value="AM">오전</option><option value="PM">오후</option></select></label>
-                <label className="chip-select"><Glyph name="leaf" size={15} /><select aria-label="활동 분야" value={category} onChange={event => setCategory(event.target.value)}><option>전체</option>{categories.map(value => <option key={value}>{value}</option>)}</select></label>
-                <label className="chip-select"><Glyph name="hand" size={15} /><select aria-label="활동 유형" value={kind} onChange={event => setKind(event.target.value)}><option value="all">모든 활동</option><option value="GENERAL">자율 활동</option><option value="INSTITUTION">기관 주관 활동</option></select></label>
-                {origin && programsOn && <label className={'chip-check' + (youth ? ' on' : '')}><input type="checkbox" checked={youth} onChange={event => setYouth(event.target.checked)} /><Glyph name="users" size={15} />청소년 가능만</label>}
-                <div className="filter-foot"><button type="button" className="text-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>필터 초기화</button>
-                  <button type="button" className="primary-button small" onClick={() => setFiltering(false)}>닫기</button></div>
-              </div>}
-            </span>
-          </div>
+            : <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '활동 목록'}<small>{origin ? '' : ` · ${live.length + filteredExamples.length}건`}</small></span>}
+          {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
         </div>
-        {searching && <div className="finder-search" role="search"><Glyph name="search" />
-          <input aria-label="활동 검색" autoFocus value={query} maxLength={50} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setQuery(''); setSearching(false) } }} placeholder="플로깅, 도서관, 어르신… 치는 대로 찾아요" />
-          {query && <button type="button" className="icon-button" aria-label="검색어 지우기" onClick={() => setQuery('')}><Glyph name="close" size={16} /></button>}</div>}
       </div>
 
       {origin ? <>
@@ -259,20 +261,29 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           <select aria-label="한 쪽에 보일 개수" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>{[9, 18, 30].map(n => <option key={n} value={n}>{n}개씩</option>)}</select></span></div>
         {everything.length ? <div className="activity-grid">{everything.slice((page - 1) * pageSize, page * pageSize).map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
           : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onDetail={setProgramDetail} /></div>)}</div>
-          : <div className="empty-state"><p>조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>조건 모두 지우기</button>}</div>}
+          : <div className="empty-state"><p>조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
         <Pages total={everything.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('all-list')?.scrollIntoView() }} />
       </>
-        : <>{(!catalog && !live.length) ? <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
-          : (live.length + filteredExamples.length) ? <>
-            {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
-              <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
-            {/* Examples are not real posts: kept apart from the real list and its pages. */}
-            {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
-              <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
-            : <div className="empty-state"><p>조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>조건 모두 지우기</button>}</div>}</>}
+        : <div className="explore-split browse">
+          <div className="explore-list">
+            {(!catalog && !live.length) ? <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
+              : (live.length + filteredExamples.length) ? <>
+                {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
+                  <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
+                {/* Examples are not real posts: kept apart from the real list and its pages. */}
+                {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
+                  <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
+                : <div className="empty-state"><p>조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
+          </div>
+          <aside className="explore-map map-wait" aria-label="지도">
+            {asking ? <LocationAsk locating={locating} notice={notice} onLocate={locate} onPick={picked => { setAsking(false); setNotice(''); setOrigin(picked) }} onSkip={() => setAsking(false)} />
+              : <div className="map-wait-copy"><Glyph name="map" size={30} /><strong>지도로 가까운 활동 보기</strong>
+                <p>{preview ? '미리보기에서는 지도를 쓰지 않아요.' : '위치를 정하면 내 주변 활동과 1365 봉사가 지도에 보여요.'}</p>
+                {!preview && <button className="pill-button dark small" onClick={() => setAsking(true)}><Glyph name="target" size={15} />위치 정하기</button>}</div>}
+          </aside>
+        </div>}
     </section>
     {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)} />}
-    <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>
   </>
 }
 
@@ -328,22 +339,24 @@ function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean
     const a = hit.local
     const card = fromLive(a)
     return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
+      <span className="hit-cover"><CategoryCover category={a.category} seed={a.id} /></span><div className="hit-main">
       <div className="hit-tags"><span className="source local">동네 활동</span><span className="tag">{a.category}</span>{Number(a.startTime.slice(0, 2)) < 12 ? <span className="tag">오전</span> : <span className="tag">오후</span>}</div>
       <h3 title={a.title}>{a.title}</h3>
       <p><Glyph name="pin" size={14} /><span className="clip">{card.placeName}</span>{distance}</p>
       <p><Glyph name="calendar" size={14} /><span className="clip">{card.date.slice(5).replace('-', '/')} {a.startTime} · {a.durationMinutes}분 · {a.confirmed} / {a.capacity}명</span></p>
       {a.supplies && a.supplies.length > 0 && <SupplyChips supplies={a.supplies} limit={2} />}
       <div className="hit-foot"><small>공식 봉사실적·보험 없음</small><a className="primary-button small" href={card.href}>자세히 보기 <Glyph name="arrow" size={14} /></a></div>
-    </article>
+    </div></article>
   }
   const p = hit.program!
   return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
+    <span className="hit-cover"><CategoryCover category="1365" seed={p.programNo.length + p.title.length} /></span><div className="hit-main">
     <div className="hit-tags"><span className="source program">1365 활동</span>{p.youthOk && <span className="tag">청소년 가능</span>}{p.recruitStatus && <span className="tag">{p.recruitStatus}</span>}</div>
     <h3 title={p.title}>{p.title}</h3>
     <p><Glyph name="pin" size={14} /><span className="clip">{p.place ?? '장소 정보 없음'}</span>{distance}</p>
     <p><Glyph name="calendar" size={14} /><span className="clip">{when1365(p) || '일정은 1365에서 확인'}</span></p>
     <div className="hit-foot"><small>모집: {p.organization ?? '1365'} · 실적 인정은 1365 기준</small><span className="hit-actions">{onDetail && <button className="secondary-button small" onClick={() => onDetail(p)}>자세히</button>}<a className="link-out" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청 <Glyph name="external" size={14} /></a></span></div>
-  </article>
+  </div></article>
 }
 
 function PreviewSheet({ hit, onClose, onDetail }: { hit: Hit; onClose: () => void; onDetail: (program: Program) => void }) {

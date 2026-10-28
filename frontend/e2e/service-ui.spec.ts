@@ -315,13 +315,13 @@ test('create form requires login, shows field errors and only offers times that 
   await tools.getByRole('button', { name: '삭제' }).click()
   await tools.getByRole('button', { name: '삭제' }).click()
   await expect(page).toHaveURL(/#\/mine$/)
-  await page.getByRole('tab', { name: '개설한 활동' }).click()
+  await page.getByRole('tab', { name: '내가 만든 활동' }).click()
   await expect(page.getByRole('tabpanel')).not.toContainText('공원 산책로 함께 걷고 줍기 (수정)')
 })
 
-test('my activities has applicant, organizer and record views without fabricated personal history', async ({ page }) => {
+test('my activities has applicant and organizer views without fabricated personal history', async ({ page }) => {
   await page.goto('/#/mine')
-  for (const name of ['신청한 활동', '개설한 활동', '활동 기록']) {
+  for (const name of ['신청한 활동', '내가 만든 활동']) {
     await page.getByRole('tab', { name }).click()
     await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('tabpanel')).toContainText('로그인하면 내 활동을 볼 수 있습니다.')
@@ -461,7 +461,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await expect(page.getByRole('heading', { name: '관리자 검토 후 공개됩니다' })).toBeVisible()
   await expect(page.locator('.result-panel')).toContainText('어르신')
   await page.goto('/#/mine')
-  await page.getByRole('tab', { name: '개설한 활동' }).click()
+  await page.getByRole('tab', { name: '내가 만든 활동' }).click()
   await expect(page.getByRole('tabpanel')).toContainText(title)
   await expect(page.getByRole('tabpanel')).toContainText('관리자 검토 중')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
@@ -653,7 +653,7 @@ test('applications fill the capacity, the waitlist gets the freed seat as an off
   await expect(page.locator('.my-status')).toHaveText('빈자리 제안 받음')
   await expect(page.getByText(/까지 수락하지 않으면 다음 대기자에게/)).toBeVisible()
   await page.screenshot({ path: shot('offer'), fullPage: true })
-  await page.getByRole('button', { name: '자리 수락' }).click()
+  await page.getByRole('button', { name: '참여할게요' }).click()
   await expect(page.locator('.my-status')).toHaveText('참가 확정')
   await page.goto('/#/mine')
   await expect(page.getByRole('listitem').filter({ hasText: title })).toContainText('참가 확정')

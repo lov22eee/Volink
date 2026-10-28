@@ -214,8 +214,8 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
     }
   }
 
-  const heading = editId ? <PageHeading title="활동 수정하기" description={locked ? '신청한 사람이 있어 소개와 만나는 곳만 고칠 수 있어요.' : '바꾼 내용도 등록할 때와 같이 다시 확인합니다.'} />
-    : <PageHeading title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
+  const heading = editId ? <PageHeading eyebrow="EDIT ACTIVITY" title="활동 수정하기" description={locked ? '신청한 사람이 있어 소개와 만나는 곳만 고칠 수 있어요.' : '바꾼 내용도 등록할 때와 같이 다시 확인합니다.'} />
+    : <PageHeading eyebrow="CREATE ACTIVITY" title="활동 만들기" description="이웃과 함께할 일과 시간·장소를 알려주세요." />
   if (!preview && !user) return <>{heading}<LoginRequired ready={ready} text="활동을 만들려면 먼저 로그인해 주세요." /></>
   if (editId && loadError) return <>{heading}<section className="empty-state"><p>{loadError}</p><a className="secondary-button" href="#/mine">내 활동으로</a></section></>
   if (editId && !editing) return <>{heading}<div className="empty-state">활동을 불러오는 중입니다.</div></>
