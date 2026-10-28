@@ -569,3 +569,4 @@ a.kpi:hover { border-color: var(--green); }
 .admin-grid .day-bars .label { font-size: 11px; }
 .admin-grid .line-chart svg { height: 132px; }
 .admin-grid + .admin-grid { margin-top: 16px; }
+.app-status { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }

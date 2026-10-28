@@ -241,4 +241,26 @@ class ParticipationIntegrationTest extends ApiTestSupport {
             pool.shutdown();
         }
     }
+
+    @Test
+    void adminDashboardCountsApplicationsPerKoreanDayAndOnlyAdminsMaySeeIt() throws Exception {
+        String today = LocalDate.now(ZoneId.of("Asia/Seoul")).toString();
+        long before = todayApplications();
+        String organizer = token(member("GENERAL"));
+        long activity = createActivity(withCapacity(3), organizer);
+        apply(activity, token(member("GENERAL")));
+        apply(activity, token(member("GENERAL")));
+        assertThat(todayApplications()).isEqualTo(before + 2);
+        perform(get("/api/admin/stats/applications"), null, token(admin())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.days.length()").value(14)).andExpect(jsonPath("$.days[13].date").value(today))
+                .andExpect(jsonPath("$.statuses.APPLIED").isNumber());
+        perform(get("/api/admin/stats/applications?days=1000"), null, token(admin())).andExpect(jsonPath("$.days.length()").value(60));
+        perform(get("/api/admin/stats/applications"), null, organizer).andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/stats/applications")).andExpect(status().isUnauthorized());
+    }
+
+    private long todayApplications() throws Exception {
+        String body = perform(get("/api/admin/stats/applications?days=7"), null, token(admin())).andReturn().getResponse().getContentAsString();
+        return ((Number) com.jayway.jsonpath.JsonPath.read(body, "$.days[6].applications")).longValue();
+    }
 }

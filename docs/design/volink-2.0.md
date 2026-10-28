@@ -50,10 +50,11 @@
 
 - 버튼·탭 글자가 시안대로 바뀐 곳만 고쳤습니다: ‘자리 수락’ → ‘참여할게요’, ‘개설한 활동’ → ‘내가 만든 활동’, ‘활동 기록’ 탭 확인 제거. ‘참가 신청’·‘대기 신청’은 ‘참가 신청하기’·‘대기 신청하기’가 되어 기존 정규식 그대로 통과합니다.
 
-## 관리자 화면 (2026-10-28, 백엔드 변경 없음)
+## 관리자 화면 (2026-10-28)
 
 - 관리자 계정은 **관리자 메뉴만** 봅니다: 대시보드(`#/admin`) · 기관 확인(`#/admin/organizations`) · 활동 검토(`#/admin/activities`) · 장소 관리(`#/admin/places`). 로그인하면 대시보드로 가고, 회원용 화면(홈·찾기·만들기·내 활동·알림) 주소로 들어오면 대시보드로 돌려보냅니다. 활동 상세는 검토용으로 열 수 있습니다(신청 버튼 없음). 화면 숨김과 별개로 서버도 관리자의 활동 개설·신청을 막고(`ActivityService`, `ParticipationService`), `/api/admin/**`은 관리자만 호출됩니다(`SecurityConfig`).
-- 대시보드: 머리글은 관리 도구 형식(위치 · 제목 · 몇 시 기준 · 새로고침). 숫자 카드 4개(기관 확인 대기·활동 검토 대기·지금 모집 중·좌표 없는 장소, 누르면 해당 화면), 기관 회원가입 확인 요약(대기/승인/반려 막대, 오래 기다린 순 3건), 게시글 승인 요약(최근 3건과 검토 이유), 그래프 좌우 2개(앞으로 14일 모집 일정 막대 · 지난 14일 기관 가입 신청 꺾은선), 분야별 모집 중, 정원 채움 현황. 관리자 화면에서는 회원용 바닥글 안내를 숨깁니다.
-- 쓰는 API(모두 기존): `GET /api/admin/organizations?status=PENDING|APPROVED|REJECTED`, `GET /api/admin/activities`(검토 대기 = DRAFT·REVIEW), `GET /api/activities`(공개 모집 중·시작 전), `GET /api/places`, 처리용 `POST …/approve|reject`, `PUT /api/admin/places/{id}`.
-- 지금 API로 **못 만드는 것**(새 API 필요): 회원 수·가입 추이, 신청 수 추이·신청 상태 비율(확정/대기/제안/취소 전체 집계), 반려·종료된 활동 목록, 자리 제안 만료 건수, 1365 호출 수, 스케줄러 상태(B+안 job_runs). 화면에 빈 카드로 두지 않았습니다.
+- 대시보드: 머리글은 관리 도구 형식(위치 · 제목 · 몇 시 기준 · 새로고침). 숫자 카드 4개(기관 확인 대기·활동 검토 대기·지금 모집 중·좌표 없는 장소, 누르면 해당 화면), 기관 회원가입 확인 요약(대기/승인/반려 막대, 오래 기다린 순 3건), 게시글 승인 요약(최근 3건과 검토 이유), 그래프 좌우 2개(앞으로 14일 모집 일정 막대 · 지난 14일 일별 참가 신청 꺾은선 + 지금 신청 상태 합계), 분야별 모집 중, 정원 채움 현황. 관리자 화면에서는 회원용 바닥글 안내를 숨깁니다.
+- 새 API 1개(읽기 전용): `GET /api/admin/stats/applications?days=14` — 날짜별 참가 신청 수와 상태별 합계(`AdminService.applicationStats`, 테스트 `ParticipationIntegrationTest`). DB 변경 없음.
+- 쓰는 기존 API: `GET /api/admin/organizations?status=PENDING|APPROVED|REJECTED`, `GET /api/admin/activities`(검토 대기 = DRAFT·REVIEW), `GET /api/activities`(공개 모집 중·시작 전), `GET /api/places`, 처리용 `POST …/approve|reject`, `PUT /api/admin/places/{id}`.
+- 아직 API가 없어 **못 만드는 것**: 회원 수·가입 추이, 새 활동 등록 추이, 반려·종료된 활동 목록, 자리 제안 만료 건수, 1365 호출 수, 스케줄러 상태(B+안 job_runs). 화면에 빈 카드로 두지 않았습니다.
 - 그림: `docs/screenshots/v2/admin-dash-d.jpg`, `admin-dash-m.jpg`, `admin-orgs-d.jpg`.

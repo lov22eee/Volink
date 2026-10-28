@@ -44,6 +44,7 @@
 | 3 | `GET /api/activities/{id}` | 공개 (비공개는 모집자·관리자) | 상세 |
 | 3 | `GET /api/admin/organizations?status=PENDING` · `POST /api/admin/organizations/{id}/approve` · `.../reject` | 관리자 | 기관 확인, 반려 사유 필수 |
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
+| 5+ | `GET /api/admin/stats/applications?days=14` | 관리자 | **구현(2026-10-28, 관리자 대시보드).** 읽기 전용. `days`(7~60, 기본 14)일 동안 한국 날짜별 신청 수 `days[{date, applications}]`(없는 날 0, 오늘 포함, 첫 신청 시각 기준 · 취소 후 재신청은 같은 행이라 한 번)와 지금 상태별 신청 수 `statuses{APPLIED: n, …}` |
 | 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
 | 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
 | 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |

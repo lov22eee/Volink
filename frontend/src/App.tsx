@@ -606,6 +606,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const [notice, setNotice] = useState('')
   const [orgTab, setOrgTab] = useState<OrgStatus>('PENDING')
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
+  const [applications, setApplications] = useState<{ days: { date: string; applications: number }[]; statuses: Record<string, number> } | null>(null)
   // Only existing APIs: the three organization lists, the review queue and the public recruiting list.
   const load = useCallback(() => {
     setFailed(false)
@@ -614,6 +615,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
       api<PendingOrganization[]>('/api/admin/organizations?status=' + status).then(list => setOrganizations(old => ({ ...old, [status]: list }))).catch(fail)
     api<LiveActivity[]>('/api/admin/activities').then(setActivities).catch(fail)
     api<LiveActivity[]>('/api/activities').then(setRecruiting).catch(fail)
+    api<{ days: { date: string; applications: number }[]; statuses: Record<string, number> }>('/api/admin/stats/applications?days=14').then(setApplications).catch(fail)
     setLoadedAt(new Date())
   }, [])
   useEffect(() => { if (user?.role === 'ADMIN') load() }, [user, load])
@@ -683,10 +685,9 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const perCategory = categories.map(name => ({ label: name, value: (recruiting ?? []).filter(a => a.category === name).length }))
   const seats = (recruiting ?? []).reduce((sum, a) => ({ confirmed: sum.confirmed + a.confirmed, capacity: sum.capacity + a.capacity }), { confirmed: 0, capacity: 0 })
   const fill = { full: (recruiting ?? []).filter(a => a.confirmed >= a.capacity).length, half: (recruiting ?? []).filter(a => a.confirmed < a.capacity && a.confirmed * 2 >= a.capacity).length, low: (recruiting ?? []).filter(a => a.confirmed * 2 < a.capacity).length }
-  // Line: organization sign-up requests per day over the last 14 days (every status, by request time).
-  const allOrgs = [...(pending ?? []), ...(organizations.APPROVED ?? []), ...(organizations.REJECTED ?? [])]
-  const last14 = Array.from({ length: 14 }, (_, i) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - (13 - i) * 86_400_000)))
-  const orgTrend = last14.map(day => ({ day, value: allOrgs.filter(item => item.requestedAt.startsWith(day)).length }))
+  // Line: participation applications per Korean day over the last 14 days (/api/admin/stats/applications).
+  const appTrend = (applications?.days ?? []).map(item => ({ day: item.date, value: item.applications }))
+  const appStatus = (keys: string[]) => keys.reduce((sum, key) => sum + (applications?.statuses[key] ?? 0), 0)
   const oldest = pending?.length ? Math.max(...pending.map(item => daysSince(item.requestedAt))) : 0
   const orgTotal = (pending?.length ?? 0) + (organizations.APPROVED?.length ?? 0) + (organizations.REJECTED?.length ?? 0)
   const count = (value: number | undefined | null) => value == null ? '–' : value
@@ -717,9 +718,11 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
         <div className="admin-card-head"><h2>앞으로 14일 모집 일정</h2><span className="small-print">날짜별 활동 수</span></div>
         {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <DayBars data={perDay} />}
       </section>
-      <section className="admin-card" aria-label="기관 가입 신청 추이">
-        <div className="admin-card-head"><h2>기관 가입 신청 추이</h2><span className="small-print">최근 14일 · {orgTrend.reduce((sum, item) => sum + item.value, 0)}건</span></div>
-        {pending === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <LineChart data={orgTrend} unit="건" />}
+      <section className="admin-card" aria-label="일별 참가 신청">
+        <div className="admin-card-head"><h2>일별 참가 신청</h2><span className="small-print">최근 14일 · {appTrend.reduce((sum, item) => sum + item.value, 0)}건</span></div>
+        {applications === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <>
+          <LineChart data={appTrend} unit="건" />
+          <ul className="stack-legend app-status"><li>승인 대기 <strong>{appStatus(['APPLIED'])}</strong></li><li>확정 <strong>{appStatus(['CONFIRMED', 'CHECKED_IN', 'COMPLETED'])}</strong></li><li>대기 <strong>{appStatus(['WAITLISTED'])}</strong></li><li>자리 제안 <strong>{appStatus(['OFFERED'])}</strong></li><li>취소·거절·만료 <strong>{appStatus(['CANCELLED', 'REJECTED', 'EXPIRED'])}</strong></li></ul></>}
       </section>
     </div>
     <div className="admin-grid">
@@ -739,7 +742,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
 
 /** Daily values as a line with a soft area under it; first, middle and last dates on the axis. */
 function LineChart({ data, unit }: { data: { day: string; value: number }[]; unit: string }) {
-  if (data.every(item => item.value === 0)) return <p className="empty-line">이 기간에 들어온 신청이 없습니다.</p>
+  if (data.length < 2 || data.every(item => item.value === 0)) return <p className="empty-line">이 기간에 들어온 신청이 없습니다.</p>
   const w = 320, h = 140, pad = 8, max = Math.max(1, ...data.map(item => item.value))
   const x = (i: number) => pad + i * (w - pad * 2) / (data.length - 1)
   const y = (v: number) => h - pad - v / max * (h - pad * 2)
