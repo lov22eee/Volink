@@ -537,3 +537,35 @@ a.kpi:hover { border-color: var(--green); }
   .kpi { padding: 14px 16px; }
   .kpi strong { font-size: 28px; }
 }
+
+/* Admin heads: a console header, not a landing page. */
+.admin-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin: 0 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.admin-head .crumb { margin: 0 0 4px; font-size: 13px; color: var(--ink-3); }
+.admin-head .crumb a { color: var(--ink-3); }
+.admin-head .crumb a:hover { color: var(--green); }
+.admin-head h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.admin-head .hint { margin: 6px 0 0; font-size: 14px; color: var(--ink-3); }
+.admin-head-side { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-3); white-space: nowrap; }
+.admin-head-side .refresh { border: 1px solid var(--line); background: #fff; width: 36px; height: 36px; }
+.admin-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
+.admin-card-head h2 { font-size: 17px; }
+.line-chart { position: relative; margin: 6px 0 0; }
+.line-chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.line-chart .grid { stroke: #ecebe5; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.line-chart .grid.base { stroke: #d9d8d0; }
+.line-chart .area { fill: rgb(36 94 72 / 10%); }
+.line-chart .stroke { fill: none; stroke: var(--green); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.line-chart .peak { position: absolute; transform: translate(-50%, -130%); padding: 2px 7px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.line-chart figcaption { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+@media (max-width: 1000px) { .admin-grid.three { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 760px) {
+  .admin-grid.three { grid-template-columns: 1fr; }
+  .admin-head { flex-direction: column; align-items: flex-start; }
+  .admin-head h1 { font-size: 24px; }
+}
+/* Half-width charts: same height so the pair lines up. */
+.admin-grid .day-bars { height: 170px; gap: 4px; }
+.admin-grid .day-bars .label small { display: none; }
+.admin-grid .day-bars .label { font-size: 11px; }
+.admin-grid .line-chart svg { height: 132px; }
+.admin-grid + .admin-grid { margin-top: 16px; }

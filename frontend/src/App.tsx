@@ -188,7 +188,7 @@ export default function App() {
       {route.page === 'admin' && <AdminPage section={route.section ?? 'dashboard'} user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
       {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
     </main>
-    <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · 우리 동네의 작은 변화</span><span className="footer-tag">Local volunteering community</span></div><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></div></footer>
+    <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · {isAdmin ? '관리자' : '우리 동네의 작은 변화'}</span><span className="footer-tag">Local volunteering community</span></div>{!isAdmin && <p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p>}</div></footer>
   </div>
 }
 
@@ -605,6 +605,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const [failed, setFailed] = useState(false)
   const [notice, setNotice] = useState('')
   const [orgTab, setOrgTab] = useState<OrgStatus>('PENDING')
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   // Only existing APIs: the three organization lists, the review queue and the public recruiting list.
   const load = useCallback(() => {
     setFailed(false)
@@ -613,6 +614,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
       api<PendingOrganization[]>('/api/admin/organizations?status=' + status).then(list => setOrganizations(old => ({ ...old, [status]: list }))).catch(fail)
     api<LiveActivity[]>('/api/admin/activities').then(setActivities).catch(fail)
     api<LiveActivity[]>('/api/activities').then(setRecruiting).catch(fail)
+    setLoadedAt(new Date())
   }, [])
   useEffect(() => { if (user?.role === 'ADMIN') load() }, [user, load])
 
@@ -629,12 +631,18 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
     }
   }
 
+  // Admin heads are plain console headers: where you are, the title, when the figures were read, and refresh.
+  const head = (title: string, hint?: string) => <div className="admin-head">
+    <div><p className="crumb">{section === 'dashboard' ? '관리자' : <><a href="#/admin">관리자</a> / {title}</>}</p><h1>{title}</h1>{hint && <p className="hint">{hint}</p>}</div>
+    <div className="admin-head-side">{loadedAt && <span>{new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(loadedAt)} 기준</span>}
+      <button className="icon-link refresh" onClick={load} aria-label="새로고침" title="새로고침"><Glyph name="refresh" size={18} /></button></div>
+  </div>
   const pending = organizations.PENDING
   const noCoordinate = places.filter(place => place.latitude == null)
   const status = <>{notice && <p className="inline-notice" role="status">{notice}</p>}{failed && <div className="error-banner" role="alert">일부 관리 정보를 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>}</>
 
   if (section === 'organizations') return <>
-    <PageHeading eyebrow="ADMIN · 기관 확인" title="기관 확인" description="기관 회원가입을 확인해요. 반려할 때는 사유를 꼭 적어 주세요." />
+    {head('기관 확인', '반려할 때는 사유를 꼭 적어 주세요. 사유는 신청한 기관에 보여요.')}
     {status}
     <div className="seg-tabs org-tabs" role="tablist" aria-label="기관 상태">{(['PENDING', 'APPROVED', 'REJECTED'] as OrgStatus[]).map(value => <button key={value} role="tab" aria-selected={orgTab === value} onClick={() => setOrgTab(value)}>{({ PENDING: '확인 대기', APPROVED: '승인됨', REJECTED: '반려됨' })[value]} <span className="count">{organizations[value]?.length ?? '–'}</span></button>)}</div>
     <section className="admin-card" aria-label={orgTab === 'PENDING' ? '기관 확인 대기' : orgTab === 'APPROVED' ? '승인된 기관' : '반려된 기관'}>
@@ -647,10 +655,10 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   </>
 
   if (section === 'activities') return <>
-    <PageHeading eyebrow="ADMIN · 활동 검토" title="활동 검토" description="위험 단어가 있거나 지역 돌봄 분야인 글은 관리자가 확인한 뒤 공개돼요." />
+    {head('활동 검토', '위험 단어가 있거나 지역 돌봄 분야인 글은 승인해야 공개돼요.')}
     {status}
     <section className="admin-card" aria-label="검토 대기 활동">
-      <div className="admin-card-head"><h2>검토 대기 활동 <span className="count">{activities?.length ?? '–'}</span></h2><span className="tag-chip">관리자 전용</span></div>
+      <div className="admin-card-head"><h2>검토 대기 활동 <span className="count">{activities?.length ?? '–'}</span></h2></div>
       {activities === null ? <div className="loading-state" role="status">검토할 활동을 불러오는 중입니다.</div>
         : activities.length === 0 ? <p className="empty-line">검토를 기다리는 활동이 없습니다.</p>
         : <ul className="review-list">{activities.map(item => <ReviewItem key={item.id} title={item.title} href={'#/activity/' + item.id}
@@ -660,7 +668,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   </>
 
   if (section === 'places') return <>
-    <PageHeading eyebrow="ADMIN · 장소 관리" title="장소 관리" description="좌표를 넣어야 거리 검색과 지도에 나와요. 현장 이용 허가는 따로 확인해야 합니다." />
+    {head('장소 관리', '좌표를 넣어야 거리 검색과 지도에 나와요. 현장 이용 허가는 따로 확인해 주세요.')}
     {status}
     <section className="admin-card" aria-label="장소 좌표">
       <div className="admin-card-head"><h2>장소 좌표 <span className="count">{places.length}</span></h2>{noCoordinate.length > 0 && <span className="status-chip wait">좌표 없음 {noCoordinate.length}</span>}</div>
@@ -675,13 +683,16 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const perCategory = categories.map(name => ({ label: name, value: (recruiting ?? []).filter(a => a.category === name).length }))
   const seats = (recruiting ?? []).reduce((sum, a) => ({ confirmed: sum.confirmed + a.confirmed, capacity: sum.capacity + a.capacity }), { confirmed: 0, capacity: 0 })
   const fill = { full: (recruiting ?? []).filter(a => a.confirmed >= a.capacity).length, half: (recruiting ?? []).filter(a => a.confirmed < a.capacity && a.confirmed * 2 >= a.capacity).length, low: (recruiting ?? []).filter(a => a.confirmed * 2 < a.capacity).length }
+  // Line: organization sign-up requests per day over the last 14 days (every status, by request time).
+  const allOrgs = [...(pending ?? []), ...(organizations.APPROVED ?? []), ...(organizations.REJECTED ?? [])]
+  const last14 = Array.from({ length: 14 }, (_, i) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - (13 - i) * 86_400_000)))
+  const orgTrend = last14.map(day => ({ day, value: allOrgs.filter(item => item.requestedAt.startsWith(day)).length }))
   const oldest = pending?.length ? Math.max(...pending.map(item => daysSince(item.requestedAt))) : 0
   const orgTotal = (pending?.length ?? 0) + (organizations.APPROVED?.length ?? 0) + (organizations.REJECTED?.length ?? 0)
   const count = (value: number | undefined | null) => value == null ? '–' : value
 
   return <>
-    <div className="page-head"><div><span className="page-eyebrow">ADMIN DASHBOARD</span><h1>관리자 대시보드</h1><p>처리할 일과 지금 모집 중인 활동을 한눈에 봐요.</p></div>
-      <button className="pill-button line small" onClick={load}>새로고침</button></div>
+    {head('대시보드')}
     {status}
     <div className="kpi-row">
       <a className={'kpi' + (pending?.length ? ' attention' : '')} href="#/admin/organizations"><span>기관 확인 대기</span><strong>{count(pending?.length)}</strong><small>{pending?.length ? `가장 오래 ${oldest}일째` : '대기 없음'}</small></a>
@@ -699,14 +710,19 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
       </section>
       <section className="admin-card" aria-label="게시글 승인 요약">
         <div className="admin-card-head"><h2>게시글 승인</h2><a className="home-more" href="#/admin/activities">전체 보기 <Icon name="outward" size={15} /></a></div>
-        <p className="small-print">위험 단어가 있거나 지역 돌봄 분야인 글이 여기에 와요. 막힌 글(BLOCKED)은 저장되지 않아 목록에 없습니다.</p>
         {activities === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : activities.length === 0 ? <p className="empty-line">검토를 기다리는 활동이 없습니다.</p>
           : <ul className="mini-list">{activities.slice(0, 3).map(item => <li key={item.id}><strong>{item.title}</strong><span>{item.category} · {dateLabel(item.date)} {item.startTime}</span>{item.riskReasons && <em className="reason">{item.riskReasons}</em>}</li>)}</ul>}
       </section>
-      <section className="admin-card wide" aria-label="앞으로 14일 모집 일정">
-        <div className="admin-card-head"><h2>앞으로 14일 모집 일정</h2><span className="small-print">날짜별 모집 중 활동 수</span></div>
+      <section className="admin-card" aria-label="앞으로 14일 모집 일정">
+        <div className="admin-card-head"><h2>앞으로 14일 모집 일정</h2><span className="small-print">날짜별 활동 수</span></div>
         {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <DayBars data={perDay} />}
       </section>
+      <section className="admin-card" aria-label="기관 가입 신청 추이">
+        <div className="admin-card-head"><h2>기관 가입 신청 추이</h2><span className="small-print">최근 14일 · {orgTrend.reduce((sum, item) => sum + item.value, 0)}건</span></div>
+        {pending === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <LineChart data={orgTrend} unit="건" />}
+      </section>
+    </div>
+    <div className="admin-grid">
       <section className="admin-card" aria-label="분야별 모집 중 활동">
         <div className="admin-card-head"><h2>분야별 모집 중</h2></div>
         {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <HBars data={perCategory} />}
@@ -719,6 +735,26 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
       </section>
     </div>
   </>
+}
+
+/** Daily values as a line with a soft area under it; first, middle and last dates on the axis. */
+function LineChart({ data, unit }: { data: { day: string; value: number }[]; unit: string }) {
+  if (data.every(item => item.value === 0)) return <p className="empty-line">이 기간에 들어온 신청이 없습니다.</p>
+  const w = 320, h = 140, pad = 8, max = Math.max(1, ...data.map(item => item.value))
+  const x = (i: number) => pad + i * (w - pad * 2) / (data.length - 1)
+  const y = (v: number) => h - pad - v / max * (h - pad * 2)
+  const line = data.map((item, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(item.value).toFixed(1)}`).join(' ')
+  const label = (day: string) => `${Number(day.slice(5, 7))}.${Number(day.slice(8, 10))}`
+  const peak = data.reduce((best, item, i) => item.value > data[best].value ? i : best, 0)
+  return <figure className="line-chart">
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label={data.filter(item => item.value).map(item => `${label(item.day)} ${item.value}${unit}`).join(', ')}>
+      <line x1={pad} x2={w - pad} y1={y(max)} y2={y(max)} className="grid" /><line x1={pad} x2={w - pad} y1={y(0)} y2={y(0)} className="grid base" />
+      <path d={`${line} L${x(data.length - 1)} ${y(0)} L${x(0)} ${y(0)} Z`} className="area" />
+      <path d={line} className="stroke" />
+    </svg>
+    <span className="peak" style={{ left: `${x(peak) / w * 100}%`, top: `${y(data[peak].value) / h * 100}%` }}>{data[peak].value}{unit}</span>
+    <figcaption><span>{label(data[0].day)}</span><span>{label(data[Math.floor(data.length / 2)].day)}</span><span>오늘</span></figcaption>
+  </figure>
 }
 
 function StackBar({ parts, total }: { parts: { label: string; value: number; tone: string }[]; total: number }) {
