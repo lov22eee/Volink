@@ -60,7 +60,7 @@ export default function Home({ user, catalog }: { user: User | null; catalog: Ca
       <div className="hero-art"><ParkArt /><div className="floating-note"><span className="floating-icon"><Icon name="leaf" /></span><div><strong>혼자보다, 함께.</strong><span>우리 동네에 변화를 남겨요</span></div></div></div>
     </section>
 
-    {user && mine && <section className="home-me" aria-label="내 요약">
+    {user && mine && <section className="home-me home-section" aria-label="내 요약">
       <div><span className="label">{user.name}님이 연 활동</span><strong>{mine.length}개{mine.some(a => a.status === 'DRAFT') ? ` · ${mine.filter(a => a.status === 'DRAFT').length}개 검토 중` : ''}</strong>
         <a href="#/mine">내 활동 보기</a></div>
       <div><span className="label">가장 가까운 내 활동</span>{upcoming ? <><strong>{upcoming.title}</strong><span>{upcoming.date.slice(5).replace('-', '/')} {upcoming.startTime}</span></> : <strong>아직 없어요</strong>}</div>
@@ -73,22 +73,23 @@ export default function Home({ user, catalog }: { user: User | null; catalog: Ca
       {weekend != null && <div><span className="label">이번 주말 동네 활동</span><strong>{weekend}개</strong></div>}
     </section>}
 
-    <section aria-label={near ? '지금 내 주변' : '모집 중인 활동'}>
-      <div className="home-head"><h2>{near ? '지금 내 주변' : preview ? '이런 활동을 함께해요' : '모집 중인 활동'}</h2><a href="#/explore">지도에서 모두 보기 <Glyph name="arrow" size={15} /></a></div>
+    <section className="home-section" aria-label={near ? '지금 내 주변' : '모집 중인 활동'}>
+      <div className="home-head"><div><h2>{near ? '지금 내 주변' : preview ? '이런 활동을 함께해요' : '모집 중인 활동'}</h2><p>{near ? '내 위치에서 가까운 순서예요.' : '지금 이웃을 기다리는 활동이에요.'}</p></div><a href="#/explore">지도에서 모두 보기 <Glyph name="arrow" size={15} /></a></div>
       {picks.length ? <div className="activity-grid">{picks.map(pick => pick.card ? <ActivityCard key={pick.key} item={pick.card} />
         : <a key={pick.key} className="home-program" href={pick.program!.link} target="_blank" rel="noopener noreferrer">
           <span className="source program">1365 활동</span><strong>{pick.program!.title}</strong>
           <span>{pick.program!.place}{pick.program!.distanceKm != null ? ` · ${pick.program!.distanceKm}km · ${travel(pick.program!.distanceKm)}` : ''}</span>
           <span className="link-out">1365에서 신청 <Glyph name="external" size={14} /></span></a>)}</div>
-        : <div className="empty-state">{all ? '아직 모집 중인 활동이 없어요. 첫 활동을 열어 보세요.' : '활동을 불러오는 중입니다.'}</div>}
+        : all ? <div className="empty-state"><p>아직 모집 중인 활동이 없어요. 첫 활동을 열어 보세요.</p><a className="secondary-button" href="#/create">활동 만들기</a></div>
+          : <div className="loading-state" role="status">활동을 불러오는 중입니다.</div>}
     </section>
 
-    <section aria-label="참여 방법">
-      <div className="home-head"><h2>이렇게 참여해요</h2><span className="small-print">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요</span></div>
+    <section className="home-section" aria-label="참여 방법">
+      <div className="home-head"><div><h2>이렇게 참여해요</h2><p>공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요</p></div></div>
       <ol className="home-steps">
         <li><Glyph name="search" size={20} /><strong>찾기</strong><span>내 주변·이번 주말 활동</span></li>
         <li><Glyph name="check" size={20} /><strong>신청</strong><span>동네 활동은 Volink에서, 1365 활동은 1365에서</span></li>
-        <li><Glyph name="pin" size={20} /><strong>출석</strong><span>현장에서 QR로 확인</span></li>
+        <li><Glyph name="pin" size={20} /><strong>참여</strong><span>정한 시간·장소에서 함께해요</span></li>
         <li><Glyph name="leaf" size={20} /><strong>기록</strong><span>내 활동에 차곡차곡</span></li>
       </ol>
     </section>

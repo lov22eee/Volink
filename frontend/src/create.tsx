@@ -248,7 +248,8 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
     {heading}
     <div className="create-layout single">
       <form className="panel activity-form create-form" noValidate onSubmit={submit} onChange={() => { setMessage(''); setBlocked('') }}>
-        <div className="form-title"><h2>활동 정보</h2>
+        <section className="form-section" aria-label="무엇을 하나요">
+        <div className="form-title"><div className="form-section-head"><span className="step" aria-hidden="true">1</span><div><h2>활동 정보</h2><p>무엇을 하는 활동인지 알려 주세요.</p></div></div>
           <label className="template-pick"><Glyph name="bolt" size={15} /><select aria-label="자주 하는 활동 불러오기" value="" onChange={event => {
             const picked = templates.find(item => item.name === event.target.value)
             if (picked) { setTitle(picked.title); setCategory(picked.category); setDescription(picked.description); setDuration(Math.min(picked.duration, durations[durations.length - 1])) }
@@ -268,10 +269,17 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
         </div>
         {kind === 'INSTITUTION' && <p className="inline-notice">{canHost ? organization?.name + ' 이름으로 활동을 엽니다.' : organization?.status === 'PENDING' ? '기관 확인을 기다리고 있습니다. 관리자 확인이 끝나면 기관 주관 활동을 열 수 있습니다.' : '기관 주관 활동은 기관 확인이 완료된 기관회원만 개설할 수 있습니다.'}</p>}
 
+        </section>
+
+        <section className="form-section" aria-label="어디서 만나나요">
+          <div className="form-section-head"><span className="step" aria-hidden="true">2</span><div><h3>어디서 만나나요</h3><p>장소를 고르고, 찾기 쉬운 만나는 곳을 적어 주세요.</p></div></div>
         <PlaceField value={place} meetingPoint={meetingPoint} error={errors.place} onChange={(picked, meeting) => { setPlace(picked); setMeetingPoint(meeting); setErrors(({ place: _, ...rest }) => rest) }} />
         {fieldError('meetingPoint')}
         <FieldRisk field="장소" status={status.place} />
+        </section>
 
+        <section className="form-section" aria-label="언제 하나요">
+          <div className="form-section-head"><span className="step" aria-hidden="true">3</span><div><h3>언제 하나요</h3><p>날짜·시작 시간·활동 시간을 고르면 끝나는 시각을 바로 보여 드려요.</p></div></div>
         <div className="field-block"><span className="field-label">일정</span>
           <div className="schedule-cards">
             <div className="schedule-card"><span className="card-head"><Glyph name="calendar" size={15} />날짜와 시작 시간</span>
@@ -288,6 +296,10 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <FieldRisk field="일정" status={status.schedule} />
         </div>
 
+        </section>
+
+        <section className="form-section" aria-label="몇 명과 함께하나요">
+          <div className="form-section-head"><span className="step" aria-hidden="true">4</span><div><h3>몇 명과 함께하나요</h3><p>나를 빼고 함께할 인원이에요. 정원이 차면 대기 순번을 받아요.</p></div></div>
         <div className="form-row">
           <div className="field-block"><span className="field-label">모집 정원 <span className="field-hint">나를 빼고 · 나 포함 최대 {r.capacityMax + 1}명</span></span>
             <ChoiceField name="capacity" label="모집 정원" icon="users" value={String(capacity)} onChange={value => setCapacity(Number(value))} grid
@@ -297,6 +309,10 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
         </div>
 
 
+        </section>
+
+        <section className="form-section" aria-label="어떤 활동인가요">
+          <div className="form-section-head"><span className="step" aria-hidden="true">5</span><div><h3>어떤 활동인가요</h3><p>하는 일과 분위기, 챙겨 올 것을 알려 주세요.</p></div></div>
         <label>활동 소개<span className="input-with-count"><textarea name="description" value={description} maxLength={r.descriptionMax} rows={4} onChange={event => setDescription(event.target.value)} placeholder="함께할 일과 준비물을 알려주세요." {...err('description')} /><small>{description.trim().length} / {r.descriptionMax}</small></span>{fieldError('description')}<FieldRisk field="활동 소개" status={status.description} /></label>
 
         <div className="field-block"><span className="field-label">챙겨 올 준비물 <span className="field-hint">선택 · 최대 {maxSupplies}개 · 누르면 켜져요</span></span>
@@ -315,15 +331,19 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
           <FieldRisk field="준비물" status={status.supplies} />
         </div>
 
+        </section>
+
+        <section className="form-section" aria-label="확인하고 등록">
+          <div className="form-section-head"><span className="step" aria-hidden="true">6</span><div><h3>확인하고 등록</h3><p>공개 전에 안전 기준을 한 번 더 확인해 주세요.</p></div></div>
         <label className="check-line"><input type="checkbox" name="safety" checked={safety} onChange={event => setSafety(event.target.checked)} {...err('safety')} />공공장소의 저위험 활동이며, 공식 봉사실적·자원봉사 종합보험이 적용되지 않음을 확인합니다</label>
         {fieldError('safety')}
         {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
         {blocked && <div className="form-alert blocked" role="alert"><strong>등록할 수 없는 활동입니다.</strong><span>{blocked}</span><span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금 등은 열 수 없습니다.</span></div>}
         {!willBlock && !willReview && <p className="field-risk ok" role="status"><Glyph name="check" size={16} />바로 공개될 예정이에요.</p>}
-        <button className="primary-button" type="submit" disabled={busy || willBlock || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
+        <button className="primary-button" type="submit" disabled={busy || willBlock || (kind === 'INSTITUTION' && !canHost)}>{preview ? '입력 내용 확인' : busy ? '저장하는 중…' : editId ? '수정 저장' : '활동 등록'} <Glyph name="arrow" size={17} /></button>
         {message && <p role="status" className="success-message">{message}</p>}
+        </section>
       </form>
-
     </div>
   </>
 }

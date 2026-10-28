@@ -56,6 +56,7 @@ export function range(when: When): { from?: string; to?: string } {
 }
 
 export default function Explore({ catalog }: { catalog: Catalog | null }) {
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('list')
   const [origin, setOrigin] = useState<Origin | null>(null)
   const [asking, setAsking] = useState(!preview && !remembered())
   const [locating, setLocating] = useState(false)
@@ -194,7 +195,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
 
   return <>
     <section id="activities" className="activity-section">
-      <div className="section-heading"><div><span className="eyebrow">NEAR YOU</span><h2>우리 동네의 작은 실천</h2></div>
+      <div className="section-heading"><div><span className="eyebrow"><span className="tiny-dot" />활동 찾기</span><h2>우리 동네의 작은 실천</h2><p>지도와 목록에서 가까운 동네 활동과 1365 봉사활동을 함께 찾아요.</p></div>
         {!preview && <span className="location-tag"><Glyph name="pin" size={16} />{origin ? origin.label + ' 기준 ' + shownRadius + 'km' : '위치 미정'}{origin && <button className="text-button" onClick={() => { setAsking(true); setOrigin(null) }}>바꾸기</button>}</span>}
       </div>
 
@@ -237,7 +238,9 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           {widened && <div className="widen-callout" role="status"><strong>{radius}km 안에는 없어서 {shownRadius}km까지 넓혔어요</strong>
             <span className="ring-steps">{rings.filter(ring => ring >= radius && ring <= shownRadius).map(ring => <span key={ring} className={ring === shownRadius ? 'on' : ''}>{ring}km · {hits.filter(hit => hit.distanceKm != null && hit.distanceKm <= ring).length}개</span>)}</span>
             <small>최대 20km까지만 넓혀요</small></div>}
-          <div className="explore-split">
+          {/* Phones show either the map or the five nearest; wide screens show both side by side. */}
+          <div className="view-switch segmented" role="group" aria-label="보기 방식"><button type="button" aria-pressed={mobileView === 'list'} onClick={() => setMobileView('list')}>목록</button><button type="button" aria-pressed={mobileView === 'map'} onClick={() => setMobileView('map')}>지도</button></div>
+          <div className={'explore-split show-' + mobileView}>
             <div className="explore-map">
               <ExploreMap origin={origin} radiusKm={shownRadius} hits={inside} selected={hovered ?? selected} onSelect={setSelected}
                 onHome={myPosition ? () => setOrigin(myPosition) : undefined}
@@ -255,17 +258,17 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           <select aria-label="한 쪽에 보일 개수" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>{[9, 18, 30].map(n => <option key={n} value={n}>{n}개씩</option>)}</select></span></div>
         {everything.length ? <div className="activity-grid">{everything.slice((page - 1) * pageSize, page * pageSize).map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
           : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onDetail={setProgramDetail} /></div>)}</div>
-          : <div className="empty-state">조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</div>}
+          : <div className="empty-state"><p>조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>조건 모두 지우기</button>}</div>}
         <Pages total={everything.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('all-list')?.scrollIntoView() }} />
       </>
-        : <>{(!catalog && !live.length) ? <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
+        : <>{(!catalog && !live.length) ? <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
           : (live.length + filteredExamples.length) ? <>
             {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
               <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
             {/* Examples are not real posts: kept apart from the real list and its pages. */}
             {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
               <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
-            : <div className="empty-state">조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</div>}</>}
+            : <div className="empty-state"><p>조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={() => { setWhen('all'); setPart(''); setCategory('전체'); setKind('all'); setYouth(false); setRadius(3) }}>조건 모두 지우기</button>}</div>}</>}
     </section>
     {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)} />}
     <section className="bottom-callout"><div className="callout-icon"><Icon name="plus" size={26} /></div><div><h3>내가 먼저, 작은 변화를 시작해 볼까요?</h3><p>이웃과 함께할 작은 활동을 생각해 보세요.</p></div><a href="#/create" className="secondary-button">활동 만들기 <Icon name="arrow" size={17} /></a></section>

@@ -140,43 +140,44 @@ export default function App() {
   const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
+  const accountNav = user
+    ? <nav className="account-links" aria-label="계정 메뉴">
+      <a href="#/notifications" className="bell-link" aria-current={route.page === 'notifications' ? 'page' : undefined} aria-label={'알림' + (unread ? ' ' + unread + '개 안 읽음' : '')}><Icon name="bell" size={21} />{unread > 0 && <span className="bell-count">{unread > 99 ? '99+' : unread}</span>}</a>
+      <a href="#/mine" className="user-name">{user.name}님</a>
+      <button className="secondary-button" onClick={signOut}>로그아웃</button></nav>
+    : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" aria-current={route.page === 'login' ? 'page' : undefined}>로그인</a><a href="#/signup" className="secondary-button" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>
+
   return <div className="app-shell">
-    <aside className="sidebar">
-      <a href="#/home" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={25} /></span>volink<span className="brand-dot">.</span></a>
-      <p className="brand-caption">우리 동네의 작은 변화</p>
-      <nav aria-label="주요 메뉴">{navigation.map(item => {
-        const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore')
-        return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}{active && <span className="nav-dot" />}</a>
-      })}</nav>
-      <div className="sidebar-bottom"><Icon name="leaf" size={23} /><p>작은 실천이 모여<br />우리 동네를 바꿉니다.</p></div>
-    </aside>
-    <div className="main-shell">
-      <header className="topbar">
-        <div className="breadcrumb">Volink <span>/</span> {titles[route.page]}</div>
-        {user
-          ? <nav className="account-links" aria-label="계정 메뉴"><a href="#/notifications" className="bell-link" aria-label={'알림' + (unread ? ' ' + unread + '개 안 읽음' : '')}><Icon name="bell" size={19} />{unread > 0 && <span className="bell-count">{unread > 99 ? '99+' : unread}</span>}</a><span className="user-name">{user.name}님</span><button className="secondary-button" onClick={signOut}>로그아웃</button></nav>
-          : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" aria-current={route.page === 'login' ? 'page' : undefined}>로그인</a><a href="#/signup" className="secondary-button" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>}
-      </header>
-      <main id="main-content">
-        {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
-        {route.page === 'home' && <Home user={user} catalog={catalog} />}
-        {route.page === 'explore' && <Explore catalog={catalog} />}
-        {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : <NotFound />)}
-        {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} user={user} onChange={pollUnread} />}
-        {route.page === 'notifications' && <Notifications user={user} ready={ready} onChange={pollUnread} />}
-        {route.page === 'create' && <CreateActivity user={user} ready={ready} />}
-        {route.page === 'edit' && route.activityId && <CreateActivity key={'edit-' + route.activityId} user={user} ready={ready} editId={route.activityId} />}
-        {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
-        {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
-        {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
-      </main>
-      <footer className="footer"><span>© Volink</span><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></footer>
-    </div>
+    <header className="site-header">
+      <div className="header-inner">
+        <a href="#/home" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={19} /></span>volink<span className="brand-dot">.</span></a>
+        {/* One menu: a top bar on wide screens, a bottom tab bar on phones (CSS only). */}
+        <nav aria-label="주요 메뉴" className="main-nav">{navigation.map(item => {
+          const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore') || (route.page === 'edit' && item.id === 'create')
+          return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>
+        })}</nav>
+        {accountNav}
+      </div>
+    </header>
+    <main id="main-content" aria-label={titles[route.page]}>
+      {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
+      {route.page === 'home' && <Home user={user} catalog={catalog} />}
+      {route.page === 'explore' && <Explore catalog={catalog} />}
+      {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : catalog ? <NotFound /> : <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>)}
+      {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} user={user} onChange={pollUnread} />}
+      {route.page === 'notifications' && <Notifications user={user} ready={ready} onChange={pollUnread} />}
+      {route.page === 'create' && <CreateActivity user={user} ready={ready} />}
+      {route.page === 'edit' && route.activityId && <CreateActivity key={'edit-' + route.activityId} user={user} ready={ready} editId={route.activityId} />}
+      {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
+      {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
+      {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
+    </main>
+    <footer className="footer"><div className="footer-inner"><span><strong>Volink</strong> · 우리 동네의 작은 변화</span><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></div></footer>
   </div>
 }
 
 function NotFound() {
-  return <section className="empty-state"><h1>활동을 찾을 수 없습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
+  return <section className="empty-state"><span className="empty-icon"><Icon name="compass" size={28} /></span><h1>활동을 찾을 수 없습니다</h1><p>삭제되었거나 아직 공개되지 않은 활동일 수 있어요.</p><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
 }
 
 export function PageHeading({ title, description }: { title: string; description: string }) {
@@ -212,16 +213,43 @@ function focusFirstError(form: HTMLFormElement, errors: Errors) {
 export function ActivityCard({ item }: { item: CardItem }) {
   return <article className="activity-card" data-kind={item.kind}>
     <div className="card-art"><ParkArt variant={item.id - 1} /><span className={'card-label' + (item.kind === 'live' ? ' live' : '')}>{item.kind === 'live' ? '모집 중' : '예시 활동'}</span><span className="duration-tag"><Icon name="clock" size={13} />{item.durationMinutes}분</span></div>
-    <div className="card-body"><span className="category-label">{item.category} · {typeLabel(item)}</span><h3>{item.title}</h3><p className="card-location"><Icon name="pin" size={15} />{item.placeName}{item.distanceKm != null && <span className="distance">{item.distanceKm}km</span>}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(item.date)} · {item.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{item.confirmed}</strong><span>/ {item.capacity}명</span></div><a className="card-detail" href={item.href} aria-label={item.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
+    <div className="card-body"><span className="category-label">{item.category} · {typeLabel(item)}</span><h3>{item.title}</h3><p className="card-location"><Icon name="pin" size={15} />{item.placeName}{item.distanceKm != null && <span className="distance">{item.distanceKm}km</span>}</p><p className="card-date"><Icon name="clock" size={15} />{dateLabel(item.date)} · {item.startTime}</p><div className="card-divider" /><div className="card-bottom"><div className="participant-count"><Icon name="users" size={16} /><strong>{item.confirmed}</strong><span>/ {item.capacity}명</span><SeatBar confirmed={item.confirmed} capacity={item.capacity} /></div><a className="card-detail" href={item.href} aria-label={item.title + ' 상세 보기'}>상세 보기 <Icon name="arrow" size={15} /></a></div></div>
   </article>
 }
 
+/** Filled share of the seats (real confirmed / capacity). */
+function SeatBar({ confirmed, capacity }: { confirmed: number; capacity: number }) {
+  const share = capacity > 0 ? Math.min(100, Math.round(confirmed / capacity * 100)) : 0
+  return <span className={'seat-bar' + (share >= 100 ? ' full' : '')} aria-hidden="true"><i style={{ width: share + '%' }} /></span>
+}
+
 function DetailView({ item, description, badge, note, supplies = [], children, action, extra }: { item: CardItem; description: string; badge: string; note: string; supplies?: Supply[]; children?: ReactNode; action?: ReactNode; extra?: ReactNode }) {
+  // With a live application box the seats are shown there (확정 · 대기 · 제안), so they are not repeated in the facts.
+  const seatsInAction = action != null && item.kind === 'live'
   return <>
     <a href="#/explore" className="back-link">← 활동 목록으로</a>
     <div className="detail-layout">
-      <article className="panel detail-content"><div className="detail-art"><ParkArt variant={item.id - 1} /></div><div className="detail-tags"><span className="outline-badge">{badge}</span><span>{item.category} · {typeLabel(item)}{item.organizationName ? ' · ' + item.organizationName : ''}</span></div><h1>{item.title}</h1>{children}<p className="detail-description">{description}</p><h2>참여 순서</h2><ol className="participation-steps"><li>참가 신청</li><li>승인 또는 대기</li><li>현장 출석</li><li>활동 완료</li></ol><p className="small-print">{note}</p></article>
-      <aside className="panel detail-booking"><h2>활동 정보</h2><dl><div><dt><Icon name="pin" size={17} />장소</dt><dd>{item.placeName}</dd></div><div><dt><Icon name="clock" size={17} />일시</dt><dd>{dateLabel(item.date)} · {item.startTime}</dd></div><div><dt><Icon name="clock" size={17} />활동 시간</dt><dd>{item.durationMinutes}분</dd></div><div><dt><Icon name="users" size={17} />참여 인원</dt><dd>{item.confirmed} / {item.capacity}명</dd></div></dl>{supplies.length > 0 && <div className="supply-block">{supplies.some(s => !s.provided) && <><h3>챙겨 올 것</h3><SupplyChips supplies={supplies.filter(s => !s.provided)} /></>}{supplies.some(s => s.provided) && <><h3>모집자가 준비해요</h3><SupplyChips supplies={supplies.filter(s => s.provided)} /></>}</div>}{action ?? <button disabled className="primary-button">참가 신청 · 준비 중</button>}<p className="small-print">위험한 물건은 직접 처리하지 않습니다. 사고가 나면 먼저 119에 신고해 주세요.</p></aside>
+      <article className="detail-content">
+        <header className="detail-head">
+          <div className="detail-tags"><span className="outline-badge">{badge}</span><span>{item.category} · {typeLabel(item)}{item.organizationName ? ' · ' + item.organizationName : ''}</span></div>
+          <h1>{item.title}</h1>
+          <p className="detail-facts"><span><Icon name="clock" size={17} />{dateLabel(item.date)} · {item.startTime} · {item.durationMinutes}분</span><span><Icon name="pin" size={17} />{item.placeName}</span></p>
+        </header>
+        {children}
+        <div className="detail-art"><ParkArt variant={item.id - 1} /></div>
+        <h2>활동 소개</h2>
+        <p className="detail-description">{description}</p>
+        <h2>참여 순서</h2>
+        <ol className="participation-steps"><li>참가 신청</li><li>승인 또는 대기</li><li>현장 출석</li><li>활동 완료</li></ol>
+        <p className="small-print detail-note">{note}</p>
+      </article>
+      <aside className="panel detail-booking" aria-label="활동 정보와 신청">
+        <h2>활동 정보</h2>
+        <dl><div><dt><Icon name="pin" size={16} />장소</dt><dd>{item.placeName}</dd></div><div><dt><Icon name="clock" size={16} />일시</dt><dd>{dateLabel(item.date)} · {item.startTime}</dd></div><div><dt><Icon name="clock" size={16} />활동 시간</dt><dd>{item.durationMinutes}분</dd></div>{!seatsInAction && <div><dt><Icon name="users" size={16} />참여 인원</dt><dd>{item.confirmed} / {item.capacity}명</dd></div>}</dl>
+        {supplies.length > 0 && <div className="supply-block">{supplies.some(s => !s.provided) && <><h3>챙겨 올 것</h3><SupplyChips supplies={supplies.filter(s => !s.provided)} /></>}{supplies.some(s => s.provided) && <><h3>모집자가 준비해요</h3><SupplyChips supplies={supplies.filter(s => s.provided)} /></>}</div>}
+        {action ?? <button disabled className="primary-button">참가 신청 · 준비 중</button>}
+        <p className="small-print">위험한 물건은 직접 처리하지 않습니다. 사고가 나면 먼저 119에 신고해 주세요.</p>
+      </aside>
     </div>
     {extra}
   </>
@@ -244,7 +272,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
     loadViewer()
   }, [id, ready, user, loadViewer])
   if (missing || preview) return <NotFound />
-  if (!activity) return <div className="empty-state">활동 정보를 불러오는 중입니다.</div>
+  if (!activity) return <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
 
   async function act(path: string, done: string) {
     setBusy(true)
@@ -267,10 +295,17 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   const full = seats.confirmed + seats.offered >= activity.capacity
   const mine = seats.participation
   const item = { ...fromLive(activity), confirmed: seats.confirmed }
+  const share = (n: number) => activity.capacity > 0 ? Math.min(100, n / activity.capacity * 100) + '%' : '0%'
+  const help = statusHelp(mine, full, seats.waiting, user != null && !organizer && user.role !== 'ADMIN' && !hidden)
   const action = <div className="apply-box">
-    <p className="seat-line">확정 {seats.confirmed} / {activity.capacity}명{seats.offered ? ' · 제안 중 ' + seats.offered : ''}{seats.waiting ? ' · 대기 ' + seats.waiting + '명' : ''}</p>
+    <div className="seat-meter">
+      <p className="seat-line">확정 {seats.confirmed} / {activity.capacity}명{seats.offered ? ' · 제안 중 ' + seats.offered : ''}{seats.waiting ? ' · 대기 ' + seats.waiting + '명' : ''}</p>
+      <span className="bar" aria-hidden="true"><i style={{ width: share(seats.confirmed) }} /><i className="offer" style={{ width: share(seats.offered) }} /></span>
+      <small>{full ? (mine || organizer ? '정원이 찼어요.' : '정원이 찼어요. 지금 신청하면 대기 순번을 받아요.') : `${Math.max(0, activity.capacity - seats.confirmed - seats.offered)}자리 남았어요`}</small>
+    </div>
     {mine && <p className={'my-status ' + mine.status.toLowerCase()}>{participationLabel(mine)}</p>}
-    {mine?.status === 'OFFERED' && mine.offerExpiresAt && <p className="small-print">{offerDeadline(mine.offerExpiresAt)}까지 수락하지 않으면 다음 대기자에게 넘어갑니다.</p>}
+    {mine?.status === 'OFFERED' && mine.offerExpiresAt && <p className="status-help urgent">{offerDeadline(mine.offerExpiresAt)}까지 수락하지 않으면 다음 대기자에게 넘어갑니다.</p>}
+    {help && <p className="status-help">{help}</p>}
     <ApplyButtons activity={activity} user={user} ready={ready} organizer={organizer} full={full} mine={mine} busy={busy || hidden} act={act} />
     {message && <p className="inline-notice" role="status">{message}</p>}
   </div>
@@ -282,6 +317,21 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   </DetailView>
 }
 
+/** What happens next for the viewer, from the real application state only. */
+function statusHelp(mine: Participation | null, full: boolean, waiting: number, canApply: boolean) {
+  switch (mine?.status) {
+    case 'APPLIED': return '모집자가 확인하면 화면 안 알림으로 알려 드려요.'
+    case 'CONFIRMED': return '참가가 확정됐어요. 시작 시각에 만나는 곳으로 와 주세요. 못 오게 되면 미리 취소해 주세요.'
+    case 'WAITLISTED': return '빈자리가 생기면 순서대로 자리를 제안해요. 제안이 오면 알림으로 알려 드려요.'
+    case 'REJECTED': return '이번 활동에는 함께하지 못해요. 다른 활동을 찾아보세요.'
+    case 'EXPIRED': return '응답 시간이 지나 자리가 다음 대기자에게 넘어갔어요.'
+    case 'CANCELLED': return (mine.cancelCount ?? 0) >= 2 ? '이 활동은 다시 신청할 수 없어요.' : '취소한 활동은 한 번 더 신청할 수 있어요.'
+    case 'OFFERED': return null
+  }
+  if (!canApply) return null
+  return full ? `정원이 차서 대기 신청돼요${waiting ? ` (현재 대기 ${waiting}명)` : ''}. 빈자리가 생기면 순서대로 제안해요.` : '신청하면 모집자가 확인한 뒤 참가가 확정돼요.'
+}
+
 function ApplyButtons({ activity, user, ready, organizer, full, mine, busy, act }: { activity: LiveActivity; user: User | null; ready: boolean; organizer: boolean; full: boolean; mine: Participation | null; busy: boolean; act: (path: string, done: string) => void }) {
   if (!user) return ready ? <a className="primary-button" href="#/login">로그인하고 신청하기 <Icon name="arrow" size={17} /></a> : null
   if (organizer) return <p className="small-print">내가 만든 활동입니다. 아래에서 신청자를 확인하세요.</p>
@@ -289,17 +339,25 @@ function ApplyButtons({ activity, user, ready, organizer, full, mine, busy, act 
   const base = '/api/participations/' + mine?.id
   switch (mine?.status) {
     case 'APPLIED': case 'WAITLISTED': case 'CONFIRMED':
-      return <button className="secondary-button" disabled={busy} onClick={() => { if (window.confirm('신청을 취소할까요?' + (mine.status === 'CONFIRMED' ? ' 자리는 대기자에게 넘어갑니다.' : ''))) act(base + '/cancel', '신청을 취소했습니다.') }}>신청 취소</button>
+      return <button className="secondary-button" disabled={busy} onClick={() => { if (window.confirm('신청을 취소할까요?' + (mine.status === 'CONFIRMED' ? ' 자리는 대기자에게 넘어갑니다.' : ''))) act(base + '/cancel', '신청을 취소했습니다.') }}>{busy ? '처리 중…' : '신청 취소'}</button>
     case 'OFFERED':
-      return <div className="button-row"><button className="primary-button" disabled={busy} onClick={() => act(base + '/accept-offer', '참가가 확정되었습니다.')}>자리 수락</button><button className="secondary-button" disabled={busy} onClick={() => act(base + '/decline-offer', '자리 제안을 거절했습니다.')}>거절</button></div>
+      return <div className="button-row"><button className="primary-button" disabled={busy} onClick={() => act(base + '/accept-offer', '참가가 확정되었습니다.')}>{busy ? '처리 중…' : '자리 수락'}</button><button className="secondary-button" disabled={busy} onClick={() => act(base + '/decline-offer', '자리 제안을 거절했습니다.')}>거절</button></div>
     case 'REJECTED': return null
     case 'CANCELLED': if ((mine.cancelCount ?? 0) >= 2) return null
   }
-  return <button className="primary-button" disabled={busy} onClick={() => act('/api/activities/' + activity.id + '/participations', full ? '대기 명단에 올렸습니다.' : '신청했습니다. 모집자가 승인하면 알려 드립니다.')}>{full ? '대기 신청' : '참가 신청'} <Icon name="arrow" size={17} /></button>
+  return <button className="primary-button" disabled={busy} onClick={() => act('/api/activities/' + activity.id + '/participations', full ? '대기 명단에 올렸습니다.' : '신청했습니다. 모집자가 승인하면 알려 드립니다.')}>{busy ? '처리 중…' : full ? '대기 신청' : '참가 신청'} <Icon name="arrow" size={17} /></button>
 }
 
 function participationLabel(item: Pick<Participation, 'status' | 'waitOrder'>) {
   return ({ APPLIED: '승인 대기 중', CONFIRMED: '참가 확정', WAITLISTED: '대기 ' + (item.waitOrder ?? '') + '번', OFFERED: '빈자리 제안 받음', EXPIRED: '제안·대기 만료', CANCELLED: '신청 취소함', REJECTED: '이번에는 함께하지 못해요', CHECKED_IN: '출석 완료', COMPLETED: '활동 완료', NO_SHOW: '불참', HELD: '보류', INVALIDATED: '무효' } as Record<string, string>)[item.status] ?? item.status
+}
+
+/** Chip colour for an application state: green done, amber waiting / act now, grey closed. */
+function chipTone(status: string) {
+  if (status === 'CONFIRMED' || status === 'COMPLETED' || status === 'CHECKED_IN') return 'ok'
+  if (status === 'OFFERED') return 'act'
+  if (status === 'APPLIED' || status === 'WAITLISTED') return 'wait'
+  return 'muted'
 }
 
 function offerDeadline(value: string) {
@@ -310,34 +368,47 @@ function offerDeadline(value: string) {
 function Applicants({ activityId, onChange }: { activityId: number; onChange: () => void }) {
   const [data, setData] = useState<{ capacity: number; confirmed: number; items: Applicant[] } | null>(null)
   const [notice, setNotice] = useState('')
+  const [working, setWorking] = useState<number | null>(null)
   const load = useCallback(() => api<{ capacity: number; confirmed: number; items: Applicant[] }>('/api/activities/' + activityId + '/participations').then(setData).catch(() => setData(null)), [activityId])
   useEffect(() => { load() }, [load])
   async function decide(item: Applicant, approve: boolean) {
+    setWorking(item.id)
     try {
       await api('/api/participations/' + item.id + (approve ? '/approve' : '/reject'), 'POST', {})
       setNotice(item.name + (approve ? ' 님 참가를 확정했습니다.' : ' 님 신청을 거절했습니다.'))
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
     }
+    setWorking(null)
     load()
     onChange()
   }
   if (!data) return null
+  const counts = (status: string) => data.items.filter(item => item.status === status).length
   return <section className="panel applicants" aria-label="신청자 관리">
     <h2>신청자 <span className="count">{data.items.length}</span></h2>
+    <div className="applicant-summary"><span className="status-chip ok">확정 {data.confirmed} / {data.capacity}명</span>{counts('APPLIED') > 0 && <span className="status-chip act">승인 대기 {counts('APPLIED')}</span>}{counts('WAITLISTED') > 0 && <span className="status-chip wait">대기 {counts('WAITLISTED')}</span>}{counts('OFFERED') > 0 && <span className="status-chip wait">제안 중 {counts('OFFERED')}</span>}</div>
     <p className="small-print">확정 {data.confirmed} / {data.capacity}명 · 정원이 차면 승인할 수 없고, 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안합니다. 이름 일부만 보이며 연락처는 공개하지 않습니다.</p>
     {notice && <p className="inline-notice" role="status">{notice}</p>}
-    {data.items.length === 0 ? <p className="small-print">아직 신청자가 없습니다.</p> : <ul className="review-list">{data.items.map(item => <li key={item.id}>
-      <div><strong>{item.name}</strong><span>{participationLabel(item)} · 신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</span></div>
+    {data.items.length === 0 ? <p className="small-print">아직 신청자가 없습니다. 신청이 들어오면 알림으로 알려 드려요.</p> : <ul className="review-list">{data.items.map(item => <li key={item.id} className="applicant-row">
+      <div><span className="who"><strong>{item.name}</strong><span className={'status-chip ' + chipTone(item.status)}>{participationLabel(item)}</span></span><span>신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</span></div>
       <span />
-      <div className="button-row">{item.status === 'APPLIED' && <button className="primary-button" onClick={() => decide(item, true)}>승인</button>}{(item.status === 'APPLIED' || item.status === 'WAITLISTED') && <button className="secondary-button" onClick={() => decide(item, false)}>거절</button>}</div>
+      <div className="button-row">{item.status === 'APPLIED' && <button className="primary-button small" disabled={working != null} onClick={() => decide(item, true)}>승인</button>}{(item.status === 'APPLIED' || item.status === 'WAITLISTED') && <button className="secondary-button small" disabled={working != null} onClick={() => decide(item, false)}>거절</button>}</div>
     </li>)}</ul>}
   </section>
 }
 
+/** Icon and urgency per notification type (types come from the server: APPLICATION_RESULT, WAITLIST_OFFER, ACTIVITY_CHANGED). */
+function noticeLook(item: AppNotification): { icon: IconName; urgent: boolean } {
+  if (item.type === 'WAITLIST_OFFER') return { icon: 'clock', urgent: item.title.includes('빈자리') }
+  if (item.type === 'ACTIVITY_CHANGED') return { icon: 'users', urgent: false }
+  return { icon: 'bell', urgent: false }
+}
+
 function Notifications({ user, ready, onChange }: { user: User | null; ready: boolean; onChange: () => void }) {
   const [items, setItems] = useState<AppNotification[] | null>(null)
-  const load = useCallback(() => api<{ items: AppNotification[] }>('/api/me/notifications').then(data => setItems(data.items)).catch(() => setItems([])), [])
+  const [failed, setFailed] = useState(false)
+  const load = useCallback(() => api<{ items: AppNotification[] }>('/api/me/notifications').then(data => { setItems(data.items); setFailed(false) }).catch(() => { setItems([]); setFailed(true) }), [])
   useEffect(() => { if (user) load() }, [user, load])
   if (!user) return <><PageHeading title="알림" description="신청 결과와 빈자리 제안을 알려 드립니다." /><LoginRequired ready={ready} text="알림을 보려면 로그인해 주세요." /></>
   async function open(item: AppNotification) {
@@ -346,12 +417,21 @@ function Notifications({ user, ready, onChange }: { user: User | null; ready: bo
     if (item.link) window.location.hash = item.link
     else load()
   }
+  const unread = (items ?? []).filter(item => !item.read)
+  const read = (items ?? []).filter(item => item.read)
+  const row = (item: AppNotification) => {
+    const look = noticeLook(item)
+    return <li key={item.id} className={(item.read ? 'read' : 'unread') + (look.urgent ? ' urgent' : '')}><button onClick={() => open(item)}><span className="notice-icon" aria-hidden="true"><Icon name={look.icon} size={19} /></span><strong>{item.title}</strong><span>{item.body}</span><small>{item.createdAt}</small></button></li>
+  }
   return <>
     <PageHeading title="알림" description="신청 결과와 빈자리 제안을 화면 안 알림으로 알려 드립니다. 문자·메일은 보내지 않습니다." />
     <section className="panel">
-      <div className="button-row notice-actions"><button className="text-button" onClick={async () => { await api('/api/notifications/read-all', 'POST'); onChange(); load() }}>모두 읽음</button></div>
-      {items === null ? <p>불러오는 중입니다.</p> : items.length === 0 ? <p className="small-print">아직 알림이 없습니다.</p>
-        : <ul className="notice-list">{items.map(item => <li key={item.id} className={item.read ? 'read' : 'unread'}><button onClick={() => open(item)}><strong>{item.title}</strong><span>{item.body}</span><small>{item.createdAt}</small></button></li>)}</ul>}
+      <div className="button-row notice-actions"><span className="small-print" style={{ margin: 0 }}>{items === null ? '' : unread.length ? `안 읽은 알림 ${unread.length}개` : '모두 읽었어요'}</span>
+        <button className="text-button" disabled={!unread.length} onClick={async () => { await api('/api/notifications/read-all', 'POST'); onChange(); load() }}>모두 읽음</button></div>
+      {items === null ? <div className="loading-state" role="status">알림을 불러오는 중입니다.</div>
+        : failed ? <div className="error-banner" role="alert">알림을 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>
+        : items.length === 0 ? <div className="account-empty"><span className="empty-icon"><Icon name="bell" size={26} /></span><h2>아직 알림이 없어요</h2><p>활동에 신청하면 승인·대기·빈자리 제안을 여기서 알려 드려요.</p><a className="secondary-button" href="#/explore">활동 찾기</a></div>
+        : <ul className="notice-list" aria-label="알림 목록">{unread.length > 0 && <li className="notice-group" aria-hidden="true">새 알림</li>}{unread.map(row)}{read.length > 0 && unread.length > 0 && <li className="notice-group" aria-hidden="true">지난 알림</li>}{read.map(row)}</ul>}
     </section>
   </>
 }
@@ -384,7 +464,7 @@ function statusLabel(status: string) {
 }
 
 export function LoginRequired({ ready, text }: { ready: boolean; text: string }) {
-  if (!ready) return <div className="empty-state">로그인 상태를 확인하는 중입니다.</div>
+  if (!ready) return <div className="loading-state" role="status">로그인 상태를 확인하는 중입니다.</div>
   return <section className="panel account-empty"><div className="empty-icon"><Icon name="users" size={31} /></div><h2>로그인이 필요합니다</h2><p>{text}</p><div className="button-row"><a href="#/login" className="primary-button">로그인 <Icon name="arrow" size={17} /></a><a href="#/signup" className="secondary-button">회원가입</a></div></section>
 }
 
@@ -416,6 +496,20 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   </>
 
   const organization = user.organization
+  // Groups from the real application states: what needs an answer first, then upcoming, in progress, and closed.
+  const group = (statuses: string[]) => (applied ?? []).filter(item => statuses.includes(item.status))
+  const offers = group(['OFFERED'])
+  const upcoming = group(['CONFIRMED', 'CHECKED_IN'])
+  const pending = group(['APPLIED', 'WAITLISTED'])
+  const closed = group(['REJECTED', 'CANCELLED', 'EXPIRED', 'COMPLETED', 'NO_SHOW', 'HELD', 'INVALIDATED'])
+  const row = (item: MyParticipation) => <li key={item.id}>
+    <span className={'risk-badge ' + (item.status === 'CONFIRMED' ? 'low' : ['REJECTED', 'CANCELLED', 'EXPIRED'].includes(item.status) ? 'blocked' : 'review')}>{participationLabel(item)}</span>
+    <a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
+    <span>{dateLabel(item.date)} · {item.startTime} · {item.placeName ?? '장소 미정'}</span>
+    {item.status === 'OFFERED' && item.offerExpiresAt && <small>{offerDeadline(item.offerExpiresAt)}까지 수락해 주세요</small>}
+    {item.status === 'OFFERED' && <a className="primary-button small go" href={'#/activity/' + item.activityId}>응답하기</a>}
+  </li>
+  const listGroup = (title: string, items: MyParticipation[]) => items.length > 0 && <div className="list-group"><h3>{title} <span className="count">{items.length}</span></h3><ul className="my-list">{items.map(row)}</ul></div>
   return <>
     <PageHeading title="내 활동" description="신청부터 참여, 내가 만든 활동까지 한곳에서." />
     <section className="panel member-card" aria-label="내 정보">
@@ -423,10 +517,13 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
       {user.interests.length > 0 && <div className="tags">{user.interests.map(value => <span key={value}>{value}</span>)}</div>}
       {organization && <p className={'org-status ' + organization.status.toLowerCase()}>{organization.name} · {organization.status === 'APPROVED' ? '기관 확인 완료' : organization.status === 'PENDING' ? '기관 확인 대기 중' : '기관 확인 반려' + (organization.rejectReason ? ' · ' + organization.rejectReason : '')}</p>}
     </section>
+    {offers.length > 0 && <section className="panel todo-panel" aria-label="지금 확인할 일"><h2>지금 확인할 일 <span className="count">{offers.length}</span></h2><p className="small-print" style={{ marginTop: 0 }}>빈자리 제안은 정해진 시간 안에 수락해야 참가가 확정돼요.</p><ul className="my-list">{offers.map(row)}</ul></section>}
+    {applied && applied.length > 0 && <div className="summary-row" aria-label="신청 현황">
+      <div><span>참가 확정</span><strong>{upcoming.length}</strong></div><div><span>승인·대기 중</span><strong>{pending.length}</strong></div><div><span>응답 필요</span><strong>{offers.length}</strong></div><div><span>지난 신청</span><strong>{closed.length}</strong></div></div>}
     {tabs}
     <section className="panel" id="my-activity-panel" role="tabpanel" aria-labelledby={'tab-' + tab}>
       {tab === '개설한 활동'
-        ? mine === null ? <p>불러오는 중입니다.</p> : mine.length === 0 ? <div className="account-empty"><h2>아직 만든 활동이 없어요</h2><a href="#/create" className="primary-button">활동 만들기 <Icon name="arrow" size={17} /></a></div>
+        ? mine === null ? <div className="loading-state" role="status">만든 활동을 불러오는 중입니다.</div> : mine.length === 0 ? <div className="account-empty"><span className="empty-icon"><Icon name="plus" size={26} /></span><h2>아직 만든 활동이 없어요</h2><p>동네에서 함께하고 싶은 일이 있다면 직접 열어 보세요.</p><a href="#/create" className="primary-button">활동 만들기 <Icon name="arrow" size={17} /></a></div>
           : <ul className="my-list">{mine.map(activity => <li key={activity.id}>
             <span className={'risk-badge ' + (activity.status === 'RECRUITING' ? 'low' : activity.status === 'DRAFT' ? 'review' : 'blocked')}>{statusLabel(activity.status)}</span>
             <a href={'#/activity/' + activity.id}><strong>{activity.title}</strong></a>
@@ -435,14 +532,10 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
             {activity.status === 'CANCELLED' && activity.reviewNote && <small>반려 사유: {activity.reviewNote}</small>}
           </li>)}</ul>
         : tab === '신청한 활동'
-          ? applied === null ? <p>불러오는 중입니다.</p> : applied.length === 0 ? <div className="account-empty"><h2>아직 신청한 활동이 없어요</h2><a href="#/explore" className="primary-button">활동 찾기 <Icon name="arrow" size={17} /></a></div>
-            : <ul className="my-list">{applied.map(item => <li key={item.id}>
-              <span className={'risk-badge ' + (item.status === 'CONFIRMED' ? 'low' : ['REJECTED', 'CANCELLED', 'EXPIRED'].includes(item.status) ? 'blocked' : 'review')}>{participationLabel(item)}</span>
-              <a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
-              <span>{dateLabel(item.date)} · {item.startTime} · {item.placeName ?? '장소 미정'}</span>
-              {item.status === 'OFFERED' && item.offerExpiresAt && <small>{offerDeadline(item.offerExpiresAt)}까지 수락해 주세요</small>}
-            </li>)}</ul>
-          : <div className="account-empty"><h2>활동 기록은 준비 중입니다</h2><p>{descriptions[tab]}</p></div>}
+          ? applied === null ? <div className="loading-state" role="status">신청한 활동을 불러오는 중입니다.</div> : applied.length === 0 ? <div className="account-empty"><span className="empty-icon"><Icon name="compass" size={26} /></span><h2>아직 신청한 활동이 없어요</h2><p>가까운 활동을 찾아 신청하면 승인·대기 상태를 여기서 볼 수 있어요.</p><a href="#/explore" className="primary-button">활동 찾기 <Icon name="arrow" size={17} /></a></div>
+            : applied.length === offers.length ? <p className="empty-text">빈자리 제안만 있어요. 위 ‘지금 확인할 일’에서 응답해 주세요.</p>
+            : <>{listGroup('다가오는 활동', upcoming)}{listGroup('승인·대기 중', pending)}{listGroup('지난 신청', closed)}</>
+          : <div className="account-empty"><span className="empty-icon"><Icon name="leaf" size={26} /></span><h2>활동 기록은 준비 중입니다</h2><p>{descriptions[tab]}</p></div>}
     </section>
     {states}
   </>
@@ -461,7 +554,7 @@ function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null
   useEffect(() => { if (user?.role === 'ADMIN') load() }, [user, load])
 
   if (!user) return <><PageHeading title="관리" description="기관 확인과 검토가 필요한 활동을 처리합니다." /><LoginRequired ready={ready} text="관리자 계정으로 로그인해 주세요." /></>
-  if (user.role !== 'ADMIN') return <section className="empty-state"><h1>관리자만 볼 수 있습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
+  if (user.role !== 'ADMIN') return <section className="empty-state"><span className="empty-icon"><Icon name="shield" size={28} /></span><h1>관리자만 볼 수 있습니다</h1><a className="secondary-button" href="#/explore">활동 목록으로</a></section>
 
   async function decide(path: string, approve: boolean, reason: string) {
     try {
@@ -475,21 +568,22 @@ function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null
 
   return <>
     <PageHeading title="관리" description="기관 확인과 검토가 필요한 활동을 처리합니다. 반려할 때는 사유를 꼭 적어 주세요." />
+    <nav className="admin-nav" aria-label="관리 바로가기"><a href="#admin-orgs">기관 확인 대기 <span className="count">{organizations.length}</span></a><a href="#admin-activities">검토 대기 활동 <span className="count">{activities.length}</span></a><a href="#admin-places">장소 좌표</a></nav>
     {notice && <p className="inline-notice" role="status">{notice}</p>}
-    <section className="panel" aria-label="기관 확인 대기">
+    <section className="panel" aria-label="기관 확인 대기" id="admin-orgs">
       <h2>기관 확인 대기 <span className="count">{organizations.length}</span></h2>
       {organizations.length === 0 ? <p className="small-print">확인을 기다리는 기관이 없습니다.</p>
         : <ul className="review-list">{organizations.map(item => <ReviewItem key={item.id} title={item.name} detail={`담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt}`}
           onDecide={(approve, reason) => decide('/api/admin/organizations/' + item.id, approve, reason)} />)}</ul>}
     </section>
-    <section className="panel" aria-label="검토 대기 활동">
+    <section className="panel" aria-label="검토 대기 활동" id="admin-activities">
       <h2>검토 대기 활동 <span className="count">{activities.length}</span></h2>
       {activities.length === 0 ? <p className="small-print">검토를 기다리는 활동이 없습니다.</p>
         : <ul className="review-list">{activities.map(item => <ReviewItem key={item.id} title={item.title} href={'#/activity/' + item.id}
           detail={`${item.organizerName} · ${dateLabel(item.date)} ${item.startTime} · ${item.placeName ?? '장소 미정'}`} reasons={item.riskReasons ?? ''}
           onDecide={(approve, reason) => decide('/api/admin/activities/' + item.id, approve, reason)} />)}</ul>}
     </section>
-    <section className="panel" aria-label="장소 좌표">
+    <section className="panel" aria-label="장소 좌표" id="admin-places">
       <h2>장소 좌표</h2>
       <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다. 좌표를 넣어야 거리 검색과 지도에 나옵니다. 현장 이용 허가는 따로 확인해야 합니다.</p>
       <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); onPlacesChanged() }} />)}</ul>
@@ -524,18 +618,20 @@ function PlaceEditor({ place, onSaved }: { place: PlaceInfo; onSaved: (message: 
     <div><strong>{place.name}</strong><span>{place.area} · {place.latitude != null ? '좌표 입력됨' : '좌표 없음'}</span></div>
     <label className="reason-field">좌표 (위도, 경도)<input aria-label={place.name + ' 좌표'} value={coordinate} onChange={event => setCoordinate(event.target.value)} placeholder="위도, 경도 붙여넣기" aria-invalid={error ? true : undefined} /></label>
     <label className="reason-field">만남 지점<input aria-label={place.name + ' 만남 지점'} value={meetingPoint} maxLength={255} onChange={event => setMeetingPoint(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
-    <div className="button-row">{kakaoEnabled && <button className="secondary-button" type="button" onClick={() => setPicking(value => !value)}>{picking ? '지도 닫기' : '지도에서 고르기'}</button>}<button className="primary-button" type="button" onClick={save}>저장</button></div>
+    <div className="button-row">{kakaoEnabled && <button className="secondary-button small" type="button" onClick={() => setPicking(value => !value)}>{picking ? '지도 닫기' : '지도에서 고르기'}</button>}<button className="primary-button small" type="button" onClick={save}>저장</button></div>
     {error && <p className="field-error" role="alert">{error}</p>}
     {picking && <div className="place-picker"><PlaceMap places={pinned} onPick={pick} label={place.name + ' 위치 고르기'} /></div>}
   </li>
 }
 
-function ReviewItem({ title, detail, reasons, href, onDecide }: { title: string; detail: string; reasons?: string; href?: string; onDecide: (approve: boolean, reason: string) => void }) {
+function ReviewItem({ title, detail, reasons, href, onDecide }: { title: string; detail: string; reasons?: string; href?: string; onDecide: (approve: boolean, reason: string) => Promise<void> | void }) {
   const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const decide = async (approve: boolean) => { setBusy(true); try { await onDecide(approve, reason) } finally { setBusy(false) } }
   return <li>
     <div>{href ? <a href={href}><strong>{title}</strong></a> : <strong>{title}</strong>}<span>{detail}</span>{reasons && <small>검토 이유: {reasons}</small>}</div>
     <label className="reason-field">처리 사유<input aria-label={title + ' 처리 사유'} value={reason} maxLength={500} onChange={event => setReason(event.target.value)} placeholder="반려 시 필수" /></label>
-    <div className="button-row"><button className="primary-button" onClick={() => onDecide(true, reason)}>승인</button><button className="secondary-button" onClick={() => onDecide(false, reason)}>반려</button></div>
+    <div className="button-row"><button className="primary-button small" disabled={busy} onClick={() => decide(true)}>승인</button><button className="secondary-button small" disabled={busy} onClick={() => decide(false)}>반려</button></div>
   </li>
 }
 
@@ -579,9 +675,9 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
     }
   }
   const count = Object.keys(errors).length
-  const label = preview ? (signup ? '회원가입 · 준비 중' : '로그인 · 준비 중') : signup ? '가입하기' : '로그인'
+  const label = preview ? (signup ? '회원가입 · 준비 중' : '로그인 · 준비 중') : busy ? (signup ? '가입하는 중…' : '로그인하는 중…') : signup ? '가입하기' : '로그인'
   return <div className="account-layout">
-    <section className="account-intro"><span className="eyebrow">VOLUNTEER TOGETHER</span><h1>작은 실천의 시작,<br />함께하는 Volink.</h1><p>가까운 곳에서 이웃과 만나<br />우리 동네에 작은 변화를 더해요.</p><ParkArt /></section>
+    <section className="account-intro"><span className="eyebrow"><span className="tiny-dot" />우리 동네의 작은 변화</span><h1>작은 실천의 시작,<br />함께하는 Volink.</h1><p>가까운 곳에서 이웃과 만나<br />우리 동네에 작은 변화를 더해요.</p><ul className="intro-points"><li><Icon name="pin" size={18} />걸어서 갈 수 있는 동네 활동</li><li><Icon name="clock" size={18} />30분부터, 3시간 이내</li><li><Icon name="shield" size={18} />연락처는 다른 회원에게 공개하지 않아요</li></ul><ParkArt /></section>
     <form className="panel activity-form account-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
       <h2>{signup ? '회원가입' : '로그인'}</h2><p className="form-description">{signup ? '어떤 모습으로 함께하시겠어요?' : '다시 만나 반가워요.'}</p>
       {signup && <><fieldset className="member-picker"><legend>회원 유형</legend><label className={memberType === 'general' ? 'selected' : ''}><input type="radio" name="memberType" value="general" checked={memberType === 'general'} onChange={() => setMemberType('general')} /><Icon name="users" /><strong>일반회원</strong><span>이웃과 함께 자율 활동</span></label><label className={memberType === 'institution' ? 'selected' : ''}><input type="radio" name="memberType" value="institution" checked={memberType === 'institution'} onChange={() => setMemberType('institution')} /><Icon name="building" /><strong>기관회원</strong><span>기관 확인 후 주관 활동</span></label></fieldset>
