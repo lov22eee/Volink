@@ -13,7 +13,7 @@ import Explore from './explore'
 import Home from './home'
 import { CategoryCover } from './covers'
 
-type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward'
+type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -31,6 +31,7 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
     user: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6.5 6.5 0 0 1 11 0" /></>,
     outward: <path d="M7 17 17 7M9 7h8v8" />,
+    grid: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -50,7 +51,8 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 
 
 type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications'
-type Route = { page: Page; activityId?: number }
+type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places'
+type Route = { page: Page; activityId?: number; section?: AdminSection }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
 export const categories = ['환경 정화', '생활 지원', '지역 돌봄']
@@ -61,6 +63,8 @@ function getRoute(): Route {
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
   if (live) return { page: 'live', activityId: Number(live[1]) }
+  const admin = /^admin(?:\/(organizations|activities|places))?$/.exec(path)
+  if (admin) return { page: 'admin', section: (admin[1] ?? 'dashboard') as AdminSection }
   const edit = /^activity\/(\d+)\/edit$/.exec(path)
   if (edit) return { page: 'edit', activityId: Number(edit[1]) }
   return { page: ['explore', 'create', 'mine', 'login', 'signup', 'admin', 'notifications'].includes(path) ? path as Page : 'home' }
@@ -133,17 +137,28 @@ export default function App() {
     window.location.hash = '#/home'
   }
 
-  const navigation: { id: Page; title: string; icon: IconName }[] = [
-    { id: 'home', title: '홈', icon: 'home' },
-    { id: 'explore', title: '활동 찾기', icon: 'compass' },
-    { id: 'create', title: '활동 만들기', icon: 'plus' },
-    { id: 'mine', title: '내 활동', icon: 'users' },
-    ...(user?.role === 'ADMIN' ? [{ id: 'admin' as Page, title: '관리', icon: 'shield' as IconName }] : []),
+  // An admin account only works on the admin screens: its own menu, and the member screens send it to the dashboard.
+  const isAdmin = user?.role === 'ADMIN'
+  const navigation: { id: string; title: string; icon: IconName; active: boolean }[] = isAdmin ? [
+    { id: 'admin', title: '대시보드', icon: 'grid', active: route.page === 'admin' && route.section === 'dashboard' },
+    { id: 'admin/organizations', title: '기관 확인', icon: 'building', active: route.section === 'organizations' },
+    { id: 'admin/activities', title: '활동 검토', icon: 'list', active: route.section === 'activities' || route.page === 'live' },
+    { id: 'admin/places', title: '장소 관리', icon: 'pin', active: route.section === 'places' },
+  ] : [
+    { id: 'home', title: '홈', icon: 'home', active: route.page === 'home' },
+    { id: 'explore', title: '활동 찾기', icon: 'compass', active: route.page === 'explore' || route.page === 'detail' || route.page === 'live' },
+    { id: 'create', title: '활동 만들기', icon: 'plus', active: route.page === 'create' || route.page === 'edit' },
+    { id: 'mine', title: '내 활동', icon: 'users', active: route.page === 'mine' },
   ]
+  useEffect(() => {
+    if (isAdmin && ['home', 'explore', 'detail', 'create', 'edit', 'mine', 'notifications', 'login', 'signup'].includes(route.page)) window.location.hash = '#/admin'
+  }, [isAdmin, route.page])
   const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
-  const accountNav = user
+  const accountNav = isAdmin && user
+    ? <nav className="account-links" aria-label="계정 메뉴"><span className="admin-badge"><Icon name="shield" size={16} />관리자</span><span className="sr-only">{user.name}님</span><button className="text-link" onClick={signOut}>로그아웃</button></nav>
+    : user
     ? <nav className="account-links" aria-label="계정 메뉴">
       <a href="#/notifications" className="icon-link bell-link" aria-current={route.page === 'notifications' ? 'page' : undefined} aria-label={'알림' + (unread ? ' ' + unread + '개 안 읽음' : '')}><Icon name="bell" size={21} />{unread > 0 && <span className="bell-count">{unread > 99 ? '99+' : unread}</span>}</a>
       <a href="#/mine" className="icon-link user-link" title={user.name + '님'}><Icon name="user" size={21} /><span className="sr-only">{user.name}님</span></a>
@@ -153,12 +168,10 @@ export default function App() {
   return <div className="app-shell">
     <header className="site-header">
       <div className="header-inner">
-        <a href="#/home" className="brand" aria-label="Volink 홈"><span className="brand-mark"><Icon name="leaf" size={19} /></span>volink<span className="brand-dot">.</span></a>
+        <a href={isAdmin ? '#/admin' : '#/home'} className="brand" aria-label={isAdmin ? 'Volink 관리자 대시보드' : 'Volink 홈'}><span className="brand-mark"><Icon name="leaf" size={19} /></span>volink<span className="brand-dot">.</span></a>
         {/* One menu: a top bar on wide screens, a bottom tab bar on phones (CSS only). */}
-        <nav aria-label="주요 메뉴" className="main-nav">{navigation.map(item => {
-          const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore') || (route.page === 'edit' && item.id === 'create')
-          return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (item.id === 'home' ? ' nav-home' : '') + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>
-        })}</nav>
+        <nav aria-label="주요 메뉴" className={'main-nav' + (isAdmin ? ' admin-menu' : '')}>{navigation.map(item =>
+          <a href={'#/' + item.id} key={item.id} className={'nav-item' + (item.id === 'home' ? ' nav-home' : '') + (item.active ? ' active' : '')} aria-current={item.active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>)}</nav>
         {accountNav}
       </div>
     </header>
@@ -172,7 +185,7 @@ export default function App() {
       {route.page === 'create' && <CreateActivity user={user} ready={ready} />}
       {route.page === 'edit' && route.activityId && <CreateActivity key={'edit-' + route.activityId} user={user} ready={ready} editId={route.activityId} />}
       {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
-      {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
+      {route.page === 'admin' && <AdminPage section={route.section ?? 'dashboard'} user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
       {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
     </main>
     <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · 우리 동네의 작은 변화</span><span className="footer-tag">Local volunteering community</span></div><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></div></footer>
@@ -576,15 +589,30 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   </>
 }
 
-type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string }
+type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string; status?: string; rejectReason?: string | null }
+type OrgStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
-function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null; ready: boolean; places: PlaceInfo[]; onPlacesChanged: () => void }) {
-  const [organizations, setOrganizations] = useState<PendingOrganization[]>([])
-  const [activities, setActivities] = useState<LiveActivity[]>([])
+/** Whole days since a "yyyy-MM-dd HH:mm" KST time (server format), for "N일째 기다리는 중". */
+function daysSince(value: string) {
+  const then = new Date(value.replace(' ', 'T') + ':00+09:00').getTime()
+  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
+}
+
+function AdminPage({ section, user, ready, places, onPlacesChanged }: { section: AdminSection; user: User | null; ready: boolean; places: PlaceInfo[]; onPlacesChanged: () => void }) {
+  const [organizations, setOrganizations] = useState<Record<OrgStatus, PendingOrganization[] | null>>({ PENDING: null, APPROVED: null, REJECTED: null })
+  const [activities, setActivities] = useState<LiveActivity[] | null>(null)
+  const [recruiting, setRecruiting] = useState<LiveActivity[] | null>(null)
+  const [failed, setFailed] = useState(false)
   const [notice, setNotice] = useState('')
+  const [orgTab, setOrgTab] = useState<OrgStatus>('PENDING')
+  // Only existing APIs: the three organization lists, the review queue and the public recruiting list.
   const load = useCallback(() => {
-    api<PendingOrganization[]>('/api/admin/organizations').then(setOrganizations).catch(() => setOrganizations([]))
-    api<LiveActivity[]>('/api/admin/activities').then(setActivities).catch(() => setActivities([]))
+    setFailed(false)
+    const fail = () => setFailed(true)
+    for (const status of ['PENDING', 'APPROVED', 'REJECTED'] as OrgStatus[])
+      api<PendingOrganization[]>('/api/admin/organizations?status=' + status).then(list => setOrganizations(old => ({ ...old, [status]: list }))).catch(fail)
+    api<LiveActivity[]>('/api/admin/activities').then(setActivities).catch(fail)
+    api<LiveActivity[]>('/api/activities').then(setRecruiting).catch(fail)
   }, [])
   useEffect(() => { if (user?.role === 'ADMIN') load() }, [user, load])
 
@@ -601,29 +629,116 @@ function AdminPage({ user, ready, places, onPlacesChanged }: { user: User | null
     }
   }
 
-  return <>
-    <div className="page-head"><div><span className="page-eyebrow">ADMIN</span><h1>관리자</h1><p>기관 확인과 검토가 필요한 활동을 처리해요. 반려할 때는 사유를 꼭 적어 주세요.</p></div></div>
-    <nav className="admin-nav" aria-label="관리 바로가기"><a href="#admin-orgs">기관 확인 대기 <span className="count">{organizations.length}</span></a><a href="#admin-activities">검토 대기 활동 <span className="count">{activities.length}</span></a><a href="#admin-places">장소 좌표</a></nav>
-    {notice && <p className="inline-notice" role="status">{notice}</p>}
-    <section className="admin-card" aria-label="기관 확인 대기" id="admin-orgs">
-      <div className="admin-card-head"><h2>기관 확인 대기 <span className="count">{organizations.length}</span></h2><span className="tag-chip">관리자 전용</span></div>
-      {organizations.length === 0 ? <p className="small-print">확인을 기다리는 기관이 없습니다.</p>
-        : <ul className="review-list">{organizations.map(item => <ReviewItem key={item.id} title={item.name} detail={`담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt}`}
-          onDecide={(approve, reason) => decide('/api/admin/organizations/' + item.id, approve, reason)} />)}</ul>}
+  const pending = organizations.PENDING
+  const noCoordinate = places.filter(place => place.latitude == null)
+  const status = <>{notice && <p className="inline-notice" role="status">{notice}</p>}{failed && <div className="error-banner" role="alert">일부 관리 정보를 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>}</>
+
+  if (section === 'organizations') return <>
+    <PageHeading eyebrow="ADMIN · 기관 확인" title="기관 확인" description="기관 회원가입을 확인해요. 반려할 때는 사유를 꼭 적어 주세요." />
+    {status}
+    <div className="seg-tabs org-tabs" role="tablist" aria-label="기관 상태">{(['PENDING', 'APPROVED', 'REJECTED'] as OrgStatus[]).map(value => <button key={value} role="tab" aria-selected={orgTab === value} onClick={() => setOrgTab(value)}>{({ PENDING: '확인 대기', APPROVED: '승인됨', REJECTED: '반려됨' })[value]} <span className="count">{organizations[value]?.length ?? '–'}</span></button>)}</div>
+    <section className="admin-card" aria-label={orgTab === 'PENDING' ? '기관 확인 대기' : orgTab === 'APPROVED' ? '승인된 기관' : '반려된 기관'}>
+      {organizations[orgTab] === null ? <div className="loading-state" role="status">기관 목록을 불러오는 중입니다.</div>
+        : organizations[orgTab]!.length === 0 ? <p className="empty-line">{orgTab === 'PENDING' ? '확인을 기다리는 기관이 없습니다.' : '해당하는 기관이 없습니다.'}</p>
+        : orgTab === 'PENDING' ? <ul className="review-list">{organizations.PENDING!.map(item => <ReviewItem key={item.id} title={item.name} detail={`담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt} (${daysSince(item.requestedAt)}일째)`}
+          onDecide={(approve, reason) => decide('/api/admin/organizations/' + item.id, approve, reason)} />)}</ul>
+        : <ul className="review-list">{organizations[orgTab]!.map(item => <li key={item.id}><div><strong>{item.name}</strong><span>담당 {item.managerName} · {item.managerEmail} · 신청 {item.requestedAt}</span>{item.rejectReason && <small>반려 사유: {item.rejectReason}</small>}</div></li>)}</ul>}
     </section>
-    <section className="admin-card" aria-label="검토 대기 활동" id="admin-activities">
-      <div className="admin-card-head"><h2>검토 대기 활동 <span className="count">{activities.length}</span></h2><span className="tag-chip">관리자 전용</span></div>
-      {activities.length === 0 ? <p className="small-print">검토를 기다리는 활동이 없습니다.</p>
+  </>
+
+  if (section === 'activities') return <>
+    <PageHeading eyebrow="ADMIN · 활동 검토" title="활동 검토" description="위험 단어가 있거나 지역 돌봄 분야인 글은 관리자가 확인한 뒤 공개돼요." />
+    {status}
+    <section className="admin-card" aria-label="검토 대기 활동">
+      <div className="admin-card-head"><h2>검토 대기 활동 <span className="count">{activities?.length ?? '–'}</span></h2><span className="tag-chip">관리자 전용</span></div>
+      {activities === null ? <div className="loading-state" role="status">검토할 활동을 불러오는 중입니다.</div>
+        : activities.length === 0 ? <p className="empty-line">검토를 기다리는 활동이 없습니다.</p>
         : <ul className="review-list">{activities.map(item => <ReviewItem key={item.id} title={item.title} href={'#/activity/' + item.id}
-          detail={`${item.organizerName} · ${dateLabel(item.date)} ${item.startTime} · ${item.placeName ?? '장소 미정'}`} reasons={item.riskReasons ?? ''}
+          detail={`${item.organizerName} · ${item.category} · ${dateLabel(item.date)} ${item.startTime} · ${item.placeName ?? '장소 미정'}`} reasons={item.riskReasons ?? ''}
           onDecide={(approve, reason) => decide('/api/admin/activities/' + item.id, approve, reason)} />)}</ul>}
     </section>
-    <section className="admin-card" aria-label="장소 좌표" id="admin-places">
-      <div className="admin-card-head"><h2>장소 좌표</h2><span className="tag-chip">관리자 전용</span></div>
-      <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다. 좌표를 넣어야 거리 검색과 지도에 나옵니다. 현장 이용 허가는 따로 확인해야 합니다.</p>
+  </>
+
+  if (section === 'places') return <>
+    <PageHeading eyebrow="ADMIN · 장소 관리" title="장소 관리" description="좌표를 넣어야 거리 검색과 지도에 나와요. 현장 이용 허가는 따로 확인해야 합니다." />
+    {status}
+    <section className="admin-card" aria-label="장소 좌표">
+      <div className="admin-card-head"><h2>장소 좌표 <span className="count">{places.length}</span></h2>{noCoordinate.length > 0 && <span className="status-chip wait">좌표 없음 {noCoordinate.length}</span>}</div>
+      <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다.</p>
       <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); onPlacesChanged() }} />)}</ul>
     </section>
   </>
+
+  // Dashboard: what needs a decision, then the shape of what is recruiting now. Every figure comes from the lists above.
+  const days = Array.from({ length: 14 }, (_, i) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + i * 86_400_000)))
+  const perDay = days.map(day => ({ label: day.slice(8, 10), weekday: new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(day + 'T12:00:00+09:00')), value: (recruiting ?? []).filter(a => a.date === day).length }))
+  const perCategory = categories.map(name => ({ label: name, value: (recruiting ?? []).filter(a => a.category === name).length }))
+  const seats = (recruiting ?? []).reduce((sum, a) => ({ confirmed: sum.confirmed + a.confirmed, capacity: sum.capacity + a.capacity }), { confirmed: 0, capacity: 0 })
+  const fill = { full: (recruiting ?? []).filter(a => a.confirmed >= a.capacity).length, half: (recruiting ?? []).filter(a => a.confirmed < a.capacity && a.confirmed * 2 >= a.capacity).length, low: (recruiting ?? []).filter(a => a.confirmed * 2 < a.capacity).length }
+  const oldest = pending?.length ? Math.max(...pending.map(item => daysSince(item.requestedAt))) : 0
+  const orgTotal = (pending?.length ?? 0) + (organizations.APPROVED?.length ?? 0) + (organizations.REJECTED?.length ?? 0)
+  const count = (value: number | undefined | null) => value == null ? '–' : value
+
+  return <>
+    <div className="page-head"><div><span className="page-eyebrow">ADMIN DASHBOARD</span><h1>관리자 대시보드</h1><p>처리할 일과 지금 모집 중인 활동을 한눈에 봐요.</p></div>
+      <button className="pill-button line small" onClick={load}>새로고침</button></div>
+    {status}
+    <div className="kpi-row">
+      <a className={'kpi' + (pending?.length ? ' attention' : '')} href="#/admin/organizations"><span>기관 확인 대기</span><strong>{count(pending?.length)}</strong><small>{pending?.length ? `가장 오래 ${oldest}일째` : '대기 없음'}</small></a>
+      <a className={'kpi' + (activities?.length ? ' attention' : '')} href="#/admin/activities"><span>활동 검토 대기</span><strong>{count(activities?.length)}</strong><small>{activities?.length ? '승인 전엔 공개 안 됨' : '대기 없음'}</small></a>
+      <div className="kpi"><span>지금 모집 중</span><strong>{count(recruiting?.length)}</strong><small>시작 전 공개 활동</small></div>
+      <a className={'kpi' + (noCoordinate.length ? ' attention' : '')} href="#/admin/places"><span>좌표 없는 장소</span><strong>{noCoordinate.length}</strong><small>{noCoordinate.length ? '거리 검색에 안 나와요' : `장소 ${places.length}곳 모두 입력됨`}</small></a>
+    </div>
+
+    <div className="admin-grid">
+      <section className="admin-card" aria-label="기관 회원가입 확인 요약">
+        <div className="admin-card-head"><h2>기관 회원가입 확인</h2><a className="home-more" href="#/admin/organizations">전체 보기 <Icon name="outward" size={15} /></a></div>
+        <StackBar parts={[{ label: '확인 대기', value: pending?.length ?? 0, tone: 'wait' }, { label: '승인됨', value: organizations.APPROVED?.length ?? 0, tone: 'ok' }, { label: '반려됨', value: organizations.REJECTED?.length ?? 0, tone: 'off' }]} total={orgTotal} />
+        {pending === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : pending.length === 0 ? <p className="empty-line">확인을 기다리는 기관이 없습니다.</p>
+          : <ul className="mini-list">{pending.slice(0, 3).map(item => <li key={item.id}><strong>{item.name}</strong><span>{item.managerName} · 신청 {item.requestedAt}</span><em>{daysSince(item.requestedAt)}일째</em></li>)}</ul>}
+      </section>
+      <section className="admin-card" aria-label="게시글 승인 요약">
+        <div className="admin-card-head"><h2>게시글 승인</h2><a className="home-more" href="#/admin/activities">전체 보기 <Icon name="outward" size={15} /></a></div>
+        <p className="small-print">위험 단어가 있거나 지역 돌봄 분야인 글이 여기에 와요. 막힌 글(BLOCKED)은 저장되지 않아 목록에 없습니다.</p>
+        {activities === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : activities.length === 0 ? <p className="empty-line">검토를 기다리는 활동이 없습니다.</p>
+          : <ul className="mini-list">{activities.slice(0, 3).map(item => <li key={item.id}><strong>{item.title}</strong><span>{item.category} · {dateLabel(item.date)} {item.startTime}</span>{item.riskReasons && <em className="reason">{item.riskReasons}</em>}</li>)}</ul>}
+      </section>
+      <section className="admin-card wide" aria-label="앞으로 14일 모집 일정">
+        <div className="admin-card-head"><h2>앞으로 14일 모집 일정</h2><span className="small-print">날짜별 모집 중 활동 수</span></div>
+        {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <DayBars data={perDay} />}
+      </section>
+      <section className="admin-card" aria-label="분야별 모집 중 활동">
+        <div className="admin-card-head"><h2>분야별 모집 중</h2></div>
+        {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : <HBars data={perCategory} />}
+      </section>
+      <section className="admin-card" aria-label="정원 채움 현황">
+        <div className="admin-card-head"><h2>정원 채움 현황</h2></div>
+        {recruiting === null ? <div className="loading-state" role="status">불러오는 중입니다.</div> : recruiting.length === 0 ? <p className="empty-line">모집 중인 활동이 없습니다.</p> : <>
+          <p className="fill-total"><strong>{seats.confirmed}</strong> / {seats.capacity}자리 확정 <span>({seats.capacity ? Math.round(seats.confirmed / seats.capacity * 100) : 0}%)</span></p>
+          <StackBar parts={[{ label: '정원 마감', value: fill.full, tone: 'off' }, { label: '절반 이상', value: fill.half, tone: 'ok' }, { label: '절반 미만', value: fill.low, tone: 'wait' }]} total={recruiting.length} /></>}
+      </section>
+    </div>
+  </>
+}
+
+function StackBar({ parts, total }: { parts: { label: string; value: number; tone: string }[]; total: number }) {
+  return <div className="stack">
+    <div className="stack-bar" role="img" aria-label={parts.map(part => `${part.label} ${part.value}`).join(', ')}>{total > 0 ? parts.filter(part => part.value > 0).map(part => <i key={part.label} className={part.tone} style={{ width: part.value / total * 100 + '%' }} />) : <i className="empty" style={{ width: '100%' }} />}</div>
+    <ul className="stack-legend">{parts.map(part => <li key={part.label}><i className={part.tone} />{part.label} <strong>{part.value}</strong></li>)}</ul>
+  </div>
+}
+
+function DayBars({ data }: { data: { label: string; weekday: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map(item => item.value))
+  if (data.every(item => item.value === 0)) return <p className="empty-line">앞으로 14일 안에 열리는 모집 중 활동이 없습니다.</p>
+  return <div className="day-bars" role="img" aria-label={data.map(item => `${item.label}일 ${item.value}개`).join(', ')}>
+    {data.map((item, i) => <div key={i} className={'day' + (item.weekday === '토' || item.weekday === '일' ? ' weekend' : '')}><span className="value">{item.value || ''}</span><span className="bar"><i style={{ height: item.value / max * 100 + '%' }} /></span><span className="label">{item.label}<small>{item.weekday}</small></span></div>)}
+  </div>
+}
+
+function HBars({ data }: { data: { label: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map(item => item.value))
+  return <ul className="h-bars">{data.map(item => <li key={item.label}><span>{item.label}</span><span className="bar"><i style={{ width: item.value / max * 100 + '%' }} /></span><strong>{item.value}</strong></li>)}</ul>
 }
 
 function PlaceEditor({ place, onSaved }: { place: PlaceInfo; onSaved: (message: string) => void }) {
@@ -700,8 +815,9 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
         birthDate: data.get('birthDate'), interests: data.getAll('interests'), organizationName: data.get('organization'),
         organizationContact: data.get('organizationContact'), agreedNotice: Boolean(data.get('notice')),
       })
-      onSession(await login(email, password))
-      window.location.hash = '#/mine'
+      const session = await login(email, password)
+      onSession(session)
+      window.location.hash = session.role === 'ADMIN' ? '#/admin' : '#/mine'
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
       else setMessage(cause instanceof Error ? cause.message : '요청을 처리하지 못했습니다.')

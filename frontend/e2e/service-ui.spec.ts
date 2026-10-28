@@ -45,7 +45,8 @@ async function loginAs(page: Page, email: string, secret: string) {
   await page.getByRole('textbox', { name: '이메일', exact: true }).fill(email)
   await page.getByRole('textbox', { name: '비밀번호', exact: true }).fill(secret)
   await page.getByRole('button', { name: '로그인', exact: true }).click()
-  await expect(page).toHaveURL(/#\/mine$/)
+  // Members land on 내 활동, the admin account on its dashboard.
+  await expect(page).toHaveURL(/#\/(mine|admin)$/)
 }
 
 async function signOut(page: Page) {
@@ -473,7 +474,11 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await signOut(page)
 
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '관리' }).click()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['대시보드', '기관 확인', '활동 검토', '장소 관리'])
+  await expect(page.getByRole('region', { name: '게시글 승인 요약' })).toBeVisible()
+  await page.goto('/#/explore')
+  await expect(page).toHaveURL(/#\/admin$/)
+  await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 검토' }).click()
   const item = page.getByRole('region', { name: '검토 대기 활동' }).getByRole('listitem').filter({ hasText: title })
   await expect(item).toContainText('어르신')
   await item.getByRole('button', { name: '반려' }).click()
@@ -482,6 +487,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await page.screenshot({ path: shot('admin'), fullPage: true })
   await item.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
+  await signOut(page)
   await page.goto('/#/explore')
   await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toBeVisible()
@@ -496,7 +502,7 @@ test('an institution member can host an activity only after the admin approves t
   await signOut(page)
 
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.goto('/#/admin')
+  await page.goto('/#/admin/organizations')
   const organization = page.getByRole('region', { name: '기관 확인 대기' }).getByRole('listitem').filter({ hasText: email })
   await organization.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
@@ -519,7 +525,7 @@ test('an institution member can host an activity only after the admin approves t
 test('admin enters a place coordinate and nearby search shows distance, falling back when location is refused', async ({ page, browser }) => {
   const place = { lat: 37.81, lng: 127.09 }
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.goto('/#/admin')
+  await page.goto('/#/admin/places')
   const places = page.getByRole('region', { name: '장소 좌표' })
   await places.getByLabel('독바위공원 좌표').fill('37.8x, 127')
   await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
