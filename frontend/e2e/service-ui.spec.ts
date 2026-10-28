@@ -112,13 +112,18 @@ function seoulDate(days: number) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))
 }
 
-test('home shows real counts, recruiting posts and how to take part, then leads to the search', async ({ page }) => {
+test('home shows fields, upcoming real posts and how to take part, then leads to the search', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: /가까운 곳에서/ })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
-  const { length } = await (await page.request.get('/api/activities')).json()
-  await expect(page.getByRole('region', { name: '지금 모집 현황' })).toContainText(`지금 모집 중인 동네 활동${length}개`)
-  await expect(page.getByRole('region', { name: '참여 방법' }).getByRole('listitem')).toHaveCount(4)
+  // Volink 2.0 home: no count cards; field chips open the search with that field, tiles are real upcoming posts.
+  await expect(page.getByRole('region', { name: '어떤 봉사에 관심 있나요?' }).getByRole('link')).toHaveText(['환경 정화', '생활 지원', '지역 돌봄'])
+  const today = seoulDate(0)
+  const upcoming = (await (await page.request.get('/api/activities')).json() as { title: string; date: string }[]).filter(a => a.date >= today)
+  const tiles = page.locator('.tile[data-kind="live"]')
+  await expect(tiles).toHaveCount(Math.min(3, upcoming.length))
+  for (const title of await tiles.locator('.tile-title').allTextContents()) expect(upcoming.map(a => a.title)).toContain(title)
+  await expect(page.getByRole('region', { name: '참여 방법' }).getByRole('listitem')).toHaveCount(3)
   await expect(page.getByRole('region', { name: '참여 방법' })).toContainText('1365 활동에만 해당돼요')
   await expect(page.locator('body')).not.toContainText(developmentCopy)
   await page.screenshot({ path: shot('home'), fullPage: true })

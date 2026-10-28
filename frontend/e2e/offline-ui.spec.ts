@@ -12,7 +12,7 @@ test('published React artifact has six service screens without backend requests 
   const html = await readFile(file, 'utf8')
   expect(html).not.toMatch(/졸업작품|경동대학교|1주차|페르소나|report-20261006|addressNote|organizer-01|admin-01/)
   await page.setContent(html, { waitUntil: 'load' })
-  await expect(page.locator('.activity-card')).toHaveCount(3)
+  await expect(page.locator('.tile[data-kind="example"]')).toHaveCount(3)
   await expect(page.locator('body')).not.toContainText(/API|DB|WEEK|발표|개발 진행|사용자 흐름/)
   await page.screenshot({ path: '../docs/screenshots/offline-ui-home.png', fullPage: true })
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 찾기', exact: true }).click()

@@ -1,97 +1,91 @@
-// Home (added 2026-10-22, user decision): the hero moved here from 활동 찾기, a short "my" summary, real counts,
-// a few activities near me and how taking part works. Every number comes from the server; when it cannot be
-// loaded it is hidden instead of showing a made-up value.
+// Home (Volink 2.0, 2026-10-28): big type and a category visual, browse by field, this week's activities and a
+// short guide. Activities come from the server (or the bundled examples in the offline preview); nothing here is
+// made up, and when the list cannot be loaded the section says so instead of showing placeholders.
 import { useEffect, useState } from 'react'
 import { api, preview } from './api'
 import type { LiveActivity, User } from './api'
-import { ActivityCard, fromExample, fromLive, Icon, ParkArt } from './App'
+import { categories, fromExample, fromLive, Icon } from './App'
 import type { CardItem } from './App'
+import { CategoryCover, CategoryMosaic } from './covers'
 import type { DisplayCatalog as Catalog } from './data'
-import { km, range, remembered, travel } from './explore'
-import type { Program } from './explore'
 import { Glyph } from './icons'
+import type { GlyphName } from './icons'
 
-type Near = { key: string; distance: number; card?: CardItem; program?: Program }
+const categoryIcon: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
 
-export default function Home({ user, catalog }: { user: User | null; catalog: Catalog | null }) {
+function seoulToday(days = 0) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))
+}
+
+function shortDate(value: string) {
+  const day = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(value + 'T12:00:00+09:00'))
+  return `${value.slice(5, 7)}.${value.slice(8, 10)}(${day})`
+}
+
+export function ActivityTile({ item }: { item: CardItem }) {
+  const left = Math.max(0, item.capacity - item.confirmed)
+  const status = item.kind === 'example' ? { text: '예시 활동', tone: 'muted' } : left > 0 ? { text: '모집 중', tone: 'open' } : { text: '대기 가능', tone: 'wait' }
+  return <a className="tile" href={item.href} data-kind={item.kind}>
+    <span className="tile-cover"><CategoryCover category={item.category} seed={item.id} /></span>
+    <span className="tile-meta"><span className="tile-cat">{item.category}</span><span aria-hidden="true">·</span><span className={'tile-status ' + status.tone}>{status.text}</span></span>
+    <strong className="tile-title">{item.title}</strong>
+    <span className="tile-info">{shortDate(item.date)} {item.startTime} · {item.placeName} · {left > 0 ? `${left}자리 남음` : '정원 마감'}</span>
+  </a>
+}
+
+export default function Home({ catalog }: { user: User | null; catalog: Catalog | null }) {
   const [all, setAll] = useState<LiveActivity[] | null>(null)
-  const [mine, setMine] = useState<LiveActivity[] | null>(null)
-  const [near, setNear] = useState<Near[] | null>(null)
-  const [programCount, setProgramCount] = useState<number | null>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     if (preview) return
-    api<LiveActivity[]>('/api/activities').then(setAll).catch(() => setAll(null))
-    // Only when location was allowed before: no permission prompt on the home page.
-    if (!remembered() || !navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(async position => {
-      const here = { lat: position.coords.latitude, lng: position.coords.longitude, label: '내 위치' }
-      const at = `lat=${here.lat.toFixed(6)}&lng=${here.lng.toFixed(6)}`
-      const [local, programs] = await Promise.all([
-        api<LiveActivity[]>(`/api/activities?${at}&radiusKm=20`).catch(() => [] as LiveActivity[]),
-        api<{ enabled: boolean; items: Program[] }>(`/api/volunteer-programs?${at}&radiusKm=20`).catch(() => null),
-      ])
-      if (programs?.enabled) setProgramCount(programs.items.length)
-      setNear([
-        ...local.map(a => ({ key: 'a' + a.id, distance: a.distanceKm ?? 999, card: { ...fromLive(a), distanceKm: a.latitude != null && a.longitude != null ? km(here, a.latitude, a.longitude) : undefined } })),
-        ...(programs?.items ?? []).map(p => ({ key: 'p' + p.programNo, distance: p.distanceKm ?? 999, program: p })),
-      ].sort((a, b) => a.distance - b.distance).slice(0, 3))
-    }, () => setNear(null), { timeout: 8000, maximumAge: 300000 })
+    api<LiveActivity[]>('/api/activities').then(setAll).catch(() => setFailed(true))
   }, [])
 
-  useEffect(() => {
-    if (!user || preview) { setMine(null); return }
-    api<LiveActivity[]>('/api/me/activities').then(setMine).catch(() => setMine(null))
-  }, [user])
+  const today = seoulToday()
+  const weekEnd = seoulToday(6)
+  const items: CardItem[] | null = preview
+    ? (catalog ? catalog.activities.map(e => fromExample(e, catalog.baseDate)) : null)
+    : all && all.filter(a => a.date >= today).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)).map(fromLive)
+  const thisWeek = items?.filter(item => item.date <= weekEnd) ?? []
+  const shown = (thisWeek.length ? thisWeek : items ?? []).slice(0, 3)
+  const heading = preview ? '이런 활동을 함께해요' : thisWeek.length || !items?.length ? '이번 주, 함께할 활동' : '곧 열리는 활동'
 
-  const { from, to } = range('weekend')
-  const weekend = all?.filter(a => (!from || a.date >= from) && (!to || a.date <= to)).length
-  const picks: Near[] = near ?? (preview
-    ? (catalog?.activities ?? []).slice(0, 3).map(e => ({ key: 'e' + e.id, distance: 0, card: fromExample(e, catalog!.baseDate) }))
-    : (all ?? []).slice(0, 3).map(a => ({ key: 'a' + a.id, distance: 0, card: fromLive(a) })))
-  const upcoming = mine?.filter(a => a.status === 'RECRUITING').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))[0]
-
-  return <>
-    <section className="hero">
-      <div className="hero-copy"><span className="eyebrow"><span className="tiny-dot" />작은 실천, 가까운 연결</span><h1>가까운 곳에서,<br />함께 만드는 <em>변화.</em></h1>
-        <p>동네 활동과 1365 봉사활동을 한 지도에서.<br />30분부터, 걸어서 갈 수 있는 곳부터 시작해요.</p>
-        <div className="hero-actions"><a className="primary-button" href="#/explore">내 주변 활동 찾기 <Icon name="arrow" size={18} /></a><a className="secondary-button" href="#/create">활동 만들기</a></div>
-        <span className="hero-note">2–10명 함께 · 3시간 이내</span></div>
-      <div className="hero-art"><ParkArt /><div className="floating-note"><span className="floating-icon"><Icon name="leaf" /></span><div><strong>혼자보다, 함께.</strong><span>우리 동네에 변화를 남겨요</span></div></div></div>
+  return <div className="home">
+    <section className="home-hero">
+      <div className="home-hero-copy">
+        <span className="home-eyebrow"><Glyph name="pin" size={16} />우리 동네에서 시작하는 좋은 일</span>
+        <h1>가까운 곳에서,<br />함께 만드는 변화.</h1>
+        <p>봉사활동, 거창하지 않아도 괜찮아요. 오늘 우리 동네에서 할 수 있는 작은 일을 찾아보세요.</p>
+        <div className="home-actions"><a className="pill-button dark" href="#/explore">내 주변 활동 찾기 <Icon name="outward" size={17} /></a><a className="pill-button line" href="#/create">활동 만들기</a></div>
+        <small>찾기부터 참여까지, 한곳에서 간편하게.</small>
+      </div>
+      <figure className="home-hero-visual"><CategoryMosaic categories={categories} />
+        <figcaption>{categories.map(name => <span key={name}>{name}</span>)}</figcaption></figure>
     </section>
 
-    {user && mine && <section className="home-me home-section" aria-label="내 요약">
-      <div><span className="label">{user.name}님이 연 활동</span><strong>{mine.length}개{mine.some(a => a.status === 'DRAFT') ? ` · ${mine.filter(a => a.status === 'DRAFT').length}개 검토 중` : ''}</strong>
-        <a href="#/mine">내 활동 보기</a></div>
-      <div><span className="label">가장 가까운 내 활동</span>{upcoming ? <><strong>{upcoming.title}</strong><span>{upcoming.date.slice(5).replace('-', '/')} {upcoming.startTime}</span></> : <strong>아직 없어요</strong>}</div>
-      <div><span className="label">관심 분야</span><strong>{user.interests.length ? user.interests.join(' · ') : '아직 고르지 않았어요'}</strong></div>
-    </section>}
-
-    {!preview && <section className="home-stats" aria-label="지금 모집 현황">
-      {all && <div><span className="label">지금 모집 중인 동네 활동</span><strong>{all.length}개</strong></div>}
-      {programCount != null && <div><span className="label">근처 20km 1365 봉사</span><strong>{programCount}개</strong></div>}
-      {weekend != null && <div><span className="label">이번 주말 동네 활동</span><strong>{weekend}개</strong></div>}
-    </section>}
-
-    <section className="home-section" aria-label={near ? '지금 내 주변' : '모집 중인 활동'}>
-      <div className="home-head"><div><h2>{near ? '지금 내 주변' : preview ? '이런 활동을 함께해요' : '모집 중인 활동'}</h2><p>{near ? '내 위치에서 가까운 순서예요.' : '지금 이웃을 기다리는 활동이에요.'}</p></div><a href="#/explore">지도에서 모두 보기 <Glyph name="arrow" size={15} /></a></div>
-      {picks.length ? <div className="activity-grid">{picks.map(pick => pick.card ? <ActivityCard key={pick.key} item={pick.card} />
-        : <a key={pick.key} className="home-program" href={pick.program!.link} target="_blank" rel="noopener noreferrer">
-          <span className="source program">1365 활동</span><strong>{pick.program!.title}</strong>
-          <span>{pick.program!.place}{pick.program!.distanceKm != null ? ` · ${pick.program!.distanceKm}km · ${travel(pick.program!.distanceKm)}` : ''}</span>
-          <span className="link-out">1365에서 신청 <Glyph name="external" size={14} /></span></a>)}</div>
-        : all ? <div className="empty-state"><p>아직 모집 중인 활동이 없어요. 첫 활동을 열어 보세요.</p><a className="secondary-button" href="#/create">활동 만들기</a></div>
-          : <div className="loading-state" role="status">활동을 불러오는 중입니다.</div>}
+    <section className="home-block" aria-labelledby="home-fields">
+      <div className="home-block-head"><h2 id="home-fields">어떤 봉사에 관심 있나요?</h2><span className="home-aside">관심 분야부터 시작해요</span></div>
+      <div className="field-chips">{categories.map(name => <a key={name} className="field-chip" href={'#/explore?category=' + encodeURIComponent(name)}><Glyph name={categoryIcon[name] ?? 'leaf'} size={18} />{name}</a>)}</div>
     </section>
 
-    <section className="home-section" aria-label="참여 방법">
-      <div className="home-head"><div><h2>이렇게 참여해요</h2><p>공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요</p></div></div>
-      <ol className="home-steps">
-        <li><Glyph name="search" size={20} /><strong>찾기</strong><span>내 주변·이번 주말 활동</span></li>
-        <li><Glyph name="check" size={20} /><strong>신청</strong><span>동네 활동은 Volink에서, 1365 활동은 1365에서</span></li>
-        <li><Glyph name="pin" size={20} /><strong>참여</strong><span>정한 시간·장소에서 함께해요</span></li>
-        <li><Glyph name="leaf" size={20} /><strong>기록</strong><span>내 활동에 차곡차곡</span></li>
+    <section className="home-block" aria-labelledby="home-week">
+      <div className="home-block-head"><div><h2 id="home-week">{heading}</h2><p>우리 동네에서 기다리는 봉사활동</p></div><a className="home-more" href="#/explore">전체 보기 <Icon name="outward" size={15} /></a></div>
+      {shown.length ? <div className="tile-row">{shown.map(item => <ActivityTile key={item.key} item={item} />)}</div>
+        : failed ? <div className="home-empty" role="alert">활동을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>
+          : items ? <div className="home-empty"><p>아직 모집 중인 활동이 없어요. 첫 활동을 열어 보세요.</p><a className="pill-button line" href="#/create">활동 만들기</a></div>
+            : <div className="home-empty" role="status">활동을 불러오는 중입니다.</div>}
+    </section>
+
+    <section className="home-guide" aria-label="참여 방법">
+      <span className="guide-label">VOLINK GUIDE</span>
+      <h2>처음이어도 괜찮아요.</h2>
+      <ol>
+        <li><b>01</b><strong>내 주변 활동 찾기</strong><span>관심 있는 동네 봉사활동을 찾아요.</span></li>
+        <li><b>02</b><strong>간편하게 신청하기</strong><span>신청하고 참여 상태를 확인해요.</span></li>
+        <li><b>03</b><strong>함께 참여하기</strong><span>정해진 시간과 장소에서 만나요.</span></li>
       </ol>
+      <p className="guide-note">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요.</p>
     </section>
-  </>
+  </div>
 }

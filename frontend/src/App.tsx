@@ -12,7 +12,7 @@ import type { Supply } from './icons'
 import Explore from './explore'
 import Home from './home'
 
-type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell'
+type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -28,6 +28,8 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
     shield: <><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z" /><path d="m9 12 2 2 4-4" /></>,
     bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
+    user: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6.5 6.5 0 0 1 11 0" /></>,
+    outward: <path d="M7 17 17 7M9 7h8v8" />,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -53,7 +55,7 @@ const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
 export const categories = ['환경 정화', '생활 지원', '지역 돌봄']
 
 function getRoute(): Route {
-  const path = window.location.hash.replace(/^#\/?/, '')
+  const path = window.location.hash.replace(/^#\/?/, '').replace(/\?.*$/, '')
   const example = /^activities\/(\d+)$/.exec(path)
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
@@ -142,10 +144,10 @@ export default function App() {
 
   const accountNav = user
     ? <nav className="account-links" aria-label="계정 메뉴">
-      <a href="#/notifications" className="bell-link" aria-current={route.page === 'notifications' ? 'page' : undefined} aria-label={'알림' + (unread ? ' ' + unread + '개 안 읽음' : '')}><Icon name="bell" size={21} />{unread > 0 && <span className="bell-count">{unread > 99 ? '99+' : unread}</span>}</a>
-      <a href="#/mine" className="user-name">{user.name}님</a>
-      <button className="secondary-button" onClick={signOut}>로그아웃</button></nav>
-    : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" aria-current={route.page === 'login' ? 'page' : undefined}>로그인</a><a href="#/signup" className="secondary-button" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>
+      <a href="#/notifications" className="icon-link bell-link" aria-current={route.page === 'notifications' ? 'page' : undefined} aria-label={'알림' + (unread ? ' ' + unread + '개 안 읽음' : '')}><Icon name="bell" size={21} />{unread > 0 && <span className="bell-count">{unread > 99 ? '99+' : unread}</span>}</a>
+      <a href="#/mine" className="icon-link user-link" title={user.name + '님'}><Icon name="user" size={21} /><span className="sr-only">{user.name}님</span></a>
+      <button className="text-link" onClick={signOut}>로그아웃</button></nav>
+    : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" className="text-link login-link" aria-current={route.page === 'login' ? 'page' : undefined}><Icon name="user" size={20} />로그인</a><a href="#/signup" className="text-link" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>
 
   return <div className="app-shell">
     <header className="site-header">
@@ -154,7 +156,7 @@ export default function App() {
         {/* One menu: a top bar on wide screens, a bottom tab bar on phones (CSS only). */}
         <nav aria-label="주요 메뉴" className="main-nav">{navigation.map(item => {
           const active = route.page === item.id || ((route.page === 'detail' || route.page === 'live') && item.id === 'explore') || (route.page === 'edit' && item.id === 'create')
-          return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>
+          return <a href={'#/' + item.id} key={item.id} className={'nav-item' + (item.id === 'home' ? ' nav-home' : '') + (active ? ' active' : '')} aria-current={active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>
         })}</nav>
         {accountNav}
       </div>
@@ -172,7 +174,7 @@ export default function App() {
       {route.page === 'admin' && <AdminPage user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
       {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
     </main>
-    <footer className="footer"><div className="footer-inner"><span><strong>Volink</strong> · 우리 동네의 작은 변화</span><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></div></footer>
+    <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · 우리 동네의 작은 변화</span><span className="footer-tag">Local volunteering community</span></div><p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p></div></footer>
   </div>
 }
 

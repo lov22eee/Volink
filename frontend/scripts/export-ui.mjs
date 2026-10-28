@@ -8,7 +8,12 @@ const jsPath = index.match(/<script[^>]+src="([^"]+)"/)?.[1]
 const cssPath = index.match(/<link[^>]+href="([^"]+\.css)"/)?.[1]
 if (!jsPath || !cssPath) throw new Error('Build output script or stylesheet missing')
 const js = await readFile(path.join(frontend, 'dist', jsPath), 'utf8')
-const css = await readFile(path.join(frontend, 'dist', cssPath), 'utf8')
+// The self-hosted font is embedded as a data URL so the single file still needs nothing outside itself.
+let css = await readFile(path.join(frontend, 'dist', cssPath), 'utf8')
+for (const [match, asset] of css.matchAll(/url\((\/?assets\/[^)]+\.woff2)\)/g)) {
+  const font = await readFile(path.join(frontend, 'dist', asset.replace(/^\//, '')))
+  css = css.replaceAll(match, `url(data:font/woff2;base64,${font.toString('base64')})`)
+}
 const catalog = JSON.parse(await readFile(path.join(frontend, 'fixtures/demo-catalog.json'), 'utf8'))
 if (!catalog.demo || catalog.personas.some(persona => 'password' in persona)) throw new Error('Only public demo data may be exported')
 // Publish only activity/venue examples; personas and internal development notes stay in the repository.

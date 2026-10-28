@@ -80,7 +80,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [radius, setRadius] = useState(3)
   const [when, setWhen] = useState<When>('all')
   const [part, setPart] = useState('')
-  const [category, setCategory] = useState('전체')
+  // Home category chips open #/explore?category=…; anything else starts with every category.
+  const [category, setCategory] = useState(() => { const value = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('category'); return value && categories.includes(value) ? value : '전체' })
   const [kind, setKind] = useState('all')
   const [youth, setYouth] = useState(false)
   const [live, setLive] = useState<LiveActivity[]>([])
