@@ -244,8 +244,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
         <div className="finder-bar">
           {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
             <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{near(value === 'all' ? allHits : allHits.filter(hit => hit.source === value)).length}</small></button>)}</div>
-            : !origin && <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '활동 목록'}<small> · {live.length + filteredExamples.length}건</small></span>}
-          {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
+            : !origin && q ? <span className="finder-title">‘{q}’ 검색 결과<small> · {live.length + filteredExamples.length}건</small></span> : null}
         </div>
       </div>
 
@@ -280,24 +279,24 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           : <div className="empty-state"><p>조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
         <Pages total={everything.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('all-list')?.scrollIntoView() }} />
       </>
-        : <div className="explore-split browse">
-          <div className="explore-list">
-            {(!catalog && !live.length) ? <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
-              : (live.length + filteredExamples.length) ? <>
-                {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
-                  <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
-                {/* Examples are not real posts: kept apart from the real list and its pages. */}
-                {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
-                  <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
-                : <div className="empty-state"><p>조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
-          </div>
-          <aside className="explore-map map-wait" aria-label="지도">
+        : <>
+          {/* No position yet: the map slot asks for one (or offers it again), the full list stays below. */}
+          <section className="panel nearby-panel waiting" aria-label="지도">
             {asking ? <LocationAsk locating={locating} notice={notice} onLocate={locate} onPick={picked => { setAsking(false); setNotice(''); setOrigin(picked) }} onSkip={() => setAsking(false)} />
-              : <div className="map-wait-copy"><Glyph name="map" size={30} /><strong>지도로 가까운 활동 보기</strong>
-                <p>{preview ? '미리보기에서는 지도를 쓰지 않아요.' : '위치를 정하면 내 주변 활동과 1365 봉사가 지도에 보여요.'}</p>
-                {!preview && <button className="pill-button dark small" onClick={() => setAsking(true)}><Glyph name="target" size={15} />위치 정하기</button>}</div>}
-          </aside>
-        </div>}
+              : <div className="map-wait-copy"><Glyph name="map" size={28} /><strong>지도로 가까운 활동 보기</strong>
+                <p>{preview ? '미리보기에서는 지도를 쓰지 않아요.' : '위치를 정하면 내 위치 기준 3km 안의 활동과 1365 봉사가 지도에 보여요.'}</p>
+                {!preview && <button className="pill-button dark small" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}</div>}
+          </section>
+          <div className="all-head"><h3>모든 모집글</h3><span className="list-count">시작이 가까운 순 · {live.length}개</span></div>
+          {(!catalog && !live.length) ? <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>
+            : (live.length + filteredExamples.length) ? <>
+              {live.length > 0 && <><div className="activity-grid">{live.map(fromLive).slice((page - 1) * pageSize, page * pageSize).map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div>
+                <Pages total={live.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('activities')?.scrollIntoView() }} /></>}
+              {/* Examples are not real posts: kept apart from the real list and its pages. */}
+              {filteredExamples.length > 0 && <><div className="all-head"><h3>참고용 예시</h3><span className="list-count">실제 모집이 아니에요</span></div>
+                <div className="activity-grid">{filteredExamples.map((item: CardItem) => <ActivityCard key={item.key} item={item} />)}</div></>}</>
+              : <div className="empty-state"><p>조건에 맞는 활동이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
+        </>}
     </section>
     {programDetail && <ProgramDialog program={programDetail} onClose={() => setProgramDetail(null)} />}
   </>

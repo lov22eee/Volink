@@ -14,7 +14,7 @@ import Explore from './explore'
 import Home from './home'
 import { CategoryCover } from './covers'
 
-type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid'
+type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid' | 'menu' | 'close'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, ReactNode> = {
@@ -32,6 +32,8 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
     user: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6.5 6.5 0 0 1 11 0" /></>,
     outward: <path d="M7 17 17 7M9 7h8v8" />,
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    close: <path d="m6 6 12 12M18 6 6 18" />,
     grid: <><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
@@ -141,17 +143,29 @@ export default function App() {
 
   // An admin account only works on the admin screens: its own menu, and the member screens send it to the dashboard.
   const isAdmin = user?.role === 'ADMIN'
-  const navigation: { id: string; title: string; icon: IconName; active: boolean }[] = isAdmin ? [
-    { id: 'admin', title: '대시보드', icon: 'grid', active: route.page === 'admin' && route.section === 'dashboard' },
-    { id: 'admin/organizations', title: '기관 확인', icon: 'building', active: route.section === 'organizations' },
-    { id: 'admin/activities', title: '활동 검토', icon: 'list', active: route.section === 'activities' || route.page === 'live' },
-    { id: 'admin/places', title: '장소 관리', icon: 'pin', active: route.section === 'places' },
+  const navigation: { id: string; title: string; hint: string; icon: IconName; active: boolean }[] = isAdmin ? [
+    { id: 'admin', title: '대시보드', hint: '처리할 일과 운영 현황', icon: 'grid', active: route.page === 'admin' && route.section === 'dashboard' },
+    { id: 'admin/organizations', title: '기관 확인', hint: '기관 회원가입 승인·반려', icon: 'building', active: route.section === 'organizations' },
+    { id: 'admin/activities', title: '활동 검토', hint: '검토가 필요한 모집글', icon: 'list', active: route.section === 'activities' || route.page === 'live' },
+    { id: 'admin/places', title: '장소 관리', hint: '장소 좌표·만남 지점', icon: 'pin', active: route.section === 'places' },
   ] : [
-    { id: 'home', title: '홈', icon: 'home', active: route.page === 'home' },
-    { id: 'explore', title: '활동 찾기', icon: 'compass', active: route.page === 'explore' || route.page === 'detail' || route.page === 'live' },
-    { id: 'create', title: '활동 만들기', icon: 'plus', active: route.page === 'create' || route.page === 'edit' },
-    { id: 'mine', title: '내 활동', icon: 'users', active: route.page === 'mine' },
+    { id: 'home', title: '홈', hint: '우리 동네 소식', icon: 'home', active: route.page === 'home' },
+    { id: 'explore', title: '활동 찾기', hint: '내 주변 봉사활동 찾기', icon: 'compass', active: route.page === 'explore' || route.page === 'detail' || route.page === 'live' },
+    { id: 'create', title: '활동 만들기', hint: '이웃과 함께할 활동 열기', icon: 'plus', active: route.page === 'create' || route.page === 'edit' },
+    { id: 'mine', title: '내 활동', hint: '신청·참여 현황', icon: 'users', active: route.page === 'mine' },
   ]
+  // Main menu: one button at the top left opens it as a panel under the header on every screen size.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const header = useRef<HTMLElement>(null)
+  useEffect(() => setMenuOpen(false), [route])
+  useEffect(() => {
+    if (!menuOpen) return
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
+    const outside = (event: MouseEvent) => { if (!header.current?.contains(event.target as Node)) setMenuOpen(false) }
+    window.addEventListener('keydown', key)
+    document.addEventListener('mousedown', outside)
+    return () => { window.removeEventListener('keydown', key); document.removeEventListener('mousedown', outside) }
+  }, [menuOpen])
   useEffect(() => {
     if (isAdmin && ['home', 'explore', 'detail', 'create', 'edit', 'mine', 'notifications', 'login', 'signup'].includes(route.page)) window.location.hash = '#/admin'
   }, [isAdmin, route.page])
@@ -168,14 +182,19 @@ export default function App() {
     : <nav className="account-links" aria-label="계정 메뉴"><a href="#/login" className="text-link login-link" aria-current={route.page === 'login' ? 'page' : undefined}><Icon name="user" size={20} />로그인</a><a href="#/signup" className="text-link" aria-current={route.page === 'signup' ? 'page' : undefined}>회원가입</a></nav>
 
   return <div className="app-shell">
-    <header className="site-header">
+    <header className={'site-header' + (menuOpen ? ' menu-open' : '')} ref={header}>
       <div className="header-inner">
-        <a href={isAdmin ? '#/admin' : '#/home'} className="brand" aria-label={isAdmin ? 'Volink 관리자 대시보드' : 'Volink 홈'}><span className="brand-mark"><Icon name="leaf" size={19} /></span>volink<span className="brand-dot">.</span></a>
-        {/* One menu: a top bar on wide screens, a bottom tab bar on phones (CSS only). */}
-        <nav aria-label="주요 메뉴" className={'main-nav' + (isAdmin ? ' admin-menu' : '')}>{navigation.map(item =>
-          <a href={'#/' + item.id} key={item.id} className={'nav-item' + (item.id === 'home' ? ' nav-home' : '') + (item.active ? ' active' : '')} aria-current={item.active ? 'page' : undefined}><Icon name={item.icon} />{item.title}</a>)}</nav>
+        <div className="header-start">
+          <button type="button" className="icon-link menu-button" aria-expanded={menuOpen} aria-controls="main-menu" aria-label={menuOpen ? '메뉴 닫기' : '메뉴 열기'} onClick={() => setMenuOpen(open => !open)}><Icon name={menuOpen ? 'close' : 'menu'} size={22} /></button>
+          <a href={isAdmin ? '#/admin' : '#/home'} className="brand" aria-label={isAdmin ? 'Volink 관리자 대시보드' : 'Volink 홈'}><span className="brand-mark"><Icon name="leaf" size={19} /></span>volink<span className="brand-dot">.</span></a>
+        </div>
         {accountNav}
       </div>
+      <nav id="main-menu" aria-label="주요 메뉴" className={'main-nav menu-panel' + (isAdmin ? ' admin-menu' : '')} hidden={!menuOpen}>
+        <div className="menu-inner">{navigation.map(item =>
+          <a href={'#/' + item.id} key={item.id} className={'nav-item' + (item.active ? ' active' : '')} aria-current={item.active ? 'page' : undefined} aria-label={item.title}>
+            <span className="nav-icon"><Icon name={item.icon} size={20} /></span><span className="nav-text"><strong>{item.title}</strong><small>{item.hint}</small></span></a>)}</div>
+      </nav>
     </header>
     <main id="main-content" aria-label={titles[route.page]}>
       {error && <div className="error-banner" role="alert">{error}<button className="text-button" onClick={() => setReload(value => value + 1)}>다시 시도</button></div>}
@@ -923,9 +942,10 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
   }
   const count = Object.keys(errors).length
   const label = preview ? (signup ? '회원가입 · 준비 중' : '로그인 · 준비 중') : busy ? (signup ? '가입하는 중…' : '로그인하는 중…') : signup ? '가입하기' : '로그인'
-  return <div className="account-layout auth-v2">
-    <section className="account-intro"><span className="intro-mark"><Icon name="leaf" size={30} /></span><h1>우리 동네의 좋은 변화,<br />여기서 시작해요.</h1><p>가까운 이웃과 함께하는 봉사활동, Volink에서 만나 보세요.</p>
-      <ul className="intro-points"><li><Icon name="pin" size={18} />걸어서 갈 수 있는 동네 활동</li><li><Icon name="clock" size={18} />30분부터, 3시간 이내</li><li><Icon name="shield" size={18} />연락처는 다른 회원에게 공개하지 않아요</li></ul></section>
+  return <div className={'account-layout auth-v2 ' + (signup ? 'is-signup' : 'is-login')}>
+    {/* The card stretches to the form's height; its text stays in view while a long sign-up form scrolls. */}
+    <section className="account-intro"><div className="intro-body"><span className="intro-mark"><Icon name="leaf" size={30} /></span><h1>우리 동네의 좋은 변화,<br />여기서 시작해요.</h1><p>가까운 이웃과 함께하는 봉사활동, Volink에서 만나 보세요.</p>
+      <ul className="intro-points"><li><Icon name="pin" size={18} />걸어서 갈 수 있는 동네 활동</li><li><Icon name="clock" size={18} />30분부터, 3시간 이내</li><li><Icon name="shield" size={18} />연락처는 다른 회원에게 공개하지 않아요</li></ul></div></section>
     <form className="activity-form account-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
       <nav className="auth-tabs" aria-label="로그인·회원가입 전환"><a href="#/login" aria-current={!signup ? 'page' : undefined}>로그인</a><a href="#/signup" aria-current={signup ? 'page' : undefined}>회원가입</a></nav>
       <h2>{signup ? '함께할 준비가 되셨나요?' : '다시 만나 반가워요!'}</h2><p className="form-description">{signup ? '어떤 모습으로 함께하시겠어요?' : '이메일과 비밀번호로 로그인해 주세요.'}</p>

@@ -10,17 +10,10 @@
 
 /* ───────── Header: logo · centred menu · icons ───────── */
 .site-header { background: #fff; backdrop-filter: none; border-bottom: 1px solid var(--line); }
-.header-inner { max-width: calc(var(--content) + 2 * var(--page-x)); height: 68px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; }
+.header-inner { max-width: calc(var(--content) + 2 * var(--page-x)); height: 68px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .brand { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; color: var(--green); gap: 10px; }
 .brand-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--sage); color: var(--green); }
 .brand-dot { margin-left: -9px; color: var(--green); }
-.main-nav { flex: none; gap: 6px; justify-self: center; }
-.nav-item { height: 40px; padding: 0 12px; border-radius: 8px; font-size: 16px; font-weight: 500; color: var(--ink-2); background: none; }
-.nav-item svg { display: none; }
-.nav-item:hover { background: none; color: var(--ink); }
-.nav-item.active { background: none; color: var(--green); font-weight: 700; }
-/* 홈 stays in the menu for screen readers and the phone tab bar; on wide screens the logo is the way home. */
-.nav-item.nav-home { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .account-links { justify-self: end; gap: 6px; }
 .icon-link { position: relative; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--ink-2); }
 .icon-link:hover, .icon-link[aria-current=page] { background: var(--bg); color: var(--green); }
@@ -111,11 +104,6 @@ main { max-width: calc(var(--content) + 2 * var(--page-x)); }
   .brand { font-size: 23px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-dot { margin-left: -8px; }
-  /* justify-self also aligns fixed boxes in current Chromium: let the tab bar span the screen again. */
-  .main-nav { justify-self: stretch; }
-  .nav-item svg { display: block; }
-  .nav-item.nav-home { position: static; width: auto; height: 52px; padding: 0 2px; overflow: visible; clip: auto; }
-  .nav-item.active { font-weight: 700; }
   .account-links > a.text-link, .account-links > .text-link { padding: 8px 4px; font-size: 14px; }
   .login-link svg { display: none; }
   .footer-top { flex-direction: column; gap: 2px; }
@@ -174,11 +162,9 @@ main { max-width: calc(var(--content) + 2 * var(--page-x)); }
 
 .explore-v2 .explore-split.browse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start; }
 .explore-v2 .explore-split.browse .activity-grid { grid-template-columns: 1fr; gap: 12px; }
-.map-wait { position: sticky; top: calc(68px + 20px); min-height: 520px; border: 1px solid #d5e1d3; border-radius: 16px; background: #e7eee5; display: grid; place-items: center; padding: 24px; }
 .map-wait-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--green); max-width: 22em; }
 .map-wait-copy strong { font-size: 18px; color: var(--ink); }
 .map-wait-copy p { margin: 0 0 8px; font-size: 15px; color: var(--ink-3); }
-.map-wait .location-ask { width: 100%; max-width: 440px; margin: 0; background: #fff; border-color: var(--line); }
 
 /* List card: cover on the left, status · field, title, date, place, seats. */
 .explore-v2 .activity-card { flex-direction: row; gap: 16px; padding: 14px; height: auto; border-radius: 14px; border: 1px solid var(--line); background: #fff; box-shadow: none; transform: none; }
@@ -213,7 +199,6 @@ main { max-width: calc(var(--content) + 2 * var(--page-x)); }
 
 @media (max-width: 900px) {
   .explore-v2 .explore-split.browse { grid-template-columns: 1fr; }
-  .explore-v2 .map-wait { position: static; min-height: 0; order: -1; padding: 20px; }
   .explore-v2 #all-list + .activity-grid { grid-template-columns: 1fr; }
 }
 
@@ -626,7 +611,6 @@ a.kpi:hover { border-color: var(--green); }
 }
 
 /* Touch targets and states (polish): 44px for everything a thumb presses. */
-.nav-item { min-height: 44px; }
 .icon-link { width: 44px; height: 44px; }
 .account-links > a.text-link, .account-links > .text-link { min-height: 44px; }
 .pill-button { transition: background .15s, border-color .15s, transform .08s; }
@@ -638,5 +622,57 @@ a.kpi:hover { border-color: var(--green); }
 .detail-booking .pill-button.dark { height: 54px; font-size: 17px; }
 @media (max-width: 720px) {
   .detail-cover { aspect-ratio: 16 / 8; }
-  .nav-item { min-height: 52px; }
 }
+
+/* ───────── Main menu: button at the top left, panel under the header ───────── */
+.header-start { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.menu-button { margin-left: -10px; color: var(--ink); }
+.menu-button[aria-expanded=true] { background: var(--bg); }
+.menu-panel { position: absolute; left: 0; right: 0; top: 100%; z-index: 35; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 16px 32px rgb(29 42 36 / 10%); animation: menu-in .16s ease-out; }
+.menu-panel[hidden] { display: none; }
+.menu-inner { max-width: calc(var(--content) + 2 * var(--page-x)); margin: 0 auto; padding: 14px var(--page-x) 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.menu-panel .nav-item { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 14px; border-radius: 14px; color: var(--ink); }
+.menu-panel .nav-item:hover { background: var(--bg); }
+.menu-panel .nav-item.active { background: var(--sage); }
+.nav-icon { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--sage); color: var(--green); display: grid; place-items: center; }
+.menu-panel .nav-item.active .nav-icon { background: var(--green); color: #fff; }
+.nav-text { display: grid; gap: 1px; min-width: 0; }
+.nav-text strong { font-size: 16px; font-weight: 700; }
+.nav-text small { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.site-header { position: sticky; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 860px) { .menu-inner { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .menu-inner { grid-template-columns: 1fr; padding: 8px var(--page-x) 14px; gap: 4px; }
+  .menu-panel { max-height: calc(100vh - 56px); overflow-y: auto; }
+  .menu-button { margin-left: -8px; }
+}
+@media (prefers-reduced-motion: reduce) { .menu-panel { animation: none; } }
+
+/* Explore (user request 2026-10-29): map + nearby list on top, nearest-first square cards below. */
+.nearby-panel.waiting { display: grid; place-items: center; min-height: 300px; padding: 28px; background: #e7eee5; border: 1px solid #d5e1d3; border-radius: 16px; margin-bottom: 8px; }
+.nearby-panel.waiting .location-ask { width: 100%; max-width: 460px; margin: 0; background: #fff; border-color: var(--line); }
+.map-wait-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--green); max-width: 24em; }
+.map-wait-copy strong { font-size: 18px; color: var(--ink); }
+.map-wait-copy p { margin: 0 0 8px; font-size: 15px; color: var(--ink-3); }
+.explore-v2 .all-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 28px 0 14px; }
+.explore-v2 .activity-grid, .explore-v2 #all-list + .activity-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.explore-v2 .activity-card { flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.explore-v2 .activity-card .card-cover { width: 100%; aspect-ratio: 4 / 3; border-radius: 0; }
+.explore-v2 .activity-card .card-body { padding: 14px 16px 16px; gap: 4px; }
+.explore-v2 .activity-card h3 { -webkit-line-clamp: 2; min-height: 2.8em; font-size: 17px; }
+.explore-v2 .activity-card:hover { border-color: var(--green); }
+@media (max-width: 1000px) { .explore-v2 .activity-grid, .explore-v2 #all-list + .activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) {
+  .explore-v2 .activity-grid, .explore-v2 #all-list + .activity-grid { grid-template-columns: 1fr; }
+  .explore-v2 .activity-card .card-cover { aspect-ratio: 16 / 9; }
+  .explore-v2 .activity-card h3 { min-height: 0; }
+  .nearby-panel.waiting { min-height: 0; padding: 18px; }
+}
+
+/* Sign-up / login intro card matches the form column's height. */
+.auth-v2 { align-items: stretch; }
+.auth-v2 .account-intro { position: static; align-self: stretch; min-height: 0; height: auto; justify-content: center; }
+.auth-v2.is-signup .account-intro { justify-content: flex-start; }
+.auth-v2.is-signup .intro-body { position: sticky; top: calc(68px + 40px); }
+@media (max-width: 860px) { .auth-v2.is-signup .intro-body { position: static; } }

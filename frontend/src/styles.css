@@ -87,11 +87,6 @@ ol, ul { margin: 0; padding: 0; }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-size: 25px; font-weight: 800; letter-spacing: -0.04em; color: var(--green-strong); }
 .brand-mark { width: 32px; height: 32px; border-radius: 10px; background: var(--sage); color: var(--green); display: grid; place-items: center; }
 .brand-dot { margin-left: -7px; color: var(--amber); }
-.main-nav { display: flex; gap: 4px; flex: 1; }
-.nav-item { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: var(--r-pill); font-size: 15px; font-weight: 600; color: var(--ink-2); }
-.nav-item svg { width: 18px; height: 18px; }
-.nav-item:hover { background: var(--surface-2); color: var(--ink); }
-.nav-item.active { background: var(--sage); color: var(--green-strong); }
 .account-links { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
 .account-links > a:not(.secondary-button):not(.bell-link) { padding: 8px 10px; font-weight: 600; }
 .account-links [aria-current=page] { color: var(--green); }
@@ -352,8 +347,6 @@ button.map-pin { cursor: pointer; padding: 0; }
 
 @media (max-width: 860px) {
   .header-inner { gap: 12px; }
-  .nav-item { padding: 0 11px; font-size: 14px; }
-  .nav-item svg { display: none; }
   .detail-layout, .account-layout { grid-template-columns: 1fr; }
   /* Phone: title first, then the booking box, then the story. */
   .detail-layout { gap: 0; }
@@ -376,16 +369,10 @@ button.map-pin { cursor: pointer; padding: 0; }
   .header-inner { gap: 8px; }
   .brand { font-size: 22px; }
   .brand-mark { width: 28px; height: 28px; }
-  .main-nav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: calc(64px + env(safe-area-inset-bottom)); padding: 6px 6px env(safe-area-inset-bottom); gap: 0; background: rgb(255 255 255 / 97%); border-top: 1px solid var(--line); box-shadow: 0 -4px 20px rgb(23 45 35 / 6%); }
-  .nav-item { flex: 1; flex-direction: column; justify-content: center; gap: 2px; height: 52px; padding: 0 2px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .nav-item svg { display: block; width: 22px; height: 22px; }
-  .nav-item.active { background: transparent; color: var(--green); }
-  .nav-item.active svg { stroke-width: 2.2; }
   .account-links { margin-left: auto; gap: 4px; font-size: 14px; }
   .account-links .secondary-button { height: 36px; padding: 0 12px; font-size: 13px; }
   .account-links > a:not(.secondary-button):not(.bell-link) { padding: 8px 6px; }
   main { padding: 20px var(--page-x) 40px; }
-  .footer { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .footer-inner { padding: 18px var(--page-x); font-size: 12px; }
   .panel { padding: 20px; border-radius: var(--r-md); }
   .activity-grid { grid-template-columns: 1fr; gap: 14px; }

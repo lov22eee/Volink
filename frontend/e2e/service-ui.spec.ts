@@ -49,6 +49,12 @@ async function loginAs(page: Page, email: string, secret: string) {
   await expect(page).toHaveURL(/#\/(mine|admin)$/)
 }
 
+// The main menu sits behind the button at the top left.
+async function openMenu(page: Page) {
+  await page.getByRole('button', { name: '메뉴 열기' }).click()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible()
+}
+
 async function signOut(page: Page) {
   await page.getByRole('button', { name: '로그아웃' }).click()
   await expect(page).toHaveURL(/#\/home$/)
@@ -116,7 +122,10 @@ function seoulDate(days: number) {
 test('home shows fields, upcoming real posts and how to take part, then leads to the search', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: /가까운 곳에서/ })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
+  await openMenu(page)
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).locator('.nav-item strong')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeHidden()
   // Volink 2.0 home: no count cards; field chips open the search with that field, tiles are real upcoming posts.
   await expect(page.getByRole('region', { name: '어떤 봉사에 관심 있나요?' }).getByRole('link')).toHaveText(['환경 정화', '생활 지원', '지역 돌봄'])
   const today = seoulDate(0)
@@ -403,6 +412,7 @@ test('all six service screens work on mobile without horizontal overflow or pres
     await expect(page.locator('body')).not.toContainText(developmentCopy)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   }
+  await openMenu(page)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 찾기', exact: true }).click()
   await expect(page.locator(examples)).toHaveCount(3)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
@@ -474,10 +484,13 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await signOut(page)
 
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['대시보드', '기관 확인', '활동 검토', '장소 관리'])
+  await openMenu(page)
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).locator('.nav-item strong')).toHaveText(['대시보드', '기관 확인', '활동 검토', '장소 관리'])
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('region', { name: '게시글 승인 요약' })).toBeVisible()
   await page.goto('/#/explore')
   await expect(page).toHaveURL(/#\/admin$/)
+  await openMenu(page)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 검토' }).click()
   const item = page.getByRole('region', { name: '검토 대기 활동' }).getByRole('listitem').filter({ hasText: title })
   await expect(item).toContainText('어르신')
