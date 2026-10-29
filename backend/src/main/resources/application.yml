@@ -50,3 +50,12 @@ spring:
 volink:
   auth:
     cookie-secure: ${AUTH_COOKIE_SECURE:false}
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+volink:
+  scheduler:
+    # Tests call ParticipationService.expireDue() directly instead of waiting for the minute timer.
+    enabled: false

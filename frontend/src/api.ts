@@ -14,10 +14,17 @@ export type LiveActivity = {
   date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
-  latitude?: number | null; longitude?: number | null; distanceKm?: number; supplies?: { name: string; provided: boolean }[]
+  latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number; supplies?: { name: string; provided: boolean }[]
   /** Only for the organizer: applications that lock the full edit. */
   applicants?: number
 }
+export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLISTED' | 'OFFERED' | 'EXPIRED' | 'CANCELLED' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW' | 'HELD' | 'INVALIDATED'
+export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number }
+export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
+export type ViewerInfo = Seats & { participation: Participation | null }
+export type Applicant = Participation & { name: string; appliedAt: string }
+export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string }
+export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
 export type PlaceInfo = {
   id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null
   latitude: number | null; longitude: number | null; coordinateStatus?: string

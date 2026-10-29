@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **3주차 행(2026-10-13)과 4주차 행(2026-10-16, 4주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 5주차 이후 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13)과 4·5주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 6주차 이후 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -56,13 +56,14 @@
 | 4+ | `PUT /api/activities/{id}` (만들기와 같은 본문) | 모집자(남은 404) | **구현(보완 2).** 시작 전·DRAFT/RECRUITING만(아니면 409 `INVALID_STATE`), 신청자가 있으면 409 `HAS_APPLICANTS`. 위험도 재검사: BLOCKED 422(변경 없음), REVIEW면 DRAFT로 다시 숨김. 지금 장소는 `placeId`로 그대로 둘 수 있음 |
 | 4+ | `PATCH /api/activities/{id}/notes` `{description, meetingPoint}` | 모집자 | **구현.** 신청자가 있어도 가능, 위험 단어 검사 |
 | 4+ | `DELETE /api/activities/{id}` | 모집자 | **구현.** 204. 신청자 0명·시작 전만, 상태 DELETED(기록 유지)로 모든 목록·상세에서 숨김 |
-| 5 | `POST /api/activities/{id}/participations` | 회원 | 신청. 중복 409, 정원 차면 대기 순번 |
-| 5 | `GET /api/activities/{id}/participations` | 모집자 | 신청자 목록(이름 일부 가림, 연락처 없음) |
-| 5 | `POST /api/participations/{id}/approve` · `.../reject` | 모집자 | 행 잠금 후 정원 재확인, 초과면 409 |
-| 5 | `POST /api/participations/{id}/cancel` | 본인 | 시작 전 취소, 빈자리 승격 |
-| 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | 승격 제안 응답, 만료 410 |
-| 5 | `GET /api/me/participations?status=` | 본인 | 내 신청 |
-| 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` | 본인 | 화면 안 알림(주기 조회, 푸시 없음) |
+| 5 | `POST /api/activities/{id}/participations` | 회원 | **구현.** 자리 있으면 APPLIED, 정원(확정+제안)이 차면 WAITLISTED·순번, 시작 2시간 전 이후 정원 참이면 409 `WAITLIST_CLOSED`. 중복 409 `DUPLICATE_APPLICATION`(첫 취소 뒤 1회·만료 뒤 재신청 허용, 거절은 불가). 내 활동·관리자 403, 제한 계정 403 `ACCOUNT_RESTRICTED`. 응답은 아래 `my-participation`과 같음 |
+| 5 | `GET /api/activities/{id}/my-participation` | 공개(로그인 시 내 신청 포함) | **구현.** `{confirmed, offered, waiting, pending, participation: {id, status, waitOrder, offerExpiresAt, cancelCount} 또는 null}` |
+| 5 | `GET /api/activities/{id}/participations` | 모집자 | **구현.** `{capacity, confirmed, offered, waiting, pending, items:[{id, name(가림), status, waitOrder, offerExpiresAt, appliedAt}]}`, 남의 활동 404 |
+| 5 | `POST /api/participations/{id}/approve` · `.../reject` `{reason?}` | 모집자 | **구현.** 활동 행 잠금 후 확정+제안 수 재확인, 차면 409 `CAPACITY_FULL`. 거절은 승인 대기·대기 중만, 사유 기본값 ‘모집자 판단’. 남의 신청 404 |
+| 5 | `POST /api/participations/{id}/cancel` | 본인 | **구현.** 시작 전만. 확정·제안 자리가 비면 대기 1번에게 제안(시작 2시간 전부터는 제안 안 함) |
+| 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
+| 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
+| 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
 | 6 | `GET /api/activities/{id}/qr` | 모집자 | 60초 서명 QR 값 |
 | 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | 시간(시작 30분 전~30분 후)·QR·200m 확인, 좌표 저장 안 함 |
 | 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | 사유 필수 |

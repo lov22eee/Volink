@@ -221,7 +221,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   if (editId && !editing) return <>{heading}<div className="empty-state">활동을 불러오는 중입니다.</div></>
   if (locked && !result) return <>{heading}
     <form className="panel activity-form create-form" noValidate onSubmit={submit}>
-      <p className="inline-notice">신청한 사람이 {editing?.applicants}명 있어 제목·장소·일정·정원은 바꿀 수 없어요. 꼭 바꿔야 하면 활동을 취소해 주세요(신청자 알림은 참가 신청 기능과 함께 제공).</p>
+      <p className="inline-notice">신청한 사람이 {editing?.applicants}명 있어 제목·장소·일정·정원은 바꿀 수 없어요. 소개와 만나는 곳만 고칠 수 있어요.</p>
       <label>만나는 곳<input name="meetingPoint" value={meetingPoint} maxLength={100} onChange={event => setMeetingPoint(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
       {errors.meetingPoint && <span className="field-error">{errors.meetingPoint}</span>}
       <label>활동 소개<textarea name="description" value={description} maxLength={r.descriptionMax} rows={5} onChange={event => setDescription(event.target.value)} /></label>
