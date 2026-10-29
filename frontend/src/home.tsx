@@ -1,4 +1,4 @@
-// Home (Volink 2.0, 2026-10-28): big type and a category visual, browse by field, this week's activities and a
+// Home (Volink 2.0, 2026-10-28): big type and a category visual with the real next activity, browse by field, this week's activities and a
 // short guide. Activities come from the server (or the bundled examples in the offline preview); nothing here is
 // made up, and when the list cannot be loaded the section says so instead of showing placeholders.
 import { useEffect, useState } from 'react'
@@ -6,7 +6,7 @@ import { api, preview } from './api'
 import type { LiveActivity, User } from './api'
 import { categories, fromExample, fromLive, Icon, waitOpen } from './App'
 import type { CardItem } from './App'
-import { CategoryCover, CategoryMosaic } from './covers'
+import { CategoryCover, HeroCover } from './covers'
 import type { DisplayCatalog as Catalog } from './data'
 import { Glyph } from './icons'
 import type { GlyphName } from './icons'
@@ -36,11 +36,13 @@ export function ActivityTile({ item }: { item: CardItem }) {
 export default function Home({ catalog }: { user: User | null; catalog: Catalog | null }) {
   const [all, setAll] = useState<LiveActivity[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (preview) return
+    setFailed(false)
     api<LiveActivity[]>('/api/activities').then(setAll).catch(() => setFailed(true))
-  }, [])
+  }, [attempt])
 
   const today = seoulToday()
   const weekEnd = seoulToday(6)
@@ -49,6 +51,7 @@ export default function Home({ catalog }: { user: User | null; catalog: Catalog 
     : all && all.filter(a => a.date >= today).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)).map(fromLive)
   const thisWeek = items?.filter(item => item.date <= weekEnd) ?? []
   const shown = (thisWeek.length ? thisWeek : items ?? []).slice(0, 3)
+  const next = items?.[0]
   const heading = preview ? '이런 활동을 함께해요' : thisWeek.length || !items?.length ? '이번 주, 함께할 활동' : '곧 열리는 활동'
 
   return <div className="home">
@@ -60,8 +63,17 @@ export default function Home({ catalog }: { user: User | null; catalog: Catalog 
         <div className="home-actions"><a className="pill-button dark" href="#/explore">내 주변 활동 찾기 <Icon name="outward" size={17} /></a><a className="pill-button line" href="#/create">활동 만들기</a></div>
         <small>찾기부터 참여까지, 한곳에서 간편하게.</small>
       </div>
-      <figure className="home-hero-visual"><CategoryMosaic categories={categories} />
-        <figcaption>{categories.map(name => <span key={name}>{name}</span>)}</figcaption></figure>
+      <div className="home-hero-visual">
+        <div className="hero-art" aria-hidden="true"><HeroCover categories={categories} /></div>
+        {/* The real next activity (or example in the preview), so the first screen already shows something to join. */}
+        {next && <a className="next-card" href={next.href}>
+          <span className="next-label">{next.kind === 'example' ? '예시 활동' : '곧 열리는 활동'}</span>
+          <strong>{next.title}</strong>
+          <span className="next-info"><Glyph name="calendar" size={15} />{shortDate(next.date)} {next.startTime}</span>
+          <span className="next-info"><Glyph name="pin" size={15} />{next.placeName}</span>
+          <span className="next-seats"><span className="bar" aria-hidden="true"><i style={{ width: Math.min(100, next.confirmed / Math.max(1, next.capacity) * 100) + '%' }} /></span>{next.confirmed}/{next.capacity}명</span>
+        </a>}
+      </div>
     </section>
 
     <section className="home-block" aria-labelledby="home-fields">
@@ -72,8 +84,8 @@ export default function Home({ catalog }: { user: User | null; catalog: Catalog 
     <section className="home-block" aria-labelledby="home-week">
       <div className="home-block-head"><div><h2 id="home-week">{heading}</h2><p>우리 동네에서 기다리는 봉사활동</p></div><a className="home-more" href="#/explore">전체 보기 <Icon name="outward" size={15} /></a></div>
       {shown.length ? <div className="tile-row">{shown.map(item => <ActivityTile key={item.key} item={item} />)}</div>
-        : failed ? <div className="home-empty" role="alert">활동을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>
-          : items ? <div className="home-empty"><p>아직 모집 중인 활동이 없어요. 첫 활동을 열어 보세요.</p><a className="pill-button line" href="#/create">활동 만들기</a></div>
+        : failed ? <div className="home-empty" role="alert"><p>활동을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p><button className="pill-button line small" onClick={() => setAttempt(n => n + 1)}>다시 불러오기</button></div>
+          : items ? <div className="home-empty"><Glyph name="leaf" size={26} /><p>아직 모집 중인 활동이 없어요. 우리 동네 첫 활동을 열어 보세요.</p><a className="pill-button dark small" href="#/create">활동 만들기</a></div>
             : <div className="home-empty" role="status">활동을 불러오는 중입니다.</div>}
     </section>
 

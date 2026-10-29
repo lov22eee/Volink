@@ -86,6 +86,8 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
   const [youth, setYouth] = useState(false)
   const [live, setLive] = useState<LiveActivity[]>([])
   const [allLive, setAllLive] = useState<LiveActivity[]>([])
+  const [liveFailed, setLiveFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [programs, setPrograms] = useState<Program[]>([])
   const [programsOn, setProgramsOn] = useState(false)
   const [programsLoading, setProgramsLoading] = useState(false)
@@ -108,14 +110,17 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
     if (category !== '전체') params.set('category', category)
     if (kind !== 'all') params.set('type', kind)
     let current = true
-    api<LiveActivity[]>('/api/activities?' + params).then(list => current && setAllLive(list)).catch(() => current && setAllLive([]))
+    // A failed request is shown as an error with a retry, never as "no results".
+    setLiveFailed(false)
+    api<LiveActivity[]>('/api/activities?' + params).then(list => current && setAllLive(list)).catch(() => { if (current) { setAllLive([]); setLiveFailed(true) } })
     if (origin) {
       const near = new URLSearchParams(params)
       near.set('lat', origin.lat.toFixed(6)); near.set('lng', origin.lng.toFixed(6)); near.set('radiusKm', '20')
-      api<LiveActivity[]>('/api/activities?' + near).then(list => current && setLive(list)).catch(() => current && setLive([]))
+      api<LiveActivity[]>('/api/activities?' + near).then(list => current && setLive(list)).catch(() => { if (current) { setLive([]); setLiveFailed(true) } })
     }
     return () => { current = false }
-  }, [origin, when, part, q, category, kind])
+  // catalog: when the app-wide retry brings the server back, this list is fetched again too.
+  }, [origin, when, part, q, category, kind, attempt, catalog])
   useEffect(() => { if (!origin) setLive(allLive) }, [origin, allLive])
 
   // Location allowed before: go straight to the map.
@@ -225,10 +230,21 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
           </span>
         </div>
         <div className="cat-chips" role="group" aria-label="분야로 거르기">{['전체', ...categories].map(value => <button type="button" key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{value}</button>)}</div>
+        {activeFilters > 0 && <div className="active-filters" aria-label="켜진 조건">
+          {([[when !== 'all', ({ today: '오늘', week: '이번 주', weekend: '주말만' } as Record<string, string>)[when], () => setWhen('all')],
+            [part !== '', part === 'AM' ? '오전' : '오후', () => setPart('')],
+            [category !== '전체', category, () => setCategory('전체')],
+            [kind !== 'all', kind === 'INSTITUTION' ? '기관 주관 활동' : '자율 활동', () => setKind('all')],
+            [youth, '청소년 가능만', () => setYouth(false)],
+            [origin != null && radius !== 3, `반경 ${radius}km`, () => setRadius(3)]] as [boolean, string, () => void][])
+            .filter(([on]) => on).map(([, label, clear]) => <button type="button" key={label} className="filter-tag" onClick={clear} aria-label={label + ' 조건 끄기'}>{label}<Glyph name="close" size={13} /></button>)}
+          <button type="button" className="text-button" onClick={resetFilters}>모두 지우기</button>
+        </div>}
+        {liveFailed && catalog && <div className="error-banner" role="alert">활동 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.<button type="button" className="text-button" onClick={() => setAttempt(n => n + 1)}>다시 불러오기</button></div>}
         <div className="finder-bar">
           {origin && programsOn ? <div className="segmented" role="group" aria-label="활동 출처">{([['all', '전체'], ['local', '동네 활동'], ['1365', '1365 활동']] as [Source, string][]).map(([value, text]) =>
             <button key={value} aria-pressed={source === value} onClick={() => setSource(value)}>{text} <small>{near(value === 'all' ? allHits : allHits.filter(hit => hit.source === value)).length}</small></button>)}</div>
-            : <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '활동 목록'}<small>{origin ? '' : ` · ${live.length + filteredExamples.length}건`}</small></span>}
+            : !origin && <span className="finder-title">{q ? `‘${q}’ 검색 결과` : '활동 목록'}<small> · {live.length + filteredExamples.length}건</small></span>}
           {!origin && !preview && !asking && <button className="secondary-button small nearby-button" onClick={() => setAsking(true)}><Glyph name="target" size={15} />내 주변 찾기</button>}
         </div>
       </div>

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { FormEvent, ReactNode } from 'react'
 import type { DisplayCatalog as Catalog } from './data'
 import { signupRules, validateSignup } from './rules'
 import type { Errors } from './rules'
-import { api, ApiError, login, logout, preview, refresh } from './api'
+import { api, ApiError, login, logout, mayHaveSession, preview, refresh } from './api'
 import type { Applicant, AppNotification, LiveActivity, MyParticipation, Participation, PlaceInfo, User, ViewerInfo } from './api'
 import { kakaoEnabled, PlaceMap } from './map'
 import CreateActivity from './create'
@@ -102,6 +103,7 @@ export default function App() {
   // Restore the login after a reload through the HttpOnly refresh cookie.
   useEffect(() => {
     if (preview) return
+    if (!mayHaveSession()) { setReady(true); return }
     refresh().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
   }, [])
 
@@ -190,6 +192,41 @@ export default function App() {
     </main>
     <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · {isAdmin ? '관리자' : '우리 동네의 작은 변화'}</span><span className="footer-tag">Local volunteering community</span></div>{!isAdmin && <p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p>}</div></footer>
   </div>
+}
+
+type Tone = 'ok' | 'error' | 'info'
+
+/** One line of feedback after an action: green when it worked, red when it did not. Read out by screen readers. */
+export function Notice({ text, tone = 'info' }: { text: string; tone?: Tone }) {
+  return <p className={'notice-banner ' + tone} role="status"><span className="notice-mark" aria-hidden="true">{tone === 'ok' ? '✓' : tone === 'error' ? '!' : 'i'}</span>{text}</p>
+}
+
+/** Small modal for decisions that cannot be undone. Escape or the backdrop closes it; focus starts on the safe choice. */
+function ConfirmDialog({ title, body, confirm, cancel = '돌아가기', danger, onConfirm, onClose }: { title: string; body: string; confirm: string; cancel?: string; danger?: boolean; onConfirm: () => void; onClose: () => void }) {
+  const safe = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null
+    safe.current?.focus()
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('keydown', key); back?.focus() }
+  }, [onClose])
+  return createPortal(<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+      <h2 id="confirm-title">{title}</h2><p id="confirm-body">{body}</p>
+      <div className="confirm-actions"><button ref={safe} className="pill-button line" onClick={onClose}>{cancel}</button><button className={'pill-button ' + (danger ? 'danger' : 'dark')} onClick={() => { onConfirm(); onClose() }}>{confirm}</button></div>
+    </div>
+  </div>, document.body)
+}
+
+/** "오늘 22:48", "어제 09:10", "10월 26일 22:48" from the server's "yyyy-MM-dd HH:mm" (KST). */
+export function friendlyTime(value: string) {
+  const [day, time] = value.split(' ')
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date())
+  const yesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() - 86_400_000))
+  if (day === today) return '오늘 ' + time
+  if (day === yesterday) return '어제 ' + time
+  return `${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 ${time}`
 }
 
 function NotFound() {
@@ -294,6 +331,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   const [missing, setMissing] = useState(false)
   const [viewer, setViewer] = useState<ViewerInfo | null>(null)
   const [message, setMessage] = useState('')
+  const [tone, setTone] = useState<Tone>('ok')
   const [busy, setBusy] = useState(false)
   const loadViewer = useCallback(() => api<ViewerInfo>('/api/activities/' + id + '/my-participation').then(setViewer).catch(() => setViewer(null)), [id])
   useEffect(() => {
@@ -310,9 +348,11 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
       const next = await api<ViewerInfo>(path, 'POST', {})
       setViewer(next)
       setMessage(done)
+      setTone('ok')
       onChange()
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+      setTone('error')
       loadViewer()
     } finally {
       setBusy(false)
@@ -337,7 +377,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
     {mine && <p className={'my-status ' + mine.status.toLowerCase()}>{participationLabel(mine)}</p>}
     {help && <div className="status-help">{!mine && !full && <strong>신청 후 모집자 승인을 기다려요</strong>}<span>{help}</span></div>}
     <ApplyButtons activity={activity} user={user} ready={ready} organizer={organizer} full={full} mine={mine} busy={busy || hidden} act={act} />
-    {message && <p className="inline-notice" role="status">{message}</p>}
+    {message && <Notice text={message} tone={tone} />}
     {user && !organizer && <p className="booking-foot">신청 상태는 내 활동과 알림에서 확인할 수 있어요.</p>}
   </div>
   const offer = mine?.status === 'OFFERED' ? <section className="offer-hero" aria-label="빈자리 제안">
@@ -380,13 +420,22 @@ function ApplyButtons({ activity, user, ready, organizer, full, mine, busy, act 
   const base = '/api/participations/' + mine?.id
   switch (mine?.status) {
     case 'APPLIED': case 'WAITLISTED': case 'CONFIRMED':
-      return <button className="pill-button line" disabled={busy} onClick={() => { if (window.confirm('신청을 취소할까요?' + (mine.status === 'CONFIRMED' ? ' 자리는 대기자에게 넘어갑니다.' : ''))) act(base + '/cancel', '신청을 취소했습니다.') }}>{busy ? '처리 중…' : '신청 취소'}</button>
+      return <CancelButton busy={busy} confirmed={mine.status === 'CONFIRMED'} onCancel={() => act(base + '/cancel', '신청을 취소했습니다.')} />
     case 'OFFERED':
       return <p className="small-print">위의 빈자리 제안에서 참여 여부를 정해 주세요.</p>
     case 'REJECTED': return null
     case 'CANCELLED': if ((mine.cancelCount ?? 0) >= 2) return null
   }
   return <button className="pill-button dark" disabled={busy} onClick={() => act('/api/activities/' + activity.id + '/participations', full ? '대기 명단에 올렸습니다.' : '신청했습니다. 모집자가 승인하면 알려 드립니다.')}>{busy ? '처리 중…' : full ? '대기 신청하기' : '참가 신청하기'}</button>
+}
+
+function CancelButton({ busy, confirmed, onCancel }: { busy: boolean; confirmed: boolean; onCancel: () => void }) {
+  const [asking, setAsking] = useState(false)
+  return <>
+    <button className="pill-button line" disabled={busy} onClick={() => setAsking(true)}>{busy ? '처리 중…' : '신청 취소'}</button>
+    {asking && <ConfirmDialog title="신청을 취소할까요?" body={confirmed ? '확정된 자리는 대기 1번에게 넘어가요. 취소한 활동은 한 번 더 신청할 수 있어요.' : '취소한 활동은 한 번 더 신청할 수 있어요.'}
+      confirm="신청 취소하기" danger onConfirm={onCancel} onClose={() => setAsking(false)} />}
+  </>
 }
 
 function participationLabel(item: Pick<Participation, 'status' | 'waitOrder'>) {
@@ -409,6 +458,7 @@ function offerDeadline(value: string) {
 function Applicants({ activityId, onChange }: { activityId: number; onChange: () => void }) {
   const [data, setData] = useState<{ capacity: number; confirmed: number; items: Applicant[] } | null>(null)
   const [notice, setNotice] = useState('')
+  const [noticeTone, setNoticeTone] = useState<Tone>('ok')
   const [working, setWorking] = useState<number | null>(null)
   const load = useCallback(() => api<{ capacity: number; confirmed: number; items: Applicant[] }>('/api/activities/' + activityId + '/participations').then(setData).catch(() => setData(null)), [activityId])
   useEffect(() => { load() }, [load])
@@ -417,8 +467,10 @@ function Applicants({ activityId, onChange }: { activityId: number; onChange: ()
     try {
       await api('/api/participations/' + item.id + (approve ? '/approve' : '/reject'), 'POST', {})
       setNotice(item.name + (approve ? ' 님 참가를 확정했습니다.' : ' 님 신청을 거절했습니다.'))
+      setNoticeTone('ok')
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+      setNoticeTone('error')
     }
     setWorking(null)
     load()
@@ -432,7 +484,7 @@ function Applicants({ activityId, onChange }: { activityId: number; onChange: ()
     <p className="section-lede">모집한 활동의 신청자와 대기자를 관리해요. 이름 일부만 보이며 연락처는 공개하지 않습니다.</p>
     <div className="stat-boxes"><div><strong>{data.confirmed}</strong><span>확정 · 정원 {data.capacity}명</span></div><div><strong>{counts('APPLIED')}</strong><span>승인 대기</span></div><div><strong>{counts('WAITLISTED') + counts('OFFERED')}</strong><span>대기열{counts('OFFERED') ? ` · 제안 중 ${counts('OFFERED')}` : ''}</span></div></div>
     <p className="small-print">정원이 차면 승인할 수 없고, 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안합니다.</p>
-    {notice && <p className="inline-notice" role="status">{notice}</p>}
+    {notice && <Notice text={notice} tone={noticeTone} />}
     <h3 className="list-title">신청자 목록</h3>
     {data.items.length === 0 ? <p className="empty-line">아직 신청자가 없습니다. 신청이 들어오면 알림으로 알려 드려요.</p> : <ul className="applicant-list">{data.items.map(item => <li key={item.id} className="applicant-row">
       <div className="who"><span className="avatar" aria-hidden="true"><Icon name="user" size={18} /></span><span><strong>{item.name}</strong><small>신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</small></span><span className={'status-chip ' + chipTone(item.status)}>{participationLabel(item)}</span></div>
@@ -466,7 +518,7 @@ function Notifications({ user, ready, onChange }: { user: User | null; ready: bo
     const look = noticeLook(item)
     const offer = !item.read && item.type === 'WAITLIST_OFFER' && item.link
     return <li key={item.id} className={'notice-card ' + (item.read ? 'read' : 'unread') + (look.urgent ? ' urgent' : '')}>
-      <button className="notice-main" onClick={() => open(item)}><span className="notice-icon" aria-hidden="true"><Icon name={look.icon} size={19} /></span><strong>{item.title}</strong><span>{item.body}</span><small>{item.createdAt}</small></button>
+      <button className="notice-main" onClick={() => open(item)}><span className="notice-icon" aria-hidden="true"><Icon name={look.icon} size={19} /></span><strong>{item.title}</strong><span>{item.body}</span><small title={item.createdAt}>{friendlyTime(item.createdAt)}</small></button>
       {offer && <button className="pill-button dark notice-cta" onClick={() => open(item)}>제안 확인</button>}
     </li>
   }
@@ -550,11 +602,13 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   </>
 
   // Groups from the real application states: what needs an answer first, then upcoming, in progress, and closed.
-  const group = (statuses: string[]) => (applied ?? []).filter(item => statuses.includes(item.status))
+  // Soonest first for what is coming up; most recent first for what is over.
+  const byDate = (a: MyParticipation, b: MyParticipation) => (a.date + a.startTime).localeCompare(b.date + b.startTime)
+  const group = (statuses: string[], latestFirst = false) => (applied ?? []).filter(item => statuses.includes(item.status)).sort((a, b) => latestFirst ? byDate(b, a) : byDate(a, b))
   const offers = group(['OFFERED'])
   const upcoming = group(['CONFIRMED', 'CHECKED_IN'])
   const pending = group(['APPLIED', 'WAITLISTED'])
-  const closed = group(['REJECTED', 'CANCELLED', 'EXPIRED', 'COMPLETED', 'NO_SHOW', 'HELD', 'INVALIDATED'])
+  const closed = group(['REJECTED', 'CANCELLED', 'EXPIRED', 'COMPLETED', 'NO_SHOW', 'HELD', 'INVALIDATED'], true)
   const row = (item: MyParticipation) => <li key={item.id} className="my-row">
     <DateBlock date={item.date} />
     <div className="my-row-main"><a href={'#/activity/' + item.activityId}><strong>{item.title}</strong></a>
@@ -604,6 +658,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const [recruiting, setRecruiting] = useState<LiveActivity[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [notice, setNotice] = useState('')
+  const [noticeTone, setNoticeTone] = useState<Tone>('ok')
   const [orgTab, setOrgTab] = useState<OrgStatus>('PENDING')
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   const [applications, setApplications] = useState<{ days: { date: string; applications: number }[]; statuses: Record<string, number> } | null>(null)
@@ -627,9 +682,11 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
     try {
       await api(path + (approve ? '/approve' : '/reject'), 'POST', { reason })
       setNotice(approve ? '승인했습니다.' : '반려했습니다.')
+      setNoticeTone('ok')
       load()
     } catch (cause) {
       setNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : '처리하지 못했습니다.')
+      setNoticeTone('error')
     }
   }
 
@@ -641,7 +698,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   </div>
   const pending = organizations.PENDING
   const noCoordinate = places.filter(place => place.latitude == null)
-  const status = <>{notice && <p className="inline-notice" role="status">{notice}</p>}{failed && <div className="error-banner" role="alert">일부 관리 정보를 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>}</>
+  const status = <>{notice && <Notice text={notice} tone={noticeTone} />}{failed && <div className="error-banner" role="alert">일부 관리 정보를 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>}</>
 
   if (section === 'organizations') return <>
     {head('기관 확인', '반려할 때는 사유를 꼭 적어 주세요. 사유는 신청한 기관에 보여요.')}
@@ -675,7 +732,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
     <section className="admin-card" aria-label="장소 좌표">
       <div className="admin-card-head"><h2>장소 좌표 <span className="count">{places.length}</span></h2>{noCoordinate.length > 0 && <span className="status-chip wait">좌표 없음 {noCoordinate.length}</span>}</div>
       <p className="small-print">카카오맵·네이버 지도에서 만날 지점의 좌표(위도, 경도)를 복사해 붙여넣거나, 지도가 보이면 지도를 눌러 고릅니다.</p>
-      <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); onPlacesChanged() }} />)}</ul>
+      <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={message => { setNotice(message); setNoticeTone('ok'); onPlacesChanged() }} />)}</ul>
     </section>
   </>
 
@@ -884,7 +941,7 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
       {signup && <><label>비밀번호 확인<input name="passwordConfirm" type="password" autoComplete="new-password" maxLength={signupRules.passwordMax} placeholder="비밀번호를 다시 입력해 주세요" {...invalid('passwordConfirm', errors)} /><FieldError name="passwordConfirm" errors={errors} /></label><fieldset className="safety-checks" {...invalid('notice', errors)}><legend>이용 안내</legend><label><input type="checkbox" name="notice" value="agreed" />활동 기록은 공식 봉사실적으로 인정되지 않으며 종합보험이 적용되지 않음을 확인합니다.</label><FieldError name="notice" errors={errors} /></fieldset></>}
       {count > 0 && <p className="form-alert" role="alert">입력 내용을 확인해 주세요. 고칠 항목 {count}개</p>}
       <button type="submit" className="pill-button dark" disabled={busy}>{label}</button>
-      {message && <p role="status" className="inline-notice">{message}</p>}
+      {message && <Notice text={message} tone={preview ? 'info' : 'error'} />}
       <p className="small-print">{preview ? '현재는 화면만 확인할 수 있습니다. 실제 개인정보를 입력하지 마세요.' : '비밀번호는 암호화해 저장하며, 연락처는 다른 회원에게 공개하지 않습니다.'}</p>
       <p className="account-switch">{signup ? '이미 계정이 있으신가요?' : '처음 오셨나요?'} <a href={signup ? '#/login' : '#/signup'}>{signup ? '로그인' : '회원가입'}</a></p>
     </form>

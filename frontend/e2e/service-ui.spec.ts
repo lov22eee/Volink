@@ -648,6 +648,15 @@ test('applications fill the capacity, the waitlist gets the freed seat as an off
   await page.goto('/' + link)
   await expect(page.locator('.my-status')).toHaveText('참가 확정')
   await page.getByRole('button', { name: '신청 취소' }).click()
+  const confirm = page.getByRole('alertdialog', { name: '신청을 취소할까요?' })
+  await expect(confirm).toContainText('대기 1번에게 넘어가요')
+  // Keyboard: focus starts on the safe choice, Escape closes without cancelling.
+  await expect(confirm.getByRole('button', { name: '돌아가기' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(confirm).toHaveCount(0)
+  await expect(page.locator('.my-status')).toHaveText('참가 확정')
+  await page.getByRole('button', { name: '신청 취소' }).click()
+  await confirm.getByRole('button', { name: '신청 취소하기' }).click()
   await expect(page.locator('.my-status')).toHaveText('신청 취소함')
   await signOut(page)
 
