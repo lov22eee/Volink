@@ -41,6 +41,12 @@ public class AdminController {
         admin.reviewOrganization(id(jwt), id, false, decision == null ? null : decision.reason());
     }
 
+    /** Dashboard line: applications per day (KST) and current status totals. Admin only, like every /api/admin/** path. */
+    @GetMapping("/api/admin/stats/applications")
+    public Map<String, Object> applicationStats(@RequestParam(defaultValue = "14") int days) {
+        return admin.applicationStats(days);
+    }
+
     @GetMapping("/api/admin/activities")
     public List<Map<String, Object>> activities() {
         return admin.reviewActivities();

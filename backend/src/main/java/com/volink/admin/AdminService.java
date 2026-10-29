@@ -4,7 +4,9 @@ import com.volink.activity.ActivityService;
 import com.volink.common.ApiException;
 import com.volink.common.Sql;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -75,6 +77,27 @@ public class AdminService {
             throw ApiException.validation(Map.of("reason", "반려 사유를 입력해 주세요."));
         if (value.length() > 500) throw ApiException.validation(Map.of("reason", "사유는 500자 이내로 입력해 주세요."));
         return value.isEmpty() ? fallback : value;
+    }
+
+    /**
+     * Dashboard: applications per Korean calendar day for the last {@code days} days (today included, missing days as 0)
+     * and how many applications are in each status now. Rows are counted by their first application time; applying
+     * again after a cancel reuses the same row, so it is not counted twice. Read only.
+     */
+    public Map<String, Object> applicationStats(int days) {
+        int span = Math.max(7, Math.min(60, days));
+        LocalDate today = LocalDate.now(clock), from = today.minusDays(span - 1L);
+        Map<String, Long> perDay = new LinkedHashMap<>();
+        for (int i = 0; i < span; i++) perDay.put(from.plusDays(i).toString(), 0L);
+        jdbc.queryForList(Sql.kst("""
+                SELECT DATE_FORMAT(KST(created_at), '%Y-%m-%d') AS day, COUNT(*) AS n FROM participations
+                WHERE KST(created_at) >= ? GROUP BY day
+                """), from.toString())
+                .forEach(row -> perDay.computeIfPresent((String) row.get("day"), (day, zero) -> ((Number) row.get("n")).longValue()));
+        Map<String, Long> statuses = new LinkedHashMap<>();
+        jdbc.queryForList("SELECT status, COUNT(*) AS n FROM participations GROUP BY status ORDER BY status")
+                .forEach(row -> statuses.put((String) row.get("status"), ((Number) row.get("n")).longValue()));
+        return Map.of("days", perDay.entrySet().stream().map(e -> Map.of("date", e.getKey(), "applications", e.getValue())).toList(), "statuses", statuses);
     }
 
     private LocalDateTime now() {

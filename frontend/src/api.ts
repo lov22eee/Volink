@@ -77,13 +77,20 @@ type Session = { accessToken: string; user: User }
 // second would be refused and log the person out. So every caller shares one in-flight refresh.
 let refreshing: Promise<User | null> | null = null
 
+// Remembers only that this browser signed in (no token, no name), so a first-time visitor does not send a refresh
+// request that can only fail. The session itself still lives in the HttpOnly cookie.
+const SIGNED_IN = 'volink.signedIn'
+function hint(on: boolean) { try { if (on) localStorage.setItem(SIGNED_IN, '1'); else localStorage.removeItem(SIGNED_IN) } catch { /* storage blocked */ } }
+export function mayHaveSession() { try { return localStorage.getItem(SIGNED_IN) === '1' } catch { return true } }
+
 export function refresh(): Promise<User | null> {
   refreshing ??= (async () => {
     try {
       const response = await send('/api/auth/refresh', 'POST', undefined, false)
-      if (!response.ok) { accessToken = null; return null }
+      if (!response.ok) { accessToken = null; hint(false); return null }
       const session: Session = await response.json()
       accessToken = session.accessToken
+      hint(true)
       return session.user
     } finally {
       refreshing = null
@@ -95,9 +102,10 @@ export function refresh(): Promise<User | null> {
 export async function login(email: string, password: string): Promise<User> {
   const session = await api<Session>('/api/auth/login', 'POST', { email, password })
   accessToken = session.accessToken
+  hint(true)
   return session.user
 }
 
 export async function logout() {
-  try { await send('/api/auth/logout', 'POST', undefined, false) } finally { accessToken = null }
+  try { await send('/api/auth/logout', 'POST', undefined, false) } finally { accessToken = null; hint(false) }
 }

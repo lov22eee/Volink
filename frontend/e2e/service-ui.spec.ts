@@ -45,7 +45,14 @@ async function loginAs(page: Page, email: string, secret: string) {
   await page.getByRole('textbox', { name: '이메일', exact: true }).fill(email)
   await page.getByRole('textbox', { name: '비밀번호', exact: true }).fill(secret)
   await page.getByRole('button', { name: '로그인', exact: true }).click()
-  await expect(page).toHaveURL(/#\/mine$/)
+  // Members land on 내 활동, the admin account on its dashboard.
+  await expect(page).toHaveURL(/#\/(mine|admin)$/)
+}
+
+// The main menu sits behind the button at the top left.
+async function openMenu(page: Page) {
+  await page.getByRole('button', { name: '메뉴 열기' }).click()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible()
 }
 
 async function signOut(page: Page) {
@@ -112,13 +119,21 @@ function seoulDate(days: number) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))
 }
 
-test('home shows real counts, recruiting posts and how to take part, then leads to the search', async ({ page }) => {
+test('home shows fields, upcoming real posts and how to take part, then leads to the search', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: /가까운 곳에서/ })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
-  const { length } = await (await page.request.get('/api/activities')).json()
-  await expect(page.getByRole('region', { name: '지금 모집 현황' })).toContainText(`지금 모집 중인 동네 활동${length}개`)
-  await expect(page.getByRole('region', { name: '참여 방법' }).getByRole('listitem')).toHaveCount(4)
+  await openMenu(page)
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).locator('.nav-item strong')).toHaveText(['홈', '활동 찾기', '활동 만들기', '내 활동'])
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeHidden()
+  // Volink 2.0 home: no count cards; field chips open the search with that field, tiles are real upcoming posts.
+  await expect(page.getByRole('region', { name: '어떤 봉사에 관심 있나요?' }).getByRole('link')).toHaveText(['환경 정화', '생활 지원', '지역 돌봄'])
+  const today = seoulDate(0)
+  const upcoming = (await (await page.request.get('/api/activities')).json() as { title: string; date: string }[]).filter(a => a.date >= today)
+  const tiles = page.locator('.tile[data-kind="live"]')
+  await expect(tiles).toHaveCount(Math.min(3, upcoming.length))
+  for (const title of await tiles.locator('.tile-title').allTextContents()) expect(upcoming.map(a => a.title)).toContain(title)
+  await expect(page.getByRole('region', { name: '참여 방법' }).getByRole('listitem')).toHaveCount(3)
   await expect(page.getByRole('region', { name: '참여 방법' })).toContainText('1365 활동에만 해당돼요')
   await expect(page.locator('body')).not.toContainText(developmentCopy)
   await page.screenshot({ path: shot('home'), fullPage: true })
@@ -310,13 +325,13 @@ test('create form requires login, shows field errors and only offers times that 
   await tools.getByRole('button', { name: '삭제' }).click()
   await tools.getByRole('button', { name: '삭제' }).click()
   await expect(page).toHaveURL(/#\/mine$/)
-  await page.getByRole('tab', { name: '개설한 활동' }).click()
+  await page.getByRole('tab', { name: '내가 만든 활동' }).click()
   await expect(page.getByRole('tabpanel')).not.toContainText('공원 산책로 함께 걷고 줍기 (수정)')
 })
 
-test('my activities has applicant, organizer and record views without fabricated personal history', async ({ page }) => {
+test('my activities has applicant and organizer views without fabricated personal history', async ({ page }) => {
   await page.goto('/#/mine')
-  for (const name of ['신청한 활동', '개설한 활동', '활동 기록']) {
+  for (const name of ['신청한 활동', '내가 만든 활동']) {
     await page.getByRole('tab', { name }).click()
     await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('tabpanel')).toContainText('로그인하면 내 활동을 볼 수 있습니다.')
@@ -397,6 +412,7 @@ test('all six service screens work on mobile without horizontal overflow or pres
     await expect(page.locator('body')).not.toContainText(developmentCopy)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   }
+  await openMenu(page)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 찾기', exact: true }).click()
   await expect(page.locator(examples)).toHaveCount(3)
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
@@ -456,7 +472,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await expect(page.getByRole('heading', { name: '관리자 검토 후 공개됩니다' })).toBeVisible()
   await expect(page.locator('.result-panel')).toContainText('어르신')
   await page.goto('/#/mine')
-  await page.getByRole('tab', { name: '개설한 활동' }).click()
+  await page.getByRole('tab', { name: '내가 만든 활동' }).click()
   await expect(page.getByRole('tabpanel')).toContainText(title)
   await expect(page.getByRole('tabpanel')).toContainText('관리자 검토 중')
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
@@ -468,7 +484,14 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await signOut(page)
 
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '관리' }).click()
+  await openMenu(page)
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' }).locator('.nav-item strong')).toHaveText(['대시보드', '기관 확인', '활동 검토', '장소 관리'])
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('region', { name: '게시글 승인 요약' })).toBeVisible()
+  await page.goto('/#/explore')
+  await expect(page).toHaveURL(/#\/admin$/)
+  await openMenu(page)
+  await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '활동 검토' }).click()
   const item = page.getByRole('region', { name: '검토 대기 활동' }).getByRole('listitem').filter({ hasText: title })
   await expect(item).toContainText('어르신')
   await item.getByRole('button', { name: '반려' }).click()
@@ -477,6 +500,7 @@ test('an activity that needs review stays hidden until the admin approves it', a
   await page.screenshot({ path: shot('admin'), fullPage: true })
   await item.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
+  await signOut(page)
   await page.goto('/#/explore')
   await searchFor(page, title)
   await expect(page.locator('.activity-card', { hasText: title })).toBeVisible()
@@ -491,7 +515,7 @@ test('an institution member can host an activity only after the admin approves t
   await signOut(page)
 
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.goto('/#/admin')
+  await page.goto('/#/admin/organizations')
   const organization = page.getByRole('region', { name: '기관 확인 대기' }).getByRole('listitem').filter({ hasText: email })
   await organization.getByRole('button', { name: '승인' }).click()
   await expect(page.getByRole('status')).toContainText('승인했습니다.')
@@ -514,7 +538,7 @@ test('an institution member can host an activity only after the admin approves t
 test('admin enters a place coordinate and nearby search shows distance, falling back when location is refused', async ({ page, browser }) => {
   const place = { lat: 37.81, lng: 127.09 }
   await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
-  await page.goto('/#/admin')
+  await page.goto('/#/admin/places')
   const places = page.getByRole('region', { name: '장소 좌표' })
   await places.getByLabel('독바위공원 좌표').fill('37.8x, 127')
   await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
@@ -637,6 +661,15 @@ test('applications fill the capacity, the waitlist gets the freed seat as an off
   await page.goto('/' + link)
   await expect(page.locator('.my-status')).toHaveText('참가 확정')
   await page.getByRole('button', { name: '신청 취소' }).click()
+  const confirm = page.getByRole('alertdialog', { name: '신청을 취소할까요?' })
+  await expect(confirm).toContainText('대기 1번에게 넘어가요')
+  // Keyboard: focus starts on the safe choice, Escape closes without cancelling.
+  await expect(confirm.getByRole('button', { name: '돌아가기' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(confirm).toHaveCount(0)
+  await expect(page.locator('.my-status')).toHaveText('참가 확정')
+  await page.getByRole('button', { name: '신청 취소' }).click()
+  await confirm.getByRole('button', { name: '신청 취소하기' }).click()
   await expect(page.locator('.my-status')).toHaveText('신청 취소함')
   await signOut(page)
 
@@ -648,7 +681,7 @@ test('applications fill the capacity, the waitlist gets the freed seat as an off
   await expect(page.locator('.my-status')).toHaveText('빈자리 제안 받음')
   await expect(page.getByText(/까지 수락하지 않으면 다음 대기자에게/)).toBeVisible()
   await page.screenshot({ path: shot('offer'), fullPage: true })
-  await page.getByRole('button', { name: '자리 수락' }).click()
+  await page.getByRole('button', { name: '참여할게요' }).click()
   await expect(page.locator('.my-status')).toHaveText('참가 확정')
   await page.goto('/#/mine')
   await expect(page.getByRole('listitem').filter({ hasText: title })).toContainText('참가 확정')
