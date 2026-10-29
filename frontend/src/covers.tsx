@@ -66,3 +66,17 @@ export function HeroCover({ categories }: { categories: string[] }) {
     {categories.slice(0, 3).map((category, i) => <Badge key={category} category={category} x={[160, 300, 312][i]} y={[150, 236, 384][i]} size={[104, 88, 92][i]} />)}
   </svg>
 }
+
+/** Wide strip for the bottom of the sign-up / login card: the three fields joined by a dotted path. */
+export function FieldStrip({ categories }: { categories: string[] }) {
+  const t = tones['환경 정화']
+  return <svg className="cover" viewBox="0 0 400 170" preserveAspectRatio="xMidYMid slice" role="img" aria-label="환경 정화·생활 지원·지역 돌봄 분야를 나타낸 그림">
+    {defs(t)}
+    <rect width="400" height="170" fill="#E6EFE4" />
+    <circle cx="40" cy="170" r="110" fill="#DCEADB" />
+    <circle cx="370" cy="10" r="90" fill="#D6E6D5" />
+    <path d="M70 92 C130 40 170 140 200 88 S290 40 330 92" fill="none" stroke="#BCD5C0" strokeWidth="2" strokeDasharray="4 8" />
+    <rect x="300" y="118" width="76" height="40" fill="url(#cover-dots-env)" />
+    {categories.slice(0, 3).map((category, i) => <Badge key={category} category={category} x={[80, 200, 320][i]} y={[92, 80, 92][i]} size={[68, 76, 68][i]} />)}
+  </svg>
+}

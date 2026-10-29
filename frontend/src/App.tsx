@@ -12,7 +12,7 @@ import { Glyph, SupplyChips } from './icons'
 import type { Supply } from './icons'
 import Explore from './explore'
 import Home from './home'
-import { CategoryCover } from './covers'
+import { CategoryCover, FieldStrip } from './covers'
 
 type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid' | 'menu' | 'close'
 
@@ -945,7 +945,15 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
   return <div className={'account-layout auth-v2 ' + (signup ? 'is-signup' : 'is-login')}>
     {/* The card stretches to the form's height; its text stays in view while a long sign-up form scrolls. */}
     <section className="account-intro"><div className="intro-body"><span className="intro-mark"><Icon name="leaf" size={30} /></span><h1>우리 동네의 좋은 변화,<br />여기서 시작해요.</h1><p>가까운 이웃과 함께하는 봉사활동, Volink에서 만나 보세요.</p>
-      <ul className="intro-points"><li><Icon name="pin" size={18} />걸어서 갈 수 있는 동네 활동</li><li><Icon name="clock" size={18} />30분부터, 3시간 이내</li><li><Icon name="shield" size={18} />연락처는 다른 회원에게 공개하지 않아요</li></ul></div></section>
+      <ul className="intro-points"><li><Icon name="pin" size={18} />걸어서 갈 수 있는 동네 활동</li><li><Icon name="clock" size={18} />30분부터, 3시간 이내</li><li><Icon name="shield" size={18} />연락처는 다른 회원에게 공개하지 않아요</li></ul>
+      {/* What happens after signing up; the institution path shows the admin check it goes through. */}
+      {signup && <div className={'intro-steps' + (memberType === 'institution' ? ' org' : '')}>
+        <span className="intro-steps-title">{memberType === 'institution' ? '기관 회원은 이렇게 진행돼요' : '가입하면 이렇게 돼요'}</span>
+        {memberType === 'institution'
+          ? <ol aria-label="기관 확인 절차"><li><b>1</b><span><strong>가입 신청</strong><small>기관 정보 제출</small></span></li><li><b>2</b><span><strong>확인 대기</strong><small>관리자가 기관을 확인해요</small></span></li><li><b>3</b><span><strong>확인 완료</strong><small>기관 주관 활동 개설</small></span></li></ol>
+          : <ol aria-label="가입 후 진행 순서"><li><b>1</b><span><strong>회원가입</strong><small>이름·이메일·관심 분야</small></span></li><li><b>2</b><span><strong>활동 찾기·신청</strong><small>가까운 동네 활동에 신청해요</small></span></li><li><b>3</b><span><strong>승인 후 참여</strong><small>모집자가 확인하면 확정돼요</small></span></li></ol>}
+      </div>}</div>
+      <div className="intro-art" aria-hidden="true"><FieldStrip categories={categories} /></div></section>
     <form className="activity-form account-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
       <nav className="auth-tabs" aria-label="로그인·회원가입 전환"><a href="#/login" aria-current={!signup ? 'page' : undefined}>로그인</a><a href="#/signup" aria-current={signup ? 'page' : undefined}>회원가입</a></nav>
       <h2>{signup ? '함께할 준비가 되셨나요?' : '다시 만나 반가워요!'}</h2><p className="form-description">{signup ? '어떤 모습으로 함께하시겠어요?' : '이메일과 비밀번호로 로그인해 주세요.'}</p>
@@ -954,7 +962,6 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
         <label>생년월일 <span className="field-hint">만 {signupRules.minimumAge}세 이상 가입 가능</span><input name="birthDate" type="date" autoComplete="bday" {...invalid('birthDate', errors)} /><FieldError name="birthDate" errors={errors} /></label>
         <fieldset className="interest-picker" {...invalid('interests', errors)}><legend>관심 분야 <span className="field-hint">1–{signupRules.maxInterests}개</span></legend>{categories.map(value => <label key={value}><input type="checkbox" name="interests" value={value} />{value}</label>)}<FieldError name="interests" errors={errors} /></fieldset></>}
       {signup && memberType === 'institution' && <><label>기관명<input name="organization" maxLength={100} placeholder="기관 이름을 입력해 주세요" {...invalid('organization', errors)} /><FieldError name="organization" errors={errors} /></label><label>기관 연락처<input name="organizationContact" type="tel" autoComplete="tel" maxLength={20} placeholder="담당자 연락처" {...invalid('organizationContact', errors)} /><FieldError name="organizationContact" errors={errors} /></label>
-        <ol className="org-steps" aria-label="기관 확인 절차"><li><strong>가입 신청</strong><span>기관 정보 제출</span></li><li><strong>확인 대기</strong><span>관리자가 기관을 확인해요</span></li><li><strong>확인 완료</strong><span>기관 주관 활동 개설</span></li></ol>
         <p className="inline-notice">확인 전에는 자율 활동만 열 수 있고, 확인이 반려되면 사유를 알려 드립니다. 기관 연락처는 다른 회원에게 공개하지 않습니다.</p></>}
       <label>이메일<input name="email" type="email" autoComplete={signup ? 'email' : 'username'} maxLength={254} placeholder="이메일을 입력해 주세요" {...invalid('email', errors)} /><FieldError name="email" errors={errors} /></label>
       <label>비밀번호{signup && <span className="field-hint">영문·숫자 포함 {signupRules.passwordMin}–{signupRules.passwordMax}자</span>}<input name="password" type="password" autoComplete={signup ? 'new-password' : 'current-password'} maxLength={signupRules.passwordMax} placeholder={signup ? '8자 이상 입력해 주세요' : '비밀번호를 입력해 주세요'} {...invalid('password', errors)} /><FieldError name="password" errors={errors} /></label>
