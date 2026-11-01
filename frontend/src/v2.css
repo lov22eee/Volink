@@ -831,3 +831,10 @@ a.kpi:hover { border-color: var(--green); }
   .cancelled-list .pill-button { width: 100%; }
   .home-guide.short { flex-direction: column; align-items: flex-start; }
 }
+
+/* 1365 programs in the 모든 모집글 grid: same upright card as a neighbourhood post, told apart by the blue cover and label */
+.card-kicker .card-label.program { color: #2f5a9a; }
+.program-card .card-location .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.program-card .card-org { margin: 2px 0 0; font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.program-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 12px; }
+.program-actions .pill-button { height: 40px; padding: 0 16px; font-size: 14px; }

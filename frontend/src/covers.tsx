@@ -19,12 +19,22 @@ const icons: Record<string, ReactNode> = {
   other: <><rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M4 10h16M9 3v4M15 3v4" /><path d="m9.5 14.6 1.8 1.8 3.4-3.6" /></>,
 }
 
-function Badge({ category, x, y, size = 96 }: { category: string; x: number; y: number; size?: number }) {
+// 1365 programs keep the blue tone (so they read as 1365) and only change the drawing by field.
+const programIcons: Record<string, ReactNode> = {
+  care: icons['지역 돌봄'],
+  life: icons['생활 지원'],
+  env: icons['환경 정화'],
+  edu: <><path d="M4 6.5c2.8-1 5.4-.8 8 .9 2.6-1.7 5.2-1.9 8-.9v12c-2.8-1-5.4-.8-8 .9-2.6-1.7-5.2-1.9-8-.9Z" /><path d="M12 7.4v12" /></>,
+  event: <><path d="M6 21V4" /><path d="M6 5h11l-2.5 4L17 13H6" /></>,
+  safety: <><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z" /><path d="m9 12 2 2 4-4" /></>,
+}
+
+function Badge({ category, x, y, size = 96, icon }: { category: string; x: number; y: number; size?: number; icon?: string }) {
   const t = tones[category] ?? tones.other
   const s = size / 96
   return <g transform={`translate(${x - size / 2} ${y - size / 2})`}>
     <rect width={size} height={size} rx={26 * s} fill="#fff" filter="url(#cover-lift)" />
-    <g transform={`translate(${size / 2 - 22 * s} ${size / 2 - 22 * s}) scale(${(44 / 24) * s})`} fill="none" stroke={t.ink} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{icons[category] ?? icons.other}</g>
+    <g transform={`translate(${size / 2 - 22 * s} ${size / 2 - 22 * s}) scale(${(44 / 24) * s})`} fill="none" stroke={t.ink} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{(icon && programIcons[icon]) ?? icons[category] ?? icons.other}</g>
   </g>
 }
 
@@ -42,14 +52,14 @@ const defs = (t: Tone) => <defs>
   <pattern id={'cover-dots-' + t.key} width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.6" fill={t.ring} /></pattern>
 </defs>
 
-export function CategoryCover({ category, seed, className }: { category: string; seed: number; className?: string }) {
+export function CategoryCover({ category, seed, className, icon }: { category: string; seed: number; className?: string; icon?: string }) {
   const t = tones[category] ?? tones.other
   const n = Math.abs(seed)
   return <svg className={'cover' + (className ? ' ' + className : '')} viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label={`${category} 기본 커버 그림`}>
     {defs(t)}
     <rect width="400" height="300" fill={t.bg[(n >> 2) % t.bg.length]} />
     <Shapes t={t} n={n} />
-    <Badge category={category} x={200} y={150} />
+    <Badge category={category} x={200} y={150} icon={icon} />
   </svg>
 }
 
