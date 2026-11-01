@@ -736,7 +736,7 @@ test('1365 programs appear next to our activities with a link to apply on 1365 (
   await sources.getByRole('button', { name: /1365 활동/ }).click()
   await expect(card).toHaveCount(1)
   await expect(page.locator('.hit-card .source.local')).toHaveCount(0)
-  await expect(page.locator('#all-list + .activity-grid .program-tile')).toContainText('예시 1365 활동')
+  await expect(page.locator('#all-list + .activity-grid .program-card')).toContainText('예시 1365 활동')
   await context.close()
 })
 

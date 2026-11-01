@@ -275,7 +275,7 @@ export default function Explore({ catalog }: { catalog: Catalog | null }) {
         <div className="all-head" id="all-list"><h3>모든 모집글</h3><span className="list-count">가까운 순 · {everything.length}개 ·
           <select aria-label="한 쪽에 보일 개수" value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>{[9, 18, 30].map(n => <option key={n} value={n}>{n}개씩</option>)}</select></span></div>
         {everything.length ? <div className="activity-grid">{everything.slice((page - 1) * pageSize, page * pageSize).map(entry => entry.card ? <ActivityCard key={entry.key} item={entry.card} />
-          : <div key={entry.key} className="program-tile"><HitCard hit={entry.hit!} active={false} onDetail={setProgramDetail} /></div>)}</div>
+          : <ProgramCard key={entry.key} program={entry.hit!.program!} distanceKm={entry.hit!.distanceKm} onDetail={setProgramDetail} />)}</div>
           : <div className="empty-state"><p>조건에 맞는 모집글이 없습니다. 다른 조건으로 찾아보세요.</p>{activeFilters > 0 && <button type="button" className="secondary-button" onClick={resetFilters}>조건 모두 지우기</button>}</div>}
         <Pages total={everything.length} size={pageSize} page={page} onPage={next => { setPage(next); document.getElementById('all-list')?.scrollIntoView() }} />
       </>
@@ -347,6 +347,37 @@ export function when1365(program: Program) {
   return [period, program.weekdays, program.beginTime && program.endTime ? program.beginTime + ' ~ ' + program.endTime : null].filter(Boolean).join(' · ')
 }
 
+// 1365 field by words in its service class or title (the live field codes are not confirmed yet), for the cover drawing.
+const programKinds: [string, string, RegExp][] = [
+  ['care', '돌봄', /노인|어르신|장애|돌봄|말벗|요양|보건|의료|복지관|병원|호스피스/],
+  ['edu', '교육', /교육|멘토|학습|아동|청소년|공부|교실|도서/],
+  ['env', '환경', /환경|정화|플로깅|쓰레기|숲|하천|공원|생태|분리수거/],
+  ['event', '행사', /행사|축제|문화|공연|체육|캠페인|전시/],
+  ['safety', '안전', /재난|안전|방범|순찰|소방|교통/],
+  ['life', '생활 지원', /식사|배식|급식|도시락|나눔|물품|장보기|생활|주거|김장|빨래/],
+]
+export function programKind(p: Pick<Program, 'field' | 'title'>) {
+  const text = (p.field ?? '') + ' ' + p.title
+  const hit = programKinds.find(([, , words]) => words.test(text))
+  return hit ? { icon: hit[0], label: hit[1] } : null
+}
+
+/** A 1365 program in the same upright shape as a neighbourhood card, so mixed rows line up. */
+function ProgramCard({ program: p, distanceKm, onDetail }: { program: Program; distanceKm: number | null; onDetail: (program: Program) => void }) {
+  const kind = programKind(p)
+  return <article className="activity-card program-card">
+    <span className="card-cover"><CategoryCover category="1365" seed={p.programNo.length + p.title.length} icon={kind?.icon} /></span>
+    <div className="card-body">
+      <p className="card-kicker"><span className="card-label program">1365 활동</span><span className="category-label">{[kind?.label, p.youthOk ? '청소년 가능' : null, p.recruitStatus].filter(Boolean).join(' · ') || '공식 봉사활동'}</span></p>
+      <h3 title={p.title}>{p.title}</h3>
+      <p className="card-date">{when1365(p) || '일정은 1365에서 확인'}</p>
+      <p className="card-location"><Glyph name="pin" size={15} /><span className="clip">{p.place ?? '장소 정보 없음'}</span>{distanceKm != null && <span className="distance">{distanceKm}km · {travel(distanceKm)}</span>}</p>
+      <p className="card-org">모집: {p.organization ?? '1365'} · 실적 인정은 1365 기준</p>
+      <div className="program-actions"><button className="pill-button line small" onClick={() => onDetail(p)}>자세히</button><a className="link-out" href={p.link} target="_blank" rel="noopener noreferrer">1365에서 신청 <Glyph name="external" size={14} /></a></div>
+    </div>
+  </article>
+}
+
 function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean; onHover?: (on: boolean) => void; onDetail?: (program: Program) => void }) {
   const hover = onHover ? { onMouseEnter: () => onHover(true), onMouseLeave: () => onHover(false), onFocus: () => onHover(true), onBlur: () => onHover(false) } : {}
   const distance = hit.distanceKm != null && <span className="distance">{hit.distanceKm}km · {travel(hit.distanceKm)}</span>
@@ -365,7 +396,7 @@ function HitCard({ hit, active, onHover, onDetail }: { hit: Hit; active: boolean
   }
   const p = hit.program!
   return <article className={'hit-card' + (active ? ' active' : '')} {...hover}>
-    <span className="hit-cover"><CategoryCover category="1365" seed={p.programNo.length + p.title.length} /></span><div className="hit-main">
+    <span className="hit-cover"><CategoryCover category="1365" seed={p.programNo.length + p.title.length} icon={programKind(p)?.icon} /></span><div className="hit-main">
     <div className="hit-tags"><span className="source program">1365 활동</span>{p.youthOk && <span className="tag">청소년 가능</span>}{p.recruitStatus && <span className="tag">{p.recruitStatus}</span>}</div>
     <h3 title={p.title}>{p.title}</h3>
     <p><Glyph name="pin" size={14} /><span className="clip">{p.place ?? '장소 정보 없음'}</span>{distance}</p>
