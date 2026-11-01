@@ -953,7 +953,7 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
       })
       const session = await login(email, password)
       onSession(session)
-      window.location.hash = session.role === 'ADMIN' ? '#/admin' : '#/mine'
+      window.location.hash = session.role === 'ADMIN' ? '#/admin' : '#/home'
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
       else setMessage(cause instanceof Error ? cause.message : '요청을 처리하지 못했습니다.')

@@ -36,7 +36,7 @@ async function signup(page: Page, options: { institution?: boolean } = {}) {
   await page.getByRole('textbox', { name: '비밀번호 확인', exact: true }).fill(password)
   await page.getByRole('checkbox', { name: /공식 봉사실적/ }).check()
   await page.getByRole('button', { name: '가입하기' }).click()
-  await expect(page).toHaveURL(/#\/mine$/)
+  await expect(page).toHaveURL(/#\/home$/)
   return email
 }
 
@@ -46,7 +46,7 @@ async function loginAs(page: Page, email: string, secret: string) {
   await page.getByRole('textbox', { name: '비밀번호', exact: true }).fill(secret)
   await page.getByRole('button', { name: '로그인', exact: true }).click()
   // Members land on 내 활동, the admin account on its dashboard.
-  await expect(page).toHaveURL(/#\/(mine|admin)$/)
+  await expect(page).toHaveURL(/#\/(home|admin)$/)
 }
 
 // The main menu sits behind the button at the top left.
@@ -380,7 +380,8 @@ test('signup checks every rule on screen, then creates an institution member wai
   await page.screenshot({ path: shot('signup'), fullPage: true })
   await page.getByRole('textbox', { name: '비밀번호 확인', exact: true }).fill('example123')
   await page.getByRole('button', { name: '가입하기' }).click()
-  await expect(page).toHaveURL(/#\/mine$/)
+  await expect(page).toHaveURL(/#\/home$/)
+  await page.goto('/#/mine')
   await expect(page.getByLabel('내 정보')).toContainText('기관회원')
   await expect(page.getByLabel('내 정보')).toContainText('기관 확인 대기 중')
   await expect(page.locator('body')).not.toContainText(developmentCopy)
@@ -425,11 +426,13 @@ test('login survives a page reload and logout ends the session', async ({ page }
   const email = await signup(page)
   await page.reload()
   await expect(page.getByRole('navigation', { name: '계정 메뉴' })).toContainText('테스트 회원님')
+  await page.goto('/#/mine')
   await expect(page.getByLabel('내 정보')).toContainText(email)
   await signOut(page)
   await page.reload()
   await expect(page.getByRole('navigation', { name: '계정 메뉴' }).getByRole('link', { name: '로그인' })).toBeVisible()
   await loginAs(page, email, password)
+  await page.goto('/#/mine')
   await expect(page.getByLabel('내 정보')).toContainText('일반회원')
 })
 
@@ -524,6 +527,7 @@ test('an institution member can host an activity only after the admin approves t
   await signOut(page)
 
   await loginAs(page, email, password)
+  await page.goto('/#/mine')
   await expect(page.getByLabel('내 정보')).toContainText('기관 확인 완료')
   const title = '기관과 함께하는 공원 정화 ' + Date.now().toString().slice(-6)
   await fillActivity(page, title, '기관 담당자와 함께 공원의 가벼운 쓰레기를 정리하는 활동입니다.')
@@ -756,4 +760,31 @@ test('the place picker asks for the location once and then starts where the user
   await expect(dialog.getByRole('group', { name: '내 위치에서 시작' })).toHaveCount(0)
   await expect(dialog.getByRole('list', { name: '검색 결과' }).getByRole('listitem').first()).toBeVisible()
   await context.close()
+})
+
+test('signed-in home shows my status and keeps a cancelled activity apart with a way back in', async ({ page }) => {
+  await signup(page)
+  const title = '홈 취소 확인 ' + Date.now()
+  await fillActivity(page, title, '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다.')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = await page.getByRole('link', { name: /모집글 보기/ }).getAttribute('href')
+  await signOut(page)
+
+  await signup(page)
+  await expect(page).toHaveURL(/#\/home$/)
+  await expect(page.getByRole('region', { name: '내 활동 현황' })).toContainText('확정된 일정이 아직 없어요')
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.getByRole('status')).toContainText('신청했어요')
+  await page.getByRole('button', { name: '신청 취소' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: '신청 취소하기' }).click()
+  await expect(page.locator('.my-status')).toHaveText('신청 취소함')
+
+  await page.goto('/#/home')
+  const cancelled = page.getByRole('region', { name: '취소한 일정이 있어요' })
+  await expect(cancelled).toContainText(title)
+  await expect(page.getByRole('region', { name: /이번 주, 함께할 활동|곧 열리는 활동/ })).not.toContainText(title)
+  await cancelled.getByRole('link', { name: '다시 신청' }).click()
+  await expect(page).toHaveURL(new RegExp(link! + '$'))
+  await expect(page.getByRole('button', { name: /참가 신청/ })).toBeVisible()
 })
