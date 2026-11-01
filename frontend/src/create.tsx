@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import type { LiveActivity, User } from './api'
-import { categories, LoginRequired, PageHeading } from './App'
+import { categories, Icon, LoginRequired, PageHeading } from './App'
 import { Glyph, supplyGlyph } from './icons'
 import type { GlyphName } from './icons'
 import type { Supply } from './icons'
@@ -230,16 +230,16 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
       <button className="primary-button" type="submit" disabled={busy}>수정 저장 <Glyph name="arrow" size={17} /></button>
       {message && <p role="status" className="success-message">{message}</p>}
     </form></>
-  if (result) return <>
-    {heading}
-    <section className="panel result-panel" role="status">
-      <span className={'risk-badge ' + (result.kind === 'published' ? 'low' : 'review')}>{result.kind === 'published' ? '바로 공개' : '관리자 검토'}</span>
-      <h2>{editId ? (result.kind === 'published' ? '수정한 내용을 저장했습니다' : '수정한 내용은 관리자 확인 후 공개됩니다') : result.kind === 'published' ? '활동이 공개되었습니다' : '관리자 검토 후 공개됩니다'}</h2>
-      <p>{result.kind === 'published' ? '활동 찾기 목록에서 이웃들이 볼 수 있습니다.' : '확인이 필요한 내용이 있어 관리자가 확인한 뒤 공개합니다. 그 전에는 나와 관리자만 볼 수 있습니다.'}</p>
+  if (result) {
+    const published = result.kind === 'published'
+    return <section className="create-done" role="status">
+      <span className={'done-mark ' + (published ? 'ok' : 'wait')} aria-hidden="true"><Icon name={published ? 'check' : 'clock'} size={42} /></span>
+      <h1>{editId ? (published ? '수정한 내용을 저장했어요' : '수정한 내용은 관리자 확인 후 공개돼요') : published ? '활동이 공개되었어요' : '관리자 확인 후 공개돼요'}</h1>
+      <p>{published ? '활동 찾기 목록에서 이웃들이 볼 수 있어요.' : '확인이 필요한 내용이 있어 관리자가 확인한 뒤 공개해요. 그 전에는 나와 관리자만 볼 수 있어요.'}</p>
       {result.activity.riskReasons && <p className="small-print">검토 이유: {result.activity.riskReasons}</p>}
-      <div className="button-row"><a className="primary-button" href={'#/activity/' + result.activity.id}>만든 활동 보기 <Glyph name="arrow" size={17} /></a><button className="secondary-button" onClick={() => { setResult(null); setMessage('') }}>다른 활동 만들기</button></div>
+      <div className="button-row"><a className="pill-button green" href={'#/activity/' + result.activity.id}>모집글 보기 <Glyph name="arrow" size={17} /></a><button className="pill-button line" onClick={() => { setResult(null); setMessage('') }}>다른 활동 만들기</button></div>
     </section>
-  </>
+  }
 
   const count = Object.keys(errors).length
   const err = (name: string) => errors[name] ? { 'aria-invalid': true as const, 'aria-describedby': name + '-error' } : {}
