@@ -229,7 +229,7 @@ main { width: 100%; max-width: 1280px; margin: 0 auto; flex: 1; padding: 32px va
 .apply-box .button-row .primary-button { width: 100%; }
 .apply-box .inline-notice { margin: 0; }
 
-.owner-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 20px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.owner-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* Organizer: applicants */
 .applicants { margin-top: 28px; }

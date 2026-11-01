@@ -342,7 +342,7 @@ function LocationAsk({ locating, notice, onLocate, onPick, onSkip }: { locating:
   </section>
 }
 
-function when1365(program: Program) {
+export function when1365(program: Program) {
   const period = program.periodStart && program.periodEnd ? (program.periodStart === program.periodEnd ? program.periodStart.slice(5).replace('-', '/') : program.periodStart.slice(5).replace('-', '/') + ' ~ ' + program.periodEnd.slice(5).replace('-', '/')) : ''
   return [period, program.weekdays, program.beginTime && program.endTime ? program.beginTime + ' ~ ' + program.endTime : null].filter(Boolean).join(' · ')
 }
