@@ -68,10 +68,12 @@ public class CheckInService {
         // Live attendance for the organizer's on-site screen.
         Map<String, Object> counts = jdbc.queryForMap("""
                 SELECT COALESCE(SUM(status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW')), 0) AS expected,
-                       COALESCE(SUM(status IN ('CHECKED_IN', 'COMPLETED')), 0) AS checkedIn
+                       COALESCE(SUM(status IN ('CHECKED_IN', 'COMPLETED')), 0) AS checkedIn,
+                       COALESCE(SUM(status = 'CHECKED_IN'), 0) AS toComplete
                 FROM participations WHERE activity_id = ?""", activityId);
         result.put("expected", ((Number) counts.get("expected")).intValue());
         result.put("checkedIn", ((Number) counts.get("checkedIn")).intValue());
+        result.put("toComplete", ((Number) counts.get("toComplete")).intValue());
         result.put("status", activity.status());
         return result;
     }

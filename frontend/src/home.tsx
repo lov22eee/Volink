@@ -13,6 +13,7 @@ import type { GlyphName } from './icons'
 import { when1365 } from './explore'
 import type { Program } from './explore'
 import { currentPosition, remember, remembered } from './location'
+import { hhmm, phaseOf, useNow } from './checkin'
 
 const categoryIcon: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
 
@@ -150,6 +151,9 @@ function MyStatus({ items, name }: { items: MyParticipation[]; name: string }) {
   const count = (...statuses: string[]) => upcoming.filter(p => statuses.includes(p.status)).length
   const next = upcoming.filter(p => p.status === 'CONFIRMED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))[0]
   const offers = upcoming.filter(p => p.status === 'OFFERED')
+  // Confirmed and on site now: the check-in window is open (30 min before to 30 min after the start).
+  const now = useNow()
+  const checkins = upcoming.filter(p => p.status === 'CONFIRMED').map(p => ({ p, day: phaseOf(p.date, p.startTime, 60, now) })).filter(({ day }) => day.phase === 'open')
   return <section className="home-me" aria-label="내 활동 현황">
     <div className="me-bar">
       <div className="me-hi"><strong>{name}님</strong><span>내 활동 현황</span></div>
@@ -162,6 +166,11 @@ function MyStatus({ items, name }: { items: MyParticipation[]; name: string }) {
         : <p className="me-next empty">확정된 일정이 아직 없어요.</p>}
       <a className="pill-button line small" href="#/mine">내 활동 <Icon name="arrow" size={15} /></a>
     </div>
+    {checkins.map(({ p, day }) => <div key={'c' + p.id} className="me-offer checkin" role="note">
+      <span className="me-offer-icon" aria-hidden="true"><Glyph name="check" size={18} /></span>
+      <span><strong>체크인이 열렸어요 · {hhmm(day.closes)}까지</strong>{p.title} · 현장에서 모집자의 QR을 휴대폰 카메라로 찍어 주세요</span>
+      <a className="pill-button green small" href={'#/activity/' + p.activityId}>체크인 방법</a>
+    </div>)}
     {offers.map(p => <div key={p.id} className="me-offer" role="note">
       <span className="me-offer-icon" aria-hidden="true"><Glyph name="clock" size={18} /></span>
       <span><strong>빈자리가 생겼어요{p.offerExpiresAt ? ' · ' + deadline(p.offerExpiresAt) + '까지 응답' : ''}</strong>{p.title}</span>

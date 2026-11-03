@@ -5,13 +5,15 @@ import type { DisplayCatalog as Catalog } from './data'
 import { signupRules, validateSignup } from './rules'
 import type { Errors } from './rules'
 import { api, ApiError, login, logout, mayHaveSession, preview, refresh } from './api'
-import type { Applicant, AppNotification, LiveActivity, MyParticipation, Participation, PlaceInfo, User, ViewerInfo } from './api'
+import type { Applicant, AppNotification, MyRecord, LiveActivity, MyParticipation, Participation, PlaceInfo, User, ViewerInfo } from './api'
 import { kakaoEnabled, PlaceMap } from './map'
 import CreateActivity from './create'
 import { Glyph, SupplyChips } from './icons'
 import type { Supply } from './icons'
 import Explore from './explore'
 import Home from './home'
+import { AttendancePanel, CheckInHint, CheckInPage, phaseOf, takeNext, useNow } from './checkin'
+import type { Phase } from './checkin'
 import { CategoryCover, FieldStrip } from './covers'
 
 type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid' | 'menu' | 'close' | 'check' | 'edit' | 'trash'
@@ -56,15 +58,18 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 }
 
 
-type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications'
+type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications' | 'checkin'
 type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places'
-type Route = { page: Page; activityId?: number; section?: AdminSection }
+type Route = { page: Page; activityId?: number; section?: AdminSection; token?: string }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
 export const categories = ['환경 정화', '생활 지원', '지역 돌봄']
 
 function getRoute(): Route {
-  const path = window.location.hash.replace(/^#\/?/, '').replace(/\?.*$/, '')
+  const [path, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?')
+  // The organizer's QR opens #/checkin/{id}?t={value} on the participant's phone.
+  const checkin = /^checkin\/(\d+)$/.exec(path)
+  if (checkin) return { page: 'checkin', activityId: Number(checkin[1]), token: new URLSearchParams(query).get('t') ?? undefined }
   const example = /^activities\/(\d+)$/.exec(path)
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
@@ -172,7 +177,7 @@ export default function App() {
   useEffect(() => {
     if (isAdmin && ['home', 'explore', 'detail', 'create', 'edit', 'mine', 'notifications', 'login', 'signup'].includes(route.page)) window.location.hash = '#/admin'
   }, [isAdmin, route.page])
-  const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림' }
+  const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림', checkin: '체크인' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
   const accountNav = isAdmin && user
@@ -205,6 +210,7 @@ export default function App() {
       {route.page === 'explore' && <Explore catalog={catalog} />}
       {route.page === 'detail' && (example && catalog ? <ExampleDetail activity={fromExample(example, catalog.baseDate)} description={example.description} /> : catalog ? <NotFound /> : <div className="loading-state" role="status">활동 정보를 불러오는 중입니다.</div>)}
       {route.page === 'live' && route.activityId && <LiveDetail key={route.activityId} id={route.activityId} ready={ready} user={user} onChange={pollUnread} />}
+      {route.page === 'checkin' && route.activityId && <CheckInPage key={route.activityId} id={route.activityId} token={route.token} user={user} ready={ready} />}
       {route.page === 'notifications' && <Notifications user={user} ready={ready} onChange={pollUnread} />}
       {route.page === 'create' && <CreateActivity user={user} ready={ready} />}
       {route.page === 'edit' && route.activityId && <CreateActivity key={'edit-' + route.activityId} user={user} ready={ready} editId={route.activityId} />}
@@ -293,7 +299,7 @@ export function fromExample(activity: Catalog['activities'][number], baseDate: s
   return { ...activity, key: 'example-' + activity.id, kind: 'example', date: baseDate, href: '#/activities/' + activity.id }
 }
 
-function dateLabel(value: string) {
+export function dateLabel(value: string) {
   return new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(value + 'T12:00:00+09:00'))
 }
 
@@ -378,6 +384,10 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   const [viewer, setViewer] = useState<ViewerInfo | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  // Time-based states (check-in open, started, ended) follow the clock; the applicant list reloads with the attendance panel.
+  const now = useNow()
+  const [applicantsTick, setApplicantsTick] = useState(0)
+  const reloadApplicants = useCallback(() => setApplicantsTick(value => value + 1), [])
   const loadViewer = useCallback(() => api<ViewerInfo>('/api/activities/' + id + '/my-participation').then(setViewer).catch(() => setViewer(null)), [id])
   useEffect(() => {
     if (!ready) return
@@ -403,14 +413,19 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
     }
   }
 
-  const hidden = activity.status !== 'RECRUITING'
+  // Started or finished activities stay visible to everyone; only drafts and rejected ones are hidden.
+  const hidden = activity.status === 'DRAFT' || activity.status === 'CANCELLED'
+  const recruiting = activity.status === 'RECRUITING'
+  const day = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
   const organizer = user != null && activity.organizerId === user.id
   const seats = viewer ?? { confirmed: activity.confirmed, offered: 0, waiting: 0, pending: 0, participation: null }
   const full = seats.confirmed + seats.offered >= activity.capacity
   const mine = seats.participation
   const item = { ...fromLive(activity), confirmed: seats.confirmed }
   const share = (n: number) => activity.capacity > 0 ? Math.min(100, n / activity.capacity * 100) + '%' : '0%'
-  const help = statusHelp(mine, full, seats.waiting, user != null && !organizer && user.role !== 'ADMIN' && !hidden)
+  // While check-in is open (or just closed) the check-in hint replaces the general "confirmed" help.
+  const onSite = mine?.status === 'CONFIRMED' && (day.phase === 'open' || day.phase === 'late')
+  const help = onSite ? null : statusHelp(mine, full, seats.waiting, user != null && !organizer && user.role !== 'ADMIN' && recruiting)
   const left = Math.max(0, activity.capacity - seats.confirmed - seats.offered)
   const action = <div className="apply-box">
     <div className="seat-meter">
@@ -419,7 +434,9 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
       <small>{full ? (mine || organizer ? '정원이 찼어요.' : '정원이 찼어요. 지금 신청하면 대기 순번을 받아요.') : `${left}자리 남았어요. 지금 신청할 수 있어요.`}</small>
     </div>
     {mine && <p className={'my-status ' + mine.status.toLowerCase()}>{participationLabel(mine)}</p>}
-    {help && <div className="status-help">{!mine && !full && <strong>신청 후 모집자 승인을 기다려요</strong>}<span>{help}</span></div>}
+    {mine?.status === 'CONFIRMED' && <CheckInHint phase={day.phase} opens={day.opens} closes={day.closes} />}
+    {help && <div className="status-help">{!mine && !full && recruiting && <strong>신청 후 모집자 승인을 기다려요</strong>}<span>{help}</span></div>}
+    {!recruiting && !hidden && !mine && !organizer && <p className="status-help"><span>{activity.status === 'FINISHED' ? '끝난 활동이에요. 다른 활동을 찾아보세요.' : '이미 시작한 활동이라 신청할 수 없어요.'}</span></p>}
     <ApplyButtons activity={activity} user={user} ready={ready} organizer={organizer} full={full} mine={mine} busy={busy || hidden} act={act} />
     {message && <Notice text={message} tone="error" />}
     {user && !organizer && <p className="booking-foot">신청 상태는 내 활동과 알림에서 확인할 수 있어요.</p>}
@@ -434,9 +451,12 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
       <button className="pill-button line" disabled={busy} onClick={() => act('/api/participations/' + mine.id + '/decline-offer', '자리 제안을 거절했어요', '다음 대기자에게 넘어가요')}>이번에는 참여하지 않을게요</button></div>
     <p className="small-print">{mine.offerExpiresAt ? offerDeadline(mine.offerExpiresAt) + '까지 수락하지 않으면 다음 대기자에게 넘어갑니다.' : '마감 시각이 지나면 수락할 수 없고, 자리는 다음 대기자에게 넘어가요.'}</p>
   </section> : null
-  return <DetailView item={item} description={activity.description} badge={hidden ? statusLabel(activity.status) : '모집 중'} supplies={activity.supplies} top={offer}
+  return <DetailView item={item} description={activity.description} badge={recruiting ? '모집 중' : statusLabel(activity.status)} supplies={activity.supplies} top={offer}
     note={'개설: ' + activity.organizerName + ' · 신청·확정 안내는 화면 안 알림으로 드립니다. 연락처는 공개하지 않습니다.'} action={action}
-    extra={organizer && <Applicants activityId={activity.id} onChange={() => { loadViewer(); onChange() }} />}
+    extra={organizer && <>
+      {!hidden && day.phase !== 'later' && <AttendancePanel activity={activity} phase={day.phase} onChanged={reloadApplicants} />}
+      <Applicants activityId={activity.id} phase={day.phase} tick={applicantsTick} onChange={() => { loadViewer(); onChange() }} />
+    </>}
     tools={activity.applicants !== undefined && ['RECRUITING', 'DRAFT'].includes(activity.status) && <OwnerTools activity={activity} />}>
     {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
     {(activity.applicants ?? 0) > 0 && ['RECRUITING', 'DRAFT'].includes(activity.status) && <p className="small-print owner-note">신청한 사람이 {activity.applicants}명 있어 일정·장소는 바꿀 수 없고 삭제도 할 수 없어요. 소개와 만나는 곳은 고칠 수 있어요.</p>}
@@ -453,6 +473,9 @@ function statusHelp(mine: Participation | null, full: boolean, waiting: number, 
     case 'EXPIRED': return '응답 시간이 지나 자리가 다음 대기자에게 넘어갔어요.'
     case 'CANCELLED': return (mine.cancelCount ?? 0) >= 2 ? '이 활동은 다시 신청할 수 없어요.' : '취소한 활동은 한 번 더 신청할 수 있어요.'
     case 'OFFERED': return null
+    case 'CHECKED_IN': return '출석했어요. 활동이 끝나면 모집자가 완료를 확인하고 활동 기록이 만들어져요.'
+    case 'COMPLETED': return '활동을 마쳤어요! 내 활동 > 활동 기록에서 볼 수 있어요. (공식 봉사실적이 아니에요)'
+    case 'NO_SHOW': return '체크인 기록 없이 활동이 끝나 불참으로 처리됐어요.'
   }
   if (!canApply) return null
   return full ? `정원이 차서 대기 신청돼요${waiting ? ` (현재 대기 ${waiting}명)` : ''}. 빈자리가 생기면 순서대로 제안해요.` : '신청하면 모집자가 확인한 뒤 참가가 확정돼요.'
@@ -462,13 +485,15 @@ function ApplyButtons({ activity, user, ready, organizer, full, mine, busy, act 
   if (!user) return ready ? <a className="pill-button dark" href="#/login">로그인하고 신청하기</a> : null
   if (organizer) return <p className="small-print">내가 만든 활동입니다. 아래에서 신청자를 확인하세요.</p>
   if (user.role === 'ADMIN') return <button disabled className="pill-button dark">관리자는 신청할 수 없습니다</button>
+  // Once it has started (or finished) nothing can be applied for or cancelled here.
+  if (activity.status !== 'RECRUITING') return null
   const base = '/api/participations/' + mine?.id
   switch (mine?.status) {
     case 'APPLIED': case 'WAITLISTED': case 'CONFIRMED':
       return <CancelButton busy={busy} confirmed={mine.status === 'CONFIRMED'} onCancel={() => act(base + '/cancel', '신청을 취소했어요', mine.status === 'CONFIRMED' ? '자리는 대기 1번에게 넘어가요' : '')} />
     case 'OFFERED':
       return <p className="small-print">위의 빈자리 제안에서 참여 여부를 정해 주세요.</p>
-    case 'REJECTED': return null
+    case 'REJECTED': case 'CHECKED_IN': case 'COMPLETED': case 'NO_SHOW': case 'HELD': case 'INVALIDATED': return null
     case 'CANCELLED': if ((mine.cancelCount ?? 0) >= 2) return null
   }
   return <button className="pill-button dark" disabled={busy} onClick={() => full ? act('/api/activities/' + activity.id + '/participations', '대기 신청했어요', '빈자리가 생기면 순서대로 알려 드려요') : act('/api/activities/' + activity.id + '/participations', '신청했어요', '모집자가 승인하면 알려 드려요')}>{busy ? '처리 중…' : full ? '대기 신청하기' : '참가 신청하기'}</button>
@@ -500,35 +525,54 @@ function offerDeadline(value: string) {
   return dateLabel(date) + ' ' + time
 }
 
-function Applicants({ activityId, onChange }: { activityId: number; onChange: () => void }) {
+// Reasons the organizer can pick for a manual check-in (they can also type their own).
+const manualReasons = ['위치 권한을 허용하지 않음', 'GPS가 잡히지 않음', 'QR을 찍을 수 없는 휴대폰', '현장에서 얼굴로 확인함']
+
+function Applicants({ activityId, phase, tick, onChange }: { activityId: number; phase: Phase; tick: number; onChange: () => void }) {
   const [data, setData] = useState<{ capacity: number; confirmed: number; items: Applicant[] } | null>(null)
   const [notice, setNotice] = useState('')
   const [working, setWorking] = useState<number | null>(null)
+  const [manual, setManual] = useState<{ id: number; reason: string } | null>(null)
   const load = useCallback(() => api<{ capacity: number; confirmed: number; items: Applicant[] }>('/api/activities/' + activityId + '/participations').then(setData).catch(() => setData(null)), [activityId])
-  useEffect(() => { load() }, [load])
-  async function decide(item: Applicant, approve: boolean) {
+  useEffect(() => { load() }, [load, tick])
+  async function run(item: Applicant, action: string, body: object, done: string, detail = '') {
     setWorking(item.id)
     try {
-      await api('/api/participations/' + item.id + (approve ? '/approve' : '/reject'), 'POST', {})
+      await api('/api/participations/' + item.id + '/' + action, 'POST', body)
       setNotice('')
-      showToast(item.name + (approve ? ' 님 참가를 확정했어요' : ' 님 신청을 거절했어요'), approve ? '참가자에게 알림을 보냈어요' : '')
+      setManual(null)
+      showToast(item.name + ' 님 ' + done, detail)
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+      setNotice(cause instanceof ApiError ? (cause.fieldErrors.reason ?? cause.message) : cause instanceof Error ? cause.message : '처리하지 못했습니다.')
     }
     setWorking(null)
     load()
     onChange()
   }
+  const decide = (item: Applicant, approve: boolean) => run(item, approve ? 'approve' : 'reject', {}, approve ? '참가를 확정했어요' : '신청을 거절했어요', approve ? '참가자에게 알림을 보냈어요' : '')
+  // Manual check-in from 30 min before the start until the end; completion only after the end.
+  const canManual = phase === 'open' || phase === 'late'
   if (!data) return null
   const counts = (status: string) => data.items.filter(item => item.status === status).length
+  const checked = counts('CHECKED_IN') + counts('COMPLETED')
   return <section className="applicants" aria-label="신청자 관리">
     <div className="applicants-head"><h2>신청자 관리 <span className="count">{data.items.length}</span></h2><span>이름 일부만 보이고 연락처는 공개하지 않아요</span></div>
-    <p className="applicant-counts">확정 <b>{data.confirmed} / {data.capacity}명</b> · 승인 대기 <b>{counts('APPLIED')}</b> · 대기 <b>{counts('WAITLISTED') + counts('OFFERED')}</b>{counts('OFFERED') ? ` (제안 중 ${counts('OFFERED')})` : ''}</p>
+    <p className="applicant-counts">확정 <b>{data.confirmed} / {data.capacity}명</b> · 승인 대기 <b>{counts('APPLIED')}</b> · 대기 <b>{counts('WAITLISTED') + counts('OFFERED')}</b>{counts('OFFERED') ? ` (제안 중 ${counts('OFFERED')})` : ''}{checked || phase === 'open' || phase === 'late' || phase === 'ended' ? <> · 출석 <b>{checked}</b></> : null}</p>
     <p className="small-print">정원이 차면 승인할 수 없고, 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안합니다.</p>
     {notice && <Notice text={notice} tone="error" />}
     {data.items.length === 0 ? <p className="empty-line">아직 신청자가 없습니다. 신청이 들어오면 알림으로 알려 드려요.</p> : <ul className="applicant-list">{data.items.map(item => <li key={item.id} className="applicant-row">
-      <div className="who"><span className="avatar" aria-hidden="true"><Icon name="user" size={18} /></span><span><strong>{item.name}</strong><small>신청 {item.appliedAt}{item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : ''}</small></span><span className={'status-chip ' + chipTone(item.status)}>{participationLabel(item)}</span></div>
-      {(item.status === 'APPLIED' || item.status === 'WAITLISTED') && <div className="button-row">{item.status === 'APPLIED' && <button className="pill-button dark small" disabled={working != null} onClick={() => decide(item, true)}>승인</button>}<button className="pill-button line small" disabled={working != null} onClick={() => decide(item, false)}>거절</button></div>}
+      <div className="who"><span className="avatar" aria-hidden="true"><Icon name="user" size={18} /></span><span><strong>{item.name}</strong><small>{item.checkInMethod
+        ? (item.checkInMethod === 'QR' ? 'QR·위치 확인' : '수동 확인') + (item.checkedInAt ? ' ' + item.checkedInAt : '') + (item.checkInReason ? ' · ' + item.checkInReason : '')
+        : '신청 ' + item.appliedAt + (item.offerExpiresAt ? ' · ' + offerDeadline(item.offerExpiresAt) + '까지 응답' : '')}</small></span><span className={'status-chip ' + chipTone(item.status)}>{participationLabel(item)}</span></div>
+      {(item.status === 'APPLIED' || item.status === 'WAITLISTED') && phase !== 'ended' && <div className="button-row">{item.status === 'APPLIED' && <button className="pill-button dark small" disabled={working != null} onClick={() => decide(item, true)}>승인</button>}<button className="pill-button line small" disabled={working != null} onClick={() => decide(item, false)}>거절</button></div>}
+      {item.status === 'CONFIRMED' && canManual && manual?.id !== item.id && <div className="button-row"><button className="pill-button line small" disabled={working != null} onClick={() => setManual({ id: item.id, reason: '' })}>수동 확인</button></div>}
+      {item.status === 'CHECKED_IN' && phase === 'ended' && <div className="button-row"><button className="pill-button dark small" disabled={working != null} onClick={() => run(item, 'complete', {}, '활동 완료를 확인했어요', '활동 기록이 만들어졌어요')}>완료 확인</button></div>}
+      {manual?.id === item.id && <form className="manual-form" onSubmit={event => { event.preventDefault(); run(item, 'manual-check-in', { reason: manual.reason }, '출석을 수동으로 확인했어요') }}>
+        <span className="manual-title">수동 확인 사유 <small>기록에 남아요</small></span>
+        <div className="reason-chips">{manualReasons.map(reason => <button type="button" key={reason} className={'reason-chip' + (manual.reason === reason ? ' on' : '')} aria-pressed={manual.reason === reason} onClick={() => setManual({ id: item.id, reason })}>{reason}</button>)}</div>
+        <input aria-label={item.name + ' 수동 확인 사유'} value={manual.reason} maxLength={500} placeholder="직접 적기" onChange={event => setManual({ id: item.id, reason: event.target.value })} />
+        <div className="button-row"><button type="submit" className="pill-button dark small" disabled={working != null || !manual.reason.trim()}>확인</button><button type="button" className="pill-button line small" onClick={() => setManual(null)}>취소</button></div>
+      </form>}
     </li>)}</ul>}
   </section>
 }
@@ -537,6 +581,7 @@ function Applicants({ activityId, onChange }: { activityId: number; onChange: ()
 function noticeLook(item: AppNotification): { icon: IconName; urgent: boolean } {
   if (item.type === 'WAITLIST_OFFER') return { icon: 'clock', urgent: item.title.includes('빈자리') }
   if (item.type === 'ACTIVITY_CHANGED') return { icon: 'users', urgent: false }
+  if (item.type === 'ACTIVITY_REMINDER') return { icon: 'clock', urgent: item.title.includes('체크인') || item.title.includes('QR') }
   return { icon: 'bell', urgent: false }
 }
 
@@ -622,10 +667,12 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
   const [tab, setTab] = useState('신청한 활동')
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
   const [applied, setApplied] = useState<MyParticipation[] | null>(null)
-  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '내가 만든 활동': '내가 만든 활동과 공개 상태, 신청자를 확인하는 공간입니다.' }
+  const [records, setRecords] = useState<MyRecord[] | null>(null)
+  const descriptions: Record<string, string> = { '신청한 활동': '신청한 활동의 승인·대기 상태와 참여 일정을 확인하는 공간입니다.', '내가 만든 활동': '내가 만든 활동과 공개 상태, 신청자를 확인하는 공간입니다.', '활동 기록': '출석하고 모집자가 완료를 확인한 활동이 기록으로 남는 공간입니다.' }
   useEffect(() => {
     if (user) api<LiveActivity[]>('/api/me/activities').then(setMine).catch(() => setMine([]))
     if (user) api<MyParticipation[]>('/api/me/participations').then(setApplied).catch(() => setApplied([]))
+    if (user) api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
   }, [user])
   const tabs = <div className="activity-tabs seg-tabs" role="tablist" aria-label="내 활동 구분">{Object.keys(descriptions).map(value => <button key={value} role="tab" id={'tab-' + value} aria-controls="my-activity-panel" aria-selected={tab === value} onClick={() => setTab(value)}>{value}</button>)}</div>
   const states = tab === '신청한 활동' && <section className="state-guide"><h2>신청 상태 안내</h2><ul className="state-list" aria-label="신청 상태 안내">{applicationStates.map(([name, text]) => <li key={name}><strong>{name}</strong><span>{text}</span></li>)}</ul></section>
@@ -664,7 +711,8 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
     <div className="stat-boxes plain" aria-label="신청 현황"><div><strong>{upcoming.length}</strong><span>참여 확정</span></div><div><strong>{group(['WAITLISTED']).length}</strong><span>대기 중</span></div><div><strong>{group(['APPLIED']).length}</strong><span>승인 대기</span></div></div>
     {tabs}
     <section className="my-panel" id="my-activity-panel" role="tabpanel" aria-labelledby={'tab-' + tab}>
-      {tab === '내가 만든 활동'
+      {tab === '활동 기록' ? <RecordList records={records} />
+        : tab === '내가 만든 활동'
         ? mine === null ? <div className="loading-state" role="status">만든 활동을 불러오는 중입니다.</div> : mine.length === 0 ? <div className="v2-empty"><Icon name="plus" size={30} /><strong>아직 만든 활동이 없어요</strong><p>동네에서 함께하고 싶은 일이 있다면 직접 열어 보세요.</p><a href="#/create" className="pill-button dark small">활동 만들기</a></div>
           : <ul className="my-list">{mine.map(activity => <li key={activity.id} className="my-row">
             <DateBlock date={activity.date} />
@@ -680,6 +728,25 @@ function MyActivities({ user, ready }: { user: User | null; ready: boolean }) {
           : <>{listGroup('다가오는 활동', upcoming)}{listGroup('승인·대기 중', pending)}{listGroup('지난 신청', closed)}</>}
     </section>
     {states}
+  </>
+}
+
+/** Volink's own activity record (after check-in and the organizer's completion). Never shown as an official 1365 record. */
+function RecordList({ records }: { records: MyRecord[] | null }) {
+  if (records === null) return <div className="loading-state" role="status">활동 기록을 불러오는 중입니다.</div>
+  if (records.length === 0) return <div className="v2-empty"><Glyph name="check" size={30} /><strong>아직 활동 기록이 없어요</strong><p>현장에서 QR로 체크인하고, 활동이 끝난 뒤 모집자가 완료를 확인하면 여기에 남아요.</p><a href="#/explore" className="pill-button dark small">활동 찾아보기</a></div>
+  const valid = records.filter(record => record.status === 'VALID')
+  const minutes = valid.reduce((sum, record) => sum + record.durationMinutes, 0)
+  return <>
+    <div className="record-summary" aria-label="Volink 활동 요약"><div><strong>{valid.length}</strong><span>완료한 활동</span></div><div><strong>{Math.floor(minutes / 60)}<small>시간</small>{minutes % 60 ? <> {minutes % 60}<small>분</small></> : null}</strong><span>함께한 시간</span></div></div>
+    <p className="small-print record-note">Volink 활동 기록이에요. 공식 봉사실적(1365)이 아니며 자원봉사 종합보험이 적용되지 않아요.</p>
+    <ul className="my-list records">{records.map(record => <li key={record.id} className="my-row">
+      <DateBlock date={record.date} />
+      <div className="my-row-main"><a href={'#/activity/' + record.activityId}><strong>{record.title}</strong></a>
+        <span>{record.startTime} · {record.durationMinutes}분 · {record.placeName ?? '장소 미정'}</span>
+        <small>{record.checkInMethod === 'QR' ? 'QR·위치로 출석' : '모집자 수동 확인'} · 완료 확인 {offerDeadline(record.confirmedAt)}</small></div>
+      <span className={'status-chip ' + (record.status === 'VALID' ? 'ok' : 'muted')}>{record.status === 'VALID' ? '완료 기록' : record.status === 'HELD' ? '보류' : '무효'}</span>
+    </li>)}</ul>
   </>
 }
 
@@ -953,7 +1020,7 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
       })
       const session = await login(email, password)
       onSession(session)
-      window.location.hash = session.role === 'ADMIN' ? '#/admin' : '#/home'
+      window.location.hash = session.role === 'ADMIN' ? '#/admin' : takeNext() ?? '#/home'
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) { setErrors(cause.fieldErrors); focusFirstError(form, cause.fieldErrors) }
       else setMessage(cause instanceof Error ? cause.message : '요청을 처리하지 못했습니다.')
