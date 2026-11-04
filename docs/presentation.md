@@ -10,6 +10,7 @@
 4. **참가자 휴대폰** — QR을 찍으면 체크인 화면 → 위치 확인하고 체크인 → ‘체크인했어요’ (`week-06-checkin-ready.png`, `week-06-checkin-done.png`).
 5. **반경 밖** — “약 1,100m 떨어져 있어요” → 모집자가 사유를 골라 수동 확인 (`week-06-manual.png`).
 6. **종료 뒤** — ‘체크인한 N명 모두 완료’ → 참가자 내 활동 > 활동 기록 (`week-06-records.png`).
+7. **활동 소식** — 모집자 공지 → 확정자 질문(전화번호를 쓰면 거절) → 모집자 답변. 연락처 없이 소통 (`week-06-news-organizer.png`, `week-06-news-participant.png`).
 
 ## 대본 (요지)
 

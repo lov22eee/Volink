@@ -19,7 +19,7 @@ flowchart LR
 
 현재 실제 연결: **React → Vite 프록시 → Spring Boot 시연 조회 API → MySQL**. 인증·JWT(3주차), 공간 검색·첫 배포(4주차), S3(7주차)는 미구현입니다.
 
-## ERD · V1~V3
+## ERD · V1~V3 (+ V8 `activity_posts`: 활동 소식 공지·질문·답변, 2026-11-04)
 
 ```mermaid
 erDiagram
@@ -36,6 +36,9 @@ erDiagram
     PARTICIPATIONS ||--o| ACTIVITY_RECORDS : records
     ACTIVITY_RECORDS ||--o{ APPEALS : disputed_by
     ACTIVITIES ||--o{ ACTIVITY_LOGS : logs
+    ACTIVITIES ||--o{ ACTIVITY_POSTS : news
+    USERS ||--o{ ACTIVITY_POSTS : writes
+    ACTIVITY_POSTS ||--o| ACTIVITY_POSTS : answers
     USERS ||--o{ NOTIFICATIONS : receives
     ACTIVITIES ||--o{ REPORTS : reported
     REPORTS ||--o{ REPORT_EVIDENCES : attaches

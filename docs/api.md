@@ -70,6 +70,11 @@
 | 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |
 | 6 | `POST /api/participations/{id}/complete` | 모집자 | **구현.** 종료 전·체크인 안 한 사람 409. `activity_records` 생성·`RECORD_CONFIRMED` 알림 |
 | 6 | `POST /api/activities/{id}/complete` | 모집자 | **구현(고도화).** 종료 후 체크인한 사람 **모두** 완료 → `{completed: n}`. 종료 전 409, 남의 활동 404 |
+| 6 | `GET /api/activities/{id}/posts` | 모집자·확정자(체크인·완료·불참 포함)·관리자(읽기만) | **구현(2026-11-04 추가).** 활동 소식 `{canNotice, canAsk, canAnswer, unanswered, notices[], questions[{…, answer}]}`. 이름 일부 가림, 모집자는 ‘모집자’. 그 밖 403 |
+| 6 | `POST /api/activities/{id}/notices` `{body}` | 모집자 | **구현.** 1~500자, 확정·체크인한 참가자에게 알림. 끝난 활동 409 |
+| 6 | `POST /api/activities/{id}/questions` `{body}` | 확정자 | **구현.** 모집자에게 알림. 전화번호·이메일·오픈채팅 링크는 400(연락처 비공개), 한 시간 10개 넘으면 429 |
+| 6 | `POST /api/activity-posts/{id}/answer` `{body}` | 모집자 | **구현.** 질문당 답변 1개(두 번째 409), 질문한 사람에게 알림 |
+| 6 | `DELETE /api/activity-posts/{id}` | 작성자, 질문은 모집자도 | **구현.** 지운 표시만 남기고(답변도 함께) 화면에서 숨김 |
 | 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·상태. Volink 자체 기록이며 공식 봉사실적이 아님 |
 | 6 | (스케줄러, 1분마다) | — | **구현.** 시작 24시간 전 승인 대기 신청이 있으면 모집자에게 1번 안내 · 시작 30분 전 체크인 열림을 확정자·모집자에게 1번 안내 · 시작 시 RECRUITING→IN_PROGRESS, 남은 승인 대기·대기·제안은 EXPIRED + 당사자 알림 · 종료 시 FINISHED, 체크인 없는 확정자 NO_SHOW + 모집자 안내 |
 | 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |

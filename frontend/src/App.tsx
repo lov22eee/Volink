@@ -14,6 +14,7 @@ import Explore from './explore'
 import Home from './home'
 import { AttendancePanel, CheckInHint, CheckInPage, phaseOf, takeNext, useNow } from './checkin'
 import type { Phase } from './checkin'
+import { ActivityNews } from './news'
 import { CategoryCover, FieldStrip } from './covers'
 
 type IconName = 'home' | 'leaf' | 'compass' | 'plus' | 'list' | 'arrow' | 'pin' | 'clock' | 'users' | 'building' | 'shield' | 'bell' | 'user' | 'outward' | 'grid' | 'menu' | 'close' | 'check' | 'edit' | 'trash'
@@ -260,7 +261,7 @@ function ToastHost() {
   </div>, document.body)
 }
 
-function ConfirmDialog({ title, body, confirm, cancel = '돌아가기', danger, onConfirm, onClose }: { title: string; body: string; confirm: string; cancel?: string; danger?: boolean; onConfirm: () => void; onClose: () => void }) {
+export function ConfirmDialog({ title, body, confirm, cancel = '돌아가기', danger, onConfirm, onClose }: { title: string; body: string; confirm: string; cancel?: string; danger?: boolean; onConfirm: () => void; onClose: () => void }) {
   const safe = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     const back = document.activeElement as HTMLElement | null
@@ -453,10 +454,11 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   </section> : null
   return <DetailView item={item} description={activity.description} badge={recruiting ? '모집 중' : statusLabel(activity.status)} supplies={activity.supplies} top={offer}
     note={'개설: ' + activity.organizerName + ' · 신청·확정 안내는 화면 안 알림으로 드립니다. 연락처는 공개하지 않습니다.'} action={action}
-    extra={organizer && <>
+    extra={organizer ? <>
       {!hidden && day.phase !== 'later' && <AttendancePanel activity={activity} phase={day.phase} onChanged={reloadApplicants} />}
       <Applicants activityId={activity.id} phase={day.phase} tick={applicantsTick} onChange={() => { loadViewer(); onChange() }} />
-    </>}
+      {!hidden && <ActivityNews activityId={activity.id} organizer />}
+    </> : mine && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW'].includes(mine.status) && <ActivityNews key={mine.status} activityId={activity.id} organizer={false} />}
     tools={activity.applicants !== undefined && ['RECRUITING', 'DRAFT'].includes(activity.status) && <OwnerTools activity={activity} />}>
     {hidden && <p className="inline-notice">아직 공개되지 않은 활동입니다. 개설한 사람과 관리자만 볼 수 있습니다.</p>}
     {(activity.applicants ?? 0) > 0 && ['RECRUITING', 'DRAFT'].includes(activity.status) && <p className="small-print owner-note">신청한 사람이 {activity.applicants}명 있어 일정·장소는 바꿀 수 없고 삭제도 할 수 없어요. 소개와 만나는 곳은 고칠 수 있어요.</p>}

@@ -909,3 +909,29 @@ a.kpi:hover { border-color: var(--green); }
   .attend-copy { width: 100%; }
 }
 .my-list.records .my-row-main small { font-weight: 500; color: var(--ink-3); }
+
+/* ───────── 활동 소식: notices and Q&A (organizer + confirmed participants) ───────── */
+.news { margin-top: 28px; padding: 18px 20px; background: #fff; border: 1px solid var(--line); border-radius: 18px; }
+.news-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.news-head h2 { margin: 0; font-size: 19px; font-weight: 650; }
+.news-lede { margin: 4px 0 12px; }
+.news-list { list-style: none; display: grid; gap: 8px; margin: 0 0 10px; padding: 0; }
+.news-item { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: #f7f8f5; }
+.news-item.notice { background: #fdf6ea; }
+.news-icon { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 9px; background: #f8e3c1; color: var(--wait); font-size: 13px; font-weight: 800; }
+.news-icon.q { background: var(--sage); color: var(--green); }
+.news-main { flex: 1; min-width: 0; }
+.news-main p { margin: 2px 0 0; font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+.news-meta { font-size: 12px; color: var(--ink-3); }
+.news-meta b { color: var(--ink-2); }
+.news-answer { margin-top: 8px; padding: 9px 11px; border-left: 3px solid #b9d6c3; border-radius: 0 10px 10px 0; background: #fff; }
+.news-reply { margin-top: 8px; }
+.news-wait { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.news-del { flex: none; min-height: 32px; font-size: 12px; color: var(--ink-3); }
+.news-empty { margin: 0 0 10px; font-size: 14px; color: var(--ink-3); }
+.news-form { display: grid; gap: 8px; }
+.news-form.inline { margin-top: 8px; }
+.news-form textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: #fff; font: inherit; font-size: 14px; line-height: 1.5; resize: vertical; }
+.news-form-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.news-form-foot small { font-size: 12px; color: var(--ink-3); }
+@media (max-width: 640px) { .news { padding: 16px; } .news-form-foot { flex-direction: column; align-items: stretch; } }
