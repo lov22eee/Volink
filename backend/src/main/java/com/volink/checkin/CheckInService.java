@@ -181,22 +181,36 @@ public class CheckInService {
     public int advance() {
         LocalDateTime now = now();
         int changed = 0;
+        // Reminder markers count only after the last RESCHEDULED log, so a moved activity gets its reminders again.
         // Once, 24 h before: the organizer still has applications to answer.
         for (Map<String, Object> row : jdbc.queryForList("""
                 SELECT a.id, a.organizer_id, a.title, COUNT(p.id) AS pending FROM activities a JOIN participations p ON p.activity_id = a.id AND p.status = 'APPLIED'
                 WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at <= ?
-                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'PENDING_REMINDED')
+                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'PENDING_REMINDED' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))
                 GROUP BY a.id, a.organizer_id, a.title""", now, now.plus(PENDING_REMINDER))) {
             long id = ((Number) row.get("id")).longValue(), organizer = ((Number) row.get("organizer_id")).longValue();
             notifications.send(organizer, "ACTIVITY_REMINDER", "승인을 기다리는 신청이 " + row.get("pending") + "건 있어요",
                     row.get("title") + " · 시작 전까지 승인하지 않으면 신청이 자동으로 마감됩니다.", "#/activity/" + id);
             log(id, null, organizer, null, "PENDING_REMINDED", "시작 24시간 전 승인 대기 안내");
         }
+        // Once, the day before (24 h): confirmed people get the time, the meeting point and what to bring.
+        for (Map<String, Object> row : jdbc.queryForList("""
+                SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime, COALESCE(a.meeting_point, p.name, '') AS place FROM activities a
+                LEFT JOIN demo_places p ON p.id = a.place_id
+                WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at <= ?
+                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'DAY_BEFORE' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))""", now.plus(WINDOW), now.plus(PENDING_REMINDER))) {
+            long id = ((Number) row.get("id")).longValue();
+            Activity activity = load(id, false);
+            for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))
+                notifications.send(user, "ACTIVITY_REMINDER", "내일 함께해요", row.get("title") + " · " + row.get("startTime") + " · " + row.get("place")
+                        + ". 준비물을 확인하고, 못 오게 되면 미리 알려 주세요.", "#/activity/" + id);
+            log(id, null, activity.organizerId(), null, "DAY_BEFORE", "하루 전 안내");
+        }
         // Once, when check-in opens (30 min before): the confirmed people and the organizer.
         for (Map<String, Object> row : jdbc.queryForList("""
                 SELECT a.id, a.organizer_id, a.title FROM activities a
                 WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at <= ?
-                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'CHECKIN_OPENED')""", now, now.plus(WINDOW))) {
+                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'CHECKIN_OPENED' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))""", now, now.plus(WINDOW))) {
             long id = ((Number) row.get("id")).longValue(), organizer = ((Number) row.get("organizer_id")).longValue();
             String link = "#/activity/" + id;
             for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))

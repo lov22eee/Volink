@@ -19,9 +19,25 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ActivityController {
     private final ActivityService activities;
+    private final ActivityChangeService changes;
 
-    public ActivityController(ActivityService activities) {
+    public ActivityController(ActivityService activities, ActivityChangeService changes) {
         this.activities = activities;
+        this.changes = changes;
+    }
+
+    public record CancelRequest(String reason) {}
+
+    /** Organizer: cancel the whole activity before the start (reason required). Everyone waiting or confirmed is told. */
+    @PostMapping("/api/activities/{id}/cancel")
+    public Map<String, Object> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody CancelRequest request) {
+        return changes.cancel(Long.parseLong(jwt.getSubject()), id, request.reason());
+    }
+
+    /** Organizer: move the date/time once, 24 h+ before the current start. Confirmed people keep their place. */
+    @PostMapping("/api/activities/{id}/reschedule")
+    public Map<String, Object> reschedule(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody ActivityChangeService.Reschedule request) {
+        return changes.reschedule(Long.parseLong(jwt.getSubject()), id, request);
     }
 
     @PostMapping("/api/activities")

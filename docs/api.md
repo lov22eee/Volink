@@ -76,6 +76,11 @@
 | 6 | `POST /api/activity-posts/{id}/answer` `{body}` | 모집자 | **구현.** 질문당 답변 1개(두 번째 409), 질문한 사람에게 알림 |
 | 6 | `DELETE /api/activity-posts/{id}` | 작성자, 질문은 모집자도 | **구현.** 지운 표시만 남기고(답변도 함께) 화면에서 숨김 |
 | 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·상태. Volink 자체 기록이며 공식 봉사실적이 아님 |
+| 6 | `POST /api/activities/{id}/cancel` `{reason}` | 모집자 | **구현(2026-11-04, V9).** 시작 전·DRAFT/RECRUITING만, 사유 2~200자. 활동 CANCELLED + `cancel_reason`, 남은 신청 모두 CANCELLED(본인 취소 횟수는 안 늘림)·알림. 신청했던 사람은 상세에서 사유를 볼 수 있음 |
+| 6 | `POST /api/activities/{id}/reschedule` `{date, time, durationMinutes, reason}` | 모집자 | **구현(V9).** 모집 중·활동마다 1회(409 `RESCHEDULE_USED`)·지금 시작 24시간 전까지(409 `RESCHEDULE_TOO_LATE`). 새 시간은 만들기 규칙과 같고 해 진 뒤 끝나면 400. 확정은 유지, 신청·대기 모두 알림, 하루 전·체크인 알림은 새 시간 기준으로 다시 |
+| 6 | `POST /api/participations/{id}/late` `{minutes: 10\|20\|30}` | 본인(확정자) | **구현(V9).** 시작 3시간 전~종료, 모집자에게 알림, 신청자 목록에 `lateMinutes` |
+| 6 | `POST /api/participations/{id}/cancel` `{reason?}` | 본인 | **보완(V9).** ‘못 가요’: 100자 이내 이유를 모집자 알림에 붙임(본문 없어도 됨) |
+| 6 | 활동 응답 `difficulty`(EASY/NORMAL/HARD)·`placeKind`(OUTDOOR/INDOOR/MIXED)·`newcomerOk` | — | **구현(V9).** 만들기·수정 본문에 선택(기본 EASY·OUTDOOR·true). 내 활동 목록에 `pending`·`unanswered`·`checkedIn`. 스케줄러가 시작 24시간 전 확정자에게 ‘내일 함께해요’ 알림 1회 |
 | 6 | (스케줄러, 1분마다) | — | **구현.** 시작 24시간 전 승인 대기 신청이 있으면 모집자에게 1번 안내 · 시작 30분 전 체크인 열림을 확정자·모집자에게 1번 안내 · 시작 시 RECRUITING→IN_PROGRESS, 남은 승인 대기·대기·제안은 EXPIRED + 당사자 알림 · 종료 시 FINISHED, 체크인 없는 확정자 NO_SHOW + 모집자 안내 |
 | 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
 | 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
