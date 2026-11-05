@@ -44,6 +44,9 @@ jobs:
         env:
           VOLINK_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleDebug --no-daemon
+      # Firebase (phone sign-in) asks for the app's signing fingerprints; they are public, not secrets.
+      - name: Show the signing fingerprints (SHA-1 / SHA-256) for Firebase
+        run: keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -E 'SHA1|SHA256' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Name the file
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk "volink-0.6-${{ github.run_number }}.apk"
       - uses: actions/upload-artifact@v4
