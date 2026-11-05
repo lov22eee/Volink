@@ -125,8 +125,9 @@ export function refresh(): Promise<User | null> {
   return refreshing
 }
 
-export async function login(email: string, password: string): Promise<User> {
-  return start(await api<Session>('/api/auth/login', 'POST', { email, password }))
+/** memberType = the app's login tab; the server refuses a tab that does not match the account (after the password). */
+export async function login(email: string, password: string, memberType?: 'GENERAL' | 'INSTITUTION'): Promise<User> {
+  return start(await api<Session>('/api/auth/login', 'POST', memberType ? { email, password, memberType } : { email, password }))
 }
 
 /** Kakao / Google: after the provider sends the browser back, a one-time code becomes the session. */

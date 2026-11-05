@@ -945,3 +945,20 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-interest-ask { flex-direction: row; align-items: center; gap: 12px; }
 .m-interest-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .m-interest-ask .m-btn { margin-top: 0; flex: none; }
+
+/* 로그인 회원 유형 탭 (개인회원 / 기관회원) and the 기관 확인 현황 screen */
+.m-kind { width: 100%; margin-bottom: 4px; }
+.m-kind button { min-height: 44px; font-size: 15px; }
+.m-org-only { justify-content: center; align-items: flex-start; margin: 4px 0 0; min-height: 84px; padding-top: 2px; } /* same height as the Kakao/Google block: the logo does not jump between tabs */
+.m-org-only::before, .m-org-only::after { display: none; }
+.m-org-review { justify-content: center; gap: 22px; }
+.m-org-review .m-splash-brand { flex: none; gap: 10px; text-align: center; }
+.m-org-review .m-splash-brand p { color: var(--ink-3); font-size: 15px; line-height: 1.55; }
+.m-org-ico { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; background: var(--amber-soft); color: var(--amber-ink); margin: 0 auto 6px; }
+.m-org-ico.bad { background: var(--red-soft); color: var(--red); }
+.m-org-facts { margin: 0; padding: 4px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.m-org-facts div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 2px; font-size: 15px; }
+.m-org-facts div + div { border-top: 1px solid var(--line); }
+.m-org-facts dt { color: var(--ink-3); }
+.m-org-facts dd { margin: 0; font-weight: 650; text-align: right; }
+.m-org-actions { display: flex; flex-direction: column; gap: 10px; }

@@ -55,6 +55,33 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void appLoginTabMustMatchTheAccountAndAWrongPasswordNeverRevealsTheType() throws Exception {
+        String general = member("GENERAL");
+        String institution = member("INSTITUTION");
+        // Right tab: a session. Wrong tab with the right password: no token, a pointer to the other tab.
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "GENERAL"), null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty());
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "INSTITUTION"), null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MEMBER_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.message").value("개인 회원 계정이에요. 개인회원 탭에서 로그인해 주세요."))
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD, "memberType", "GENERAL"), null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("기관 회원 계정이에요. 기관회원 탭에서 로그인해 주세요."));
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD, "memberType", "INSTITUTION"), null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.user.memberType").value("INSTITUTION"))
+                .andExpect(jsonPath("$.user.organization.status").value("PENDING"));
+        // A wrong password answers the same on either tab: the type is never told before the password matches.
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", "wrongPass1", "memberType", "GENERAL"), null)
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        perform(post("/api/auth/login"), Map.of("email", "nobody-" + general, "password", "wrongPass1", "memberType", "INSTITUTION"), null)
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "ADMIN"), null)
+                .andExpect(status().isBadRequest());
+        // The web sends no tab: unchanged.
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD), null).andExpect(status().isOk());
+    }
+
+    @Test
     void loginRefreshRotationAndLogoutWorkWithAnHttpOnlyCookie() throws Exception {
         String email = member("GENERAL");
         perform(post("/api/auth/login"), Map.of("email", email, "password", "wrongPass1"), null)

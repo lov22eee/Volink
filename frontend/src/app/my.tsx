@@ -54,7 +54,6 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
       <nav className="m-menu" aria-label="마이 메뉴">{menu.map(item => item.href
         ? <a key={item.label} href={item.href}><MIcon name={item.icon} size={21} /><span>{item.label}</span>{item.note && <small>{item.note}</small>}<MIcon name="chevron" size={18} /></a>
         : <button key={item.label} type="button" onClick={item.onClick}><MIcon name={item.icon} size={21} /><span>{item.label}</span><MIcon name="chevron" size={18} /></button>)}</nav>
-      {user.memberType !== 'INSTITUTION' && <p className="m-help center">기관 회원 가입·기관 확인은 PC에서 할 수 있어요.</p>}
     </div>
     {about && <Sheet title="활동 기록·보험 안내" onClose={() => setAbout(false)}>
       <ul className="m-bullets">

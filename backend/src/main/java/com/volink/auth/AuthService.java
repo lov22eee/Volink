@@ -90,7 +90,16 @@ public class AuthService {
     }
 
     @Transactional
-    public Session login(String rawEmail, String password) {
+    public Session login(String rawEmail, String password) { return login(rawEmail, password, null); }
+
+    /**
+     * App login tab (개인회원 / 기관회원): {@code memberType} is the tab the person chose (null = no tab, the web).
+     * It is compared only after the password matched, so a wrong password never tells whether an e-mail belongs to an
+     * institution. A mismatch issues no token. The tab grants nothing: institution powers are checked on every request
+     * from the stored member type and organization status.
+     */
+    @Transactional
+    public Session login(String rawEmail, String password, String memberType) {
         String email = trim(rawEmail).toLowerCase(Locale.ROOT);
         if (limiter.blocked(email))
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_REQUESTS", "로그인 시도가 많습니다. 1분 뒤 다시 시도해 주세요.");
@@ -101,6 +110,12 @@ public class AuthService {
         }
         limiter.succeeded(email);
         AuthUser user = findByEmail(email).orElseThrow();
+        if (memberType != null && !user.admin() && !memberType.equals(user.memberType())) {
+            boolean institution = "INSTITUTION".equals(user.memberType());
+            throw new ApiException(HttpStatus.CONFLICT, "MEMBER_TYPE_MISMATCH", institution
+                    ? "기관 회원 계정이에요. 기관회원 탭에서 로그인해 주세요."
+                    : "개인 회원 계정이에요. 개인회원 탭에서 로그인해 주세요.");
+        }
         return new Session(user, tokens.accessToken(user), issueRefresh(user.id()));
     }
 

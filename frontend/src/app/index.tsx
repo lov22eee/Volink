@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, logout, mayHaveSession, refresh } from '../api'
 import { AccountScreen, SettingsScreen, applyTextSize } from './settings'
 import type { User } from '../api'
-import { ToastHost } from '../App'
+import { ToastHost, showToast } from '../App'
 import { CheckInPage } from '../checkin'
 import './app.css'
-import { Login, Signup, SocialDone, SocialSignup } from './auth'
+import { Login, OrgReview, Signup, SocialDone, SocialSignup } from './auth'
 import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
@@ -77,13 +77,16 @@ export default function MobileApp() {
     if (route.page === 'checkin' && route.id) try { sessionStorage.setItem('volink.next', window.location.hash) } catch { /* private mode */ }
     if (route.page === 'oauth') return <SocialDone onSession={signed => { onSession(signed); window.location.hash = '#/home' }} />
     if (route.page === 'social-signup') return <><SocialSignup onSession={onSession} /><ToastHost /></>
-    return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
+    return route.page === 'signup' ? <><Signup key={route.query.get('type') ?? ''} institution={route.query.get('type') === 'institution'} onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
       onSession(user)
       let next: string | null = null
       try { next = sessionStorage.getItem('volink.next'); sessionStorage.removeItem('volink.next') } catch { /* private mode */ }
       window.location.hash = next ?? '#/home'
     }} /></>
   }
+  // 기관회원 not (yet) confirmed: the review status only, read again on 다시 확인.
+  if (user.memberType === 'INSTITUTION' && user.organization?.status !== 'APPROVED') return <><ToastHost /><OrgReview user={user} onSignOut={signOut}
+    onRefresh={async () => { try { const fresh = await api<User>('/api/me'); setUser(fresh); if (fresh.organization?.status === 'APPROVED') { showToast('기관 확인이 끝났어요'); window.location.hash = '#/home' } else showToast('아직 확인 중이에요') } catch { showToast('지금은 확인하지 못했어요') } }} /></>
   if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
 
   const bell = <BellLink unread={unread} />

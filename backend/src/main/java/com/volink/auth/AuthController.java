@@ -36,11 +36,18 @@ public class AuthController {
         this.secureCookie = secureCookie;
     }
 
-    public record LoginRequest(String email, String password) {}
+    /** memberType: the app's login tab (GENERAL / INSTITUTION); left out on the web. */
+    public record LoginRequest(String email, String password, String memberType) {}
     public record InterestsRequest(List<String> interests) {}
     /** The Android app keeps its refresh token itself and sends it in the body (no cookie across sites). */
     public record RefreshRequest(String refreshToken) {}
     public record WithdrawRequest(Boolean confirm) {}
+
+    private static String memberType(String value) {
+        if (value == null || value.isBlank()) return null;
+        if (!value.equals("GENERAL") && !value.equals("INSTITUTION")) throw com.volink.common.ApiException.validation(Map.of("memberType", "회원 유형을 확인해 주세요."));
+        return value;
+    }
 
     @PostMapping("/api/auth/signup")
     @ResponseStatus(HttpStatus.CREATED)
@@ -50,7 +57,7 @@ public class AuthController {
 
     @PostMapping("/api/auth/login")
     public Map<String, Object> login(@RequestBody LoginRequest request, HttpServletRequest http, HttpServletResponse response) {
-        return session(auth.login(request.email(), request.password()), http, response);
+        return session(auth.login(request.email(), request.password(), memberType(request.memberType())), http, response);
     }
 
     @PostMapping("/api/auth/refresh")
