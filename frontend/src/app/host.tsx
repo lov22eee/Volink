@@ -23,7 +23,6 @@ export function HostScreen({ user, actions }: { user: User; actions: ReactNode }
   return <div className="m-screen">
     <TopBar title="봉사 만들기" back="history" actions={actions} />
     <div className="m-body">
-      <p className="m-lede">처음부터 복잡하게 입력하지 않아도 돼요.</p>
       <section className="m-hero">
         <span className="m-hero-ico"><MIcon name="plus" size={26} /></span>
         <h2>새로운 봉사 모집하기</h2>

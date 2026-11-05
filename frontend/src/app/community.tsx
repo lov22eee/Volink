@@ -63,7 +63,7 @@ export function CommunitySetup({ profile, onDone, change }: { profile: Profile |
     <label className="m-field"><span className="m-label">닉네임 <small>{CommunityNick.min}~{CommunityNick.max}자 · 한글·영문·숫자</small></span>
       <span className="m-input with-peek"><input aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="done" />
         <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
-      <span className="m-help">돌림 버튼을 누르면 새 닉네임을 추천해 드려요. 바꾸기는 30일에 한 번이에요.{profile?.nextChange && change ? ` (${profile.nextChange.slice(5).replace('-', '/')}부터)` : ''}</span></label>
+      <span className="m-help">닉네임은 30일에 한 번 바꿀 수 있어요.{profile?.nextChange && change ? ` (${profile.nextChange.slice(5).replace('-', '/')}부터)` : ''}</span></label>
     {!change && <div className="m-field"><span className="m-label">커뮤니티 이용 규칙</span>
       <ul className="c-rules">{rules.map(rule => <li key={rule}><MIcon name="check" size={16} />{rule}</li>)}</ul>
       <label className={'m-check box' + (error && !agree ? ' bad' : '')}><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" /><span>이용 규칙을 읽었고 지킬게요 (필수)</span></label></div>}
@@ -111,7 +111,7 @@ function CommunityOnboarding({ profile, onDone }: { profile: Profile | null; onD
         <span className={'m-input with-peek' + (error && !rulesOpen ? ' bad' : '')}><input aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} tabIndex={stage === 'hello' ? -1 : 0}
           onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="next" />
           <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" tabIndex={stage === 'hello' ? -1 : 0} onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
-        <span className="m-help">돌림 버튼으로 새 닉네임을 추천받을 수 있어요. 바꾸기는 30일에 한 번이에요.</span>
+        <span className="m-help">닉네임은 30일에 한 번 바꿀 수 있어요.</span>
         {error && !rulesOpen && <span className="m-err" role="alert">{error}</span>}</label>
       <ActionBar><button className="m-btn" disabled={!valid || stage === 'hello'} tabIndex={stage === 'hello' ? -1 : 0}>다음</button></ActionBar>
     </form>

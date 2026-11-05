@@ -188,6 +188,7 @@ export function NoticeSettingsScreen() {
       {!settings ? <Loading /> : <>
         <ul className="m-switches"><li><label><span><strong>휴대폰 알림 받기</strong><small>끄면 휴대폰으로 알림이 오지 않아요</small></span>
           <input type="checkbox" role="switch" checked={settings.push} onChange={togglePush} /><i aria-hidden="true" /></label></li></ul>
+        <p className="m-help">휴대폰 푸시는 준비 중이에요. 지금은 앱 안 알림으로 알려 드려요.</p>
         {phoneOff && settings.push && <p className="m-err" role="alert">휴대폰에서 알림이 꺼져 있어요. 휴대폰 설정 › 애플리케이션 › Volink › 알림에서 켜 주세요.</p>}
 
         <h2 className="m-set-title">받을 알림</h2>
@@ -204,7 +205,6 @@ export function NoticeSettingsScreen() {
             <span aria-hidden="true">~</span>
             <button type="button" disabled={off} onClick={() => setPicking('quietEnd')}><small>끝</small><strong>{ampm(settings.quietEnd)}{settings.quietEnd <= settings.quietStart ? ' (다음 날)' : ''}</strong></button></li>}
         </ul>
-        <p className="m-help">앱 안 알림 목록에는 모두 그대로 남아요. 휴대폰 푸시는 연결을 준비하고 있어요.</p>
       </>}
     </div>
     {picking && settings && <QuietTimeSheet title={picking === 'quietStart' ? '방해 금지 시작' : '방해 금지 끝'} value={settings[picking]} other={settings[picking === 'quietStart' ? 'quietEnd' : 'quietStart']}

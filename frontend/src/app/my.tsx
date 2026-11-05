@@ -69,7 +69,7 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
       </ul>
     </Sheet>}
     {leaving && <Sheet title="로그아웃할까요?" onClose={() => setLeaving(false)} footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setLeaving(false)}>돌아가기</button><button type="button" className="m-btn" onClick={onSignOut}>로그아웃</button></div>}>
-      <p className="m-help">다시 쓰려면 이메일과 비밀번호로 로그인해야 해요.</p></Sheet>}
+      </Sheet>}
   </div>
 }
 
@@ -98,7 +98,7 @@ export function InterestsScreen({ user, onChange }: { user: User; onChange: (use
     } catch { showToast('저장하지 못했어요') } finally { setBusy(false) }
   }
   return <div className="m-screen"><TopBar title="관심 분야" back="#/my" />
-    <div className="m-body"><p className="m-lede">고르면 홈의 ‘나에게 맞는 봉사’에 먼저 보여 드려요. 골라도 안 골라도 돼요 (최대 {signupRules.maxInterests}개)</p>
+    <div className="m-body"><p className="m-lede">추천에 써요 · 최대 {signupRules.maxInterests}개</p>
       <div className="m-tiles">{categories.map(c => { const on = picked.includes(c)
         return <button type="button" key={c} className={'m-tile' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setPicked(on ? picked.filter(x => x !== c) : picked.length < signupRules.maxInterests ? [...picked, c] : picked)}>
           <MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button> })}</div>

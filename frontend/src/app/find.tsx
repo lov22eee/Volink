@@ -198,7 +198,6 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
             onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} />
           <p className="m-map-legend">{showVolink && <><i className="local" />동네 활동 {shown.length}개</>}{show1365 && mapPrograms.length > 0 && <><i className="program" />1365 활동 {mapPrograms.length}개</>}</p>
           {selected && shown.find(a => a.id === selected) && <div className="m-map-card"><ActivityRow activity={shown.find(a => a.id === selected)!} /></div>}
-          {!mapPlaces.some(a => a.latitude != null) && <p className="m-help center">장소 좌표가 있는 활동만 지도에 보여요.</p>}
         </div>
         : total === 0 ? <Empty icon="search" title="조건에 맞는 활동이 없어요" text="조건을 줄이거나 다른 지역·날짜를 골라 보세요."
           action={applied.length || q ? <button className="m-btn line sm" onClick={() => { setFilters(defaults); setQ(''); setQuery('') }}>조건 모두 지우기</button> : undefined} />
@@ -274,7 +273,6 @@ function FilterSheet({ value, q, origin, onClose, onApply }: { value: Filters; q
         {p}{districts[p] ? <MIcon name="chevron" size={16} /> : <small>전체만</small>}</button></li>)
       : ['', ...districts[sido]].map(d => { const on = draft.area.kind === 'region' && draft.area.sido === sido && draft.area.sigungu === d
         return <li key={d || 'all'}><button type="button" className={on ? 'on' : ''} onClick={() => { set({ area: { kind: 'region', sido, sigungu: d } }); setStep('main') }}>{d || shortProvince(sido) + ' 전체'}{on && <MIcon name="check" size={16} />}</button></li> })}</ul>
-    {step === 'sido' && <p className="m-help">시·군·구는 서울·경기만 고를 수 있어요. 다른 시·도는 전체로 찾아요.</p>}
   </Sheet>
 
   return <Sheet title="상세 필터" className="m-filter-sheet" onClose={onClose}
@@ -311,20 +309,17 @@ function FilterSheet({ value, q, origin, onClose, onApply }: { value: Filters; q
         {categories.map(c => { const on = draft.categories.includes(c)
           return <button key={c} type="button" className={'m-chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => toggleCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={15} />{c}</button> })}
       </div>
-      <p className="m-help">1365 활동은 공식 분야로 나누고, 분야를 알 수 없으면 ‘기타’로 보여요.</p>
     </section>
     <section className="m-fsec" aria-labelledby="f-status"><h3 id="f-status"><MIcon name="users" size={18} />모집 상태</h3>
       <div className="m-radios" role="radiogroup" aria-labelledby="f-status">
         {(['OPEN', 'WAITLIST', 'ALL'] as Status[]).map(s => <label key={s} className={draft.status === s ? 'on' : ''}>
           <input type="radio" name="f-status" checked={draft.status === s} onChange={() => set({ status: s })} /><i aria-hidden="true" />{statusLabel[s]}</label>)}
       </div>
-      <p className="m-help">대기 신청은 Volink 활동만 있어요(시작 2시간 전 마감). 1365는 1365가 알려 주는 모집 상태를 따라요.</p>
     </section>
     <section className="m-fsec" aria-labelledby="f-source"><h3 id="f-source"><MIcon name="list" size={18} />모집 출처</h3>
       <div className="m-seg wide" role="radiogroup" aria-labelledby="f-source">
         {(['ALL', 'VOLINK', '1365'] as Source[]).map(s => <button key={s} type="button" role="radio" aria-checked={draft.source === s} className={draft.source === s ? 'on' : ''} onClick={() => set({ source: s })}>{sourceLabel[s]}</button>)}
       </div>
-      <p className="m-help">1365 활동은 1365 자원봉사포털에서 신청해요.</p>
     </section>
   </Sheet>
 }
