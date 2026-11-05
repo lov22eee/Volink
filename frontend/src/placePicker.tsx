@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
 import { Glyph } from './icons'
+import { TextInput } from './app/ui'
 import { kakaoEnabled, loadKakao, pinSvg } from './map'
 import { currentPosition, decline, declined, remember, remembered } from './location'
 
@@ -129,7 +130,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
     <div className="place-dialog" role="dialog" aria-modal="true" aria-labelledby="place-dialog-title" ref={dialog}>
       <div className="dialog-head"><h2 id="place-dialog-title">장소 찾기</h2><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button></div>
       <form className="dialog-search" onSubmit={submit} role="search">
-        <Glyph name="search" /><input aria-label="장소 이름이나 주소" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="장소 이름이나 주소 (예: 옥정호수공원)" />
+        <Glyph name="search" /><TextInput aria-label="장소 이름이나 주소" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="장소 이름이나 주소 (예: 옥정호수공원)" />
         <button className="primary-button small" type="submit" disabled={busy}>검색</button>
       </form>
       {asking && <div className="place-ask" role="group" aria-label="내 위치에서 시작"><Glyph name="pin" size={16} /><span>내 위치 주변 장소부터 볼까요? <small>위치는 저장하지 않아요</small></span>
@@ -148,7 +149,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
               </button>
             </li>
           })}</ul>
-          <label className="meeting-field">만나는 곳 <span className="field-hint">선택 · 100자 이내</span><input value={meeting} maxLength={100} onChange={event => setMeeting(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
+          <label className="meeting-field">만나는 곳 <span className="field-hint">선택 · 100자 이내</span><TextInput value={meeting} maxLength={100} onChange={event => setMeeting(event.target.value)} placeholder="예: 정문 안내판 앞" /></label>
           {chosen?.placeClass === 'REVIEW' && <p className="small-print">{chosen.classLabel}에서 하는 활동은 관리자가 확인한 뒤 공개돼요.</p>}
         </div>
         {kakaoEnabled && mode !== 'LOCAL'

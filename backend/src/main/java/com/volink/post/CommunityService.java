@@ -40,6 +40,7 @@ public class CommunityService {
     private static final String COLUMNS = """
             p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, a.id AS activityId, (p.activity_id IS NOT NULL) AS reviewed,
             a.title AS activityTitle, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS activityDate,
+            (SELECT ac.name FROM categories ac WHERE ac.id = a.category_id) AS activityCategory, p.edited_at IS NOT NULL AS edited,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
@@ -68,13 +69,14 @@ public class CommunityService {
         Long organizer = post.get("activityId") == null ? null
                 : jdbc.queryForObject("SELECT organizer_id FROM activities WHERE id = ?", Long.class, post.get("activityId"));
         List<Map<String, Object>> comments = jdbc.queryForList(Sql.kst("""
-                SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt
+                SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt, c.edited_at IS NOT NULL AS edited
                 FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL ORDER BY c.created_at, c.id
                 """), id);
         comments.forEach(comment -> {
             long author = ((Number) comment.remove("authorId")).longValue();
             comment.put("author", shown(comment));
             comment.put("mine", author == viewerId);
+            if (comment.get("edited") instanceof Number edited) comment.put("edited", edited.intValue() == 1);
             comment.put("organizer", organizer != null && organizer == author);
             comment.put("postAuthor", author == ((Number) post.get("authorIdRaw")).longValue());
         });
@@ -115,6 +117,35 @@ public class CommunityService {
         if (today >= POSTS_PER_DAY) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_POSTS", "글은 하루에 " + POSTS_PER_DAY + "개까지 쓸 수 있어요.");
         jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id) VALUES (?, ?, ?, ?, ?)", userId, category, title, body, activityId);
         return detail(userId, jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
+    }
+
+    public record EditRequest(String title, String body) {}
+
+    /** The author fixes the title and text (the kind and the reviewed activity stay). Shown as "수정됨". */
+    @Transactional
+    public Map<String, Object> edit(long userId, long id, EditRequest request) {
+        writer(userId);
+        if (authorOf("community_posts", id) != userId) throw notFound();
+        String title = clean(request.title()), body = clean(request.body());
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (title.length() < 2 || title.length() > TITLE_MAX) errors.put("title", "제목은 2~" + TITLE_MAX + "자로 적어 주세요.");
+        if (body.length() < 5 || body.length() > BODY_MAX) errors.put("body", "내용은 5~" + BODY_MAX + "자로 적어 주세요.");
+        if (contact(title) || contact(body)) errors.put(contact(title) ? "title" : "body", "전화번호·이메일·오픈채팅 같은 연락처는 올릴 수 없어요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        jdbc.update("UPDATE community_posts SET title = ?, body = ?, edited_at = ? WHERE id = ?", title, body, now(), id);
+        return detail(userId, id);
+    }
+
+    @Transactional
+    public Map<String, Object> editComment(long userId, long id, CommentRequest request) {
+        writer(userId);
+        if (authorOf("community_comments", id) != userId) throw notFound();
+        String body = clean(request.body());
+        if (body.isEmpty() || body.length() > COMMENT_MAX) throw ApiException.validation(Map.of("body", "댓글은 1~" + COMMENT_MAX + "자로 적어 주세요."));
+        if (contact(body)) throw ApiException.validation(Map.of("body", "전화번호·이메일·오픈채팅 같은 연락처는 올릴 수 없어요."));
+        jdbc.update("UPDATE community_comments SET body = ?, edited_at = ? WHERE id = ?", body, now(), id);
+        long postId = jdbc.queryForObject("SELECT post_id FROM community_comments WHERE id = ?", Long.class, id);
+        return detail(userId, postId);
     }
 
     @Transactional
@@ -166,6 +197,7 @@ public class CommunityService {
         row.put("author", shown(row));
         row.put("mine", author == viewerId);
         row.put("liked", ((Number) row.get("liked")).intValue() == 1);
+        if (row.get("edited") instanceof Number edited) row.put("edited", edited.intValue() == 1);
         // A deleted activity (organizer withdrew or deleted it) drops its title and link; the review stays verified.
         row.put("verified", ((Number) row.remove("reviewed")).intValue() == 1);
         if (!row.containsKey("body")) row.remove("authorIdRaw");

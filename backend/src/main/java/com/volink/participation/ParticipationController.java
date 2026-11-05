@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -33,6 +34,14 @@ public class ParticipationController {
     @GetMapping("/api/activities/{id}/participations")
     public Map<String, Object> applicants(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
         return participations.applicants(user(jwt), id);
+    }
+
+    public record AutoApprove(Boolean on) {}
+
+    /** 자동 승인 on/off (organizer). Turning it on confirms waiting applications while seats are free. */
+    @PutMapping("/api/activities/{id}/auto-approve")
+    public Map<String, Object> autoApprove(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody AutoApprove body) {
+        return participations.autoApprove(user(jwt), id, body == null ? null : body.on());
     }
 
     @PostMapping("/api/participations/{id}/approve")

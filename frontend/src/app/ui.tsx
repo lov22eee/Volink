@@ -312,6 +312,10 @@ function QuietField<E extends HTMLInputElement | HTMLTextAreaElement>({ tag, pro
   useLayoutEffect(() => {
     const field = document.createElement(tag) as E
     field.value = value
+    // Android WebView asks the system spell checker on every key (a round trip to the keyboard); words in this app are
+    // short notes and names, so it is off. The keyboard's own suggestions still work.
+    field.spellcheck = false
+    field.setAttribute('autocorrect', 'off')
     el.current = field
     const off: (() => void)[] = []
     for (const [prop, type] of Object.entries(EVENTS)) {

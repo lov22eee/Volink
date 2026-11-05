@@ -28,7 +28,7 @@ public class ActivityService {
                    o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint, a.supplies,
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
-                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.reschedule_count AS rescheduleCount, a.cancel_reason AS cancelReason,
+                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
                    a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId, u.display_name AS organizerName,
                    ST_Latitude(l.location) AS latitude, ST_Longitude(l.location) AS longitude
@@ -205,12 +205,12 @@ public class ActivityService {
             jdbc.update("""
                     UPDATE activities SET category_id = ?, activity_type = ?, organization_id = ?, place_id = ?, meeting_point = ?, supplies = ?,
                            title = ?, description = ?, starts_at = ?, ends_at = ?, capacity = ?, risk_level = ?, risk_reasons = ?, status = ?, review_note = NULL,
-                           difficulty = ?, place_kind = ?, newcomer_ok = ?
+                           difficulty = ?, place_kind = ?, newcomer_ok = ?, auto_approve = COALESCE(?, auto_approve)
                     WHERE id = ?
                     """, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint,
                     supplies.isEmpty() ? null : write(supplies), title, description, times[0].startsAt(), times[0].endsAt(), request.capacity(),
                     result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
-                    request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), id);
+                    request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), request.autoApprove(), id);
             jdbc.update("DELETE FROM activity_locations WHERE activity_id = ?", id);
             places.locate(id, placeId);
             log(id, userId, (String) existing.get("status"), status, "수정 · 위험도 " + result.level());
@@ -218,13 +218,13 @@ public class ActivityService {
         }
         jdbc.update("""
                 INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, meeting_point, supplies, title, description,
-                                       starts_at, ends_at, capacity, risk_level, risk_reasons, status, difficulty, place_kind, newcomer_ok)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       starts_at, ends_at, capacity, risk_level, risk_reasons, status, difficulty, place_kind, newcomer_ok, auto_approve)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint,
                 supplies.isEmpty() ? null : write(supplies), title, description,
                 times[0].startsAt(), times[0].endsAt(), request.capacity(),
                 result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
-                request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer());
+                request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), Boolean.TRUE.equals(request.autoApprove()));
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         places.locate(id, placeId);
         log(id, userId, null, status, "개설 · 위험도 " + result.level());

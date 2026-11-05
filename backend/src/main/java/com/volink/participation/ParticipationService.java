@@ -44,7 +44,7 @@ public class ParticipationService {
         this.clock = clock;
     }
 
-    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, int capacity) {
+    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, int capacity, boolean autoApprove) {
         LocalDateTime waitlistClosesAt() { return startsAt.minus(WAITLIST_CLOSE); }
         String link() { return "#/activity/" + id; }
     }
@@ -79,7 +79,8 @@ public class ParticipationService {
         boolean full = seatsTaken(activityId) >= activity.capacity();
         if (full && !now.isBefore(activity.waitlistClosesAt()))
             throw conflict("WAITLIST_CLOSED", "정원이 찼고 대기 신청도 마감되었습니다(시작 2시간 전 마감).");
-        String to = full ? "WAITLISTED" : "APPLIED";
+        // 자동 승인: a free seat is confirmed at once (the seat count above ran under the activity lock).
+        String to = full ? "WAITLISTED" : activity.autoApprove() ? "CONFIRMED" : "APPLIED";
         Integer order = full ? nextWaitOrder(activityId) : null;
         long id;
         String from = null;
@@ -92,8 +93,12 @@ public class ParticipationService {
             from = (String) existing.get("status");
             jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ? WHERE id = ?", to, order, now, id);
         }
-        log(activityId, id, userId, from, to, from == null ? "신청" : "다시 신청");
-        notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link());
+        log(activityId, id, userId, from, to, (from == null ? "신청" : "다시 신청") + ("CONFIRMED".equals(to) ? " · 자동 승인" : ""));
+        if ("CONFIRMED".equals(to)) {
+            notifications.send(activity.organizerId(), "APPLIED", "새 참가자 확정", activity.title() + " · 자동 승인으로 한 명이 참가 확정되었습니다.", activity.link());
+            notifications.send(userId, "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+        } else
+            notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link());
         if (full) notifications.send(userId, "WAITLISTED", "대기 " + order + "번으로 신청했습니다",
                 activity.title() + " · 빈자리가 생기면 순서대로 자리를 제안합니다.", activity.link());
         return viewer(activityId, userId);
@@ -234,6 +239,29 @@ public class ParticipationService {
         notifications.send(applicant(participationId), "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
     }
 
+    /**
+     * 자동 승인 on/off by the organizer. Turning it on also confirms the applications already waiting for approval,
+     * oldest first, while seats are free (the rest stay waiting for a hand approval). Returns how many were confirmed.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> autoApprove(long organizerId, long activityId, Boolean on) {
+        if (on == null) throw com.volink.common.ApiException.validation(Map.of("on", "켜거나 끄는 값을 보내 주세요."));
+        Activity activity = lock(activityId);
+        if (activity.organizerId() != organizerId) throw activityNotFound();
+        jdbc.update("UPDATE activities SET auto_approve = ? WHERE id = ?", on, activityId);
+        int confirmed = 0;
+        if (on && "RECRUITING".equals(activity.status()) && now().isBefore(activity.startsAt())) {
+            for (Long id : jdbc.queryForList("SELECT id FROM participations WHERE activity_id = ? AND status = 'APPLIED' ORDER BY created_at, id", Long.class, activityId)) {
+                if (seatsTaken(activityId) >= activity.capacity()) break;
+                jdbc.update("UPDATE participations SET status = 'CONFIRMED', updated_at = ? WHERE id = ?", now(), id);
+                log(activityId, id, organizerId, "APPLIED", "CONFIRMED", "자동 승인 켜기");
+                notifications.send(applicant(id), "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+                confirmed++;
+            }
+        }
+        return Map.of("autoApprove", on, "confirmed", confirmed);
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void reject(long organizerId, long participationId, String rawReason) {
         Activity activity = organizerLock(organizerId, participationId);
@@ -308,9 +336,10 @@ public class ParticipationService {
     }
 
     private Activity lock(long activityId) {
-        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, capacity FROM activities WHERE id = ? FOR UPDATE", activityId)
+        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, capacity, auto_approve FROM activities WHERE id = ? FOR UPDATE", activityId)
                 .stream().findFirst().map(row -> new Activity(((Number) row.get("id")).longValue(), ((Number) row.get("organizer_id")).longValue(),
-                        (String) row.get("title"), (String) row.get("status"), time(row.get("starts_at")), ((Number) row.get("capacity")).intValue()))
+                        (String) row.get("title"), (String) row.get("status"), time(row.get("starts_at")), ((Number) row.get("capacity")).intValue(),
+                        Boolean.TRUE.equals(row.get("auto_approve")) || Integer.valueOf(1).equals(row.get("auto_approve"))))
                 .orElseThrow(ParticipationService::activityNotFound);
     }
 

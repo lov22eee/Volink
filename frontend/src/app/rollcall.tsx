@@ -1,4 +1,4 @@
-// 출석부 (organizer, app): QR + 4-digit code on top, then who is here (✅) and who is not yet (⬜).
+// 출석부 (organizer, app): QR + 4-digit code on top, then who is here and who is not yet (before check-in opens: only who is confirmed).
 // Anyone not yet here can be checked in by hand with a reason, one at a time or several at once with one reason
 // (e.g. people who applied on a PC and have no phone with them). Every manual check-in keeps its reason.
 import { useCallback, useEffect, useState } from 'react'
@@ -73,7 +73,14 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
       : phase === 'late' ? <div className="m-note warm"><strong>QR·코드 체크인 시간이 지났어요</strong>늦게 온 사람은 아래 ‘출석 체크’로 확인해 주세요.</div>
       : null}
 
-    <div className="r-sec"><h3>✅ 출석 <b>{here.length}</b>/{expected}</h3></div>
+    {(phase === 'later' || phase === 'soon') ? <>
+      <div className="r-sec"><h3><MIcon name="users" size={18} />참가 확정 <b>{notYet.length + here.length}</b>명</h3></div>
+      {notYet.length + here.length ? <ul className="r-roll">{[...here, ...notYet].map(p => <li key={p.id}>
+        <span className="m-avatar sm"><MIcon name="user" size={16} /></span>
+        <span className="r-nm"><b>{p.name}</b>{p.lateMinutes ? <small className="late">약 {p.lateMinutes}분 늦어요</small> : null}</span>
+      </li>)}</ul> : <p className="r-empty">아직 확정된 참가자가 없어요.</p>}
+    </> : <>
+    <div className="r-sec"><h3><MIcon name="checkCircle" size={18} />출석 <b>{here.length}</b>/{expected}</h3></div>
     {here.length ? <ul className="r-roll">{here.map(p => <li key={p.id}>
       <span className="r-ok"><MIcon name="check" size={15} /></span>
       <span className="r-nm"><b>{p.name}</b><small>{p.checkedInAt ?? ''}{p.checkInReason ? ' · ' + p.checkInReason : ''}{p.status === 'COMPLETED' ? ' · 완료 확인' : ''}</small></span>
@@ -81,16 +88,17 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
     </li>)}</ul> : <p className="r-empty">아직 출석한 사람이 없어요.</p>}
 
     {phase !== 'ended' && <>
-      <div className="r-sec"><h3>⬜ 아직 <b>{notYet.length}</b></h3>
+      <div className="r-sec"><h3><MIcon name="clock" size={18} />아직 <b>{notYet.length}</b></h3>
         {canManual && notYet.length > 1 && <button type="button" className="m-text-btn" onClick={() => { setSelecting(!selecting); setPicked([]) }}>{selecting ? '선택 취소' : '여러 명 선택'}</button>}</div>
       {notYet.length ? <ul className="r-roll">{notYet.map(p => {
         const on = picked.includes(p.id)
         return <li key={p.id} className={on ? 'sel' : ''} onClick={selecting ? () => setPicked(on ? picked.filter(x => x !== p.id) : [...picked, p.id]) : undefined}>
           {selecting ? <span className={'r-cb' + (on ? ' on' : '')} role="checkbox" aria-checked={on} aria-label={p.name + ' 선택'}>{on && <MIcon name="check" size={14} />}</span> : <span className="r-no" />}
-          <span className="r-nm"><b>{p.name}</b><small className={p.lateMinutes ? 'late' : ''}>{p.lateMinutes ? `🕐 약 ${p.lateMinutes}분 늦어요` : '아직 체크인 안 함'}</small></span>
+          <span className="r-nm"><b>{p.name}</b><small className={p.lateMinutes ? 'late' : ''}>{p.lateMinutes ? `약 ${p.lateMinutes}분 늦어요` : '아직 체크인 안 함'}</small></span>
           {!selecting && canManual && <button type="button" className="m-btn xs line" onClick={() => { setTarget([p]); setReason(reasons[0]); setOwn('') }}>출석 체크</button>}
         </li>
-      })}</ul> : <p className="r-empty">모두 출석했어요 🎉</p>}
+      })}</ul> : <p className="r-empty">모두 출석했어요</p>}
+    </>}
     </>}
     {phase === 'ended' && notYet.length > 0 && <p className="m-help">체크인하지 않은 {notYet.length}명은 불참으로 처리돼요.</p>}
     <p className="m-help">수동 확인은 사유와 함께 기록에 남아요. QR·위치 확인은 부정 참여를 줄이는 방법이며 완벽한 증명은 아니에요.</p>

@@ -1,14 +1,14 @@
 // 커뮤니티 (bottom tab): 자유 · 질문 · 봉사후기. Reviews are tied to an activity the writer completed ("참여 확인").
 // Names are partly hidden; contact details are refused by the server. No example posts: an empty board says so.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api, ApiError } from '../api'
 import { friendlyTime, showToast } from '../App'
-import { ActionBar, dayWord, Empty, go, Loading, MIcon, Sheet, TopBar, TextArea, TextInput } from './ui'
+import { ActionBar, dayWord, Empty, go, goBack, Loading, MIcon, Sheet, TopBar, TextArea, TextInput } from './ui'
 
 type Category = 'FREE' | 'QUESTION' | 'REVIEW'
-export type PostSummary = { id: number; category: Category; title: string; preview: string; author: string; mine: boolean; createdAt: string; likes: number; comments: number; liked: boolean; verified: boolean; activityId: number | null; activityTitle: string | null; activityDate: string | null }
-type Comment = { id: number; body: string; author: string; mine: boolean; organizer: boolean; postAuthor: boolean; createdAt: string }
+export type PostSummary = { id: number; category: Category; title: string; preview: string; author: string; mine: boolean; createdAt: string; likes: number; comments: number; liked: boolean; verified: boolean; activityId: number | null; activityTitle: string | null; activityDate: string | null; activityCategory?: string | null; edited?: boolean }
+type Comment = { id: number; body: string; author: string; mine: boolean; organizer: boolean; postAuthor: boolean; createdAt: string; edited?: boolean }
 type Post = Omit<PostSummary, 'preview'> & { body: string; comments: Comment[] }
 type Reviewable = { id: number; title: string; date: string; durationMinutes: number }
 
@@ -16,7 +16,6 @@ export const categoryLabel: Record<Category, string> = { FREE: '자유', QUESTIO
 const order: Category[] = ['FREE', 'QUESTION', 'REVIEW']
 // The server sends "yyyy-MM-ddTHH:mm"; friendlyTime reads "yyyy-MM-dd HH:mm".
 const ago = (value: string) => friendlyTime(value.replace('T', ' '))
-const shortDate = (date: string) => Number(date.slice(5, 7)) + '/' + Number(date.slice(8, 10))
 // "같이 할 분 구해요" kind of posts belong in 모집 (safety review, no contact exchange).
 const meetup = /(같이|함께).{0,12}(하실|할|가실|갈|하실래|해요|모여)|(구해요|구합니다|모여요|모집해요|모집합니다|만나요)/
 
@@ -163,126 +162,194 @@ function CommunityBoard({ actions, nickname }: { actions: ReactNode; nickname: s
   </div>
 }
 
+type Menu = { kind: 'post' } | { kind: 'comment'; comment: Comment }
+
 export function PostScreen({ id, onChange }: { id: number; onChange: () => void }) {
   const [post, setPost] = useState<Post | null>(null)
   const [failed, setFailed] = useState(false)
   const [text, setText] = useState('')
+  const [editing, setEditing] = useState<Comment | null>(null)
   const [busy, setBusy] = useState(false)
-  const [menu, setMenu] = useState(false)
+  const [menu, setMenu] = useState<Menu | null>(null)
+  const [confirm, setConfirm] = useState<{ path: string; title: string; done: string; after: () => void } | null>(null)
+  const [newest, setNewest] = useState(false)
   const [error, setError] = useState('')
+  const liking = useRef(false)
+  const reply = useRef<HTMLInputElement>(null)
   const load = useCallback(() => api<Post>('/api/community/posts/' + id).then(setPost).catch(() => setFailed(true)), [id])
   useEffect(() => { load() }, [load])
   if (failed) return <div className="m-screen"><TopBar title="게시글" back="#/community" /><div className="m-body"><Empty icon="chat" title="글을 찾을 수 없어요" text="지워졌을 수 있어요." action={<a className="m-btn sm" href="#/community">커뮤니티로</a>} /></div></div>
   if (!post) return <div className="m-screen"><TopBar title="게시글" back="history" /><Loading /></div>
+
+  // 좋아요: the heart changes at once; a second tap waits for the first answer; a failure puts it back.
   async function like() {
-    if (!post) return
+    if (!post || liking.current) return
+    liking.current = true
+    const before = post
+    setPost({ ...post, liked: !post.liked, likes: post.likes + (post.liked ? -1 : 1) })
     try {
-      const result = await api<{ liked: boolean; likes: number }>('/api/community/posts/' + id + '/like', post.liked ? 'DELETE' : 'PUT')
-      setPost({ ...post, liked: result.liked, likes: result.likes })
-    } catch { showToast('처리하지 못했어요') }
+      const result = await api<{ liked: boolean; likes: number }>('/api/community/posts/' + id + '/like', before.liked ? 'DELETE' : 'PUT')
+      setPost(current => current && { ...current, liked: result.liked, likes: result.likes })
+    } catch { setPost(before); showToast('처리하지 못했어요') } finally { liking.current = false }
   }
-  async function comment(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault()
-    if (!text.trim()) return
+    if (!text.trim() || busy) return
     setBusy(true)
     setError('')
     try {
-      setPost(await api<Post>('/api/community/posts/' + id + '/comments', 'POST', { body: text }))
+      setPost(editing ? await api<Post>('/api/community/comments/' + editing.id, 'PUT', { body: text })
+        : await api<Post>('/api/community/posts/' + id + '/comments', 'POST', { body: text }))
+      if (editing) showToast('댓글을 고쳤어요')
       setText('')
+      setEditing(null)
       onChange()
     } catch (cause) {
       setError(cause instanceof ApiError ? (cause.fieldErrors.body ?? cause.message) : '댓글을 달지 못했어요.')
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
-  async function remove(path: string, done: string, after: () => void) {
-    try { await api(path, 'DELETE'); showToast(done); after() } catch { showToast('지우지 못했어요') }
+  async function remove() {
+    if (!confirm) return
+    try { await api(confirm.path, 'DELETE'); showToast(confirm.done); confirm.after() } catch { showToast('지우지 못했어요') } finally { setConfirm(null) }
   }
+  const comments = newest ? [...post.comments].reverse() : post.comments
+  const scrollToComments = () => document.getElementById('c-comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   return <div className="m-screen c-post">
-    <TopBar title="게시글" back="history" actions={post.mine ? <button type="button" className="m-icon-btn" aria-label="글 메뉴" onClick={() => setMenu(true)}><MIcon name="more" /></button> : undefined} />
+    <TopBar title="게시글" back="history" actions={<button type="button" className="m-icon-btn" aria-label="글 메뉴" onClick={() => setMenu({ kind: 'post' })}><MIcon name="more" /></button>} />
     <div className="m-body">
       <article className="c-article">
         <div className="c-card-top"><span className={'m-badge ' + (post.category === 'REVIEW' ? 'mint' : 'gray')}>{categoryLabel[post.category]}</span>
-          {post.verified && <span className="c-verified"><MIcon name="check" size={14} />Volink 참여 확인</span>}</div>
+          {post.verified && <span className="c-verified"><MIcon name="checkCircle" size={15} />참여 확인</span>}</div>
         <h1>{post.title}</h1>
-        <div className="c-author"><span className="m-avatar sm"><MIcon name="user" size={17} /></span><span><b>{post.author}{post.mine ? ' (나)' : ''}</b><small>{ago(post.createdAt)}</small></span></div>
+        <div className="c-author"><span className="m-avatar sm"><MIcon name="user" size={17} /></span>
+          <span><b>{post.author}{post.mine && <em> (나)</em>}</b><small>{ago(post.createdAt)}{post.edited ? ' · 수정됨' : ''}</small></span></div>
         <p className="c-body">{post.body}</p>
-        {post.activityId && <a className="c-linked" href={'#/activity/' + post.activityId}><span><MIcon name="calendar" size={18} /><b>연결된 봉사활동</b></span>
-          <strong>{post.activityTitle}</strong><small>활동일 {post.activityDate ? shortDate(post.activityDate) : ''}</small><em>봉사 상세보기 <MIcon name="chevron" size={15} /></em></a>}
-        <div className="c-actions"><button type="button" className={'m-btn line sm' + (post.liked ? ' liked' : '')} aria-pressed={post.liked} onClick={like}><MIcon name={post.liked ? 'heart' : 'heart'} size={19} />좋아요 {post.likes}</button></div>
+        {post.activityId && <a className="c-linked" href={'#/activity/' + post.activityId}>
+          <span><MIcon name="calendar" size={18} /><b>함께한 봉사활동</b></span>
+          <strong>{post.activityTitle}</strong>
+          <small>{[post.activityDate ? Number(post.activityDate.slice(5, 7)) + '월 ' + Number(post.activityDate.slice(8, 10)) + '일' : null, post.activityCategory, '참여 완료'].filter(Boolean).join(' · ')}</small>
+          <em>활동 상세 보기 <MIcon name="chevron" size={15} /></em></a>}
+        <div className="c-stats">
+          <button type="button" className={post.liked ? 'on' : ''} aria-pressed={post.liked} onClick={like}><MIcon name="heart" size={19} />좋아요 {post.likes}</button>
+          <button type="button" onClick={scrollToComments}><MIcon name="chat" size={19} />댓글 {post.comments.length}</button>
+        </div>
       </article>
-      <section className="c-comments" aria-label="댓글"><h2>댓글 {post.comments.length}</h2>
-        {post.comments.length === 0 ? <p className="m-help">첫 댓글을 남겨 보세요.</p> : <ul>{post.comments.map(c => <li key={c.id}>
-          <span className="m-avatar sm"><MIcon name="user" size={16} /></span>
-          <div><b>{c.author}{c.mine ? ' (나)' : ''}{c.organizer && <span className="m-badge mint">모집자</span>}{c.postAuthor && !c.organizer && <span className="m-badge gray">글쓴이</span>}</b><p>{c.body}</p><small>{ago(c.createdAt)}</small></div>
-          {c.mine && <button type="button" className="m-text-btn" onClick={() => remove('/api/community/comments/' + c.id, '댓글을 지웠어요', load)}>지우기</button>}
-        </li>)}</ul>}
+      <section className="c-comments" id="c-comments" aria-label="댓글">
+        <div className="c-comments-head"><h2>댓글 <b>{post.comments.length}</b></h2>
+          {post.comments.length > 1 && <button type="button" className="m-text-btn" onClick={() => setNewest(!newest)}>{newest ? '최신순' : '등록순'}</button>}</div>
+        {post.comments.length === 0 ? <div className="c-empty"><MIcon name="chat" size={26} /><strong>아직 댓글이 없어요</strong><span>첫 번째 이야기를 남겨보세요!</span></div>
+          : <ul>{comments.map(c => <li key={c.id}>
+            <span className="m-avatar sm"><MIcon name="user" size={16} /></span>
+            <div><b>{c.author}{c.mine && <em> (나)</em>}{c.organizer && <span className="m-badge mint">모집자</span>}{c.postAuthor && !c.organizer && <span className="m-badge gray">글쓴이</span>}</b>
+              <p>{c.body}</p><small>{ago(c.createdAt)}{c.edited ? ' · 수정됨' : ''}</small></div>
+            <button type="button" className="m-icon-btn sm" aria-label="댓글 메뉴" onClick={() => setMenu({ kind: 'comment', comment: c })}><MIcon name="more" size={18} /></button>
+          </li>)}</ul>}
       </section>
     </div>
-    <form className="c-reply" onSubmit={comment}>
+    <form className="c-reply" onSubmit={submit}>
+      {editing && <div className="c-editing"><span>댓글 고치는 중</span><button type="button" className="m-text-btn" onClick={() => { setEditing(null); setText('') }}>취소</button></div>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <div><TextInput className="m-input" aria-label="댓글 내용" placeholder="댓글 달기" maxLength={500} value={text} onChange={event => { setText(event.target.value); setError('') }} enterKeyHint="send" />
-        <button className="c-send" aria-label="댓글 보내기" disabled={busy || !text.trim()}><MIcon name="send" size={20} /></button></div>
+      <div><TextInput ref={reply} className="m-input" aria-label="댓글 내용" placeholder="댓글을 입력해 주세요" maxLength={500} value={text} onChange={event => { setText(event.target.value); setError('') }} enterKeyHint="send" />
+        <button className="c-send" aria-label={editing ? '댓글 고치기' : '댓글 보내기'} disabled={busy || !text.trim()}><MIcon name="send" size={20} /></button></div>
     </form>
-    {menu && <Sheet title="글 메뉴" onClose={() => setMenu(false)}>
-      <nav className="m-menu flat"><button type="button" className="danger" onClick={() => remove('/api/community/posts/' + id, '글을 지웠어요', () => go('#/community'))}><MIcon name="trash" size={20} /><span>글 지우기</span><MIcon name="chevron" size={18} /></button></nav>
+    {menu && <Sheet title={menu.kind === 'post' ? '글 메뉴' : '댓글 메뉴'} onClose={() => setMenu(null)}>
+      <nav className="m-menu flat">{menu.kind === 'post'
+        ? post.mine ? <>
+          <button type="button" onClick={() => { setMenu(null); go('#/write?edit=' + id) }}><MIcon name="edit" size={20} /><span>글 수정</span><MIcon name="chevron" size={18} /></button>
+          <button type="button" className="danger" onClick={() => { setMenu(null); setConfirm({ path: '/api/community/posts/' + id, title: '글을 지울까요?', done: '글을 지웠어요', after: () => go('#/community') }) }}><MIcon name="trash" size={20} /><span>글 삭제</span><MIcon name="chevron" size={18} /></button></>
+          : <button type="button" className="danger" onClick={() => { setMenu(null); showToast('신고 기능은 곧 열려요') }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>
+        : menu.comment.mine ? <>
+          <button type="button" onClick={() => { const c = menu.comment; setMenu(null); setEditing(c); setText(c.body); window.setTimeout(() => reply.current?.focus(), 50) }}><MIcon name="edit" size={20} /><span>댓글 수정</span><MIcon name="chevron" size={18} /></button>
+          <button type="button" className="danger" onClick={() => { const c = menu.comment; setMenu(null); setConfirm({ path: '/api/community/comments/' + c.id, title: '댓글을 지울까요?', done: '댓글을 지웠어요', after: load }) }}><MIcon name="trash" size={20} /><span>댓글 삭제</span><MIcon name="chevron" size={18} /></button></>
+          : <button type="button" className="danger" onClick={() => { setMenu(null); showToast('신고 기능은 곧 열려요') }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>}
+      </nav>
     </Sheet>}
+    {confirm && <Sheet title={confirm.title} onClose={() => setConfirm(null)} footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setConfirm(null)}>취소</button><button type="button" className="m-btn danger" onClick={remove}>지우기</button></div>}>
+      <p className="m-help">지운 뒤에는 되돌릴 수 없어요.</p></Sheet>}
   </div>
 }
 
-export function WriteScreen({ initial, activity }: { initial?: string; activity?: number }) {
-  const [category, setCategory] = useState<Category>(initial === 'QUESTION' || initial === 'REVIEW' ? initial : activity ? 'REVIEW' : 'FREE')
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [picked, setPicked] = useState<number | null>(activity ?? null)
+const DRAFT = 'volink.communityDraft'
+type Draft = { category: Category; title: string; body: string; picked: number | null }
+const readDraft = (): Draft | null => { try { const raw = localStorage.getItem(DRAFT); return raw ? JSON.parse(raw) as Draft : null } catch { return null } }
+const writeDraft = (draft: Draft | null) => { try { if (draft) localStorage.setItem(DRAFT, JSON.stringify(draft)); else localStorage.removeItem(DRAFT) } catch { /* storage blocked */ } }
+const bodyHint: Record<Category, string> = {
+  FREE: '이웃들과 나누고 싶은 이야기를 자유롭게 적어 주세요.',
+  QUESTION: '궁금한 점을 적어 주세요. 준비물, 처음 참여할 때 팁 등',
+  REVIEW: '어떤 활동이었는지, 좋았던 점과 아쉬운 점을 나눠 주세요.',
+}
+
+/** 글쓰기 (and 글 수정 with editId): kind chips, title, text; a draft is kept on the phone until it is posted. */
+export function WriteScreen({ initial, activity, editId }: { initial?: string; activity?: number; editId?: number }) {
+  const saved = useMemo(() => editId || activity ? null : readDraft(), [editId, activity])
+  const [category, setCategory] = useState<Category>(saved?.category ?? (initial === 'QUESTION' || initial === 'REVIEW' ? initial : activity ? 'REVIEW' : 'FREE'))
+  const [title, setTitle] = useState(saved?.title ?? '')
+  const [body, setBody] = useState(saved?.body ?? '')
+  const [picked, setPicked] = useState<number | null>(activity ?? saved?.picked ?? null)
   const [reviewable, setReviewable] = useState<Reviewable[] | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  useEffect(() => { api<Reviewable[]>('/api/community/reviewable').then(list => { setReviewable(list); if (!activity && list[0]) setPicked(list[0].id) }).catch(() => setReviewable([])) }, [activity])
+  const [leaving, setLeaving] = useState(false)
+  const [loaded, setLoaded] = useState(!editId)
+  useEffect(() => { if (saved && (saved.title || saved.body)) showToast('작성 중이던 글을 불러왔어요') }, [saved])
+  useEffect(() => {
+    if (editId) { api<Post>('/api/community/posts/' + editId).then(p => { setCategory(p.category); setTitle(p.title); setBody(p.body); setLoaded(true) }).catch(() => { showToast('글을 불러오지 못했어요'); go('#/community') }); return }
+    api<Reviewable[]>('/api/community/reviewable').then(list => { setReviewable(list); if (!activity && !saved?.picked && list[0]) setPicked(list[0].id) }).catch(() => setReviewable([]))
+  }, [activity, editId, saved])
+  // Keep the draft (new posts only) as the person types.
+  useEffect(() => { if (!editId && loaded) writeDraft(title || body ? { category, title, body, picked } : null) }, [editId, loaded, category, title, body, picked])
   const looksLikeMeetup = useMemo(() => category !== 'REVIEW' && meetup.test(title + ' ' + body), [category, title, body])
   const canReview = (reviewable?.length ?? 0) > 0
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  const ready = title.trim().length >= 2 && body.trim().length >= 5 && (editId || category !== 'REVIEW' || (canReview && picked))
+  async function submit(event?: FormEvent) {
+    event?.preventDefault()
     const found: Record<string, string> = {}
     if (title.trim().length < 2) found.title = '제목은 2자 이상 적어 주세요.'
     if (body.trim().length < 5) found.body = '내용은 5자 이상 적어 주세요.'
-    if (category === 'REVIEW' && !picked) found.activityId = '후기를 남길 활동을 골라 주세요.'
+    if (!editId && category === 'REVIEW' && !picked) found.activityId = '후기를 남길 활동을 골라 주세요.'
     setErrors(found)
     if (Object.keys(found).length) return
     setBusy(true)
     try {
-      const post = await api<Post>('/api/community/posts', 'POST', { category, title, body, activityId: category === 'REVIEW' ? picked : null })
-      showToast('글을 올렸어요')
+      const post = editId ? await api<Post>('/api/community/posts/' + editId, 'PUT', { title, body })
+        : await api<Post>('/api/community/posts', 'POST', { category, title, body, activityId: category === 'REVIEW' ? picked : null })
+      if (!editId) writeDraft(null)
+      showToast(editId ? '글을 고쳤어요' : '글을 올렸어요')
       window.location.replace('#/post/' + post.id)
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setErrors(cause.fieldErrors)
       else setErrors({ form: cause instanceof Error ? cause.message : '올리지 못했어요.' })
-    } finally {
-      setBusy(false)
-    }
+    } finally { setBusy(false) }
   }
-  return <div className="m-screen m-create">
-    <TopBar title="글쓰기" back="history" />
+  const dirty = Boolean(title.trim() || body.trim())
+  if (!loaded) return <div className="m-screen"><TopBar title="글 수정" back="history" /><Loading /></div>
+  return <div className="m-screen m-create c-write">
+    <TopBar title={editId ? '글 수정' : '글쓰기'} back={() => dirty ? setLeaving(true) : goBack('#/community')}
+      actions={<button type="button" className="c-post-btn" disabled={busy || !ready} onClick={() => submit()}>{editId ? '저장' : '등록'}</button>} />
     <form className="m-body m-form" onSubmit={submit} noValidate>
-      <div className="m-field"><span className="m-label">글 종류</span><div className="m-seg wide">{order.map(c =>
-        <button type="button" key={c} className={category === c ? 'on' : ''} aria-pressed={category === c} onClick={() => setCategory(c)}>{categoryLabel[c]}</button>)}</div></div>
-      {category === 'REVIEW' && (!reviewable ? <Loading /> : canReview ? <div className="m-field"><span className="m-label">어떤 활동 후기인가요?</span>
+      {!editId && <div className="m-field"><span className="m-label">어떤 이야기를 나눌까요?</span><div className="c-kinds">{order.map(c =>
+        <button type="button" key={c} className={'m-chip' + (category === c ? ' on' : '')} aria-pressed={category === c} onClick={() => setCategory(c)}>{categoryLabel[c]}</button>)}</div></div>}
+      {!editId && category === 'REVIEW' && (!reviewable ? <Loading /> : canReview ? <div className="m-field"><span className="m-label">내 완료 기록에서 골라 주세요</span>
         <div className="c-picks">{reviewable.slice(0, 4).map(a => <button type="button" key={a.id} className={'c-pick' + (picked === a.id ? ' on' : '')} aria-pressed={picked === a.id} onClick={() => setPicked(a.id)}>
-          <span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} 완료</small></span></button>)}</div>
+          <span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} 참여 완료</small></span></button>)}</div>
         {errors.activityId && <span className="m-err">{errors.activityId}</span>}</div>
         : <div className="m-note"><strong>아직 후기를 쓸 수 있는 활동이 없어요</strong>Volink 활동에 참여하고 완료 확인을 받으면 ‘참여 확인’ 후기를 남길 수 있어요.</div>)}
       <label className="m-field"><span className="m-label">제목</span>
-        <input name="title" className={'m-input' + (errors.title ? ' bad' : '')} maxLength={60} placeholder={category === 'REVIEW' ? '예: 호수공원 플로깅 다녀왔어요' : category === 'QUESTION' ? '예: 첫 봉사인데 준비물이 있을까요?' : '예: 플로깅엔 코팅 장갑이 편해요'}
-          value={title} onChange={event => setTitle(event.target.value)} enterKeyHint="next" />
+        <TextInput name="title" className={'m-input' + (errors.title ? ' bad' : '')} maxLength={60} placeholder="제목을 입력해 주세요" value={title} onChange={event => setTitle(event.target.value)} enterKeyHint="next" />
         <span className="m-count">{title.trim().length} / 60</span>{errors.title && <span className="m-err">{errors.title}</span>}</label>
       <label className="m-field"><span className="m-label">내용</span>
-        <TextArea name="body" className={'m-input' + (errors.body ? ' bad' : '')} rows={7} maxLength={2000} placeholder="이웃에게 나누고 싶은 이야기를 적어 주세요." value={body} onChange={event => setBody(event.target.value)} />
-        <span className="m-count">{body.trim().length} / 2000</span>{errors.body && <span className="m-err">{errors.body}</span>}</label>
+        <TextArea name="body" className={'m-input' + (errors.body ? ' bad' : '')} rows={8} maxLength={2000} placeholder={bodyHint[category]} value={body} onChange={event => setBody(event.target.value)} />
+        <span className="m-count">{body.trim().length.toLocaleString()} / 2,000</span>{errors.body && <span className="m-err">{errors.body}</span>}</label>
       {looksLikeMeetup && <div className="m-note warm"><strong>같이 할 사람을 찾고 있나요?</strong>모집으로 열면 안전 검토와 출석 확인을 받을 수 있고, 연락처를 주고받지 않아도 돼요. <a className="c-inline-link" href="#/host">모집하러 가기 →</a></div>}
-      <p className="m-help">전화번호·이메일·오픈채팅은 올릴 수 없어요. 글에는 내 커뮤니티 닉네임이 보여요.</p>
+      <p className="c-safe"><MIcon name="alert" size={17} />개인 연락처와 민감한 정보는 공유하지 마세요.</p>
       {errors.form && <div className="m-note bad">{errors.form}</div>}
-      <ActionBar><button className="m-btn" disabled={busy || (category === 'REVIEW' && !canReview)}>{busy ? '올리는 중…' : '올리기'}</button></ActionBar>
+      <ActionBar><button className="m-btn" disabled={busy || (!editId && category === 'REVIEW' && !canReview)}>{busy ? '올리는 중…' : editId ? '수정 저장하기' : '게시글 등록하기'}</button></ActionBar>
     </form>
+    {leaving && <Sheet title="작성 중인 글을 버릴까요?" onClose={() => setLeaving(false)} footer={<div className="c-leave">
+      {!editId && <button type="button" className="m-btn" onClick={() => { setLeaving(false); goBack('#/community') }}>임시 저장하고 나가기</button>}
+      <button type="button" className="m-btn line danger-text" onClick={() => { if (!editId) writeDraft(null); setLeaving(false); goBack('#/community') }}>{editId ? '고친 내용 버리기' : '버리기'}</button>
+      <button type="button" className="m-btn line" onClick={() => setLeaving(false)}>계속 쓰기</button></div>}>
+      <p className="m-help">{editId ? '나가면 고친 내용은 저장되지 않아요.' : '임시 저장하면 다음에 글쓰기를 열 때 이어서 쓸 수 있어요.'}</p>
+    </Sheet>}
   </div>
 }

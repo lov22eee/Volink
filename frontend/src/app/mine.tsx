@@ -46,8 +46,8 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
             <small>{p.date.slice(5).replace('-', '/')} {p.startTime}{p.activityStatus === 'CANCELLED' ? ' · 모집자가 활동을 취소했어요' : ''}</small></span>
             <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.activityStatus === 'CANCELLED' ? '활동 취소' : statusWord[p.status]?.text ?? p.status}</span></a>)}</div></section>}
       </>)}
-      {view === 'host' && <div className="m-newbtns"><a className="main" href="#/create"><MIcon name="plus" size={22} />새 활동 만들기<small>3단계로 쉽게</small></a>
-        <a href="#/host"><MIcon name="refresh" size={22} />다시 모집<small>지난 활동 복사</small></a></div>}
+      {view === 'host' && <div className="m-newbtns"><a className="main" href="#/create"><MIcon name="plus" size={22} /><span>새 활동 만들기</span></a>
+        <a href="#/host"><MIcon name="refresh" size={22} /><span>다시 모집</span></a></div>}
       {view === 'host' && (!hosted ? <Loading /> : hosted.length ? <div className="m-cards">{hosted.map(a => {
         const live = ['RECRUITING', 'IN_PROGRESS', 'DRAFT'].includes(a.status)
         const word = a.status === 'DRAFT' ? (a.reviewNote ? '반려' : '검토 중') : a.status === 'RECRUITING' ? '모집 중' : a.status === 'IN_PROGRESS' ? '진행 중' : a.status === 'FINISHED' ? '종료' : '취소'

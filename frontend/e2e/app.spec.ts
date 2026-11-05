@@ -60,9 +60,12 @@ test('nothing is shown before signing in, and signup has three steps without an 
   // The birth wheel opens by itself.
   await page.getByRole('option', { name: '2003년' }).click()
   await page.getByRole('button', { name: '완료' }).click()
-  // Interests are no longer asked at signup (마이 > 관심 분야, optional).
-  await expect(page.getByRole('button', { name: '환경' })).toHaveCount(0)
   await next.click()
+  // Interests are optional: pick up to 3 or leave them for later.
+  await expect(page.getByRole('heading', { name: '관심 있는 봉사를 골라 주세요' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '나중에 할게요' })).toBeVisible()
+  await page.getByRole('button', { name: '환경' }).click()
+  await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText('기관 회원', { exact: true })).toHaveCount(0)
   const terms = page.getByRole('dialog', { name: '마지막으로 확인해 주세요' })
   await terms.getByText('모두 동의').click()
@@ -128,6 +131,12 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await memberPage.reload()
   await expect(memberPage.getByText('참가가 확정됐어요')).toBeVisible()
   await expect(memberPage.getByRole('button', { name: '못 가요' })).toBeVisible()
+  // 못 가요 needs a reason before it can be sent.
+  await memberPage.getByRole('button', { name: '못 가요' }).click()
+  await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeDisabled()
+  await memberPage.getByRole('button', { name: '몸이 좋지 않아요' }).click()
+  await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeEnabled()
+  await memberPage.keyboard.press('Escape')
   await memberPage.goto('/#/notifications')
   await expect(memberPage.getByText('활동 일정이 바뀌었어요')).toBeVisible()
   await memberPage.close()
@@ -198,10 +207,10 @@ test('community: a question, a like and a comment, and a review only after compl
   const title = '첫 봉사 준비물 질문 ' + Date.now() % 100000
   await page.locator('input[name=title]').fill(title)
   await page.locator('textarea[name=body]').fill('연락 주세요 010-1234-5678')
-  await page.getByRole('button', { name: '올리기' }).click()
+  await page.getByRole('button', { name: '게시글 등록하기' }).click()
   await expect(page.getByText(/연락처는 올릴 수 없어요/).first()).toBeVisible()
   await page.locator('textarea[name=body]').fill('이번 주말 처음 참여하는데 무엇을 챙기면 좋을까요?')
-  await page.getByRole('button', { name: '올리기' }).click()
+  await page.getByRole('button', { name: '게시글 등록하기' }).click()
   await expect(page).toHaveURL(/#\/post\/\d+$/)
   const postUrl = page.url()
 
@@ -215,13 +224,27 @@ test('community: a question, a like and a comment, and a review only after compl
   await reader.getByLabel('댓글 내용').fill('장갑이랑 물 챙기세요!')
   await reader.getByRole('button', { name: '댓글 보내기' }).click()
   await expect(reader.getByText('장갑이랑 물 챙기세요!')).toBeVisible()
+  // Someone else's post: the menu offers 신고 (week 7: the button only), not edit or delete.
+  await reader.getByRole('button', { name: '글 메뉴', exact: true }).click()
+  await expect(reader.getByRole('button', { name: '글 수정' })).toHaveCount(0)
+  await reader.getByRole('button', { name: '신고하기' }).click()
+  await expect(reader.getByText('신고 기능은 곧 열려요')).toBeVisible()
   await reader.close()
+
+  // The writer fixes the title; the post says 수정됨.
+  await page.goto(postUrl.slice(postUrl.indexOf('#')).replace(/^/, '/'))
+  await page.getByRole('button', { name: '글 메뉴', exact: true }).click()
+  await page.getByRole('button', { name: '글 수정' }).click()
+  await page.locator('input[name=title]').fill(title + ' (수정)')
+  await page.getByRole('button', { name: '수정 저장하기' }).click()
+  await expect(page.getByRole('heading', { name: title + ' (수정)' })).toBeVisible()
+  await expect(page.getByText(/수정됨/)).toBeVisible()
 
   await page.goto('/#/notifications')
   await expect(page.getByText('내 글에 댓글이 달렸어요')).toBeVisible()
   await page.goto('/#/community')
   // The shared dev database keeps posts from earlier runs, so the title is unique.
-  await expect(page.getByText(title)).toBeVisible()
+  await expect(page.getByText(title + ' (수정)')).toBeVisible()
 })
 
 test('activity news: the organizer posts a notice from a template, a member asks privately, the organizer answers and sees who read it', async ({ page, browser }) => {

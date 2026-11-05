@@ -891,3 +891,55 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-hero-row .m-hero-plus { flex: 0 0 56px; padding: 0; border: 0; color: var(--m-green-ink); }
 .m-hero p + p.m-hero-sub { margin-top: -4px; }
 .m-quiet { display: contents; }
+
+/* 커뮤니티 글·글쓰기 (2026-11-05 개편) */
+.c-post .c-article { gap: 14px; }
+.c-author b em { font-style: normal; font-weight: 500; color: var(--ink-3); font-size: 13px; }
+.c-verified { display: inline-flex; align-items: center; gap: 4px; color: var(--m-green-ink); font-size: 13px; font-weight: 650; }
+.c-stats { display: flex; gap: 18px; padding-top: 2px; }
+.c-stats button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 6px 0; color: var(--ink-2); font-size: 14.5px; font-weight: 600; }
+.c-stats button.on { color: #d1495b; }
+.c-stats button.on svg path { fill: currentColor; }
+.c-linked { background: var(--m-mint); border: 0; }
+.c-comments-head { display: flex; align-items: center; justify-content: space-between; }
+.c-comments-head h2 b { color: var(--m-green); }
+.c-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 26px 16px; margin-top: 8px; border-radius: 18px; background: #eef0ec; color: var(--ink-3); text-align: center; }
+.c-empty strong { color: var(--ink); font-size: 16px; margin-top: 4px; }
+.c-empty span { font-size: 14px; }
+.c-comments li .m-icon-btn.sm { margin: -6px -8px 0 0; color: var(--ink-3); }
+.c-comments b em { font-style: normal; font-weight: 500; color: var(--ink-3); font-size: 12.5px; }
+.c-editing { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 6px; font-size: 13px; color: var(--m-green-ink); font-weight: 600; }
+.c-reasons { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.c-reasons button { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line); background: #fff; font-size: 15px; color: var(--ink); text-align: left; }
+.c-reasons button i { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; }
+.c-reasons button.on { border-color: var(--m-green); background: var(--m-mint); }
+.c-reasons button.on i { border: 5px solid var(--m-green); }
+.c-post-btn { height: 34px; padding: 0 14px; border-radius: 17px; border: 0; background: var(--m-green); color: #fff; font-size: 14px; font-weight: 700; margin-right: 8px; }
+.c-post-btn:disabled { background: #dfe5e0; color: #8b958f; }
+.c-kinds { display: flex; gap: 8px; }
+.c-kinds .m-chip { min-height: 42px; padding: 0 18px; font-size: 15px; }
+.c-safe { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 13.5px; }
+.c-leave { display: flex; flex-direction: column; gap: 8px; }
+.m-btn.line.danger-text { color: var(--red); }
+.c-kinds .m-chip { background: #fff; border-color: var(--line-2); color: var(--ink-2); }
+.c-kinds .m-chip.on { background: var(--m-mint); border-color: var(--m-green); color: var(--m-green-ink); }
+/* No blur behind the top bar in the app: Android WebView repaints the blur on every caret blink and key. */
+.m-top { backdrop-filter: none; background: #f6f7f4; }
+.c-comments-head h2 b { display: inline; color: var(--m-green); font-size: inherit; }
+.c-comments li p { margin: 2px 0 4px; }
+
+.m-newbtns a { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; min-height: 64px; padding: 0 16px; font-size: 15.5px; }
+.m-newbtns a svg { flex: none; }
+.m-auto { margin-bottom: 4px; }
+.c-empty { background: none; padding: 22px 16px 8px; border-radius: 0; }
+.r-sec h3 svg { color: var(--m-green-ink); }
+
+.m-interest-ask { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
+.m-interest-ask svg { color: #d1495b; }
+.m-interest-ask strong { font-size: 16.5px; }
+.m-interest-ask span { color: var(--ink-2); font-size: 14px; }
+.m-interest-ask .m-btn { margin-top: 6px; }
+
+.m-interest-ask { flex-direction: row; align-items: center; gap: 12px; }
+.m-interest-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.m-interest-ask .m-btn { margin-top: 0; flex: none; }

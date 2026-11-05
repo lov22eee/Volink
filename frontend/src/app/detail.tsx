@@ -57,6 +57,12 @@ function About({ text }: { text: string }) {
 
 type Stage = 'before' | 'waiting' | 'offer' | 'confirmed' | 'today' | 'checkedin' | 'done' | 'closed'
 
+/**
+ * Only the server saying the activity is gone (404/403) counts as gone. A failed request while the phone's network is
+ * waking up (coming back from the background) keeps what is on screen; the next load fixes it.
+ */
+const gone = (cause: unknown) => cause instanceof ApiError && (cause.status === 404 || cause.status === 403)
+
 export function ActivityScreen({ id, user, onChange }: { id: number; user: User; onChange: () => void }) {
   const now = useNow(15_000)
   const [activity, setActivity] = useState<LiveActivity | null>(null)
@@ -69,7 +75,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     api<LiveActivity>('/api/activities/' + id).then(a => {
       if (a.organizerId === user.id) { window.location.replace('#/manage/' + id); return }
       setActivity(a)
-    }).catch(() => setFailed('활동을 찾을 수 없어요. 삭제됐거나 비공개일 수 있어요.'))
+    }).catch(cause => setFailed(gone(cause) ? '활동을 찾을 수 없어요. 삭제됐거나 비공개일 수 있어요.' : ''))
     api<ViewerInfo>('/api/activities/' + id + '/my-participation').then(setViewer).catch(() => setViewer(null))
   }, [id, user.id])
   useEffect(() => { load() }, [load])
@@ -202,10 +208,10 @@ function CancelSheet({ confirmed, busy, onClose, onSend }: { confirmed: boolean;
   const reasons = ['갑자기 일이 생겼어요', '몸이 좋지 않아요', '시간이 맞지 않아요']
   const [reason, setReason] = useState('')
   return <Sheet title={confirmed ? '못 간다고 알릴까요?' : '신청을 취소할까요?'} onClose={onClose}
-    footer={<button className="m-btn danger" disabled={busy} onClick={() => onSend(reason.trim())}>{confirmed ? '못 간다고 알리기' : '신청 취소하기'}</button>}>
+    footer={<button className="m-btn danger" disabled={busy || (confirmed && reason.trim().length < 2)} onClick={() => onSend(reason.trim())}>{confirmed ? '못 간다고 알리기' : '신청 취소하기'}</button>}>
     <p className="m-help">{confirmed ? '자리는 대기 1번에게 넘어가요 (시작 2시간 전부터는 넘기지 않아요). ' : ''}취소한 활동은 한 번 더 신청할 수 있어요.</p>
-    {confirmed && <><div className="m-chips wrap">{reasons.map(x => <button key={x} type="button" className={'m-chip' + (reason === x ? ' on' : '')} aria-pressed={reason === x} onClick={() => setReason(x)}>{x}</button>)}</div>
-      <label className="m-field"><span className="m-label">모집자에게 한마디 <small>선택 · 100자</small></span>
+    {confirmed && <><span className="m-label">왜 못 가게 됐나요?</span><div className="m-chips wrap">{reasons.map(x => <button key={x} type="button" className={'m-chip' + (reason === x ? ' on' : '')} aria-pressed={reason === x} onClick={() => setReason(x)}>{x}</button>)}</div>
+      <label className="m-field"><span className="m-label">취소 사유 <small>필수 · 모집자에게 전해져요</small></span>
         <TextInput className="m-input" maxLength={100} value={reason} placeholder="직접 적기" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label></>}
   </Sheet>
 }
@@ -276,12 +282,19 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
   const load = useCallback(() => {
-    api<LiveActivity>('/api/activities/' + id).then(a => { if (a.organizerId !== user.id) { window.location.replace('#/activity/' + id); return } setActivity(a) }).catch(() => setFailed('활동을 찾을 수 없어요.'))
-    api<typeof people>('/api/activities/' + id + '/participations').then(setPeople).catch(() => setPeople(null))
+    api<LiveActivity>('/api/activities/' + id).then(a => { if (a.organizerId !== user.id) { window.location.replace('#/activity/' + id); return } setActivity(a); setFailed('') })
+      .catch(cause => setFailed(gone(cause) ? '활동을 찾을 수 없어요.' : ''))
+    api<typeof people>('/api/activities/' + id + '/participations').then(setPeople).catch(() => {})
     api<{ unanswered: number }>('/api/activities/' + id + '/posts').then(data => setUnanswered(data.unanswered)).catch(() => {})
   }, [id, user.id])
   useEffect(() => { load() }, [load])
-  useEffect(() => { const t = window.setInterval(load, 30_000); return () => window.clearInterval(t) }, [load])
+  // Every 30 s while the screen is shown, and again when the app comes back to the front.
+  useEffect(() => {
+    const t = window.setInterval(() => { if (!document.hidden) load() }, 30_000)
+    const back = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', back)
+    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', back) }
+  }, [load])
 
   if (failed) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><div className="m-body"><div className="m-note bad">{failed}</div></div></div>
   if (!activity) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><Loading /></div>
@@ -308,6 +321,16 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
     } finally {
       setBusy(false)
     }
+  }
+
+  async function toggleAuto(on: boolean) {
+    setBusy(true)
+    try {
+      const result = await api<{ confirmed: number }>('/api/activities/' + id + '/auto-approve', 'PUT', { on })
+      showToast(on ? (result.confirmed ? `자동 승인을 켰어요 · ${result.confirmed}명 확정` : '자동 승인을 켰어요') : '자동 승인을 껐어요 · 신청을 직접 승인해요')
+      load()
+      onChange()
+    } catch (cause) { showToast(message(cause)) } finally { setBusy(false) }
   }
 
   const tabs: [ManageTab, string, number][] = [['people', '신청자', count('APPLIED')], ['attendance', '출석', 0]]
@@ -339,6 +362,9 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
       <div className="m-seg-tabs inset" role="tablist" aria-label="관리 화면">{tabs.map(([key, label, badge]) =>
         <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{label}{badge > 0 && <i>{badge}</i>}</button>)}</div>
 
+      {tab === 'people' && activity.status === 'RECRUITING' && phase !== 'ended' && <label className="m-switch m-auto">
+        <span><strong>자동 승인</strong><small>{activity.autoApprove ? '빈자리가 있으면 신청이 바로 확정돼요' : '켜면 기다리는 신청도 빈자리만큼 바로 확정돼요'}</small></span>
+        <input type="checkbox" role="switch" checked={Boolean(activity.autoApprove)} disabled={busy} onChange={event => toggleAuto(event.target.checked)} /><i /></label>}
       {tab === 'people' && (!people ? <Loading /> : items.length === 0 ? <div className="m-empty"><span className="m-empty-ico"><MIcon name="users" size={26} /></span><strong>아직 신청자가 없어요</strong><p>신청이 들어오면 알림으로 알려 드려요.</p></div>
         : <ul className="m-people">{items.map(p => <li key={p.id}>
           <span className="m-avatar sm"><MIcon name="user" size={18} /></span>

@@ -20,7 +20,7 @@ export type LiveActivity = {
   /** Only for the organizer: applications that lock the full edit. */
   applicants?: number
   /** Week 6 (V9): labels, one reschedule, the organizer's cancel reason; counts only in the organizer's own list. */
-  difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number
+  difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number; autoApprove?: boolean | number
   rescheduleCount?: number; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
   /** V18: the organizer's cancellation (organizer and applicants only). Counts are null for cancellations before V18. */
   cancellation?: { reasonCode: string; reasonLabel: string; message: string; statusBefore: string; confirmedCount: number | null; waitingCount: number | null; appliedCount: number | null; cancelledAt: string }
