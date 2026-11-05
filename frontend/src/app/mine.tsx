@@ -1,4 +1,4 @@
-// 내 활동: 참여 예정 (my applications) / 내가 모집 (activities I opened) / 완료 기록 (Volink records).
+// 내 활동: 참여 예정 (my applications) / 내 모집현황 (activities I opened) / 완료 기록 (Volink records).
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
@@ -28,7 +28,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
   const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN'].includes(p.status) && p.activityStatus !== 'CANCELLED' && ends(p.date, p.startTime, p.durationMinutes) > now)
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
   const ended = (joined ?? []).filter(p => !upcoming.includes(p) && p.status !== 'COMPLETED').slice(0, 6)
-  const tabs: [View, string][] = [['join', '참여 예정'], ['host', '내가 모집'], ['done', '완료 기록']]
+  const tabs: [View, string][] = [['join', '참여 예정'], ['host', '내 모집현황'], ['done', '완료 기록']]
   return <div className="m-screen">
     <TopBar title="내 활동" actions={actions} />
     <div className="m-seg-tabs" role="tablist" aria-label="내 활동 보기">{tabs.map(([id, label]) =>

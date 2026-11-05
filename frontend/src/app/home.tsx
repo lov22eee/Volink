@@ -93,8 +93,8 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
         : <section className="m-hero soft" aria-label="첫 활동">
           <div className="m-hero-top"><span>아직 예정된 활동이 없어요</span></div>
           <h2>가까운 곳에서 첫 봉사를 시작해 보세요</h2>
-          <a className="m-btn" href="#/find">내 주변 봉사 찾기</a>
-          <a className="m-btn line" href="#/host">내가 활동 만들기</a>
+          <div className="m-hero-pair"><a className="m-btn" href="#/find">내 주변 봉사 찾기</a>
+            <a className="m-btn line" href="#/host">활동 만들기</a></div>
         </section>}
 
       <section className="m-section" aria-label="분야별 봉사">
@@ -129,15 +129,18 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
         <div className="m-list">{urgent.map(a => <ActivityRow key={a.id} activity={a} />)}</div>
       </section>}
 
-      {reviews.length > 0 && <section className="m-section" aria-label="봉사 이야기">
+      <section className="m-section" aria-label="봉사 이야기">
         <div className="m-section-head"><h2>우리들의 봉사 이야기</h2><a href="#/community">커뮤니티</a></div>
-        <div className="m-list">{reviews.map(r => <a key={r.id} href={'#/post/' + r.id} className="m-review">
+        {reviews.length === 0 ? <a href="#/community" className="m-review">
+          <strong>아직 올라온 후기가 없어요</strong>
+          <span>봉사를 마치면 첫 이야기를 남겨 주세요.</span>
+        </a> : <div className="m-list">{reviews.map(r => <a key={r.id} href={'#/post/' + r.id} className="m-review">
           <small>{r.author} · {r.createdAt.slice(5, 10).replace('-', '/')}</small>
           <strong>{r.title}</strong>
           {r.preview && <span>{r.preview}</span>}
           {r.activityTitle && <em><MIcon name="check" size={13} />{r.activityTitle}{r.verified ? ' · 참여 확인' : ''}</em>}
-        </a>)}</div>
-      </section>}
+        </a>)}</div>}
+      </section>
     </div>
   </div>
 }

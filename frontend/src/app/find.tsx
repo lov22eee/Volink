@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity } from '../api'
-import { categories } from '../categories'
+import { categories, categoryTone } from '../categories'
 import { programKind, range, when1365 } from '../explore'
 import type { Program } from '../explore'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
@@ -92,6 +92,8 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const [view, setView] = useState<'list' | 'map'>('list')
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
+  // A remembered position is looked up in the background; 1365 waits for it instead of saying 'nothing found' first.
+  const [waitPos, setWaitPos] = useState(() => remembered())
   const [notice, setNotice] = useState('')
   const [items, setItems] = useState<LiveActivity[] | null>(null)
   const [programs, setPrograms] = useState<Program[] | null>(null)
@@ -116,7 +118,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
       }
     })
   }, [near, origin])
-  useEffect(() => { if (remembered()) currentPosition().then(position => position && setOrigin(position)) }, [])
+  useEffect(() => { if (remembered()) currentPosition().then(position => { if (position) setOrigin(position); setWaitPos(false) }) }, [])
 
   const showVolink = filters.source !== '1365', show1365 = filters.source !== 'VOLINK'
   useEffect(() => {
@@ -130,14 +132,14 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   useEffect(() => {
     if (!show1365 || (near && !origin)) { setPrograms(show1365 ? null : []); return }
     const params = programParams(filters, q, origin)
-    if (!params) { setPrograms([]); setProgramsState('needPlace'); return }
+    if (!params) { if (waitPos) { setPrograms(null); return } setPrograms([]); setProgramsState('needPlace'); return }
     let current = true
     setPrograms(null)
     api<{ enabled: boolean; items: Program[] }>('/api/volunteer-programs?' + params)
       .then(result => { if (!current) return; setProgramsState(result.enabled ? 'ok' : 'off'); setPrograms(result.items.filter(p => programInDates(p, filters))) })
       .catch(() => { if (current) { setProgramsState('error'); setPrograms([]) } })
     return () => { current = false }
-  }, [filters, q, origin, near, show1365])
+  }, [filters, q, origin, near, show1365, waitPos])
 
   // Full activities go to the end (the waitlist may still be open).
   const shown = useMemo(() => (items ?? []).filter(a => !filters.newcomer || isNewcomer(a)).sort((a, b) => Number(seatsLeft(a) === 0) - Number(seatsLeft(b) === 0)), [items, filters.newcomer])
@@ -147,8 +149,10 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     ...shown.map(a => ({ id: a.id, name: a.title, latitude: a.latitude ?? null, longitude: a.longitude ?? null, tone: 'local' as const })),
     ...mapPrograms.map((p, i) => ({ id: -(i + 1), name: p.title, latitude: p.latitude, longitude: p.longitude, tone: 'program' as const })),
   ], [shown, mapPrograms])
-  const loading = (showVolink && items === null) || (show1365 && programs === null)
   const total = shown.length + programList.length
+  // Whatever arrived first is shown at once; the spinner is only for 'nothing yet'.
+  const pending = (showVolink && items === null) || (show1365 && programs === null)
+  const loading = pending && total === 0
   const applied = chipsOf(filters)
   function search(event: FormEvent) { event.preventDefault(); setQ(query.trim()); input.current?.blur() }
 
@@ -184,7 +188,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     <div className="m-body">
       {locating && <p className="m-help">위치를 확인하고 있어요…</p>}
       {notice && <div className="m-note">{notice}</div>}
-      <div className="m-result-head"><h2>{loading ? '활동' : `${total}개 활동`}</h2>
+      <div className="m-result-head"><h2>{pending ? '활동' : `${total}개 활동`}</h2>
         <div className="m-seg" role="tablist" aria-label="보기">
           <button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'on' : ''} onClick={() => setView('list')}><MIcon name="list" size={17} />목록</button>
           <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}><MIcon name="map" size={17} />지도</button></div></div>
@@ -203,10 +207,11 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
           action={applied.length || q ? <button className="m-btn line sm" onClick={() => { setFilters(defaults); setQ(''); setQuery('') }}>조건 모두 지우기</button> : undefined} />
         : <>
           {shown.length > 0 && <div className="m-list">{shown.map(a => <ActivityRow key={a.id} activity={a} />)}</div>}
+          {show1365 && programs === null && <p className="m-help">1365 활동을 불러오고 있어요…</p>}
           {programList.length > 0 && <>
             <h3 className="m-list-title">1365 공식 봉사 <small>신청은 1365에서</small></h3>
             <div className="m-list">{programList.map(p => <button key={p.programNo} type="button" className="m-row" onClick={() => setProgram(p)}>
-              <span className="m-row-ico p"><MIcon name="flag" size={21} /></span>
+              <span className={'m-row-ico ' + (p.category && categoryTone(p.category) ? 'f' + categoryTone(p.category) : 'p')}><MIcon name={(p.category && fieldIcon[p.category]) || 'flag'} size={21} /></span>
               <span className="m-row-main"><strong>{p.title}</strong><small>{[when1365(p) || '일정은 1365에서 확인', p.distanceKm != null ? p.distanceKm + 'km' : null, programKind(p)?.label].filter(Boolean).join(' · ')}</small></span>
               <span className="m-badge blue">{p.recruitStatus && p.recruitStatus !== '모집중' ? p.recruitStatus : '1365'}</span></button>)}</div>
           </>}
