@@ -57,6 +57,7 @@ npm run build:app    # dist-app/ (APK에 넣을 묶음, git에 올리지 않음)
 ## APK (2026-11-05, 테스트용)
 
 - 구조: Capacitor 8.5.3이 `dist-app/`을 `frontend/android/`에 넣어 APK로 만듦. 앱 이름 Volink, 패키지 `com.volink.app`, 아이콘·시작 화면은 `node scripts/make-app-icons.mjs`로 다시 그림.
+- 카카오 지도: 저장소 변수 `VOLINK_KAKAO_JS_KEY`(JavaScript 키, 공개용)가 있으면 앱에도 카카오 지도. 카카오 콘솔의 JavaScript SDK 도메인에 `https://localhost`를 등록해야 함. 없으면 그림 지도.
 - 서버 주소: 빌드할 때 `VITE_API_BASE`(Actions는 저장소 변수 `VOLINK_SITE`, 없으면 현재 AWS 주소). 앱이 아닌 브라우저(`npm run dev:app`)는 예전처럼 같은 주소·쿠키 방식.
 - 로그인 유지: 앱은 `https://localhost`에서 열리므로 쿠키 대신 서버가 응답 본문으로 준 리프레시 토큰을 앱 저장소에 보관하고 `/api/auth/refresh`에 본문으로 보냄(한 번 쓰면 바뀜, 로그아웃 때 지움). 서버는 `APP_ORIGINS`(기본 `https://localhost`)에서 온 요청에만 이렇게 함.
 - 카카오·구글: 휴대폰 브라우저(Custom Tab)로 `…/start?app=1` → 끝나면 서버 페이지가 `intent://oauth?code=…#Intent;scheme=volink;package=com.volink.app;end`로 앱을 엶 → 앱이 `#/oauth`로 이어서 로그인. 브라우저가 자동으로 안 넘기면 ‘앱으로 돌아가기’ 버튼.
@@ -74,5 +75,5 @@ npm run build:app    # dist-app/ (APK에 넣을 묶음, git에 올리지 않음)
 ## 아직 남은 일
 
 - 실제 기기 확인(설치·키보드·카메라 QR·GPS·카카오/구글 왕복).
-- 정식 서명 키(사용자가 보관, git 제외)·버전 관리, 휴대폰 기본 카메라로 찍은 QR이 앱으로 열리는 App Links(`assetlinks.json`), 푸시 알림, 앱 안 카카오 지도(카카오 콘솔에 `https://localhost` 등록 필요).
+- 정식 서명 키(사용자가 보관, git 제외)·버전 관리, 휴대폰 기본 카메라로 찍은 QR이 앱으로 열리는 App Links(`assetlinks.json`), 푸시 알림.
 - `volink://` 링크는 다른 앱도 같은 이름을 쓸 수 있어 완벽한 보호가 아님(1회용·60초 코드로 피해를 줄임). 정식 출시 전 App Links로 바꾸기.
