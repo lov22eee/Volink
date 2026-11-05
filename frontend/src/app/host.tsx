@@ -96,7 +96,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       setNewcomer(a.newcomerOk === undefined || Boolean(a.newcomerOk)); setMeeting(a.meetingPoint ?? '')
       // Keep the start on the form's 10-minute grid inside 06:00 ~ 21:30.
       setStart(clock(Math.min(minutes(r.latestEnd) - r.durationMin, Math.max(minutes(r.earliestStart), Math.round(minutes(a.startTime) / 10) * 10)))); setDuration(a.durationMinutes)
-      setCapacity(a.capacity); setDescription(a.description); setSupplies(a.supplies ?? [])
+      setCapacity(a.capacity); setDescription(a.description); setSupplies((a.supplies ?? []).map((s: Supply) => ({ ...s, provided: false })))
       setPlace({ placeId: a.placeId ?? undefined, name: a.placeName ?? '', address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null, distanceMeters: null, placeClass: 'OPEN', classLabel: '지난 장소' })
       if (editId) { setDate(a.date); setSafety(true); setLocked((a.applicants ?? 0) > 0) }
     }).catch(() => setMessage('활동 정보를 불러오지 못했어요.')).finally(() => setLoading(false))
@@ -190,7 +190,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
         <div className="m-field"><span className="m-label">분야</span><div className="m-tiles">{categories.map(c =>
           <button type="button" key={c} className={'m-tile' + (category === c ? ' on' : '')} aria-pressed={category === c} disabled={locked} onClick={() => setCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button>)}</div>
           {category && categoryHint[category] && <p className="m-help">{categoryHint[category]}</p>}</div>
-        <div className="m-field"><span className="m-label">활동 강도 <small>처음 오는 사람이 고를 때 도움이 돼요</small></span><div className="m-seg wide">
+        <div className="m-field"><span className="m-label">활동 강도</span><div className="m-seg wide">
           {(Object.keys(difficultyLabel) as (keyof typeof difficultyLabel)[]).map(key => <button type="button" key={key} disabled={locked} className={difficulty === key ? 'on' : ''} aria-pressed={difficulty === key} onClick={() => setDifficulty(key)}>{difficultyLabel[key]}</button>)}</div></div>
         <div className="m-field"><span className="m-label">장소 환경</span><div className="m-seg wide">
           {(Object.keys(placeKindLabel) as (keyof typeof placeKindLabel)[]).map(key => <button type="button" key={key} disabled={locked} className={placeKind === key ? 'on' : ''} aria-pressed={placeKind === key} onClick={() => setPlaceKind(key)}>{placeKindLabel[key]}</button>)}</div></div>
@@ -201,7 +201,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       {step === 2 && <>
         <h2 className="m-h2">어디서, 언제 만나요?</h2>
         {!locked && <div className="m-legacy"><PlaceField value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
-        <label className="m-field"><span className="m-label">만나는 곳 <small>선택 · 100자</small></span>
+        <label className="m-field"><span className="m-label">만나는 곳 <small>선택</small></span>
           <input name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
           <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
@@ -210,12 +210,12 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
             <PickField name="duration" label="활동 시간" icon="timer" value={durationLabel(duration)} onOpen={() => setSheet('duration')} />
           </div>
           <p className={'m-help' + (afterSunset ? ' warn' : '')}><MIcon name="sun" size={16} />{start} ~ {end} · {afterSunset ? `해 진 뒤(${sunset[Number(date.slice(5, 7)) - 1]} 이후) 끝나서 관리자 확인 후 공개돼요.` : '해 지기 전에 끝나요.'}</p>
-          <div className="m-field"><span className="m-label">준비물 <small>누르면 ‘각자 챙겨요’ → ‘모집자가 준비’ → 빼기</small></span>
+          <div className="m-field"><span className="m-label">준비물</span>
             <div className="m-chips wrap">{presetSupplies.concat(supplies.filter(s => !presetSupplies.includes(s.name)).map(s => s.name)).map(name => {
               const item = supplies.find(s => s.name === name)
-              return <button type="button" key={name} className={'m-chip' + (item ? item.provided ? ' on blue' : ' on' : '')} aria-pressed={Boolean(item)}
-                onClick={() => setSupplies(item ? item.provided ? supplies.filter(s => s.name !== name) : supplies.map(s => s.name === name ? { ...s, provided: true } : s) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>
-                {name}{item && <small>{item.provided ? '모집자 준비' : '각자'}</small>}</button>
+              return <button type="button" key={name} className={'m-chip' + (item ? ' on' : '')} aria-pressed={Boolean(item)}
+                onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>
+                {name}</button>
             })}</div>
             <span className="m-inline"><input className="m-input" placeholder="직접 추가 (10자)" maxLength={10} value={custom} onChange={event => setCustom(event.target.value)} enterKeyHint="done"
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); const name = custom.trim(); if (name && supplies.length < 6 && !supplies.some(s => s.name === name)) { setSupplies([...supplies, { name, provided: false }]); setCustom('') } } }} />
@@ -239,7 +239,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
           <strong>{title || '활동 이름'}</strong>
           <span>{category} · {difficultyLabel[difficulty]} · {placeKindLabel[placeKind]}{newcomer ? ' · 처음 환영' : ''}</span>
           <span>{dayWord(date)} {start}~{end} · {place?.name ?? '장소 미정'}{meeting ? ' · ' + meeting : ''}</span>
-          {supplies.length > 0 && <span>준비물 {supplies.map(s => s.name + (s.provided ? '(준비)' : '')).join(', ')}</span>}
+          {supplies.length > 0 && <span>준비물 {supplies.map(s => s.name).join(', ')}</span>}
         </div>
         {!locked && <label className={'m-check box' + (errors.safety ? ' bad' : '')}><input name="safety" type="checkbox" checked={safety} onChange={event => setSafety(event.target.checked)} /><span className="m-box" />
           <span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금이 없고, 사고가 나면 먼저 119에 신고해요.</span></label>}

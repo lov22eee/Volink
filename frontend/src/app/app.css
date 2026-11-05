@@ -414,6 +414,7 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 /* web components reused inside the app (news, attendance QR, place picker, check-in) */
 .m-legacy .news, .m-legacy .attendance { border-radius: 20px; }
 .m-legacy .place-field { min-height: 60px; border-radius: 14px; }
+.m-legacy .field-hint { display: none; }
 .m-legacy .checkin-page { padding: 0; }
 .m-legacy .pill-button { min-height: 44px; }
 .m-legacy textarea { font-size: 16px; }
