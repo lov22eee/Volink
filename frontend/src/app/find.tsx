@@ -83,10 +83,10 @@ function programInDates(p: Program, f: Filters) {
   return start <= d.to && end >= d.from
 }
 
-export function FindScreen({ actions, focus, initial }: { actions: ReactNode; focus?: boolean; initial?: string }) {
+export function FindScreen({ actions, focus, initial, category }: { actions: ReactNode; focus?: boolean; initial?: string; category?: string }) {
   const [query, setQuery] = useState('')
   const [q, setQ] = useState('')
-  const [filters, setFilters] = useState<Filters>(() => ({ ...defaults,
+  const [filters, setFilters] = useState<Filters>(() => ({ ...defaults, ...(category && categories.includes(category) ? { categories: [category] } : {}),
     ...(initial === 'near' ? { area: { kind: 'near', km: 5 } } : initial === 'weekend' ? { when: { kind: 'weekend' } } : initial === 'newcomer' ? { newcomer: true } : initial === '1365' ? { source: '1365' } : {}) } as Filters))
   const [sheet, setSheet] = useState(false)
   const [view, setView] = useState<'list' | 'map'>('list')

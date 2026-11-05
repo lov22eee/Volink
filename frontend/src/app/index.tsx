@@ -88,7 +88,7 @@ export default function MobileApp() {
   let screen
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
-    case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} />; break
+    case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
     case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break
     case 'post': screen = route.id ? <PostScreen key={route.id} id={route.id} onChange={pollUnread} /> : null; break
