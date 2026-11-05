@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity } from '../api'
-import { categories } from '../categories'
+import { categories, categoryTone } from '../categories'
 import { programKind, range, when1365 } from '../explore'
 import type { Program } from '../explore'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
@@ -211,7 +211,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
           {programList.length > 0 && <>
             <h3 className="m-list-title">1365 공식 봉사 <small>신청은 1365에서</small></h3>
             <div className="m-list">{programList.map(p => <button key={p.programNo} type="button" className="m-row" onClick={() => setProgram(p)}>
-              <span className="m-row-ico p"><MIcon name="flag" size={21} /></span>
+              <span className={'m-row-ico ' + (p.category && categoryTone(p.category) ? 'f' + categoryTone(p.category) : 'p')}><MIcon name={(p.category && fieldIcon[p.category]) || 'flag'} size={21} /></span>
               <span className="m-row-main"><strong>{p.title}</strong><small>{[when1365(p) || '일정은 1365에서 확인', p.distanceKm != null ? p.distanceKm + 'km' : null, programKind(p)?.label].filter(Boolean).join(' · ')}</small></span>
               <span className="m-badge blue">{p.recruitStatus && p.recruitStatus !== '모집중' ? p.recruitStatus : '1365'}</span></button>)}</div>
           </>}
