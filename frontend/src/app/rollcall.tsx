@@ -9,7 +9,7 @@ import type { Applicant, LiveActivity } from '../api'
 import { showToast } from '../App'
 import { hhmm } from '../checkin'
 import type { Phase, QrInfo } from '../checkin'
-import { ActionBar, MIcon, Sheet } from './ui'
+import { ActionBar, MIcon, Sheet, TextInput } from './ui'
 
 const reasons = ['휴대폰 없음', '앱·로그인 안 됨', '위치 안 잡힘', '얼굴로 확인함']
 const methodTag: Record<string, { text: string; tone: string }> = { QR: { text: 'QR', tone: '' }, CODE: { text: '코드', tone: '' }, MANUAL: { text: '수동', tone: 'man' } }
@@ -103,7 +103,7 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
       {target.length > 1 && <div className="m-labels">{target.map(p => <span key={p.id} className="m-badge gray">{p.name}</span>)}</div>}
       <span className="m-label">사유 <small>기록에 남아요</small></span>
       <div className="r-reasons">{reasons.map(x => <button key={x} type="button" className={reason === x && !own.trim() ? 'on' : ''} aria-pressed={reason === x && !own.trim()} onClick={() => { setReason(x); setOwn('') }}>{x}</button>)}</div>
-      <label className="m-field"><span className="sr-only">직접 적기</span><input className="m-input" maxLength={200} placeholder="직접 적기 (선택)" value={own} onChange={event => setOwn(event.target.value)} enterKeyHint="done" /></label>
+      <label className="m-field"><span className="sr-only">직접 적기</span><TextInput className="m-input" maxLength={200} placeholder="직접 적기 (선택)" value={own} onChange={event => setOwn(event.target.value)} enterKeyHint="done" /></label>
     </Sheet>}
 
     {big && info?.code && createPortal(<div className="r-full" role="dialog" aria-modal="true" aria-label="출석 QR과 코드 크게 보기">

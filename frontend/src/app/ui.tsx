@@ -1,6 +1,6 @@
 // Shared pieces of the Android app screens: icons, top bar, bottom tabs, bottom sheets, wheels and the keyboard helper.
-import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { InputHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
@@ -291,4 +291,64 @@ export function dDay(date: string) {
 export function useToggle(initial = false): [boolean, () => void, (value: boolean) => void] {
   const [value, setValue] = useState(initial)
   return [value, () => setValue(v => !v), setValue]
+}
+
+/**
+ * Text fields that React does not touch while typing. React re-applies an input's name/value attributes after every
+ * key it sees (even for uncontrolled inputs); on Android (Samsung keyboard in the WebView) that restarts the
+ * keyboard's word and typing feels a beat late. So the <input>/<textarea> here is a plain DOM element that React does
+ * not manage: React only hears about the text (onChange) and writes it back when the value changes from outside
+ * (a reset or a loaded form). Same props as <input>/<textarea>; handlers get the native event.
+ */
+type FieldProps<E> = { value: string; onChange?: (event: { target: E; currentTarget: E }) => void; ref?: Ref<E> }
+const ATTRS: Record<string, string> = { className: 'class', maxLength: 'maxlength', inputMode: 'inputmode', autoComplete: 'autocomplete', enterKeyHint: 'enterkeyhint', tabIndex: 'tabindex', htmlFor: 'for' }
+const EVENTS: Record<string, string> = { onChange: 'input', onKeyDown: 'keydown', onKeyUp: 'keyup', onBlur: 'blur', onFocus: 'focus', onPaste: 'paste' }
+function QuietField<E extends HTMLInputElement | HTMLTextAreaElement>({ tag, props }: { tag: 'input' | 'textarea'; props: FieldProps<E> & Record<string, unknown> }) {
+  const { value, ref: outer, autoFocus, ...rest } = props
+  const holder = useRef<HTMLSpanElement>(null)
+  const el = useRef<E | null>(null)
+  const latest = useRef(rest)
+  latest.current = rest
+  useLayoutEffect(() => {
+    const field = document.createElement(tag) as E
+    field.value = value
+    el.current = field
+    const off: (() => void)[] = []
+    for (const [prop, type] of Object.entries(EVENTS)) {
+      const listener = (event: Event) => {
+        const handler = latest.current[prop] as ((e: unknown) => void) | undefined
+        if (!handler) return
+        handler(prop === 'onChange' ? { target: field, currentTarget: field } : event)
+      }
+      field.addEventListener(type, listener)
+      off.push(() => field.removeEventListener(type, listener))
+    }
+    holder.current?.appendChild(field)
+    if (typeof outer === 'function') outer(field); else if (outer) (outer as { current: E | null }).current = field
+    if (autoFocus) field.focus()
+    return () => { off.forEach(f => f()); field.remove(); if (typeof outer === 'function') outer(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tag])
+  // Plain attributes (class, placeholder, disabled…) follow the props; they change rarely, never per key.
+  const plain = Object.entries(rest).filter(([k, v]) => typeof v !== 'function' && !(k in EVENTS))
+  const key = JSON.stringify(plain)
+  useLayoutEffect(() => {
+    const field = el.current
+    if (!field) return
+    for (const [k, v] of plain) {
+      const attr = ATTRS[k] ?? (k.startsWith('aria') || k.startsWith('data') ? k : k.toLowerCase())
+      if (v === false || v === undefined || v === null) field.removeAttribute(attr)
+      else field.setAttribute(attr, v === true ? '' : String(v))
+      if (k === 'disabled') field.disabled = Boolean(v)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  useLayoutEffect(() => { if (el.current && el.current.value !== value) el.current.value = value }, [value])
+  return <span ref={holder} className="m-quiet" />
+}
+export function TextInput(props: FieldProps<HTMLInputElement> & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'defaultValue'>) {
+  return <QuietField tag="input" props={props as FieldProps<HTMLInputElement> & Record<string, unknown>} />
+}
+export function TextArea(props: FieldProps<HTMLTextAreaElement> & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'>) {
+  return <QuietField tag="textarea" props={props as FieldProps<HTMLTextAreaElement> & Record<string, unknown>} />
 }

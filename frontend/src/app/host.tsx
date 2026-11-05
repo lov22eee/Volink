@@ -12,7 +12,7 @@ import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
 import { difficultyLabel, fieldIcon, placeKindLabel } from './cards'
-import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels } from './ui'
+import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels, TextInput } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
@@ -185,7 +185,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
           <button type="button" className={kind === 'GENERAL' ? 'on' : ''} aria-pressed={kind === 'GENERAL'} onClick={() => setKind('GENERAL')}>자율 활동</button>
           <button type="button" className={kind === 'INSTITUTION' ? 'on' : ''} aria-pressed={kind === 'INSTITUTION'} onClick={() => setKind('INSTITUTION')}>기관 주관</button></div></div>}
         <label className="m-field"><span className="m-label">활동 이름</span>
-          <input name="title" className={'m-input' + (errors.title ? ' bad' : '')} placeholder="예: 공원 산책로 함께 걷고 줍기" maxLength={r.titleMax} value={title} disabled={locked} onChange={event => setTitle(event.target.value)} enterKeyHint="done" />
+          <TextInput name="title" className={'m-input' + (errors.title ? ' bad' : '')} placeholder="예: 공원 산책로 함께 걷고 줍기" maxLength={r.titleMax} value={title} disabled={locked} onChange={event => setTitle(event.target.value)} enterKeyHint="done" />
           <span className="m-count">{title.trim().length} / {r.titleMax}</span>{err('title')}</label>
         <div className="m-field"><span className="m-label">분야</span><div className="m-tiles">{categories.map(c =>
           <button type="button" key={c} className={'m-tile' + (category === c ? ' on' : '')} aria-pressed={category === c} disabled={locked} onClick={() => setCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button>)}</div>
@@ -202,7 +202,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
         <h2 className="m-h2">어디서, 언제 만나요?</h2>
         {!locked && <div className="m-legacy"><PlaceField value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
         <label className="m-field"><span className="m-label">만나는 곳 <small>선택</small></span>
-          <input name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
+          <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
           <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
           <div className="m-two">
@@ -217,7 +217,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
                 onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>
                 {name}</button>
             })}</div>
-            <span className="m-inline"><input className="m-input" placeholder="직접 추가 (10자)" maxLength={10} value={custom} onChange={event => setCustom(event.target.value)} enterKeyHint="done"
+            <span className="m-inline"><TextInput className="m-input" placeholder="직접 추가 (10자)" maxLength={10} value={custom} onChange={event => setCustom(event.target.value)} enterKeyHint="done"
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); const name = custom.trim(); if (name && supplies.length < 6 && !supplies.some(s => s.name === name)) { setSupplies([...supplies, { name, provided: false }]); setCustom('') } } }} />
               <button type="button" className="m-btn line sm" disabled={!custom.trim() || supplies.length >= 6} onClick={() => { const name = custom.trim(); if (name && !supplies.some(s => s.name === name)) { setSupplies([...supplies, { name, provided: false }]); setCustom('') } }}>추가</button></span>
             {err('supplies')}</div>
