@@ -71,19 +71,45 @@ const years = Array.from({ length: 90 }, (_, i) => todayYear - 10 - i)
 const months = Array.from({ length: 12 }, (_, i) => i + 1)
 const pad = (n: number) => String(n).padStart(2, '0')
 
+type Birth = { y: number; m: number; d: number }
+const birthText = (b: Birth | null) => b ? `${b.y}년 ${b.m}월 ${b.d}일` : ''
+
+/** The birth-date wheel, shared by both signups. */
+function BirthSheet({ value, onPick, onClose }: { value: Birth | null; onPick: (b: Birth) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<Birth>(value ?? { y: 2003, m: 1, d: 1 })
+  const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
+  return <Sheet title="생년월일" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => onPick({ ...draft, d: Math.min(draft.d, days.length) })}>완료</button>}>
+    <Wheels>
+      <WheelColumn label="년" items={years} value={draft.y} render={y => y + '년'} onChange={y => setDraft(v => ({ ...v, y }))} />
+      <WheelColumn label="월" items={months} value={draft.m} render={m => m + '월'} onChange={m => setDraft(v => ({ ...v, m }))} />
+      <WheelColumn label="일" items={days} value={Math.min(draft.d, days.length)} render={d => d + '일'} onChange={d => setDraft(v => ({ ...v, d }))} />
+    </Wheels>
+  </Sheet>
+}
+
+/** An answer already given: small, below the current question, tap to change it. */
+function Answered({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
+  return <button type="button" className="m-answered" onClick={onEdit} aria-label={label + ' 고치기'}><small>{label}</small><span>{value}</span><em>고치기</em></button>
+}
+
+/**
+ * Signup one question at a time (like the community start): email → password (+ confirm) → name → birth date →
+ * the agreements in a bottom sheet. Earlier answers stay below the question and can be changed by tapping them.
+ */
 export function Signup({ onSession }: { onSession: (user: User) => void }) {
-  const [step, setStep] = useState(1)
+  type Step = 'email' | 'password' | 'name' | 'birth'
+  const order: Step[] = ['email', 'password', 'name', 'birth']
+  const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [show, setShow] = useState(false)
   const [name, setName] = useState('')
-  const [birth, setBirth] = useState<{ y: number; m: number; d: number } | null>(null)
-  const [draft, setDraft] = useState({ y: 2003, m: 1, d: 1 })
+  const [birth, setBirth] = useState<Birth | null>(null)
   const [picking, setPicking] = useState(false)
+  const [terms, setTerms] = useState(false)
   const [agreeNotice, setAgreeNotice] = useState(false)
   const [agreeContact, setAgreeContact] = useState(false)
-  const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -99,9 +125,11 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   const age = birth ? ageOn(birthDate, new Date()) : null
   const ageOk = age !== null && age >= signupRules.minimumAge
   const nameOk = name.trim().length >= 1 && name.trim().length <= signupRules.nameMax
-  const can = step === 1 ? emailOk && passwordOk && confirmOk : step === 2 ? nameOk && ageOk : agreeNotice && agreeContact
-  const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
-  const touch = (key: string) => setTouched(value => ({ ...value, [key]: true }))
+  const ok: Record<Step, boolean> = { email: emailOk, password: passwordOk && confirmOk, name: nameOk, birth: ageOk }
+  const index = order.indexOf(step)
+
+  // The birth wheel opens by itself when that question comes up.
+  useEffect(() => { if (step === 'birth' && !birth) setPicking(true) }, [step, birth])
 
   async function finish() {
     setBusy(true)
@@ -112,7 +140,8 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
       onSession(await login(email.trim(), password))
       window.location.hash = '#/welcome'
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') { setStep(1); setError('이미 가입한 이메일이에요. 로그인하거나 다른 이메일을 써 주세요.') }
+      setTerms(false)
+      if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') { setStep('email'); setError('이미 가입한 이메일이에요. 로그인하거나 다른 이메일을 써 주세요.') }
       else if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setError(Object.values(cause.fieldErrors)[0])
       else setError(cause instanceof Error ? cause.message : '가입하지 못했어요.')
     } finally {
@@ -121,63 +150,59 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   }
   function next(event?: FormEvent) {
     event?.preventDefault()
-    if (!can) { setTouched({ email: true, password: true, confirm: true, name: true, birth: true }); return }
-    if (step < 3) { setStep(step + 1); setError(''); window.scrollTo(0, 0) } else finish()
+    if (!ok[step]) return
+    setError('')
+    // Back after changing an earlier answer: go on to the first question not yet answered well.
+    const pending = order.find(s => !ok[s])
+    if (pending) setStep(pending)
+    else setTerms(true)
   }
-  const back = () => step === 1 ? (window.location.hash = '#/login') : setStep(step - 1)
+  const back = () => index === 0 ? (window.location.hash = '#/login') : setStep(order[index - 1])
+  const titles: Record<Step, string> = { email: '이메일을 알려 주세요', password: '비밀번호를 정해 주세요', name: '어떻게 불러 드릴까요?', birth: '생년월일을 알려 주세요' }
+  const answered = order.slice(0, index).reverse()
 
-  return <div className="m-screen m-signup">
+  return <div className="m-screen m-signup m-ask">
     <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={back}><MIcon name="back" /></button><h1 className="m-title">회원가입</h1><span className="m-top-actions" /></header>
-    <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label="가입 단계"><i style={{ width: step * 33.34 + '%' }} /></div>
+    <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={5} aria-valuenow={index + 1} aria-label="가입 단계"><i style={{ width: (index + 1) * 20 + '%' }} /></div>
     <form className="m-body m-form" onSubmit={next} noValidate>
-      <span className="m-step">{step} / 3</span>
-      {step === 1 && <>
-        <h2 className="m-h2">로그인에 쓸<br />이메일과 비밀번호</h2>
-        <label className="m-field"><span className="m-label">이메일</span>
-          <input className={'m-input' + (touched.email && !emailOk ? ' bad' : '')} type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" value={email}
-            onChange={event => { setEmail(event.target.value); setError('') }} onBlur={() => touch('email')} enterKeyHint="next" />
-          {email && (emailOk ? <span className="m-ok"><MIcon name="check" size={15} />사용할 수 있는 형식이에요</span> : touched.email && <span className="m-err">이메일 형식을 확인해 주세요.</span>)}</label>
-        <label className="m-field"><span className="m-label">비밀번호</span>
-          <span className={'m-input with-peek' + (touched.password && !passwordOk ? ' bad' : '')}>
-            <input type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="영문·숫자 포함 8자 이상" value={password} onChange={event => setPassword(event.target.value)} onBlur={() => touch('password')} aria-label="비밀번호" enterKeyHint="next" />
+      <div key={step} className="m-q">
+        <h2 className="m-h2">{titles[step]}</h2>
+        {step === 'email' && <>
+          <input className="m-input big" type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" aria-label="이메일" autoFocus value={email}
+            onChange={event => { setEmail(event.target.value); setError('') }} enterKeyHint="next" />
+          {email && !emailOk && <span className="m-err">이메일 형식을 확인해 주세요.</span>}
+          <p className="m-help m-org-hint">기관 가입은 PC에서 진행해 주세요.</p>
+        </>}
+        {step === 'password' && <>
+          <span className="m-input big with-peek">
+            <input type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="영문·숫자 포함 8자 이상" aria-label="비밀번호" autoFocus value={password} onChange={event => setPassword(event.target.value)} enterKeyHint="next" />
             <button type="button" className="m-peek" aria-label={show ? '비밀번호 숨기기' : '비밀번호 보기'} onClick={() => setShow(!show)}><MIcon name={show ? 'eyeOff' : 'eye'} size={20} /></button></span>
-          <span className="m-rules">{rules.map(rule => <span key={rule.label} className={'m-rule' + (rule.ok ? ' ok' : '')}>{rule.ok && <MIcon name="check" size={13} />}{rule.label}</span>)}</span></label>
-        <label className="m-field"><span className="m-label">비밀번호 확인</span>
-          <input className={'m-input' + (touched.confirm && confirm && !confirmOk ? ' bad' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="한 번 더 입력" value={confirm}
-            onChange={event => setConfirm(event.target.value)} onBlur={() => touch('confirm')} aria-label="비밀번호 확인" enterKeyHint="done" />
-          {confirm && (confirmOk ? <span className="m-ok"><MIcon name="check" size={15} />비밀번호가 같아요</span> : touched.confirm && <span className="m-err">비밀번호가 달라요.</span>)}</label>
-        <p className="m-help m-org-hint">기관 가입은 PC에서 진행해 주세요.</p>
-      </>}
-      {step === 2 && <>
-        <h2 className="m-h2">어떻게 불러 드릴까요?</h2>
-        <label className="m-field"><span className="m-label">이름</span>
-          <input className={'m-input' + (touched.name && !nameOk ? ' bad' : '')} autoComplete="name" placeholder="이름" maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} onBlur={() => touch('name')} enterKeyHint="done" />
-          <span className="m-help">다른 사람에게는 가운데 글자를 가려서 보여 줘요 (예: 김*지)</span></label>
-        <div className="m-field"><span className="m-label">생년월일</span>
-          <button type="button" className={'m-input m-pick' + (touched.birth && !ageOk ? ' bad' : '')} aria-label={'생년월일 ' + (birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '선택')} onClick={() => { if (birth) setDraft(birth); setPicking(true) }}>
-            <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
-          {birth && !ageOk && <span className="m-err" role="alert">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</div>
-      </>}
-      {step === 3 && <>
-        <h2 className="m-h2">마지막으로 확인해 주세요</h2>
-        <div className="m-agree">
-          <label className="m-check all"><input type="checkbox" checked={agreeNotice && agreeContact} onChange={event => { setAgreeNotice(event.target.checked); setAgreeContact(event.target.checked) }} /><span className="m-box" /><strong>모두 동의</strong></label>
-          <label className="m-check"><input type="checkbox" checked={agreeNotice} onChange={event => setAgreeNotice(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label>
-          <label className="m-check"><input type="checkbox" checked={agreeContact} onChange={event => setAgreeContact(event.target.checked)} /><span className="m-box" />연락처는 서로 공개하지 않아요</label>
-        </div>
-        <p className="m-help">Volink 활동 기록은 우리 동네 기록이에요. 공식 봉사시간은 1365 자원봉사포털에서 인정받을 수 있어요.</p>
-      </>}
+          <span className="m-rules">{rules.map(rule => <span key={rule.label} className={'m-rule' + (rule.ok ? ' ok' : '')}>{rule.ok && <MIcon name="check" size={13} />}{rule.label}</span>)}</span>
+          {passwordOk && <div className="m-q-more">
+            <input className={'m-input big' + (confirm && !confirmOk ? ' bad' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="한 번 더 입력" aria-label="비밀번호 확인" value={confirm}
+              onChange={event => setConfirm(event.target.value)} enterKeyHint="done" />
+            {confirm && !confirmOk && <span className="m-err">비밀번호가 달라요.</span>}</div>}
+        </>}
+        {step === 'name' && <input className="m-input big" autoComplete="name" placeholder="이름" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />}
+        {step === 'birth' && <>
+          <button type="button" className="m-input big m-pick" aria-label={'생년월일 ' + (birth ? birthText(birth) : '선택')} onClick={() => setPicking(true)}>
+            <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
+          {birth && !ageOk && <span className="m-err" role="alert">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}
+        </>}
+      </div>
+      {answered.length > 0 && <div className="m-answers">{answered.map(s => <Answered key={s} label={{ email: '이메일', password: '비밀번호', name: '이름', birth: '생년월일' }[s]}
+        value={s === 'email' ? email : s === 'password' ? '•'.repeat(Math.min(password.length, 12)) : s === 'name' ? name : birthText(birth)} onEdit={() => setStep(s)} />)}</div>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <ActionBar><button className="m-btn" disabled={!can || busy}>{step < 3 ? '다음' : busy ? '가입하는 중…' : '가입하고 시작하기'}</button></ActionBar>
+      <ActionBar><button className="m-btn" disabled={!ok[step] || busy}>다음</button></ActionBar>
     </form>
-    {picking && <Sheet title="생년월일" onClose={() => setPicking(false)} footer={<>
-      <p className="m-help center">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요</p>
-      <button type="button" className="m-btn" onClick={() => { const d = Math.min(draft.d, days.length); setBirth({ ...draft, d }); touch('birth'); setPicking(false) }}>완료</button></>}>
-      <Wheels>
-        <WheelColumn label="년" items={years} value={draft.y} render={y => y + '년'} onChange={y => setDraft(v => ({ ...v, y }))} />
-        <WheelColumn label="월" items={months} value={draft.m} render={m => m + '월'} onChange={m => setDraft(v => ({ ...v, m }))} />
-        <WheelColumn label="일" items={days} value={Math.min(draft.d, days.length)} render={d => d + '일'} onChange={d => setDraft(v => ({ ...v, d }))} />
-      </Wheels>
+    {picking && <BirthSheet value={birth} onClose={() => setPicking(false)} onPick={value => { setBirth(value); setPicking(false) }} />}
+    {terms && <Sheet title="마지막으로 확인해 주세요" onClose={() => setTerms(false)} footer={<button type="button" className="m-btn" disabled={!(agreeNotice && agreeContact) || busy} onClick={finish}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button>}>
+      <div className="m-agree flat">
+        <label className="m-check all"><input type="checkbox" checked={agreeNotice && agreeContact} onChange={event => { setAgreeNotice(event.target.checked); setAgreeContact(event.target.checked) }} /><span className="m-box" /><strong>모두 동의</strong></label>
+        <label className="m-check"><input type="checkbox" checked={agreeNotice} onChange={event => setAgreeNotice(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label>
+        <label className="m-check"><input type="checkbox" checked={agreeContact} onChange={event => setAgreeContact(event.target.checked)} /><span className="m-box" />연락처는 서로 공개하지 않아요</label>
+      </div>
+      <p className="m-help">공식 봉사시간은 1365 자원봉사포털에서 인정받을 수 있어요.</p>
     </Sheet>}
   </div>
 }
@@ -198,54 +223,60 @@ export function SocialDone({ onSession }: { onSession: (user: User) => void }) {
     {error ? <><p>{error}</p><a className="m-btn line" href="#/login">로그인으로</a></> : <p>로그인하는 중이에요…</p>}</div></main>
 }
 
-/** First Kakao / Google login in the app: name, birth date (14+) and the notice, then in. */
+/** First Kakao / Google login in the app: name → birth date (14+) one at a time, then the notice in a sheet. */
 export function SocialSignup({ onSession }: { onSession: (user: User) => void }) {
   const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const provider = (query.get('provider') ?? 'kakao') as Provider
+  const [step, setStep] = useState<'name' | 'birth'>('name')
   const [name, setName] = useState(query.get('name') ?? '')
-  const [birth, setBirth] = useState<{ y: number; m: number; d: number } | null>(null)
-  const [draft, setDraft] = useState({ y: 2003, m: 1, d: 1 })
+  const [birth, setBirth] = useState<Birth | null>(null)
   const [picking, setPicking] = useState(false)
+  const [terms, setTerms] = useState(false)
   const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
   const birthDate = birth ? `${birth.y}-${pad(birth.m)}-${pad(birth.d)}` : ''
   const age = birth ? ageOn(birthDate, new Date()) : null
-  const can = name.trim().length > 0 && age !== null && age >= signupRules.minimumAge && agree
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  const nameOk = name.trim().length > 0
+  const ageOk = age !== null && age >= signupRules.minimumAge
+  useEffect(() => { if (step === 'birth' && !birth) setPicking(true) }, [step, birth])
+  function next(event?: FormEvent) {
+    event?.preventDefault()
+    if (step === 'name' && nameOk) setStep('birth')
+    else if (step === 'birth' && ageOk && nameOk) setTerms(true)
+  }
+  async function finish() {
     setBusy(true)
     setError('')
     try {
       onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests: [], agreedNotice: agree }))
       window.location.hash = '#/welcome'
     } catch (cause) {
+      setTerms(false)
       setError(cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : '가입하지 못했어요.')
     } finally {
       setBusy(false)
     }
   }
-  return <div className="m-screen m-signup">
-    <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={() => { window.location.hash = '#/login' }}><MIcon name="back" /></button><h1 className="m-title">{providerName[provider]}로 시작하기</h1><span className="m-top-actions" /></header>
-    <form className="m-body m-form" onSubmit={submit} noValidate>
-      <h2 className="m-h2" style={{ marginTop: 8 }}>처음 한 번만<br />확인해 주세요</h2>
-      <label className="m-field"><span className="m-label">이름</span><input className="m-input" maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="done" /></label>
-      <div className="m-field"><span className="m-label">생년월일</span>
-        <button type="button" className="m-input m-pick" aria-label={'생년월일 ' + (birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '선택')} onClick={() => setPicking(true)}>
-          <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
-        {age !== null && age < signupRules.minimumAge && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</div>
-      <div className="m-agree"><label className="m-check"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label></div>
-      <p className="m-help">간편 로그인은 개인 회원으로 가입돼요. 기관 가입은 PC에서 진행해 주세요.</p>
+  return <div className="m-screen m-signup m-ask">
+    <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={() => { if (step === 'birth') setStep('name'); else window.location.hash = '#/login' }}><MIcon name="back" /></button><h1 className="m-title">{providerName[provider]}로 시작하기</h1><span className="m-top-actions" /></header>
+    <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={2} aria-valuenow={step === 'name' ? 1 : 2} aria-label="가입 단계"><i style={{ width: step === 'name' ? '50%' : '100%' }} /></div>
+    <form className="m-body m-form" onSubmit={next} noValidate>
+      <div key={step} className="m-q">
+        <h2 className="m-h2">{step === 'name' ? '어떻게 불러 드릴까요?' : '생년월일을 알려 주세요'}</h2>
+        {step === 'name' ? <input className="m-input big" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />
+          : <><button type="button" className="m-input big m-pick" aria-label={'생년월일 ' + (birth ? birthText(birth) : '선택')} onClick={() => setPicking(true)}>
+            <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
+            {birth && !ageOk && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</>}
+      </div>
+      {step === 'birth' && <div className="m-answers"><Answered label="이름" value={name} onEdit={() => setStep('name')} /></div>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <ActionBar><button className="m-btn" disabled={!can || busy}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button></ActionBar>
+      <ActionBar><button className="m-btn" disabled={step === 'name' ? !nameOk : !ageOk || busy}>다음</button></ActionBar>
     </form>
-    {picking && <Sheet title="생년월일" onClose={() => setPicking(false)} footer={<button type="button" className="m-btn" onClick={() => { setBirth({ ...draft, d: Math.min(draft.d, days.length) }); setPicking(false) }}>완료</button>}>
-      <Wheels>
-        <WheelColumn label="년" items={years} value={draft.y} render={y => y + '년'} onChange={y => setDraft(v => ({ ...v, y }))} />
-        <WheelColumn label="월" items={months} value={draft.m} render={m => m + '월'} onChange={m => setDraft(v => ({ ...v, m }))} />
-        <WheelColumn label="일" items={days} value={Math.min(draft.d, days.length)} render={d => d + '일'} onChange={d => setDraft(v => ({ ...v, d }))} />
-      </Wheels>
+    {picking && <BirthSheet value={birth} onClose={() => setPicking(false)} onPick={value => { setBirth(value); setPicking(false) }} />}
+    {terms && <Sheet title="마지막으로 확인해 주세요" onClose={() => setTerms(false)} footer={<button type="button" className="m-btn" disabled={!agree || busy} onClick={finish}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button>}>
+      <div className="m-agree flat"><label className="m-check"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label></div>
+      <p className="m-help">간편 로그인은 개인 회원으로 가입돼요.</p>
     </Sheet>}
   </div>
 }

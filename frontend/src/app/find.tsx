@@ -62,11 +62,11 @@ function volinkParams(f: Filters, q: string, origin: { lat: number; lng: number 
   return params
 }
 
-/** 1365 needs a place to look: the chosen region, or the position (near: the radius; all areas: 20 km around you). */
+/** 1365 needs a place to look: the chosen region, or the position (near: the radius; all areas: 5 km around you). */
 function programParams(f: Filters, q: string, origin: { lat: number; lng: number } | null) {
   const params = new URLSearchParams()
   if (f.area.kind === 'region') { params.set('sido', f.area.sido); if (f.area.sigungu) params.set('sigungu', f.area.sigungu) }
-  else if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', f.area.kind === 'near' ? String(f.area.km) : '20') }
+  else if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', f.area.kind === 'near' ? String(f.area.km) : '5') }
   else return null
   if (q) params.set('q', q)
   if (f.categories.length) params.set('category', f.categories.join(','))
@@ -83,10 +83,10 @@ function programInDates(p: Program, f: Filters) {
   return start <= d.to && end >= d.from
 }
 
-export function FindScreen({ actions, focus, initial }: { actions: ReactNode; focus?: boolean; initial?: string }) {
+export function FindScreen({ actions, focus, initial, category }: { actions: ReactNode; focus?: boolean; initial?: string; category?: string }) {
   const [query, setQuery] = useState('')
   const [q, setQ] = useState('')
-  const [filters, setFilters] = useState<Filters>(() => ({ ...defaults,
+  const [filters, setFilters] = useState<Filters>(() => ({ ...defaults, ...(category && categories.includes(category) ? { categories: [category] } : {}),
     ...(initial === 'near' ? { area: { kind: 'near', km: 5 } } : initial === 'weekend' ? { when: { kind: 'weekend' } } : initial === 'newcomer' ? { newcomer: true } : initial === '1365' ? { source: '1365' } : {}) } as Filters))
   const [sheet, setSheet] = useState(false)
   const [view, setView] = useState<'list' | 'map'>('list')
@@ -194,11 +194,10 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
       {loading ? <Loading />
         : view === 'map' ? <div className="m-map-box">
           <PlaceMap label="활동 위치 지도" places={mapPlaces}
-            origin={origin && near ? { ...origin, label: '내 위치' } : null} radiusKm={filters.area.kind === 'near' ? filters.area.km : undefined} selected={selected}
+            origin={origin && filters.area.kind !== 'region' ? { ...origin, label: '내 위치' } : null} radiusKm={filters.area.kind === 'near' ? filters.area.km : undefined} selected={selected}
             onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} />
           <p className="m-map-legend">{showVolink && <><i className="local" />동네 활동 {shown.length}개</>}{show1365 && mapPrograms.length > 0 && <><i className="program" />1365 활동 {mapPrograms.length}개</>}</p>
           {selected && shown.find(a => a.id === selected) && <div className="m-map-card"><ActivityRow activity={shown.find(a => a.id === selected)!} /></div>}
-          {!mapPlaces.some(a => a.latitude != null) && <p className="m-help center">장소 좌표가 있는 활동만 지도에 보여요.</p>}
         </div>
         : total === 0 ? <Empty icon="search" title="조건에 맞는 활동이 없어요" text="조건을 줄이거나 다른 지역·날짜를 골라 보세요."
           action={applied.length || q ? <button className="m-btn line sm" onClick={() => { setFilters(defaults); setQ(''); setQuery('') }}>조건 모두 지우기</button> : undefined} />
@@ -274,7 +273,6 @@ function FilterSheet({ value, q, origin, onClose, onApply }: { value: Filters; q
         {p}{districts[p] ? <MIcon name="chevron" size={16} /> : <small>전체만</small>}</button></li>)
       : ['', ...districts[sido]].map(d => { const on = draft.area.kind === 'region' && draft.area.sido === sido && draft.area.sigungu === d
         return <li key={d || 'all'}><button type="button" className={on ? 'on' : ''} onClick={() => { set({ area: { kind: 'region', sido, sigungu: d } }); setStep('main') }}>{d || shortProvince(sido) + ' 전체'}{on && <MIcon name="check" size={16} />}</button></li> })}</ul>
-    {step === 'sido' && <p className="m-help">시·군·구는 서울·경기만 고를 수 있어요. 다른 시·도는 전체로 찾아요.</p>}
   </Sheet>
 
   return <Sheet title="상세 필터" className="m-filter-sheet" onClose={onClose}
@@ -311,20 +309,17 @@ function FilterSheet({ value, q, origin, onClose, onApply }: { value: Filters; q
         {categories.map(c => { const on = draft.categories.includes(c)
           return <button key={c} type="button" className={'m-chip' + (on ? ' on' : '')} aria-pressed={on} onClick={() => toggleCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={15} />{c}</button> })}
       </div>
-      <p className="m-help">1365 활동은 공식 분야로 나누고, 분야를 알 수 없으면 ‘기타’로 보여요.</p>
     </section>
     <section className="m-fsec" aria-labelledby="f-status"><h3 id="f-status"><MIcon name="users" size={18} />모집 상태</h3>
       <div className="m-radios" role="radiogroup" aria-labelledby="f-status">
         {(['OPEN', 'WAITLIST', 'ALL'] as Status[]).map(s => <label key={s} className={draft.status === s ? 'on' : ''}>
           <input type="radio" name="f-status" checked={draft.status === s} onChange={() => set({ status: s })} /><i aria-hidden="true" />{statusLabel[s]}</label>)}
       </div>
-      <p className="m-help">대기 신청은 Volink 활동만 있어요(시작 2시간 전 마감). 1365는 1365가 알려 주는 모집 상태를 따라요.</p>
     </section>
     <section className="m-fsec" aria-labelledby="f-source"><h3 id="f-source"><MIcon name="list" size={18} />모집 출처</h3>
       <div className="m-seg wide" role="radiogroup" aria-labelledby="f-source">
         {(['ALL', 'VOLINK', '1365'] as Source[]).map(s => <button key={s} type="button" role="radio" aria-checked={draft.source === s} className={draft.source === s ? 'on' : ''} onClick={() => set({ source: s })}>{sourceLabel[s]}</button>)}
       </div>
-      <p className="m-help">1365 활동은 1365 자원봉사포털에서 신청해요.</p>
     </section>
   </Sheet>
 }

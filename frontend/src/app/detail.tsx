@@ -351,7 +351,6 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
               : p.status === 'CHECKED_IN' && phase === 'ended' ? <button className="m-btn xs" disabled={busy} onClick={() => run('/api/participations/' + p.id + '/complete', {}, p.name + ' 님 완료를 확인했어요')}>완료 확인</button>
               : <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.status === 'WAITLISTED' ? `대기 ${p.waitOrder}번` : statusWord[p.status]?.text ?? p.status}</span>}
           </span></li>)}</ul>)}
-      {tab === 'people' && <p className="m-help">이름 일부만 보이고 연락처는 공개하지 않아요. 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안해요.</p>}
       {tab === 'attendance' && people && <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} />}
       {open && <section className="m-ops" aria-label="활동 운영 관리"><h2>활동 운영 관리</h2>
         <nav className="m-menu flat">

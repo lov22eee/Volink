@@ -14,14 +14,14 @@ const kakaoKey = import.meta.env.VITE_KAKAO_JS_KEY
 export const kakaoEnabled = Boolean(kakaoKey)
 
 /** Map pin drawn as an SVG string for Kakao overlays (bigger when picked). */
-export const pinSvg = (colour: string, big: boolean) => `<svg width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`
+export const pinSvg = (colour: string, big: boolean) => `<svg xmlns="http://www.w3.org/2000/svg" width="${big ? 36 : 28}" height="${big ? 36 : 28}" viewBox="0 0 24 24" fill="${colour}" stroke="#fff" stroke-width="1.6"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.3" fill="#fff"/></svg>`
 let loading: Promise<any> | null = null
 
 export function loadKakao(): Promise<any> {
   if (window.kakao?.maps?.LatLng) return Promise.resolve(window.kakao)
   loading ??= new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoKey ?? '')}&autoload=false`
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoKey ?? '')}&autoload=false&libraries=clusterer`
     script.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
     script.onerror = () => { loading = null; reject(new Error('Kakao map unavailable')) }
     document.head.appendChild(script)
@@ -63,25 +63,37 @@ function KakaoMap({ places, origin, radiusKm, selected, onSelect, onPick, label,
       if (cancelled || !box.current) return
       const points = located(places)
       const centre = origin ?? placesCentre(places) ?? { lat: 37.8, lng: 127.08, label: '' }
-      const map = new kakao.maps.Map(box.current, { center: new kakao.maps.LatLng(centre.lat, centre.lng), level: 6 })
+      // Around me: a close view (level 5, about a few km across); otherwise fit the pins, but never zoomed out past a city.
+      const map = new kakao.maps.Map(box.current, { center: new kakao.maps.LatLng(centre.lat, centre.lng), level: origin ? (radiusKm && radiusKm > 5 ? 7 : radiusKm && radiusKm > 2 ? 6 : 5) : 6 })
       const bounds = new kakao.maps.LatLngBounds()
+      const markers: any[] = []
       for (const place of points) {
         const position = new kakao.maps.LatLng(place.latitude, place.longitude)
         const big = selected === place.id
+        // A data-URL image needs xmlns, or Android WebView shows a broken image.
         const image = place.tone ? new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pinSvg(toneColour[place.tone], big)),
           new kakao.maps.Size(big ? 36 : 28, big ? 36 : 28), { offset: new kakao.maps.Point(big ? 18 : 14, big ? 34 : 26) }) : undefined
-        const marker = new kakao.maps.Marker({ map, position, title: place.name, image, zIndex: big ? 3 : place.tone === 'local' ? 2 : 1, opacity: place.tone || selected == null || big ? 1 : 0.5 })
+        const marker = new kakao.maps.Marker({ position, title: place.name, image, zIndex: big ? 3 : place.tone === 'local' ? 2 : 1, opacity: place.tone || selected == null || big ? 1 : 0.5 })
         kakao.maps.event.addListener(marker, 'click', () => choose.current?.(place.id))
-        drawn.push(marker)
+        markers.push(marker)
         bounds.extend(position)
       }
+      // Many pins: grouped into numbered circles that split when zoomed in (the selected one always stays on its own).
+      if (markers.length >= 12 && kakao.maps.MarkerClusterer) {
+        const clusterer = new kakao.maps.MarkerClusterer({ map, averageCenter: true, minLevel: 5, gridSize: 50, disableClickZoom: false,
+          styles: [{ width: '40px', height: '40px', lineHeight: '40px', borderRadius: '20px', background: 'rgba(47, 111, 82, 0.88)', color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: '14px', border: '2px solid #fff' }] })
+        clusterer.addMarkers(markers)
+        drawn.push({ setMap: () => clusterer.clear() })
+      } else markers.forEach(marker => { marker.setMap(map); drawn.push(marker) })
       if (origin) {
         const position = new kakao.maps.LatLng(origin.lat, origin.lng)
-        drawn.push(new kakao.maps.Circle({ map, center: position, radius: (radiusKm ?? 3) * 1000, strokeWeight: 2, strokeColor: '#2f6b4f', strokeOpacity: 0.7, fillColor: '#2f6b4f', fillOpacity: 0.08 }))
+        if (radiusKm) drawn.push(new kakao.maps.Circle({ map, center: position, radius: radiusKm * 1000, strokeWeight: 2, strokeColor: '#2f6b4f', strokeOpacity: 0.7, fillColor: '#2f6b4f', fillOpacity: 0.08 }))
         drawn.push(new kakao.maps.CustomOverlay({ map, position, content: '<span class="map-origin">●</span>' }))
-        bounds.extend(position)
       }
-      if (!bounds.isEmpty() && !origin) map.setBounds(bounds)
+      if (!bounds.isEmpty() && !origin) {
+        map.setBounds(bounds)
+        if (map.getLevel() > 8) map.setLevel(8)
+      }
       if (pickable) kakao.maps.event.addListener(map, 'click', (event: any) => pick.current?.(event.latLng.getLat(), event.latLng.getLng()))
     }).catch(() => fail.current())
     return () => { cancelled = true; drawn.forEach(item => item.setMap(null)) }

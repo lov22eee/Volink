@@ -135,7 +135,7 @@ export function ActionBar({ children }: { children: ReactNode }) {
 }
 
 /** A panel that slides up from the bottom. Closes on the dim area, the close button or Escape. */
-export function Sheet({ title, onClose, children, footer, headAction, className }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; headAction?: ReactNode; className?: string }) {
+export function Sheet({ title, onClose, children, footer, headAction, className }: { title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; headAction?: ReactNode; className?: string }) {
   useEffect(() => {
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', key)
