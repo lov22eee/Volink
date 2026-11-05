@@ -258,13 +258,18 @@ export function useKeyboardAware() {
       field.dispatchEvent(new Event('input', { bubbles: true }))
     }
     const sync = (event: Event) => { if (textField(event.target)) push(event.target) }
+    // A real input event already handed the text to React: remember it, so the check above does not send the same text
+    // again (that second event made every key render the screen twice, measured 1.7 renders per key).
+    const heard = (event: Event) => { if (event.isTrusted && textField(event.target)) seen.set(event.target, event.target.value) }
     const poll = window.setInterval(() => { const field = document.activeElement; if (textField(field)) push(field) }, 80)
     viewport?.addEventListener('resize', resize)
     window.addEventListener('resize', resize)
     document.addEventListener('focusin', onFocus)
     document.addEventListener('focusout', onBlur)
     for (const type of ['compositionupdate', 'compositionend', 'focusout']) document.addEventListener(type, sync, true)
+    document.addEventListener('input', heard, true)
     return () => {
+      document.removeEventListener('input', heard, true)
       viewport?.removeEventListener('resize', resize); window.removeEventListener('resize', resize); document.removeEventListener('focusin', onFocus); document.removeEventListener('focusout', onBlur)
       for (const type of ['compositionupdate', 'compositionend', 'focusout']) document.removeEventListener(type, sync, true)
       window.clearInterval(poll)
