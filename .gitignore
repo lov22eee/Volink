@@ -12,6 +12,7 @@ application-secret.*
 # Dependencies, build output and local services
 node_modules/
 dist/
+dist-app/
 target/
 .cache/
 .tools/

@@ -75,6 +75,7 @@
 | 6 | `POST /api/activities/{id}/questions` `{body}` | 확정자 | **구현.** 모집자에게 알림. 전화번호·이메일·오픈채팅 링크는 400(연락처 비공개), 한 시간 10개 넘으면 429 |
 | 6 | `POST /api/activity-posts/{id}/answer` `{body}` | 모집자 | **구현.** 질문당 답변 1개(두 번째 409), 질문한 사람에게 알림 |
 | 6 | `DELETE /api/activity-posts/{id}` | 작성자, 질문은 모집자도 | **구현.** 지운 표시만 남기고(답변도 함께) 화면에서 숨김 |
+| 6 | `GET /api/me/saved` · `PUT /api/me/saved/{activityId}` · `DELETE …` | 본인 | **구현(2026-11-05, V10).** 저장한 봉사. 볼 수 없는 활동 PUT은 404, 같은 활동 두 번 저장해도 1개. 목록은 모집 중·진행·종료만 |
 | 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·상태. Volink 자체 기록이며 공식 봉사실적이 아님 |
 | 6 | `POST /api/activities/{id}/cancel` `{reason}` | 모집자 | **구현(2026-11-04, V9).** 시작 전·DRAFT/RECRUITING만, 사유 2~200자. 활동 CANCELLED + `cancel_reason`, 남은 신청 모두 CANCELLED(본인 취소 횟수는 안 늘림)·알림. 신청했던 사람은 상세에서 사유를 볼 수 있음 |
 | 6 | `POST /api/activities/{id}/reschedule` `{date, time, durationMinutes, reason}` | 모집자 | **구현(V9).** 모집 중·활동마다 1회(409 `RESCHEDULE_USED`)·지금 시작 24시간 전까지(409 `RESCHEDULE_TOO_LATE`). 새 시간은 만들기 규칙과 같고 해 진 뒤 끝나면 400. 확정은 유지, 신청·대기 모두 알림, 하루 전·체크인 알림은 새 시간 기준으로 다시 |

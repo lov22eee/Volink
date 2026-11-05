@@ -1,0 +1,100 @@
+// Android app (APK) screens. Built with `vite --mode app`; the web site keeps its own design (src/App.tsx).
+// Login first: nothing else is reachable before signing in. Five bottom tabs: 홈 / 찾기 / 모집 / 내 활동 / 마이.
+import { useCallback, useEffect, useState } from 'react'
+import { api, logout, mayHaveSession, refresh } from '../api'
+import type { User } from '../api'
+import { ToastHost } from '../App'
+import { CheckInPage } from '../checkin'
+import './app.css'
+import { Login, Signup } from './auth'
+import { ActivityScreen, ManageScreen } from './detail'
+import { FindScreen } from './find'
+import { HomeScreen } from './home'
+import { CreateWizard, HostScreen } from './host'
+import { MineScreen } from './mine'
+import { MyScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
+import { BellLink, Loading, MIcon, TabBar, TopBar, useKeyboardAware } from './ui'
+import type { Tab } from './ui'
+
+type Route = { page: string; id?: number; query: URLSearchParams }
+
+function parse(hash: string): Route {
+  const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
+  const [page = 'home', id] = path.split('/')
+  return { page: page || 'home', id: id && /^\d+$/.test(id) ? Number(id) : undefined, query: new URLSearchParams(query) }
+}
+
+function useRoute() {
+  const [route, setRoute] = useState(() => parse(window.location.hash))
+  useEffect(() => {
+    const change = () => { setRoute(parse(window.location.hash)); window.scrollTo(0, 0) }
+    window.addEventListener('hashchange', change)
+    return () => window.removeEventListener('hashchange', change)
+  }, [])
+  return route
+}
+
+export default function MobileApp() {
+  const route = useRoute()
+  const [user, setUser] = useState<User | null>(null)
+  const [ready, setReady] = useState(false)
+  const [unread, setUnread] = useState(0)
+  useKeyboardAware()
+
+  useEffect(() => {
+    document.documentElement.classList.add('m-app')
+    if (!mayHaveSession()) { setReady(true); return }
+    refresh().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
+  }, [])
+  const pollUnread = useCallback(() => {
+    if (!user) return
+    api<{ unread: number }>('/api/me/notifications?unread=true').then(data => setUnread(data.unread)).catch(() => {})
+  }, [user])
+  useEffect(() => {
+    pollUnread()
+    if (!user) return
+    const timer = window.setInterval(pollUnread, 30_000)
+    return () => window.clearInterval(timer)
+  }, [user, pollUnread, route.page])
+
+  const signOut = useCallback(async () => { await logout(); setUser(null); window.location.hash = '#/login' }, [])
+  const onSession = (signed: User) => { setUser(signed); if (['login', 'signup', ''].includes(parse(window.location.hash).page)) window.location.hash = '#/home' }
+
+  if (!ready) return <div className="m-boot"><span className="m-logo"><MIcon name="leaf" size={44} /></span></div>
+  // A QR scanned with the phone camera opens the check-in link; after signing in it continues there.
+  if (!user) {
+    if (route.page === 'checkin' && route.id) try { sessionStorage.setItem('volink.next', window.location.hash) } catch { /* private mode */ }
+    return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <Login onSession={user => {
+      onSession(user)
+      let next: string | null = null
+      try { next = sessionStorage.getItem('volink.next'); sessionStorage.removeItem('volink.next') } catch { /* private mode */ }
+      window.location.hash = next ?? '#/home'
+    }} />
+  }
+  if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
+
+  const bell = <BellLink unread={unread} />
+  const search = <a href="#/find?focus=1" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
+  const tab: Tab | null = (['home', 'find', 'host', 'mine', 'my'] as Tab[]).includes(route.page as Tab) ? route.page as Tab : null
+  let screen
+  switch (route.page) {
+    case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
+    case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} />; break
+    case 'host': screen = <HostScreen user={user} actions={bell} />; break
+    case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
+    case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
+    case 'mine': screen = <MineScreen actions={bell} initial={route.query.get('tab') ?? undefined} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
+    case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
+    case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
+    case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break
+    case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
+    default: screen = null
+  }
+  if (!screen) { window.location.hash = '#/home'; return <Loading /> }
+  return <div className={'m-shell' + (tab ? ' has-tabs' : '')}>
+    {screen}
+    {tab && <TabBar active={tab} />}
+    <ToastHost />
+  </div>
+}

@@ -136,6 +136,17 @@ class ActivityCareIntegrationTest extends ApiTestSupport {
                 .andExpect(jsonPath("$[0].pending").value(0)).andExpect(jsonPath("$[0].unanswered").value(0)).andExpect(jsonPath("$[0].checkedIn").value(0));
     }
 
+    @Test
+    void savedActivitiesAreOnlyMine() throws Exception {
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/me/saved/" + activity), null, member).andExpect(status().isNoContent());
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/me/saved/" + activity), null, member).andExpect(status().isNoContent());
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/me/saved/999999"), null, member).andExpect(status().isNotFound());
+        mvc.perform(get("/api/me/saved").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(activity));
+        mvc.perform(get("/api/me/saved").header("Authorization", "Bearer " + waiting)).andExpect(jsonPath("$.length()").value(0));
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/me/saved/" + activity), null, member).andExpect(status().isNoContent());
+        mvc.perform(get("/api/me/saved").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.length()").value(0));
+    }
+
     // ---- helpers ----
 
     private long apply(String token) throws Exception {

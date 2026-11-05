@@ -239,7 +239,7 @@ export function showToast(text: string, detail = '') {
   toastBus.dispatchEvent(new CustomEvent('toast', { detail: { text, detail } }))
 }
 
-function ToastHost() {
+export function ToastHost() {
   const [toast, setToast] = useState<{ id: number; text: string; detail: string } | null>(null)
   useEffect(() => {
     let timer = 0

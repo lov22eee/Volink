@@ -12,7 +12,9 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "test:e2e": "playwright test",
     "report:export": "node scripts/export-report.mjs",
-    "ui:export": "npm run build && node scripts/export-ui.mjs"
+    "ui:export": "npm run build && node scripts/export-ui.mjs",
+    "dev:app": "vite --mode app --host 127.0.0.1 --port 5174 --strictPort",
+    "build:app": "tsc -b && vite build --mode app --outDir dist-app"
   },
   "dependencies": {
     "qrcode": "1.5.4",

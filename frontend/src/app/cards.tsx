@@ -1,0 +1,50 @@
+// Small activity rows used on several app screens (home, find, host, saved).
+import type { LiveActivity } from '../api'
+import { durationLabel } from '../create'
+import { dayWord, MIcon } from './ui'
+import type { MIconName } from './ui'
+
+export const fieldIcon: Record<string, MIconName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
+export const difficultyLabel = { EASY: '가벼워요', NORMAL: '보통', HARD: '힘들어요' } as const
+export const placeKindLabel = { OUTDOOR: '야외', INDOOR: '실내', MIXED: '실내·야외' } as const
+
+export const seatsLeft = (a: Pick<LiveActivity, 'capacity' | 'confirmed'>) => Math.max(0, a.capacity - a.confirmed)
+export const startsAt = (a: Pick<LiveActivity, 'date' | 'startTime'>) => new Date(`${a.date}T${a.startTime}:00+09:00`).getTime()
+export const isNewcomer = (a: Pick<LiveActivity, 'newcomerOk'>) => a.newcomerOk === undefined || Boolean(a.newcomerOk)
+
+/** The single most useful badge for a card: 마감 임박 > 처음 환영 > N자리 남음. */
+export function badgeOf(a: LiveActivity): { text: string; tone: 'hot' | 'mint' | 'gray' } {
+  const left = seatsLeft(a)
+  if (left === 0) return { text: '정원 마감', tone: 'gray' }
+  if (startsAt(a) - Date.now() < 48 * 3_600_000) return { text: left + '자리 남음', tone: 'hot' }
+  if (isNewcomer(a)) return { text: '처음 환영', tone: 'mint' }
+  return { text: left + '자리 남음', tone: 'gray' }
+}
+
+export function ActivityRow({ activity, note, href }: { activity: LiveActivity; note?: string; href?: string }) {
+  const badge = badgeOf(activity)
+  const meta = [dayWord(activity.date) + ' ' + activity.startTime, durationLabel(activity.durationMinutes),
+    activity.distanceKm != null ? activity.distanceKm + 'km' : activity.placeName ?? ''].filter(Boolean).join(' · ')
+  return <a className="m-row" href={href ?? '#/activity/' + activity.id}>
+    <span className={'m-row-ico f' + (Object.keys(fieldIcon).indexOf(activity.category) + 1)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={22} /></span>
+    <span className="m-row-main"><strong>{activity.title}</strong><small>{meta}</small>{note && <em>{note}</em>}</span>
+    <span className={'m-badge ' + badge.tone}>{badge.text}</span>
+  </a>
+}
+
+/** Downloads an .ics file so the phone calendar can add the activity (nothing is sent anywhere). */
+export function addToCalendar(a: Pick<LiveActivity, 'id' | 'title' | 'date' | 'startTime' | 'durationMinutes' | 'placeName' | 'meetingPoint'>) {
+  const start = new Date(`${a.date}T${a.startTime}:00+09:00`)
+  const end = new Date(start.getTime() + a.durationMinutes * 60_000)
+  const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const text = (value: string) => value.replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n')
+  const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Volink//KO', 'BEGIN:VEVENT', `UID:volink-${a.id}@volink`, `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`, `SUMMARY:${text(a.title)}`, `LOCATION:${text([a.placeName, a.meetingPoint].filter(Boolean).join(' · '))}`,
+    'DESCRIPTION:Volink 활동 · 못 가게 되면 앱에서 미리 알려 주세요.', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Volink 활동 1시간 전', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar;charset=utf-8' }))
+  link.download = `volink-${a.id}.ics`
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 4000)
+}

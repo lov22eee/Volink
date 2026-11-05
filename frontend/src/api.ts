@@ -17,14 +17,17 @@ export type LiveActivity = {
   latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number; supplies?: { name: string; provided: boolean }[]
   /** Only for the organizer: applications that lock the full edit. */
   applicants?: number
+  /** Week 6 (V9): labels, one reschedule, the organizer's cancel reason; counts only in the organizer's own list. */
+  difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number
+  rescheduleCount?: number; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
 }
 export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLISTED' | 'OFFERED' | 'EXPIRED' | 'CANCELLED' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW' | 'HELD' | 'INVALIDATED'
-export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number }
+export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number; lateMinutes?: number | null }
 export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
 export type ViewerInfo = Seats & { participation: Participation | null }
 export type Applicant = Participation & { name: string; appliedAt: string; checkInMethod?: 'QR' | 'MANUAL' | null; checkInReason?: string | null; checkedInAt?: string | null }
 export type MyRecord = { id: number; activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes: number; checkInMethod: 'QR' | 'MANUAL'; confirmedAt: string; appealDeadline: string; status: 'VALID' | 'HELD' | 'INVALIDATED' }
-export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string }
+export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes?: number; activityStatus?: string; cancelReason?: string | null; organizerId?: number }
 export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
 export type PlaceInfo = {
   id: number; name: string; area: string; addressNote?: string; meetingPoint?: string | null
