@@ -17,15 +17,15 @@ class ActivityEditIntegrationTest extends ApiTestSupport {
     @Test
     void theFormCanAskWhichFieldHasARiskWordWithoutSaving() throws Exception {
         String organizer = token(member("GENERAL"));
-        perform(post("/api/activities/check"), Map.of("title", "어르신 말벗 산책", "description", "전기 배관 주변을 정리합니다.", "supplies", java.util.List.of("장갑", "사다리")), organizer)
+        perform(post("/api/activities/check"), Map.of("title", "어린이 말벗 산책", "description", "전기 배관 주변을 정리합니다.", "supplies", java.util.List.of("장갑", "사다리")), organizer)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title[0].keyword").value("어르신")).andExpect(jsonPath("$.title[0].level").value("REVIEW"))
+                .andExpect(jsonPath("$.title[0].keyword").value("어린이")).andExpect(jsonPath("$.title[0].level").value("REVIEW"))
                 .andExpect(jsonPath("$.description[*].level").value(org.hamcrest.Matchers.hasItem("BLOCKED")))
                 .andExpect(jsonPath("$.supplies[0].keyword").value("사다리"));
         perform(post("/api/activities/check"), Map.of("title", "공원 산책로 함께 걷고 줍기", "description", "천천히 걸으며 쓰레기를 줍습니다."), organizer)
                 .andExpect(jsonPath("$.title.length()").value(0)).andExpect(jsonPath("$.description.length()").value(0));
         mvc.perform(post("/api/activities/check").contentType("application/json").content("{}")).andExpect(status().isUnauthorized());
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activities WHERE title = '어르신 말벗 산책'", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM activities WHERE title = '어린이 말벗 산책'", Integer.class)).isZero();
     }
 
     @Test
@@ -57,7 +57,7 @@ class ActivityEditIntegrationTest extends ApiTestSupport {
         perform(put("/api/activities/" + id), edit, organizer).andExpect(status().isUnprocessableEntity());
         mvc.perform(get("/api/activities/" + id)).andExpect(jsonPath("$.status").value("RECRUITING")).andExpect(jsonPath("$.capacity").value(8));
         // Edited into a REVIEW activity: hidden again until an admin approves.
-        edit.put("description", "공원에서 어르신과 함께 천천히 걸으며 쓰레기를 줍는 활동입니다.");
+        edit.put("description", "공원에서 어린이와 함께 천천히 걸으며 쓰레기를 줍는 활동입니다.");
         perform(put("/api/activities/" + id), edit, organizer).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DRAFT"));
         mvc.perform(get("/api/activities/" + id)).andExpect(status().isNotFound());
         mvc.perform(get("/api/activities/" + id).header("Authorization", "Bearer " + organizer)).andExpect(jsonPath("$.applicants").value(0));

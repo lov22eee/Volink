@@ -1,5 +1,6 @@
 // Activity form (4주차 보완): one place field with a search dialog, a schedule card (date first, then a wheel for the
 // start time) and a duration list that only offers lengths ending by 22:00. Minutes are in 10-minute steps.
+import { categoryHint as sharedHint } from './categories'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError, preview } from './api'
@@ -87,9 +88,9 @@ const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 �
 const maxSupplies = 6
 
 const templates = [
-  { name: '공원 플로깅', title: '공원 산책로 함께 걷고 줍기', category: '환경 정화', duration: 90, description: '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
-  { name: '동네 화단 가꾸기', title: '동네 화단 물주기와 잡초 뽑기', category: '환경 정화', duration: 60, description: '동네 화단에 물을 주고 잡초를 뽑는 가벼운 활동입니다. 장갑을 챙겨 오시면 좋아요.' },
-  { name: '나눔 장터 정리', title: '주민 나눔 장터 정리 돕기', category: '생활 지원', duration: 120, description: '주민 나눔 장터가 끝난 뒤 테이블과 물품을 함께 정리합니다. 무거운 물건은 두 사람이 함께 옮겨요.' },
+  { name: '공원 플로깅', title: '공원 산책로 함께 걷고 줍기', category: '환경', duration: 90, description: '공원 산책로를 천천히 걸으며 눈에 띄는 쓰레기를 함께 줍습니다. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
+  { name: '동네 화단 가꾸기', title: '동네 화단 물주기와 잡초 뽑기', category: '환경', duration: 60, description: '동네 화단에 물을 주고 잡초를 뽑는 가벼운 활동입니다. 장갑을 챙겨 오시면 좋아요.' },
+  { name: '나눔 장터 정리', title: '주민 나눔 장터 정리 돕기', category: '지역사회', duration: 120, description: '주민 나눔 장터가 끝난 뒤 테이블과 물품을 함께 정리합니다. 무거운 물건은 두 사람이 함께 옮겨요.' },
 ]
 
 type CreateResult = { kind: 'published' | 'review'; activity: LiveActivity }
@@ -151,7 +152,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   }, [title, description, supplyNames, user])
   const status = {
     title: fromWords(words.title),
-    category: category === '지역 돌봄' ? { level: 'REVIEW', reasons: ['지역 돌봄 분야는 만나는 분이 누구인지 관리자가 확인해요.'] } as FieldStatus : null,
+    category: null,
     place: place?.placeClass === 'REVIEW' ? { level: 'REVIEW', reasons: ['지도에서 직접 찍은 길·골목·공터는 어떤 곳인지 알 수 없어 관리자가 확인해요. 근처의 이름 있는 장소를 고르면 바로 공개돼요.'] } as FieldStatus : null,
     schedule: afterSunset ? { level: 'REVIEW', reasons: ['해가 진 뒤(' + sunset[Number(date.slice(5, 7)) - 1] + ' 이후) 끝나는 활동은 관리자가 확인해요.'] } as FieldStatus : null,
     description: fromWords(words.description),
@@ -413,8 +414,8 @@ function TimeWheel({ value, onChange }: { value: string; onChange: (time: string
   </div>
 }
 
-const categoryGlyph: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
-const categoryHint: Record<string, string> = { '환경 정화': '공원·거리 정리, 화단 가꾸기', '생활 지원': '나눔 장터, 물품 정리 돕기', '지역 돌봄': '이웃과 함께하는 활동 · 관리자 확인 후 공개' }
+const categoryGlyph: Record<string, GlyphName> = { 환경: 'leaf', 교육: 'book', 복지: 'hand', '문화·예술': 'palette', 동물: 'paw', 지역사회: 'users', 기타: 'target' }
+const categoryHint: Record<string, string> = sharedHint
 
 type Choice = { value: string; text: string; icon?: GlyphName; hint?: string }
 

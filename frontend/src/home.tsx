@@ -15,7 +15,7 @@ import type { Program } from './explore'
 import { currentPosition, remember, remembered } from './location'
 import { hhmm, phaseOf, useNow } from './checkin'
 
-const categoryIcon: Record<string, GlyphName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
+const categoryIcon: Record<string, GlyphName> = { 환경: 'leaf', 교육: 'book', 복지: 'hand', '문화·예술': 'palette', 동물: 'paw', 지역사회: 'users', 기타: 'target' }
 
 function seoulToday(days = 0) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + days * 86_400_000))

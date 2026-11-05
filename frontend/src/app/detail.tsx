@@ -2,6 +2,7 @@
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
+import { categoryTone } from '../categories'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User, ViewerInfo } from '../api'
 import { showToast } from '../App'
@@ -115,7 +116,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   }
 
   const head = <section className="m-detail-head">
-    <span className={'m-cover f' + (['환경 정화', '생활 지원', '지역 돌봄'].indexOf(activity.category) + 1)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
+    <span className={'m-cover f' + categoryTone(activity.category)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
     <Labels activity={activity} />
     <h1>{activity.title}</h1>
     <p className="m-by">{activity.activityType === 'INSTITUTION' ? activity.organizationName : activity.organizerName + ' 님'}이 모집해요</p>
@@ -123,7 +124,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
 
   // One card at the top that says where I am now and what happens next.
   const statusCard = (() => {
-    if (cancelled) return <div className="m-state bad"><strong>모집자가 활동을 취소했어요</strong><span>{activity.cancelReason ?? '취소 이유가 없어요.'}</span></div>
+    if (cancelled) return <CancelledCard activity={activity} organizer={false} />
     switch (stage) {
       case 'before': return !recruiting ? <div className="m-state gray"><strong>{activity.status === 'FINISHED' ? '끝난 활동이에요' : '신청이 마감됐어요'}</strong></div>
         : <div className="m-state"><strong>{full ? (waitClosed ? '정원이 찼어요' : `정원이 찼어요 · 대기 ${viewer.waiting}명`) : `${seatsLeft(activity)}자리 남았어요`}</strong>
@@ -325,7 +326,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         <div className="m-labels"><span className={'m-badge ' + (activity.status === 'RECRUITING' ? 'mint' : activity.status === 'DRAFT' ? 'amber' : 'gray')}>{statusText}</span>{dDay(activity.date) && <span className="m-badge gray">{dDay(activity.date)}</span>}</div>
         <h1>{activity.title}</h1>
         <p>{dayWord(activity.date)} {activity.startTime} · {durationLabel(activity.durationMinutes)} · {activity.meetingPoint ?? activity.placeName}</p>
-        {activity.status === 'CANCELLED' && <div className="m-state bad"><strong>취소한 활동이에요</strong><span>{activity.cancelReason ?? activity.reviewNote}</span></div>}
+        {activity.status === 'CANCELLED' && (activity.cancellation ? <CancelledCard activity={activity} organizer /> : <div className="m-state bad"><strong>취소된 활동이에요</strong><span>{activity.cancelReason ?? activity.reviewNote}</span></div>)}
         {activity.status === 'DRAFT' && <div className="m-state amber"><strong>{activity.reviewNote ? '관리자가 반려했어요' : '관리자 확인 후 공개돼요'}</strong><span>{activity.reviewNote ?? activity.riskReasons ?? ''}</span></div>}
         <div className="m-kpis">
           <div><b>{people?.confirmed ?? activity.confirmed}<small>/{activity.capacity}</small></b><span>확정</span></div>
@@ -352,6 +353,12 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
           </span></li>)}</ul>)}
       {tab === 'people' && <p className="m-help">이름 일부만 보이고 연락처는 공개하지 않아요. 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안해요.</p>}
       {tab === 'attendance' && people && <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} />}
+      {open && <section className="m-ops" aria-label="활동 운영 관리"><h2>활동 운영 관리</h2>
+        <nav className="m-menu flat">
+          <a href={'#/edit/' + id}><MIcon name="edit" size={20} /><span>활동 정보 수정<small>{(activity.applicants ?? 0) > 0 ? '신청자가 있어 소개·만나는 곳만 바꿀 수 있어요' : '모든 정보를 바꿀 수 있어요'}</small></span><MIcon name="chevron" size={18} /></a>
+          {canMove && <button type="button" onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 바꾸기<small>한 번만, 시작 24시간 전까지 · 신청자에게 알려요</small></span><MIcon name="chevron" size={18} /></button>}
+          {checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소하기<small>참가자 전원에게 취소 안내</small></span><MIcon name="chevron" size={18} /></button>}
+        </nav></section>}
     </div>
     {main && <ActionBar>{main}</ActionBar>}
 
@@ -361,10 +368,23 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {open && <button type="button" disabled={!canMove} onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 바꾸기</span><small>{(activity.rescheduleCount ?? 0) > 0 ? '이미 한 번 바꿨어요' : !canMove ? '시작 24시간 전까지만' : '한 번만 가능'}</small><MIcon name="chevron" size={18} /></button>}
         <a href={'#/create?from=' + id}><MIcon name="refresh" size={20} /><span>같은 내용으로 다시 모집</span><MIcon name="chevron" size={18} /></a>
         {open && (activity.applicants ?? 0) === 0 && <button type="button" onClick={() => setSheet('delete')}><MIcon name="trash" size={20} /><span>활동 삭제</span><MIcon name="chevron" size={18} /></button>}
-        {open && (activity.applicants ?? 0) > 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="close" size={20} /><span>활동 취소</span><small>신청자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
+        {open && checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소</span><small>참가자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
       </nav>
     </Sheet>}
-    {sheet === 'cancel' && <ActivityCancelSheet busy={busy} onClose={() => setSheet(null)} onSend={reason => run('/api/activities/' + id + '/cancel', { reason }, '활동을 취소하고 신청자에게 알렸어요')} />}
+    {sheet === 'cancel' && <ActivityCancelSheet activity={activity} counts={{ confirmed: count('CONFIRMED'), waiting: count('WAITLISTED') + count('OFFERED'), applied: count('APPLIED') }} busy={busy}
+      onClose={() => setSheet(null)} onSend={async body => {
+        setBusy(true)
+        try {
+          await api('/api/activities/' + id + '/cancel', 'POST', body)
+          showToast('활동을 취소했어요', '참가자에게 취소 안내를 보냈어요')
+          setSheet(null)
+        } catch (cause) {
+          // Already cancelled, or the answer was lost on the way: read the activity again instead of sending twice.
+          if (cause instanceof ApiError && cause.code !== 'ALREADY_CANCELLED') showToast(message(cause))
+          else showToast(cause instanceof ApiError ? '이미 취소된 활동이에요' : '결과를 확인하고 있어요', '활동 상태를 다시 불러왔어요')
+          if (!(cause instanceof ApiError) || cause.code === 'ALREADY_CANCELLED') setSheet(null)
+        } finally { setBusy(false); load(); onChange() }
+      }} />}
     {sheet === 'delete' && <Sheet title="활동을 삭제할까요?" onClose={() => setSheet(null)} footer={<button className="m-btn danger" disabled={busy} onClick={async () => {
       setBusy(true); try { await api('/api/activities/' + id, 'DELETE'); showToast('활동을 삭제했어요'); go('#/host') } catch (cause) { showToast(message(cause)) } finally { setBusy(false) } }}>삭제하기</button>}>
       <p className="m-help">아직 신청한 사람이 없어서 바로 지울 수 있어요. 되돌릴 수 없어요.</p></Sheet>}
@@ -385,15 +405,77 @@ function ManualForm({ busy, onSend }: { busy: boolean; onSend: (reason: string) 
   </>
 }
 
-function ActivityCancelSheet({ busy, onClose, onSend }: { busy: boolean; onClose: () => void; onSend: (reason: string) => void }) {
-  const quick = ['비 예보가 있어요', '장소를 쓸 수 없게 됐어요', '모집자 사정이 생겼어요']
-  const [reason, setReason] = useState('')
-  return <Sheet title="활동을 취소할까요?" onClose={onClose} footer={<button className="m-btn danger" disabled={busy || reason.trim().length < 2} onClick={() => onSend(reason.trim())}>활동 취소하기</button>}>
-    <p className="m-help">신청·대기한 사람 모두에게 이유와 함께 알림이 가요. 되돌릴 수 없어요.</p>
-    <div className="m-chips wrap">{quick.map(x => <button key={x} type="button" className={'m-chip' + (reason === x ? ' on' : '')} aria-pressed={reason === x} onClick={() => setReason(x)}>{x}</button>)}</div>
-    <label className="m-field"><span className="m-label">취소 이유 <small>2~200자</small></span>
-      <textarea className="m-input" rows={3} maxLength={200} value={reason} placeholder="참가자에게 보여요" onChange={event => setReason(event.target.value)} /></label>
+const cancelReasons: [string, string, string][] = [
+  ['PERSONAL', '모집자의 개인 사정', '모집자에게 피치 못할 사정이 생겨 활동을 진행할 수 없게 되었어요. 참여에 불편을 드려 죄송합니다.'],
+  ['WEATHER', '기상 악화 및 안전 문제', '기상 악화로 안전하게 활동하기 어려워 취소합니다. 참여에 불편을 드려 죄송합니다.'],
+  ['PLACE', '장소·시설 이용 불가', '활동 장소를 이용할 수 없게 되어 취소합니다. 참여에 불편을 드려 죄송합니다.'],
+  ['STAFF', '운영 인력 부족', '운영 인력이 부족해 활동을 안전하게 진행하기 어려워 취소합니다. 참여에 불편을 드려 죄송합니다.'],
+  ['OTHER', '기타 사유', ''],
+]
+
+/**
+ * Organizer's emergency cancellation: who is affected, a reason (required), a message for participants (suggested,
+ * editable, required), what happens, a tick, a preview of the notification, then a final confirmation. Nothing is
+ * sent before "활동 취소 확정"; the button cannot be pressed twice.
+ */
+function ActivityCancelSheet({ activity, counts, busy, onClose, onSend }: { activity: LiveActivity; counts: { confirmed: number; waiting: number; applied: number }; busy: boolean; onClose: () => void; onSend: (body: { reasonCode: string; message: string }) => void }) {
+  const [code, setCode] = useState('')
+  const [text, setText] = useState('')
+  const [touched, setTouched] = useState(false)
+  const [agree, setAgree] = useState(false)
+  const [step, setStep] = useState<'form' | 'confirm'>('form')
+  const label = cancelReasons.find(r => r[0] === code)?.[1] ?? ''
+  const message = text.trim()
+  const ok = Boolean(code) && message.length >= 5 && message.length <= 300 && agree
+  const people = counts.confirmed + counts.waiting + counts.applied
+  const pick = (value: string) => {
+    const before = cancelReasons.find(r => r[0] === code)?.[2] ?? ''
+    setCode(value)
+    // Suggest the matching sentence unless the organizer already wrote their own.
+    if (!text.trim() || text === before) setText(cancelReasons.find(r => r[0] === value)?.[2] ?? '')
+  }
+  const when = `${dayWord(activity.date)} ${activity.startTime}`
+  if (step === 'confirm') return <Sheet title="정말 취소할까요?" onClose={() => setStep('form')}
+    footer={<div className="m-two"><button type="button" className="m-btn line" disabled={busy} onClick={() => setStep('form')}>돌아가기</button>
+      <button type="button" className="m-btn danger" disabled={busy} onClick={() => onSend({ reasonCode: code, message })}>{busy ? '취소하는 중…' : '활동 취소 확정'}</button></div>}>
+    <div className="m-cancel-warn" role="alert">
+      <MIcon name="alert" size={22} />
+      <p>{people > 0 ? <>현재 확정 참가자 <b>{counts.confirmed}명</b>, 대기자 <b>{counts.waiting}명</b>{counts.applied ? <>, 승인 대기 <b>{counts.applied}명</b></> : null}이 있어요.<br /></> : <>아직 참가자가 없어요.<br /></>}
+        활동을 취소하면 {people > 0 ? '모든 참가자에게 취소 사실이 안내되고 ' : ''}새로운 신청이 중단돼요. 취소된 활동은 기록으로 남고 되돌릴 수 없어요.</p>
+    </div>
   </Sheet>
+  return <Sheet title="활동을 취소하시겠어요?" onClose={onClose}
+    footer={<button type="button" className="m-btn danger" disabled={!ok} onClick={() => setStep('confirm')}>{!code ? '취소 사유를 골라 주세요' : message.length < 5 ? '안내를 적어 주세요' : !agree ? '확인에 체크해 주세요' : '다음'}</button>}>
+    <div className="m-cancel-sum"><strong>{activity.title}</strong><span>{when}</span>
+      <small><MIcon name="users" size={15} />확정 {counts.confirmed}명 · 대기 {counts.waiting}명{counts.applied ? ` · 승인 대기 ${counts.applied}명` : ''}</small></div>
+    <fieldset className="m-fsec"><legend className="m-label">취소 사유 <small>필수</small></legend>
+      <div className="m-radios" role="radiogroup">{cancelReasons.map(([value, text]) => <label key={value} className={code === value ? 'on' : ''}>
+        <input type="radio" name="cancel-reason" checked={code === value} onChange={() => pick(value)} /><i aria-hidden="true" />{text}</label>)}</div></fieldset>
+    <label className="m-field"><span className="m-label">참가자에게 전달할 안내 <small>필수 · 5~300자</small></span>
+      <textarea className="m-input" rows={4} maxLength={300} value={text} placeholder="참가자에게 취소 사유를 안내해 주세요." onChange={event => setText(event.target.value)} onBlur={() => setTouched(true)} />
+      <span className="m-help">개인정보나 자세한 개인 사정은 적지 않아도 돼요. 연락처는 적을 수 없어요.</span>
+      {touched && message.length < 5 && <span className="m-err">안내를 5자 이상 적어 주세요.</span>}</label>
+    <div className="m-note"><strong>취소하면 이렇게 처리돼요</strong>
+      <ul className="m-dots"><li>확정·대기·승인 대기 중인 참가자에게 취소 알림이 가요.</li><li>새로운 참가 신청과 대기자 자리 제안이 멈춰요.</li><li>모집글과 신청·취소 기록은 지우지 않고 남겨요.</li></ul></div>
+    {code && message.length >= 5 && <div className="m-cancel-preview" aria-label="취소 안내 미리보기"><small>참가자가 받는 알림</small>
+      <strong>봉사활동이 취소되었어요</strong><span>{activity.title} 활동이 {label}(으)로 취소되었습니다. 자세한 내용을 확인해 주세요.</span>
+      <small>활동 화면 안내</small><span>“{message}”</span></div>}
+    <label className="m-check box"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" /><span>취소로 인해 참가자에게 영향이 생긴다는 점을 확인했어요.</span></label>
+  </Sheet>
+}
+
+/** A cancelled activity: what the organizer said, when, and (for the organizer) who it affected. */
+function CancelledCard({ activity, organizer }: { activity: LiveActivity; organizer: boolean }) {
+  const c = activity.cancellation
+  return <div className="m-cancelled" role="status">
+    <span className="m-badge red">{organizer ? '취소됨' : '모집자에 의해 취소됨'}</span>
+    <strong><MIcon name="alert" size={18} />활동 취소 안내</strong>
+    <p>{c ? `${c.reasonLabel}(으)로 활동이 취소되었습니다.` : '모집자가 활동을 취소했어요.'}</p>
+    {(c?.message ?? activity.cancelReason) && <p className="m-cancelled-msg">“{c?.message ?? activity.cancelReason}”</p>}
+    <small>원래 일정 {dayWord(activity.date)} {activity.startTime}{c ? ` · 취소 ${c.cancelledAt.slice(5).replace('-', '/')}` : ''}</small>
+    {organizer && c && c.confirmedCount != null && <small>취소 당시 확정 {c.confirmedCount}명 · 대기 {c.waitingCount}명 · 승인 대기 {c.appliedCount}명</small>}
+    {!organizer && <a className="m-btn line sm" href="#/find">다른 봉사활동 찾아보기</a>}
+  </div>
 }
 
 function RescheduleSheet({ activity, busy, onClose, onSend }: { activity: LiveActivity; busy: boolean; onClose: () => void; onSend: (body: object) => void }) {

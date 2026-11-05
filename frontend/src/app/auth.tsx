@@ -8,12 +8,8 @@ import { GoogleMark, KakaoMark, providerName, socialError, startSocial, useProvi
 import type { Provider } from '../social'
 import { showToast } from '../App'
 import type { User } from '../api'
-import { categories } from '../App'
 import { ageOn, signupRules } from '../rules'
 import { ActionBar, MIcon, Sheet, WheelColumn, Wheels } from './ui'
-import type { MIconName } from './ui'
-
-const fieldIcon: Record<string, MIconName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
 
 export function Login({ onSession }: { onSession: (user: User) => void }) {
   const providers = useProviders()
@@ -23,6 +19,12 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
   const [show, setShow] = useState(false)
   const [error, setError] = useState(() => socialError(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth')))
   const [busy, setBusy] = useState(false)
+  // The app returns here from the phone browser (volink://login?oauth=…) while this screen is already open.
+  useEffect(() => {
+    const read = () => { const code = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth'); if (code) setError(socialError(code)) }
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!email.trim() || !password) { setError('이메일과 비밀번호를 입력해 주세요.'); return }
@@ -79,7 +81,6 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   const [birth, setBirth] = useState<{ y: number; m: number; d: number } | null>(null)
   const [draft, setDraft] = useState({ y: 2003, m: 1, d: 1 })
   const [picking, setPicking] = useState(false)
-  const [interests, setInterests] = useState<string[]>([])
   const [agreeNotice, setAgreeNotice] = useState(false)
   const [agreeContact, setAgreeContact] = useState(false)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
@@ -98,7 +99,7 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   const age = birth ? ageOn(birthDate, new Date()) : null
   const ageOk = age !== null && age >= signupRules.minimumAge
   const nameOk = name.trim().length >= 1 && name.trim().length <= signupRules.nameMax
-  const can = step === 1 ? emailOk && passwordOk && confirmOk : step === 2 ? nameOk && ageOk && interests.length >= 1 : agreeNotice && agreeContact
+  const can = step === 1 ? emailOk && passwordOk && confirmOk : step === 2 ? nameOk && ageOk : agreeNotice && agreeContact
   const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
   const touch = (key: string) => setTouched(value => ({ ...value, [key]: true }))
 
@@ -106,9 +107,10 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
     setBusy(true)
     setError('')
     try {
-      await api('/api/auth/signup', 'POST', { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate, interests, agreedNotice: true })
+      // Interests are no longer asked at signup (마이 > 관심 분야, optional).
+      await api('/api/auth/signup', 'POST', { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate, interests: [], agreedNotice: true })
       onSession(await login(email.trim(), password))
-      window.location.hash = '#/home'
+      window.location.hash = '#/welcome'
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') { setStep(1); setError('이미 가입한 이메일이에요. 로그인하거나 다른 이메일을 써 주세요.') }
       else if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setError(Object.values(cause.fieldErrors)[0])
@@ -119,7 +121,7 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   }
   function next(event?: FormEvent) {
     event?.preventDefault()
-    if (!can) { setTouched({ email: true, password: true, confirm: true, name: true, birth: true, interests: true }); return }
+    if (!can) { setTouched({ email: true, password: true, confirm: true, name: true, birth: true }); return }
     if (step < 3) { setStep(step + 1); setError(''); window.scrollTo(0, 0) } else finish()
   }
   const back = () => step === 1 ? (window.location.hash = '#/login') : setStep(step - 1)
@@ -155,13 +157,6 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
           <button type="button" className={'m-input m-pick' + (touched.birth && !ageOk ? ' bad' : '')} aria-label={'생년월일 ' + (birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '선택')} onClick={() => { if (birth) setDraft(birth); setPicking(true) }}>
             <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
           {birth && !ageOk && <span className="m-err" role="alert">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</div>
-        <div className="m-field"><span className="m-label">관심 분야 <small>1~{signupRules.maxInterests}개 · 맞춤 추천에 써요</small></span>
-          <div className="m-tiles">{categories.map(category => {
-            const on = interests.includes(category)
-            return <button type="button" key={category} className={'m-tile' + (on ? ' on' : '')} aria-pressed={on}
-              onClick={() => setInterests(on ? interests.filter(item => item !== category) : interests.length < signupRules.maxInterests ? [...interests, category] : interests)}>
-              <MIcon name={fieldIcon[category] ?? 'sprout'} size={24} />{category}</button>
-          })}</div></div>
       </>}
       {step === 3 && <>
         <h2 className="m-h2">마지막으로 확인해 주세요</h2>
@@ -203,7 +198,7 @@ export function SocialDone({ onSession }: { onSession: (user: User) => void }) {
     {error ? <><p>{error}</p><a className="m-btn line" href="#/login">로그인으로</a></> : <p>로그인하는 중이에요…</p>}</div></main>
 }
 
-/** First Kakao / Google login in the app: name, birth date (14+), interests and the notice, then in. */
+/** First Kakao / Google login in the app: name, birth date (14+) and the notice, then in. */
 export function SocialSignup({ onSession }: { onSession: (user: User) => void }) {
   const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const provider = (query.get('provider') ?? 'kakao') as Provider
@@ -211,21 +206,20 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
   const [birth, setBirth] = useState<{ y: number; m: number; d: number } | null>(null)
   const [draft, setDraft] = useState({ y: 2003, m: 1, d: 1 })
   const [picking, setPicking] = useState(false)
-  const [interests, setInterests] = useState<string[]>([])
   const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
   const birthDate = birth ? `${birth.y}-${pad(birth.m)}-${pad(birth.d)}` : ''
   const age = birth ? ageOn(birthDate, new Date()) : null
-  const can = name.trim().length > 0 && age !== null && age >= signupRules.minimumAge && interests.length > 0 && agree
+  const can = name.trim().length > 0 && age !== null && age >= signupRules.minimumAge && agree
   async function submit(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
     setError('')
     try {
-      onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests, agreedNotice: agree }))
-      window.location.hash = '#/home'
+      onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests: [], agreedNotice: agree }))
+      window.location.hash = '#/welcome'
     } catch (cause) {
       setError(cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : '가입하지 못했어요.')
     } finally {
@@ -241,10 +235,6 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
         <button type="button" className="m-input m-pick" aria-label={'생년월일 ' + (birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '선택')} onClick={() => setPicking(true)}>
           <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
         {age !== null && age < signupRules.minimumAge && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</div>
-      <div className="m-field"><span className="m-label">관심 분야 <small>1~{signupRules.maxInterests}개</small></span>
-        <div className="m-tiles">{categories.map(category => { const on = interests.includes(category)
-          return <button type="button" key={category} className={'m-tile' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setInterests(on ? interests.filter(x => x !== category) : interests.length < signupRules.maxInterests ? [...interests, category] : interests)}>
-            <MIcon name={fieldIcon[category] ?? 'sprout'} size={24} />{category}</button> })}</div></div>
       <div className="m-agree"><label className="m-check"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label></div>
       <p className="m-help">간편 로그인은 개인 회원으로 가입돼요. 기관 가입은 PC에서 진행해 주세요.</p>
       {error && <p className="m-err" role="alert">{error}</p>}

@@ -73,9 +73,18 @@ Kakao 장소의 카테고리(위험 단어는 장소 이름도)로 정합니다.
 | 등급 | 처리 | 금지 규칙 | 키워드 초안 (`risk_keywords`, V3) |
 |---|---|---|---|
 | BLOCKED (15) | 게시 거부 | 정원(모집자 제외 1~9)·180분 위반, 22:00 이후 종료 | 사다리, 고소작업, 지붕, 전기 작업, 가스 작업, 전기톱, 예초기, 농약, 화학약품, 입수, 의료, 주사, 모금, 후원금, 음주 |
-| REVIEW (17) | 관리자 승인 전 비공개 | 분야 base_risk=REVIEW(지역 돌봄), 일몰 이후 종료 | 어르신, 어린이, 아동, 동물, 시설, 가정 방문, 야간, 일몰, 차도, 운전, 하천, 등산, 낫, 칼, 조리, 무거운, 공사 |
+| REVIEW (17, V17부터 15) | 관리자 승인 전 비공개 | 일몰 이후 종료 (분야 base_risk=REVIEW는 V17에서 없앰) | ~~어르신~~, 어린이, 아동, ~~동물~~, 시설, 가정 방문, 야간, 일몰, 차도, 운전, 하천, 등산, 낫, 칼, 조리, 무거운, 공사 |
 | LOW | 즉시 게시 | 위에 해당 없음 | - |
 
 일몰 시각은 서울 기준 월별 근사값(`RiskClassifier.SUNSET`)이며 지역·날짜별 정확한 값이 아닙니다. 검사 순서: 등록 불가 단어가 하나라도 있으면 BLOCKED → 아니면 검토 단어·검토 분야·일몰 후 종료 중 하나라도 있으면 REVIEW → 나머지 LOW.
 
 알려진 한계: ‘칼’은 ‘칼국수’처럼 엉뚱한 글자에도 걸립니다(REVIEW로 넘어가 관리자가 판단). 3주차에 실제 문장으로 오탐을 시험하고 목록을 조정합니다.
+
+
+## 분야 7개 (V17, 2026-11-05 사용자 결정)
+
+- 분야: **환경 · 교육 · 복지 · 문화·예술 · 동물 · 지역사회 · 기타**(서비스 전체 공통, `frontend/src/categories.ts`, DB `categories.active`·`sort_order`).
+- 옛 분야: 환경 정화 → 환경, 생활 지원 → 복지, 지역 돌봄 → 복지. 활동·템플릿·관심 분야의 원래 값은 `category_changes_v17`에 남김. 생활 지원 행은 지우지 않고 `active = FALSE`(`legacy_name`)로 둠. 같은 사람이 생활 지원·지역 돌봄을 둘 다 골랐다면 복지 하나로 합쳐짐.
+- 검토: 사용자 결정으로 **분야만으로는 검토하지 않음**(복지·동물 포함 모두 바로 공개). 위험 단어 ‘동물’·‘어르신’도 검토에서 뺌(`risk_keywords_removed_v17`에 보관). 나머지 검토 단어(어린이·아동·야간·하천 등)와 일몰 이후 종료는 그대로.
+- 되돌리기(운영 DB에 적용하기 전 백업 권장: `mysqldump volink categories activities user_interests demo_activity_templates risk_keywords`): ① `UPDATE activities a JOIN category_changes_v17 h ON h.table_name='activities' AND h.row_key=a.id JOIN categories c ON c.legacy_name=h.old_category SET a.category_id=c.id` 식으로 원래 분야 복원 ② 생활 지원 행 `active=TRUE`, 이름 복원 ③ `risk_keywords_removed_v17` 행을 `risk_keywords`로 다시 넣기. Flyway 기록은 `flyway repair` 대신 새 마이그레이션(V18)으로 되돌림.
+- 1365 분야: `ProgramCategory` — 1365 서비스 분야(srvcClCode)가 알려진 이름이면 그대로(OFFICIAL), 아니면 제목 단어로 추정(ESTIMATED, 화면에 ‘(추정)’), 둘 다 아니면 기타(UNKNOWN). 분야를 모르는 활동이 잘못 숨지 않도록 ‘기타’에 남김. srvcClCode 실제 값 형식은 이 환경에서 확인하지 못함.

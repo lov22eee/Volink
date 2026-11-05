@@ -1,10 +1,11 @@
 // Small activity rows used on several app screens (home, find, host, saved).
+import { categoryTone } from '../categories'
 import type { LiveActivity } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, MIcon } from './ui'
 import type { MIconName } from './ui'
 
-export const fieldIcon: Record<string, MIconName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
+export const fieldIcon: Record<string, MIconName> = { 환경: 'leaf', 교육: 'book', 복지: 'hand', '문화·예술': 'palette', 동물: 'paw', 지역사회: 'users', 기타: 'sprout' }
 export const difficultyLabel = { EASY: '가벼워요', NORMAL: '보통', HARD: '힘들어요' } as const
 export const placeKindLabel = { OUTDOOR: '야외', INDOOR: '실내', MIXED: '실내·야외' } as const
 
@@ -26,7 +27,7 @@ export function ActivityRow({ activity, note, href }: { activity: LiveActivity; 
   const meta = [dayWord(activity.date) + ' ' + activity.startTime, durationLabel(activity.durationMinutes),
     activity.distanceKm != null ? activity.distanceKm + 'km' : activity.placeName ?? ''].filter(Boolean).join(' · ')
   return <a className="m-row" href={href ?? '#/activity/' + activity.id}>
-    <span className={'m-row-ico f' + (Object.keys(fieldIcon).indexOf(activity.category) + 1)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={22} /></span>
+    <span className={'m-row-ico f' + categoryTone(activity.category)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={22} /></span>
     <span className="m-row-main"><strong>{activity.title}</strong><small>{meta}</small>{note && <em>{note}</em>}</span>
     <span className={'m-badge ' + badge.tone}>{badge.text}</span>
   </a>

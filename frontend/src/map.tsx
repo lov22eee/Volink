@@ -1,7 +1,9 @@
 // Map panel: Kakao Maps when VITE_KAKAO_JS_KEY is set (domain-restricted public key), otherwise a simple relative-position drawing.
 import { useEffect, useRef, useState } from 'react'
 
-export type MapPlace = { id: number; name: string; latitude: number | null; longitude: number | null; meetingPoint?: string | null }
+/** {@code tone}: 'local' (our activity, green) or 'program' (1365, blue) when one map shows both; none = the plain marker. */
+export type MapPlace = { id: number; name: string; latitude: number | null; longitude: number | null; meetingPoint?: string | null; tone?: 'local' | 'program' }
+const toneColour = { local: '#245e48', program: '#2f62a8' }
 export type Origin = { lat: number; lng: number; label: string }
 
 declare global {
@@ -65,7 +67,10 @@ function KakaoMap({ places, origin, radiusKm, selected, onSelect, onPick, label,
       const bounds = new kakao.maps.LatLngBounds()
       for (const place of points) {
         const position = new kakao.maps.LatLng(place.latitude, place.longitude)
-        const marker = new kakao.maps.Marker({ map, position, title: place.name, opacity: selected == null || selected === place.id ? 1 : 0.5 })
+        const big = selected === place.id
+        const image = place.tone ? new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pinSvg(toneColour[place.tone], big)),
+          new kakao.maps.Size(big ? 36 : 28, big ? 36 : 28), { offset: new kakao.maps.Point(big ? 18 : 14, big ? 34 : 26) }) : undefined
+        const marker = new kakao.maps.Marker({ map, position, title: place.name, image, zIndex: big ? 3 : place.tone === 'local' ? 2 : 1, opacity: place.tone || selected == null || big ? 1 : 0.5 })
         kakao.maps.event.addListener(marker, 'click', () => choose.current?.(place.id))
         drawn.push(marker)
         bounds.extend(position)
@@ -95,7 +100,7 @@ function SketchMap({ places, origin, selected, onSelect, label }: Props) {
   return <div className="map-canvas" role="img" aria-label={label}>
     {points.map(point => point.id === null
       ? <span key="origin" className="map-origin-pin" style={{ left: x(point.lng) + '%', top: y(point.lat) + '%' }} title={point.name} />
-      : <button key={point.id} type="button" className={'map-pin' + (selected === point.id ? ' selected' : '')} style={{ left: x(point.lng) + '%', top: y(point.lat) + '%' }}
+      : <button key={point.id} type="button" className={'map-pin' + (selected === point.id ? ' selected' : '') + (places.find(p => p.id === point.id)?.tone === 'program' ? ' program' : '')} style={{ left: x(point.lng) + '%', top: y(point.lat) + '%' }}
           aria-label={point.name + ' 위치'} onClick={() => onSelect?.(point.id)}>{places.findIndex(p => p.id === point.id) + 1}</button>)}
     {!points.length && <span className="map-empty">장소 좌표가 아직 입력되지 않았습니다.</span>}
   </div>

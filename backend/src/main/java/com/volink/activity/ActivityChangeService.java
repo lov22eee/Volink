@@ -43,23 +43,55 @@ public class ActivityChangeService {
         this.clock = clock;
     }
 
+    /** Reason codes for an organizer's cancellation, with the words participants see. */
+    public static final Map<String, String> REASONS = new java.util.LinkedHashMap<>(Map.of(
+            "PERSONAL", "모집자의 개인 사정", "WEATHER", "기상 악화 및 안전 문제", "PLACE", "장소·시설 이용 불가", "STAFF", "운영 인력 부족", "OTHER", "기타 사유"));
+
+    public record Cancel(String reasonCode, String message, String reason) {}
+
+    /**
+     * Cancels before the start (one record, all-or-nothing). The activity row is locked like every application change,
+     * so an application, an approval or a seat offer racing with it either finishes first (and is counted here) or
+     * sees CANCELLED and is refused. Started activities, check-ins already made, and a second cancel are refused;
+     * participants are told once each (dedupe key per cancellation) in the same transaction.
+     */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Map<String, Object> cancel(long organizerId, long id, String rawReason) {
+    public Map<String, Object> cancel(long organizerId, long id, Cancel request) {
         Map<String, Object> row = own(organizerId, id);
-        String reason = ActivityRules.trim(rawReason);
-        if (reason.length() < 2 || reason.length() > 200) throw ApiException.validation(Map.of("reason", "취소 이유를 2~200자로 적어 주세요."));
+        String code = request.reasonCode() == null || request.reasonCode().isBlank() ? (request.reason() != null ? "OTHER" : "") : request.reasonCode().trim();
+        String message = ActivityRules.trim(request.message() != null ? request.message() : request.reason());
+        if ("CANCELLED".equals(row.get("status")))
+            throw new ApiException(HttpStatus.CONFLICT, "ALREADY_CANCELLED", "이미 취소된 활동이에요.");
         if (!List.of("DRAFT", "RECRUITING").contains(row.get("status")) || !start(row).isAfter(now()))
-            throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATE", "시작했거나 이미 끝난 활동은 취소할 수 없습니다.");
-        jdbc.update("UPDATE activities SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = ? WHERE id = ?", reason, now(), id);
-        activities.log(id, organizerId, (String) row.get("status"), "CANCELLED", "모집자 취소 · " + reason);
-        for (Map<String, Object> p : jdbc.queryForList("SELECT id, user_id, status FROM participations WHERE activity_id = ? AND status IN ('APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED') FOR UPDATE", id)) {
+            throw new ApiException(HttpStatus.CONFLICT, "STARTED", "활동이 시작된 뒤에는 취소할 수 없어요. 진행 중 중단·조기 종료는 아직 준비 중이에요.");
+        int checkedIn = jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND status IN ('CHECKED_IN', 'COMPLETED')", Integer.class, id);
+        if (checkedIn > 0) throw new ApiException(HttpStatus.CONFLICT, "CHECKED_IN", "이미 출석한 참가자가 있어 취소할 수 없어요. 출석 기록은 그대로 보존돼요.");
+        Map<String, String> errors = new java.util.LinkedHashMap<>();
+        if (!REASONS.containsKey(code)) errors.put("reasonCode", "취소 사유를 골라 주세요.");
+        if (message.length() < 5 || message.length() > 300) errors.put("message", "참가자에게 전할 안내를 5~300자로 적어 주세요.");
+        else if (com.volink.post.PostService.CONTACT.matcher(message).find()) errors.put("message", "전화번호·이메일·링크는 적을 수 없어요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+
+        List<Map<String, Object>> affected = jdbc.queryForList("SELECT id, user_id, status FROM participations WHERE activity_id = ? AND status IN ('APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED') FOR UPDATE", id);
+        long confirmed = affected.stream().filter(p -> "CONFIRMED".equals(p.get("status"))).count();
+        long waiting = affected.stream().filter(p -> List.of("WAITLISTED", "OFFERED").contains(p.get("status"))).count();
+        long applied = affected.stream().filter(p -> "APPLIED".equals(p.get("status"))).count();
+        LocalDateTime now = now();
+        jdbc.update("UPDATE activities SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = ? WHERE id = ?", message, now, id);
+        jdbc.update("""
+                INSERT INTO activity_cancellations(activity_id, cancelled_by, reason_code, message, status_before, confirmed_count, waiting_count, applied_count, cancelled_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", id, organizerId, code, message, row.get("status"), confirmed, waiting, applied, now);
+        long cancellation = jdbc.queryForObject("SELECT id FROM activity_cancellations WHERE activity_id = ?", Long.class, id);
+        activities.log(id, organizerId, (String) row.get("status"), "CANCELLED", "모집자 취소 · " + REASONS.get(code) + " · " + message);
+        String label = REASONS.get(code);
+        for (Map<String, Object> p : affected) {
             long pid = ((Number) p.get("id")).longValue();
-            // Not the person's own cancellation: cancel_count stays as it was.
-            jdbc.update("UPDATE participations SET status = 'CANCELLED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now(), pid);
+            // Not the person's own cancellation: cancel_count stays; the log keeps the status they had.
+            jdbc.update("UPDATE participations SET status = 'CANCELLED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now, pid);
             jdbc.update("INSERT INTO activity_logs(activity_id, participation_id, actor_id, from_status, to_status, reason) VALUES (?, ?, ?, ?, 'CANCELLED', '활동 취소')",
                     id, pid, organizerId, p.get("status"));
-            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CHANGED", "활동이 취소됐어요",
-                    row.get("title") + " · 모집자가 취소했어요. 이유: " + reason, "#/activity/" + id);
+            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CANCELLED", "봉사활동이 취소되었어요",
+                    row.get("title") + " 활동이 " + label + "(으)로 취소되었습니다. 자세한 내용을 확인해 주세요.", "#/activity/" + id, id, "CANCELLED:" + cancellation);
         }
         return activities.detail(id, organizerId);
     }
@@ -105,7 +137,7 @@ public class ActivityChangeService {
         // RESCHEDULED also resets the one-off reminders (they are sent again for the new time).
         activities.log(id, organizerId, "RECRUITING", "RESCHEDULED", WHEN.format(from) + " → " + WHEN.format(startsAt) + " · " + reason);
         for (Map<String, Object> p : jdbc.queryForList("SELECT user_id, status FROM participations WHERE activity_id = ? AND status IN ('APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED')", id))
-            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CHANGED", "활동 일정이 바뀌었어요",
+            notifications.send(((Number) p.get("user_id")).longValue(), "RESCHEDULED", "활동 일정이 바뀌었어요",
                     row.get("title") + " · " + WHEN.format(from) + " → " + WHEN.format(startsAt) + " (" + reason + ")"
                             + ("CONFIRMED".equals(p.get("status")) ? " · 참가 확정은 그대로예요. 시간이 안 맞으면 취소해 주세요." : ""), "#/activity/" + id);
         return activities.detail(id, organizerId);

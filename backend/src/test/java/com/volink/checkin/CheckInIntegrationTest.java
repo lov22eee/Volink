@@ -64,7 +64,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
         assertThat((LocalDateTime) record.get("confirmed_at")).isAfter(now().minusMinutes(2));
         assertThat(jdbc.queryForList("SELECT to_status FROM activity_logs WHERE participation_id = ? ORDER BY id", String.class, participation))
                 .containsExactly("APPLIED", "CONFIRMED", "CHECKED_IN", "COMPLETED");
-        mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.items[0].type").value("RECORD_CONFIRMED"));
+        mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.items[0].type").value("REVIEW_INVITE")).andExpect(jsonPath("$.items[1].type").value("RECORD_CONFIRMED"));
         // The coordinates sent at check-in are not stored anywhere: only inside/outside.
         assertThat(jdbc.queryForObject("SELECT within_radius FROM check_ins WHERE participation_id = ?", Boolean.class, participation)).isTrue();
     }

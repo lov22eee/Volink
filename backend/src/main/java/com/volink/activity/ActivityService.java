@@ -162,7 +162,7 @@ public class ActivityService {
         ActivityRules.Checked[] times = new ActivityRules.Checked[1];
         Map<String, String> errors = rules.validate(request, times);
         String category = ActivityRules.trim(request.category());
-        Long categoryId = jdbc.queryForList("SELECT id FROM categories WHERE name = ?", Long.class, category).stream().findFirst().orElse(null);
+        Long categoryId = jdbc.queryForList("SELECT id FROM categories WHERE name = ? AND active", Long.class, category).stream().findFirst().orElse(null);
         if (categoryId == null) errors.putIfAbsent("category", "분야를 선택해 주세요.");
         // On an edit the current place may stay as it is (it can be a searched place, which is not in the public list).
         boolean samePlace = existing != null && request.placeId() != null && request.placeId() == ((Number) existing.get("place_id")).longValue();
@@ -233,12 +233,30 @@ public class ActivityService {
 
     /** Search filters (all optional). With lat+lng only activities within radiusKm are returned, nearest first.
      *  4주차 보완: q (words in the title, description or place), from/to (date range), part (AM = starts before noon, PM = from noon). */
+    /**
+     * {@code category}: one name or several separated by commas (V17, 7 categories). {@code status} (optional):
+     * OPEN = seats left, WAITLIST = also full ones whose waitlist is still open (until 2 h before), ALL = also
+     * closed ones (full with the waitlist closed, started or finished in the last 30 days; never cancelled or
+     * deleted). Without it the list is as before (recruiting and not started, full ones included).
+     * {@code sido}/{@code sigungu}: the place's address starts with the province and names the district.
+     */
     public record Search(Double lat, Double lng, Double radiusKm, String date, String category, String type,
-                         String q, String from, String to, String part) {
+                         String q, String from, String to, String part, String status, String sido, String sigungu) {
         public static final double DEFAULT_RADIUS_KM = 3;
         public static final double MAX_RADIUS_KM = 20;
+        public Search(Double lat, Double lng, Double radiusKm, String date, String category, String type, String q, String from, String to, String part) {
+            this(lat, lng, radiusKm, date, category, type, q, from, to, part, null, null, null);
+        }
         public static Search none() { return new Search(null, null, null, null, null, null, null, null, null, null); }
     }
+
+    /** "환경,교육" → [환경, 교육]; blank or 전체 → none. */
+    public static List<String> categoryList(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return java.util.Arrays.stream(value.split(",")).map(String::trim).filter(name -> !name.isEmpty() && !name.equals("전체")).distinct().toList();
+    }
+
+    private static final String SEATS_TAKEN = "(SELECT COUNT(*) FROM participations s WHERE s.activity_id = a.id AND s.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'OFFERED'))";
 
     /**
      * Public list: only RECRUITING activities that have not started (REVIEW drafts and rejected ones never appear;
@@ -258,6 +276,12 @@ public class ActivityService {
         if (part != null && !part.equals("AM") && !part.equals("PM")) errors.put("part", "시간대를 확인해 주세요.");
         String type = search.type() == null || search.type().isBlank() ? null : search.type().trim();
         if (type != null && !type.equals("GENERAL") && !type.equals("INSTITUTION")) errors.put("type", "활동 유형을 확인해 주세요.");
+        String status = search.status() == null || search.status().isBlank() ? null : search.status().trim().toUpperCase(java.util.Locale.ROOT);
+        if (status != null && !List.of("OPEN", "WAITLIST", "ALL").contains(status)) errors.put("status", "모집 상태를 확인해 주세요.");
+        List<String> categories = categoryList(search.category());
+        if (categories.size() > 7) errors.put("category", "분야를 확인해 주세요.");
+        String sido = search.sido() == null ? "" : search.sido().trim(), sigungu = search.sigungu() == null ? "" : search.sigungu().trim();
+        if (sido.length() > 20 || sigungu.length() > 20 || (!sigungu.isEmpty() && sido.isEmpty())) errors.put("sido", "지역을 확인해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
 
         List<Object> args = new ArrayList<>();
@@ -271,8 +295,17 @@ public class ActivityService {
             sql.append(" WHERE MBRContains(ST_PolygonFromText(?, 4326, 'axis-order=long-lat'), l.location)");
             args.add(box(search.lat() - dLat, search.lng() - dLng, search.lat() + dLat, search.lng() + dLng));
         } else sql.append(" WHERE 1 = 1");
-        sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ?");
-        args.add(LocalDateTime.now(clock));
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (status == null) { sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ?"); args.add(now); }
+        else if (status.equals("OPEN")) { sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ? AND " + SEATS_TAKEN + " < a.capacity"); args.add(now); }
+        else if (status.equals("WAITLIST")) {
+            // Full ones only while the waitlist is open (it closes 2 h before the start).
+            sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ? AND (" + SEATS_TAKEN + " < a.capacity OR a.starts_at > ?)");
+            args.add(now); args.add(now.plusHours(2));
+        } else {
+            sql.append(" AND ((a.status = 'RECRUITING' AND a.starts_at > ?) OR (a.status IN ('RECRUITING', 'IN_PROGRESS', 'FINISHED') AND a.starts_at > ?))");
+            args.add(now); args.add(now.minusDays(30));
+        }
         if (date != null) { sql.append(" AND a.starts_at >= ? AND a.starts_at < ?"); args.add(date.atStartOfDay()); args.add(date.plusDays(1).atStartOfDay()); }
         if (from != null) { sql.append(" AND a.starts_at >= ?"); args.add(from.atStartOfDay()); }
         if (to != null) { sql.append(" AND a.starts_at < ?"); args.add(to.plusDays(1).atStartOfDay()); }
@@ -282,13 +315,36 @@ public class ActivityService {
             sql.append(" AND (a.title LIKE ? OR a.description LIKE ? OR p.name LIKE ?)");
             args.add(like); args.add(like); args.add(like);
         }
-        if (search.category() != null && !search.category().isBlank()) { sql.append(" AND c.name = ?"); args.add(search.category().trim()); }
+        if (!categories.isEmpty()) {
+            sql.append(" AND c.name IN (").append(String.join(", ", categories.stream().map(name -> "?").toList())).append(")");
+            args.addAll(categories);
+        }
+        if (!sido.isEmpty()) {
+            // Kakao addresses start with the short province ("서울 강북구 …", "경기 양주시 …"); a district may also be written
+            // without 시/군/구 ("양주 · 옥정동"), so it is matched by its stem.
+            sql.append(" AND p.area LIKE ?");
+            args.add(like(shortSido(sido)) + "%");
+            if (!sigungu.isEmpty()) { sql.append(" AND p.area LIKE ?"); args.add("%" + like(sigungu.length() > 2 ? sigungu.substring(0, sigungu.length() - 1) : sigungu) + "%"); }
+        }
         if (type != null) { sql.append(" AND a.activity_type = ?"); args.add(type); }
         if (near) { sql.append(" HAVING distanceMeters <= ? ORDER BY distanceMeters, a.starts_at, a.id"); args.add(radiusKm * 1000); }
         else sql.append(" ORDER BY a.starts_at, a.id");
         List<Map<String, Object>> rows = withSupplies(jdbc.queryForList(sql.toString(), args.toArray()));
         if (near) rows.forEach(row -> row.put("distanceKm", Math.round(((Number) row.remove("distanceMeters")).doubleValue() / 100.0) / 10.0));
         return rows;
+    }
+
+    private static String like(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    /** 서울특별시 → 서울, 경기도 → 경기, 충청북도 → 충북 (as Kakao writes addresses). */
+    static String shortSido(String sido) {
+        return switch (sido) {
+            case "충청북도" -> "충북"; case "충청남도" -> "충남"; case "전라북도", "전북특별자치도" -> "전북"; case "전라남도" -> "전남";
+            case "경상북도" -> "경북"; case "경상남도" -> "경남";
+            default -> sido.replaceAll("(특별자치시|특별자치도|특별시|광역시|도)$", "");
+        };
     }
 
     /** The JSON column arrives as text; the API returns it as a list ([] when none). */
@@ -339,6 +395,14 @@ public class ActivityService {
         if (!visible) throw notFound();
         // The organizer sees how many applications lock the full edit (week 5 adds applying).
         if (organizer) activity.put("applicants", activeApplications(id));
+        // Cancelled by the organizer: reason, message, time and who was affected (shown to the organizer and applicants).
+        if ("CANCELLED".equals(activity.get("status"))) jdbc.queryForList("""
+                SELECT reason_code AS reasonCode, message, status_before AS statusBefore, confirmed_count AS confirmedCount, waiting_count AS waitingCount,
+                       applied_count AS appliedCount, DATE_FORMAT(cancelled_at, '%Y-%m-%d %H:%i') AS cancelledAt
+                FROM activity_cancellations WHERE activity_id = ?""", id).stream().findFirst().ifPresent(c -> {
+            c.put("reasonLabel", ActivityChangeService.REASONS.get(c.get("reasonCode")));
+            activity.put("cancellation", c);
+        });
         return activity;
     }
 

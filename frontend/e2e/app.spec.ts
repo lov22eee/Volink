@@ -19,7 +19,7 @@ const inDays = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia
 
 async function signupByApi(page: Page, name: string) {
   const email = unique('app')
-  const response = await page.request.post('/api/auth/signup', { data: { memberType: 'GENERAL', name, email, password, birthDate: '2000-01-01', interests: ['환경 정화'], agreedNotice: true } })
+  const response = await page.request.post('/api/auth/signup', { data: { memberType: 'GENERAL', name, email, password, birthDate: '2000-01-01', interests: ['환경'], agreedNotice: true } })
   expect(response.ok()).toBeTruthy()
   return email
 }
@@ -54,11 +54,18 @@ test('nothing is shown before signing in, and signup has three steps without an 
   await page.getByRole('button', { name: /^생년월일/ }).click()
   await page.getByRole('option', { name: '2003년' }).click()
   await page.getByRole('button', { name: '완료' }).click()
-  await page.getByRole('button', { name: '환경 정화' }).click()
+  // Interests are no longer asked at signup (마이 > 관심 분야, optional).
+  await expect(page.getByRole('button', { name: '환경' })).toHaveCount(0)
   await next.click()
   await expect(page.getByText('기관 회원', { exact: true })).toHaveCount(0)
   await page.getByText('모두 동의').click()
   await page.getByRole('button', { name: '가입하고 시작하기' }).click()
+  // Right after signup: why location, then why notifications; both can wait.
+  await expect(page).toHaveURL(/#\/welcome$/)
+  await expect(page.getByRole('heading', { name: /위치를 허용해 주세요/ })).toBeVisible()
+  await page.getByRole('button', { name: '나중에 할게요' }).click()
+  await expect(page.getByRole('heading', { name: /알려 드릴까요/ })).toBeVisible()
+  await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
   await expect(page.getByRole('heading', { name: '앱 회원님, 반가워요' })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
@@ -103,7 +110,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.getByRole('button', { name: '승인' }).click()
   await expect(page.getByText('참가 확정').first()).toBeVisible()
   await page.getByRole('button', { name: '활동 메뉴' }).click()
-  await page.getByRole('button', { name: /일정 바꾸기/ }).click()
+  await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
   await page.getByRole('button', { name: /^시작/ }).click()
   await page.getByRole('option', { name: '오후 2시' }).click()
   await page.getByRole('button', { name: /14:00 시작/ }).click()
@@ -122,7 +129,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
 test('the organizer cancels with a reason and the member sees it', async ({ page, browser }) => {
   const organizer = await signupByApi(page, '취소 모집자')
   const auth = await tokenFor(page, organizer)
-  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '취소될 공원 정리 모임', category: '환경 정화', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '취소될 공원 정리 모임', category: '환경', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
   const id = (await created.json()).id
   const memberPage = await browser.newPage({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
   const member = await signupByApi(memberPage, '취소 참가자')
@@ -130,16 +137,31 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  await page.getByRole('button', { name: '활동 메뉴' }).click()
-  await page.getByRole('button', { name: /활동 취소/ }).click()
-  await page.getByRole('button', { name: '비 예보가 있어요' }).click()
-  await page.getByRole('button', { name: '활동 취소하기' }).click()
-  await expect(page.getByText('취소한 활동이에요')).toBeVisible()
+  // 활동 운영 관리 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
+  await page.getByRole('region', { name: '활동 운영 관리' }).getByRole('button', { name: /활동 취소하기/ }).click()
+  const sheet = page.getByRole('dialog', { name: '활동을 취소하시겠어요?' })
+  await expect(sheet).toContainText('확정 0명 · 대기 0명 · 승인 대기 1명')
+  await expect(sheet.getByRole('button', { name: '취소 사유를 골라 주세요' })).toBeDisabled()
+  await sheet.getByText('기상 악화 및 안전 문제').click()
+  await expect(sheet.getByRole('textbox')).toHaveValue(/기상 악화로 안전하게 활동하기 어려워/)
+  await sheet.getByRole('textbox').fill('내일 강풍 예보가 있어 안전을 위해 취소해요.')
+  await expect(sheet.getByLabel('취소 안내 미리보기')).toContainText('기상 악화 및 안전 문제(으)로 취소되었습니다')
+  await sheet.getByText('취소로 인해 참가자에게 영향이 생긴다는 점을 확인했어요.').click()
+  await sheet.getByRole('button', { name: '다음' }).click()
+  const confirm = page.getByRole('dialog', { name: '정말 취소할까요?' })
+  await expect(confirm).toContainText('되돌릴 수 없어요')
+  await confirm.getByRole('button', { name: '활동 취소 확정' }).click()
+  await expect(page.getByText('활동 취소 안내')).toBeVisible()
+  await expect(page.getByText('취소 당시 확정 0명 · 대기 0명 · 승인 대기 1명')).toBeVisible()
+  await expect(page.getByRole('region', { name: '활동 운영 관리' })).toHaveCount(0)
 
   await login(memberPage, member)
-  await memberPage.goto('/#/activity/' + id)
-  await expect(memberPage.getByText('모집자가 활동을 취소했어요')).toBeVisible()
-  await expect(memberPage.getByText('비 예보가 있어요')).toBeVisible()
+  await memberPage.goto('/#/notifications')
+  await memberPage.getByText('봉사활동이 취소되었어요').click()
+  await expect(memberPage).toHaveURL(new RegExp('#/activity/' + id))
+  await expect(memberPage.getByText('모집자에 의해 취소됨')).toBeVisible()
+  await expect(memberPage.getByText('내일 강풍 예보가 있어 안전을 위해 취소해요.')).toBeVisible()
+  await expect(memberPage.getByRole('link', { name: '다른 봉사활동 찾아보기' })).toBeVisible()
   await memberPage.close()
 })
 
@@ -198,7 +220,7 @@ test('community: a question, a like and a comment, and a review only after compl
 test('activity news: the organizer posts a notice from a template, a member asks privately, the organizer answers and sees who read it', async ({ page, browser }) => {
   const organizer = await signupByApi(page, '소식 모집자')
   const auth = await tokenFor(page, organizer)
-  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '소식 확인용 공원 정리', category: '환경 정화', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true, meetingPoint: '정문 안내판 앞' } })
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '소식 확인용 공원 정리', category: '환경', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true, meetingPoint: '정문 안내판 앞' } })
   const id = (await created.json()).id
   const memberPage = await browser.newPage({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
   const member = await signupByApi(memberPage, '소식 참가자')
@@ -250,7 +272,7 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   expect(adminLogin.ok()).toBeTruthy()
   const admin = 'Bearer ' + (await adminLogin.json()).accessToken
   await page.request.put('/api/admin/places/1', { headers: { Authorization: admin }, data: { latitude: 37.8156, longitude: 127.0937 } })
-  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '출석부 확인용 공원 정리', category: '환경 정화', placeId: 1, date: inDays(3), time: '10:00', capacity: 5, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '출석부 확인용 공원 정리', category: '환경', placeId: 1, date: inDays(3), time: '10:00', capacity: 5, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
   const id = String((await created.json()).id)
   const members: { email: string; token: string }[] = []
   for (const name of ['코드 참가자', '폰 없는 참가자', 'PC 참가자']) {
@@ -289,4 +311,124 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   await page.getByRole('dialog').getByRole('button', { name: '출석 확인' }).click()
   await expect(page.getByText('모두 출석했어요')).toBeVisible()
   await expect(page.locator('.r-tag.man')).toHaveCount(2)
+})
+
+test('notification center: chips, three new applications as one card, read on open, then all read', async ({ page }) => {
+  const organizer = await signupByApi(page, '알림 모집자')
+  const auth = await tokenFor(page, organizer)
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '알림센터 확인용 공원 정리', category: '환경', placeId: 1, date: inDays(3), time: '10:00', capacity: 5, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
+  expect(created.ok()).toBeTruthy()
+  const id = (await created.json()).id
+  for (let i = 0; i < 3; i++) {
+    const member = await tokenFor(page, await signupByApi(page, '알림 참가자' + i))
+    expect((await page.request.post('/api/activities/' + id + '/participations', { headers: { Authorization: member } })).ok()).toBeTruthy()
+  }
+  await login(page, organizer)
+  await page.goto('/#/notifications')
+  const card = page.locator('.m-center-card').filter({ hasText: '새 참가 신청 3건' })
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('알림센터 확인용 공원 정리')
+  await expect(card).toContainText('NEW')
+  await expect(page.getByRole('heading', { name: '오늘' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /신청·참여/ })).toContainText('3')
+  await page.getByRole('tab', { name: /공지·소통/ }).click()
+  await expect(page.getByText('이 종류의 알림이 없어요')).toBeVisible()
+  await page.getByRole('tab', { name: /전체/ }).click()
+  await card.click()
+  await expect(page).toHaveURL(new RegExp('#/manage/' + id))
+  await page.goto('/#/notifications')
+  await expect(page.locator('.m-center-card').filter({ hasText: '새 참가 신청 3건' })).not.toContainText('NEW')
+  await expect(page.getByRole('button', { name: '모두 읽음' })).toBeDisabled()
+})
+
+test('after signup: notifications, then night choice; settings: all off, own quiet hours', async ({ page }) => {
+  const email = await signupByApi(page, '밤 알림')
+  await login(page, email)
+  await page.goto('/#/welcome')
+  await page.getByRole('button', { name: '나중에 할게요' }).click()
+  await page.getByRole('button', { name: '알림 받기' }).click()
+  await expect(page.getByRole('heading', { name: /밤에도 알림을/ })).toBeVisible()
+  await page.getByRole('button', { name: '밤에도 받을게요' }).click()
+  await expect(page).toHaveURL(/#\/home$/)
+  await page.goto('/#/my?view=notice-settings')
+  const quiet = page.getByRole('switch', { name: /방해 금지/ })
+  await expect(quiet).not.toBeChecked()
+  await quiet.check({ force: true })
+  await expect(page.getByText('오후 10시 ~ 오전 8시에는 알림을 보내지 않아요')).toBeVisible()
+  await page.getByRole('button', { name: /시작/ }).click()
+  await page.getByRole('option', { name: '오후 11시' }).click()
+  await page.getByRole('button', { name: /로 정하기/ }).click()
+  await expect(page.getByText('오후 11시 ~ 오전 8시에는 알림을 보내지 않아요')).toBeVisible()
+  await page.getByRole('switch', { name: /휴대폰 알림 받기/ }).uncheck({ force: true })
+  await expect(page.getByRole('switch', { name: /신청·참여/ })).toBeDisabled()
+  await page.reload()
+  await expect(page.getByRole('switch', { name: /휴대폰 알림 받기/ })).not.toBeChecked()
+  await expect(page.getByText('오후 11시 ~ 오전 8시에는 알림을 보내지 않아요')).toBeVisible()
+})
+
+test('find: detail filter with categories, status, source and dates; applied chips; list and map share it', async ({ page }) => {
+  const host = await signupByApi(page, '필터 모집자')
+  const auth = await tokenFor(page, host)
+  const make = async (title: string, category: string) => {
+    const response = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title, category, placeId: 1, date: inDays(4), time: '10:00', capacity: 4, durationMinutes: 60, description: '상세 필터로 찾을 수 있는지 확인하는 활동이에요.', safetyConfirmed: true } })
+    expect(response.ok()).toBeTruthy()
+  }
+  const stamp = Date.now() % 100000
+  await make(`필터 환경 ${stamp}`, '환경')
+  await make(`필터 교육 ${stamp}`, '교육')
+  await make(`필터 문화 ${stamp}`, '문화·예술')
+  await login(page, host)
+  await page.goto('/#/find')
+  await page.getByRole('searchbox', { name: '검색어' }).fill(`필터 `)
+  await page.getByRole('searchbox', { name: '검색어' }).press('Enter')
+
+  await page.getByRole('button', { name: /^상세 필터/ }).click()
+  const sheet = page.getByRole('dialog', { name: '상세 필터' })
+  await sheet.getByRole('button', { name: '환경' }).click()
+  await sheet.getByRole('button', { name: '교육' }).click()
+  await expect(sheet.getByRole('region', { name: /활동 카테고리/ }).getByRole('button', { name: '전체', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await sheet.getByRole('radio', { name: 'Volink' }).click()
+  // Volink only: the server counts exactly.
+  await expect(sheet.getByRole('button', { name: /개 활동 보기$/ })).toBeVisible()
+  // A wrong date range is refused before applying.
+  await sheet.getByRole('button', { name: '날짜 직접 선택' }).click()
+  await sheet.getByLabel('시작일').fill(inDays(5))
+  await sheet.getByLabel('종료일').fill(inDays(3))
+  await expect(sheet.getByText('시작일이 종료일보다 늦을 수 없어요.')).toBeVisible()
+  await sheet.getByLabel('종료일').fill(inDays(6))
+  await sheet.getByLabel('시작일').fill(inDays(1))
+  await sheet.getByRole('button', { name: /활동 보기$/ }).click()
+
+  await expect(page.getByText(`필터 환경 ${stamp}`)).toBeVisible()
+  await expect(page.getByText(`필터 교육 ${stamp}`)).toBeVisible()
+  await expect(page.getByText(`필터 문화 ${stamp}`)).toHaveCount(0)
+  const applied = page.getByRole('group', { name: '적용된 조건' })
+  await expect(applied.getByRole('button', { name: '환경 조건 지우기' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /상세 필터 \(\d+개 적용 중\)/ })).toBeVisible()
+
+  // Same filters on the map; back to the list unchanged.
+  await page.getByRole('tab', { name: '지도' }).click()
+  // The shared dev database may keep the same activities from earlier runs: same filters, at least these two.
+  await expect(page.locator('.m-map-legend')).toContainText(/동네 활동 \d+개/)
+  await page.getByRole('tab', { name: '목록' }).click()
+  await expect(page.getByText(`필터 환경 ${stamp}`)).toBeVisible()
+
+  // One chip off: only that condition goes.
+  await applied.getByRole('button', { name: '환경 조건 지우기' }).click()
+  await expect(page.getByText(`필터 환경 ${stamp}`)).toHaveCount(0)
+  await expect(page.getByText(`필터 교육 ${stamp}`)).toBeVisible()
+
+  // Closing without applying keeps the applied filters; 초기화 only changes the draft.
+  await page.getByRole('button', { name: /^상세 필터/ }).click()
+  await sheet.getByRole('button', { name: '초기화' }).click()
+  await sheet.getByRole('button', { name: '닫기' }).click()
+  await expect(page.getByText(`필터 교육 ${stamp}`)).toBeVisible()
+  await expect(applied.getByRole('button', { name: '교육 조건 지우기' })).toBeVisible()
+
+  // Nothing found.
+  await page.getByRole('button', { name: /^상세 필터/ }).click()
+  await sheet.getByRole('button', { name: '교육' }).click()
+  await sheet.getByRole('button', { name: '기타' }).click()
+  await sheet.getByRole('button', { name: /활동 보기$/ }).click()
+  await expect(page.getByText('조건에 맞는 활동이 없어요')).toBeVisible()
 })

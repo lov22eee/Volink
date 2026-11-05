@@ -154,6 +154,9 @@ public class CheckInService {
         jdbc.update("INSERT INTO check_ins(participation_id, method, within_radius, reason, checked_by, checked_at) VALUES (?, 'MANUAL', NULL, ?, ?, ?)", participationId, reason, organizerId, now);
         jdbc.update("UPDATE participations SET status = 'CHECKED_IN', updated_at = ? WHERE id = ?", now, participationId);
         log(activity.id(), participationId, organizerId, "CONFIRMED", "CHECKED_IN", "수동 확인: " + reason);
+        // The organizer checked them in by hand, so the participant is told (a QR check-in is their own action).
+        long user = jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, participationId);
+        notifications.send(user, "CHECKED_IN", "출석이 확인됐어요", activity.title() + " · 모집자가 현장에서 출석을 확인했어요.", "#/activity/" + activity.id(), activity.id(), "CHECKED_IN:" + participationId);
     }
 
     /** Several people at once with one reason (출석부 "여러 명 선택"). All or nothing. */
@@ -197,7 +200,8 @@ public class CheckInService {
         jdbc.update("UPDATE participations SET status = 'COMPLETED', updated_at = ? WHERE id = ?", now, participationId);
         log(activity.id(), participationId, organizerId, "CHECKED_IN", "COMPLETED", "모집자 완료 확인");
         long user = jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, participationId);
-        notifications.send(user, "RECORD_CONFIRMED", "활동 기록이 만들어졌습니다", activity.title() + " · 내 활동 > 활동 기록에서 볼 수 있고 7일 안에 이의를 신청할 수 있습니다.", "#/mine");
+        notifications.send(user, "RECORD_CONFIRMED", "활동 기록이 만들어졌습니다", activity.title() + " · 내 활동 > 활동 기록에서 볼 수 있고 7일 안에 이의를 신청할 수 있습니다.", "#/mine", activity.id(), "RECORD:" + participationId);
+        notifications.send(user, "REVIEW_INVITE", "활동 후기를 남겨 보세요", activity.title() + " · 커뮤니티 봉사후기에 경험을 나눠 주세요.", "#/activity/" + activity.id(), activity.id(), "REVIEW:" + participationId);
     }
 
     public List<Map<String, Object>> records(long userId) {
@@ -228,7 +232,7 @@ public class CheckInService {
                   AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'PENDING_REMINDED' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))
                 GROUP BY a.id, a.organizer_id, a.title""", now, now.plus(PENDING_REMINDER))) {
             long id = ((Number) row.get("id")).longValue(), organizer = ((Number) row.get("organizer_id")).longValue();
-            notifications.send(organizer, "ACTIVITY_REMINDER", "승인을 기다리는 신청이 " + row.get("pending") + "건 있어요",
+            notifications.send(organizer, "PENDING_REMINDER", "승인을 기다리는 신청이 " + row.get("pending") + "건 있어요",
                     row.get("title") + " · 시작 전까지 승인하지 않으면 신청이 자동으로 마감됩니다.", "#/activity/" + id);
             log(id, null, organizer, null, "PENDING_REMINDED", "시작 24시간 전 승인 대기 안내");
         }
@@ -241,9 +245,24 @@ public class CheckInService {
             long id = ((Number) row.get("id")).longValue();
             Activity activity = load(id, false);
             for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))
-                notifications.send(user, "ACTIVITY_REMINDER", "내일 함께해요", row.get("title") + " · " + row.get("startTime") + " · " + row.get("place")
+                notifications.send(user, "DAY_BEFORE", "내일 함께해요", row.get("title") + " · " + row.get("startTime") + " · " + row.get("place")
                         + ". 준비물을 확인하고, 못 오게 되면 미리 알려 주세요.", "#/activity/" + id);
             log(id, null, activity.organizerId(), null, "DAY_BEFORE", "하루 전 안내");
+        }
+        // Once, on the morning of the day (from 07:00, while check-in is not open yet): "오늘이에요" with time and place.
+        LocalDateTime morning = now.toLocalDate().atTime(7, 0);
+        if (!now.isBefore(morning)) for (Map<String, Object> row : jdbc.queryForList("""
+                SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime, COALESCE(a.meeting_point, p.name, '') AS place FROM activities a
+                LEFT JOIN demo_places p ON p.id = a.place_id
+                WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at < ?
+                  AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'DAY_OF' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))""",
+                now.plus(WINDOW), now.toLocalDate().plusDays(1).atStartOfDay())) {
+            long id = ((Number) row.get("id")).longValue();
+            Activity activity = load(id, false);
+            for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))
+                notifications.send(user, "DAY_OF", "오늘 " + row.get("startTime") + " 봉사가 있어요", row.get("title") + " · " + row.get("place")
+                        + ". 출발 전에 준비물을 한 번 더 확인해 주세요.", "#/activity/" + id);
+            log(id, null, activity.organizerId(), null, "DAY_OF", "당일 아침 안내");
         }
         // Once, when check-in opens (30 min before): the confirmed people and the organizer.
         for (Map<String, Object> row : jdbc.queryForList("""
@@ -253,8 +272,8 @@ public class CheckInService {
             long id = ((Number) row.get("id")).longValue(), organizer = ((Number) row.get("organizer_id")).longValue();
             String link = "#/activity/" + id;
             for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))
-                notifications.send(user, "ACTIVITY_REMINDER", "체크인이 열렸어요", row.get("title") + " · 현장에서 모집자가 보여 주는 QR을 휴대폰 카메라로 찍어 주세요.", link);
-            notifications.send(organizer, "ACTIVITY_REMINDER", "출석 QR을 띄울 시간이에요", row.get("title") + " · 활동 상세에서 '출석 체크'를 열어 참가자에게 QR을 보여 주세요.", link);
+                notifications.send(user, "CHECKIN_OPEN", "체크인이 열렸어요", row.get("title") + " · 현장에서 모집자가 보여 주는 QR을 휴대폰 카메라로 찍어 주세요.", link);
+            notifications.send(organizer, "QR_TIME", "출석 QR을 띄울 시간이에요", row.get("title") + " · 활동 상세에서 '출석 체크'를 열어 참가자에게 QR을 보여 주세요.", link);
             log(id, null, organizer, null, "CHECKIN_OPENED", "체크인 시작 안내");
         }
         for (long id : jdbc.queryForList("SELECT id FROM activities WHERE status = 'RECRUITING' AND starts_at <= ? ORDER BY id", Long.class, now)) {
@@ -267,8 +286,8 @@ public class CheckInService {
                 jdbc.update("UPDATE participations SET status = 'EXPIRED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now, pid);
                 log(id, pid, activity.organizerId(), (String) row.get("status"), "EXPIRED", "활동 시작으로 신청 마감");
                 long user = jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, pid);
-                notifications.send(user, "APPLICATION_RESULT", "APPLIED".equals(row.get("status")) ? "승인 전에 활동이 시작됐어요" : "자리가 나지 않아 대기가 끝났어요",
-                        activity.title() + " · 이번 활동에는 함께하지 못해요. 다른 활동을 찾아보세요.", "#/explore");
+                notifications.send(user, "START_EXPIRED", "APPLIED".equals(row.get("status")) ? "승인 전에 활동이 시작됐어요" : "자리가 나지 않아 대기가 끝났어요",
+                        activity.title() + " · 이번 활동에는 함께하지 못해요. 다른 활동을 찾아보세요.", "#/explore", activity.id(), null);
             }
             changed++;
         }
@@ -280,7 +299,7 @@ public class CheckInService {
                 jdbc.update("UPDATE participations SET status = 'NO_SHOW', updated_at = ? WHERE id = ?", now, pid);
                 log(id, pid, activity.organizerId(), "CONFIRMED", "NO_SHOW", "체크인 없이 종료");
             }
-            notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "활동이 끝났습니다", activity.title() + " · 체크인한 참가자의 완료를 확인해 주세요.", activity.link());
+            notifications.send(activity.organizerId(), "FINISHED", "활동이 끝났습니다", activity.title() + " · 체크인한 참가자의 완료를 확인해 주세요.", activity.link());
             changed++;
         }
         return changed;

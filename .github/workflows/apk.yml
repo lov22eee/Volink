@@ -27,10 +27,18 @@ jobs:
         env:
           # The server the app calls (the public site). Override with the repository variable VOLINK_SITE.
           VITE_API_BASE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
+          # Kakao Maps JavaScript key (public, domain-restricted: register https://localhost for the app). Empty = drawn map.
+          VITE_KAKAO_JS_KEY: ${{ vars.VOLINK_KAKAO_JS_KEY || secrets.VOLINK_KAKAO_JS_KEY }}
         run: |
           npm ci
           npm run build:app
           npx cap sync android
+      # Keep one debug signing key between runs so a new test APK installs over the previous one
+      # (a new key each run makes Android refuse the update). Test builds only; never a release key.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: volink-debug-keystore
       - name: Build the APK
         working-directory: frontend/android
         env:

@@ -37,7 +37,7 @@
 |---|---|---|---|
 | 3 | `POST /api/auth/signup` | 공개 | 일반·기관 가입. 만 14세 미만 422 `UNDER_AGE`, `role` 필드 무시(ADMIN 불가), 기관이면 organizations PENDING 생성 |
 | 3 | `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/logout` | 공개/회원 | 토큰 발급·갱신·폐기 |
-| 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 1~3개 |
+| 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 0~3개(2026-11-05부터 가입 때 묻지 않음, 선택) |
 | 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원, 관리자 불가) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
 | 3 | `GET /api/activities` | 공개 | **구현 추가:** 모집 중(RECRUITING)이고 시작 전인 활동, 시작 시각 순. 4주차에 반경·날짜·분야 조건 추가 |
 | 3 | `GET /api/me/activities` | 본인 | **구현 추가:** 내가 개설한 활동 전체(검토 이유·반려 사유 포함) |
@@ -46,6 +46,9 @@
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
 | 5+ | `GET /api/admin/stats/applications?days=14` | 관리자 | **구현(2026-10-28, 관리자 대시보드).** 읽기 전용. `days`(7~60, 기본 14)일 동안 한국 날짜별 신청 수 `days[{date, applications}]`(없는 날 0, 오늘 포함, 첫 신청 시각 기준 · 취소 후 재신청은 같은 행이라 한 번)와 지금 상태별 신청 수 `statuses{APPLIED: n, …}` |
 | 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
+| 6 | `POST /api/activities/{id}/cancel` `{reasonCode: PERSONAL\|WEATHER\|PLACE\|STAFF\|OTHER, message}` | 모집자 | **구현(V18, 2026-11-05 긴급 취소).** 시작 전·출석 기록 없음일 때만(시작 후 409 `STARTED`, 출석자 있음 409 `CHECKED_IN`, 두 번째 409 `ALREADY_CANCELLED`, 남의 활동 404). 안내 5~300자·연락처 거절. 활동 행 잠금 안에서 취소 기록(`activity_cancellations`: 사유·안내·이전 상태·확정/대기/승인 대기 수)·신청 상태 CANCELLED(원래 상태는 activity_logs)·알림(‘봉사활동이 취소되었어요’, 사람마다 한 번)을 한꺼번에. 상세에 `cancellation`. 예전 `{reason}`도 받음(기타 사유) |
+| 6 | `GET /api/activities?category=환경,교육&status=OPEN\|WAITLIST\|ALL&sido&sigungu&from&to&q` | 공개 | **구현(V17, 2026-11-05 찾기 상세 필터).** `category` 쉼표로 여러 개(전체=생략). `status` 없으면 예전과 같음(모집 중·시작 전, 꽉 찬 것 포함). OPEN=자리 남음, WAITLIST=+꽉 찼지만 대기 가능(시작 2시간 전까지), ALL=+마감(대기 마감·진행 중·최근 30일 종료, 취소·삭제 제외). `sido`(서울특별시…)·`sigungu`는 장소 주소로 거름 |
+| 6 | `GET /api/volunteer-programs?sido&sigungu&category` | 공개 | **구현(V17).** 위치 없이 지역으로 1365 조회(시·군·구 코드는 서울·경기만, 그 밖은 시·도 전체 + 장소 글자). 항목에 `category`·`categoryBasis`(OFFICIAL/ESTIMATED/UNKNOWN). 호출 제한·3시간 캐시는 그대로 |
 | 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
 | 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |
 | 4+ | `GET /api/activities?…&q&from&to&part` | 공개 | **구현(2026-10-21 보완).** `q` 제목·소개·장소 이름 검색(50자), `from`·`to` 날짜 범위, `part`=AM(정오 전 시작)/PM, 반경 최대 **20km** |
@@ -65,6 +68,9 @@
 | 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
 | 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
 | 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
+| 6 | `GET /api/me/notification-center?category=APPLY\|ACTIVITY\|TALK&before={id}&size=20` | 본인 | **구현(V16, 2026-11-05 알림센터 A안).** 최신순 페이지(`next`=다음 `before`), 칩별 안 읽은 수 `unread{ALL,APPLY,ACTIVITY,TALK,OTHER}`. 항목: `type`·`category`·`activityId`·`activityTitle`·`activityGone`(지워진 활동)·`ids`·`count`. 같은 활동의 새 참가 신청(`APPLIED`)이 30분 안에 이어지면 한 줄(‘새 참가 신청 3건’, `ids`에 전부). 원본은 묶거나 지우지 않음. 알 수 없는 category·size 1~50 밖은 400 |
+| 6 | `POST /api/notifications/read` `{ids}` | 본인 | **구현(V16).** 묶인 줄을 한 번에 읽음(1~200개, 남의 id는 건드리지 않고 건너뜀, 반복해도 같음). `{read: 바뀐 수}` |
+| 6 | `GET·PUT /api/me/notification-settings` `{push, apply, activity, talk, quiet, quietStart, quietEnd}` | 본인 | **구현(V16).** 휴대폰 알림(푸시) 전체·종류별 켜기·끄기, 방해 금지 시간(HH:mm, 기본 22:00~08:00, 자정 넘김 가능, 시작=끝 400). 서버 `pushAllowed(user, category, 지금)`이 푸시 보낼지 판단. 앱 안 알림 목록에는 영향 없음. 푸시는 Firebase 연결 전이라 아직 쓰이지 않음 |
 | 6 | `GET /api/activities/{id}/qr` | 모집자 | **구현.** `{open, token(열려 있을 때만), opensAt, closesAt, validSeconds:60, rotateSeconds:30, expected, checkedIn, toComplete, status}`. 값 = `활동번호.발급초.HMAC`. 화면은 30초마다 새 값을 받아 QR을 바꿈(받은 값은 60초 유효). 남의 활동 404 |
 | 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng, accuracy?}` | 본인(확정자) | **구현.** 확인 순서: 확정 아니면 403(이미 체크인 409) → 시간 밖 422 `CHECKIN_OUT_OF_TIME` → QR 60초 지남 410 `QR_EXPIRED`, 위조·다른 활동 400 `QR_INVALID` → 위치 없음·장소 좌표 없음·반경 밖 422 `CHECKIN_OUT_OF_RANGE`(“약 Nm 떨어져 있어요”). 휴대폰이 알려 준 GPS 오차는 **최대 50m까지만** 반경에 더해 줌. 좌표 저장 안 함 |
 | 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |

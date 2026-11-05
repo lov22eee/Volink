@@ -24,8 +24,9 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
+                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18");
+        // 7 active (V17) + the merged 생활 지원 row kept as inactive history.
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(8);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
     }
@@ -113,11 +114,15 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
                 "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
-                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts");
+                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts", "notification_settings", "category_changes_v17", "risk_keywords_removed_v17", "activity_cancellations");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
-                .containsExactlyInAnyOrder(Map.entry("BLOCKED", 19), Map.entry("REVIEW", 19));
-        assertThat(jdbc.queryForObject("SELECT base_risk FROM categories WHERE name = '지역 돌봄'", String.class)).isEqualTo("REVIEW");
+                .containsExactlyInAnyOrder(Map.entry("BLOCKED", 19), Map.entry("REVIEW", 17));
+        // V17: 7 categories, none needs a review by itself (user decision); 생활 지원 stays only as inactive history.
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories WHERE base_risk = 'REVIEW'", Integer.class)).isZero();
+        assertThat(jdbc.queryForList("SELECT name FROM categories WHERE active ORDER BY sort_order", String.class))
+                .containsExactly("환경", "교육", "복지", "문화·예술", "동물", "지역사회", "기타");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories WHERE NOT active AND legacy_name = '생활 지원'", Integer.class)).isEqualTo(1);
     }
 
     @Test

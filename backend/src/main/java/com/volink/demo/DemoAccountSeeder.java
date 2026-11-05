@@ -52,7 +52,7 @@ public class DemoAccountSeeder implements ApplicationRunner {
                     email, persona.get("display_name"), hash, admin ? "ADMIN" : "USER", "INSTITUTION".equals(role) ? "INSTITUTION" : "GENERAL",
                     admin ? null : LocalDate.of(2000, 1, 1));
             if (!admin)
-                jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT u.id, c.id FROM users u, categories c WHERE u.email = ? AND c.name = '환경 정화'", email);
+                jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT u.id, c.id FROM users u, categories c WHERE u.email = ? AND c.name = '환경'", email);
         }
         Long adminId = jdbc.queryForList("SELECT id FROM users WHERE email = ?", Long.class, "admin-01" + DOMAIN).stream().findFirst().orElse(null);
         organization("institution-01", "시연 기관 01", adminId, true);

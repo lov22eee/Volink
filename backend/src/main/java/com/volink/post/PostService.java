@@ -27,7 +27,7 @@ public class PostService {
     static final int MAX_LENGTH = 500;
     /** A person can post this many times per activity per hour (keeps the thread readable and stops spam). */
     static final int PER_HOUR = 10;
-    static final Pattern CONTACT = Pattern.compile(
+    public static final Pattern CONTACT = Pattern.compile(
             "01[016789][-\\s.]?\\d{3,4}[-\\s.]?\\d{4}|[\\w.+-]+@[\\w-]+\\.[\\w.]+|open\\.kakao\\.com|오픈\\s*채팅|카톡\\s*아이디|카카오톡\\s*아이디");
 
     private final JdbcTemplate jdbc;
@@ -100,7 +100,7 @@ public class PostService {
         String body = checked(organizerId, activity, rawBody);
         long id = insert(activity.id(), organizerId, "NOTICE", null, body);
         for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status IN ('CONFIRMED', 'CHECKED_IN')", Long.class, activityId))
-            notifications.send(user, "ACTIVITY_CHANGED", "새 공지가 올라왔어요", activity.title() + " · " + preview(body), activity.link());
+            notifications.send(user, "NOTICE", "새 공지가 올라왔어요", activity.title() + " · " + preview(body), activity.link());
         return Map.of("id", id);
     }
 
@@ -117,7 +117,7 @@ public class PostService {
         String body = checked(userId, activity, rawBody);
         long id = insert(activity.id(), userId, "QUESTION", null, body);
         if (privately) jdbc.update("UPDATE activity_posts SET private_post = TRUE WHERE id = ?", id);
-        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", privately ? "모집자에게만 보이는 질문이 있어요" : "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link());
+        notifications.send(activity.organizerId(), "QUESTION", privately ? "모집자에게만 보이는 질문이 있어요" : "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link());
         return Map.of("id", id);
     }
 
@@ -131,7 +131,7 @@ public class PostService {
             throw new ApiException(HttpStatus.CONFLICT, "ALREADY_ANSWERED", "이미 답변한 질문입니다. 고치려면 답변을 지우고 다시 써 주세요.");
         String body = checked(organizerId, activity, rawBody);
         long id = insert(activity.id(), organizerId, "ANSWER", questionId, body);
-        notifications.send(((Number) question.get("author_id")).longValue(), "ACTIVITY_CHANGED", "질문에 답변이 달렸어요", activity.title() + " · " + preview(body), activity.link());
+        notifications.send(((Number) question.get("author_id")).longValue(), "ANSWER", "질문에 답변이 달렸어요", activity.title() + " · " + preview(body), activity.link());
         return Map.of("id", id);
     }
 

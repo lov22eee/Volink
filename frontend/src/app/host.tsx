@@ -5,13 +5,14 @@ import type { ReactNode } from 'react'
 import { api, ApiError } from '../api'
 import type { LiveActivity, User } from '../api'
 import { categories, showToast } from '../App'
+import { categoryHint, categoryTone } from '../categories'
 import { durationLabel } from '../create'
 import { PlaceField } from '../placePicker'
 import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
 import { difficultyLabel, fieldIcon, placeKindLabel } from './cards'
-import { ActionBar, dayWord, Empty, go, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels } from './ui'
+import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
@@ -32,7 +33,7 @@ export function HostScreen({ user, actions }: { user: User; actions: ReactNode }
       {!mine ? <Loading /> : <>
         {live.length > 0 && <section className="m-section"><div className="m-section-head"><h2>모집 중인 활동</h2></div>
           <div className="m-list">{live.map(a => <a key={a.id} className="m-row" href={'#/manage/' + a.id}>
-            <span className="m-row-ico f1"><MIcon name={fieldIcon[a.category] ?? 'sprout'} size={22} /></span>
+            <span className={'m-row-ico f' + categoryTone(a.category)}><MIcon name={fieldIcon[a.category] ?? 'sprout'} size={22} /></span>
             <span className="m-row-main"><strong>{a.title}</strong><small>{dayWord(a.date)} {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</small>
               {((a.pending ?? 0) > 0 || (a.unanswered ?? 0) > 0) && <em className="hot">{[a.pending ? `승인 대기 ${a.pending}` : '', a.unanswered ? `질문 ${a.unanswered}` : ''].filter(Boolean).join(' · ')}</em>}</span>
             <span className={'m-badge ' + (a.status === 'DRAFT' ? 'amber' : 'mint')}>{a.status === 'DRAFT' ? '검토 중' : '관리'}</span></a>)}</div></section>}
@@ -173,7 +174,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
   const stepTitle = ['기본 정보', '참여 안내', '운영 설정'][step - 1]
   const err = (key: string) => errors[key] && <span className="m-err" role="alert">{errors[key]}</span>
   return <div className="m-screen m-create">
-    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : go(editId ? '#/manage/' + editId : '#/host')} />
+    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : goUp(editId ? '#/manage/' + editId : '#/host')} />
     <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label="만들기 단계"><i style={{ width: step * 33.34 + '%' }} /></div>
     {loading ? <Loading /> : <form className="m-body m-form" noValidate onSubmit={event => { event.preventDefault(); next() }}>
       <span className="m-step">{step} / 3 · {stepTitle}</span>
@@ -188,7 +189,8 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
           <input name="title" className={'m-input' + (errors.title ? ' bad' : '')} placeholder="예: 공원 산책로 함께 걷고 줍기" maxLength={r.titleMax} value={title} disabled={locked} onChange={event => setTitle(event.target.value)} enterKeyHint="done" />
           <span className="m-count">{title.trim().length} / {r.titleMax}</span>{err('title')}</label>
         <div className="m-field"><span className="m-label">분야</span><div className="m-tiles">{categories.map(c =>
-          <button type="button" key={c} className={'m-tile' + (category === c ? ' on' : '')} aria-pressed={category === c} disabled={locked} onClick={() => setCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button>)}</div></div>
+          <button type="button" key={c} className={'m-tile' + (category === c ? ' on' : '')} aria-pressed={category === c} disabled={locked} onClick={() => setCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button>)}</div>
+          {category && categoryHint[category] && <p className="m-help">{categoryHint[category]}</p>}</div>
         <div className="m-field"><span className="m-label">활동 강도 <small>처음 오는 사람이 고를 때 도움이 돼요</small></span><div className="m-seg wide">
           {(Object.keys(difficultyLabel) as (keyof typeof difficultyLabel)[]).map(key => <button type="button" key={key} disabled={locked} className={difficulty === key ? 'on' : ''} aria-pressed={difficulty === key} onClick={() => setDifficulty(key)}>{difficultyLabel[key]}</button>)}</div></div>
         <div className="m-field"><span className="m-label">장소 환경</span><div className="m-seg wide">

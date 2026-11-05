@@ -61,7 +61,7 @@ class ActivityCareIntegrationTest extends ApiTestSupport {
         assertThat(jdbc.queryForList("SELECT status FROM participations WHERE activity_id = ?", String.class, activity)).containsOnly("CANCELLED");
         assertThat(jdbc.queryForObject("SELECT cancel_count FROM participations WHERE id = ?", Integer.class, participation)).isZero();
         mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member))
-                .andExpect(jsonPath("$.items[0].title").value("활동이 취소됐어요")).andExpect(jsonPath("$.items[0].body").value(containsString("비 예보")));
+                .andExpect(jsonPath("$.items[0].title").value("봉사활동이 취소되었어요")).andExpect(jsonPath("$.items[0].body").value(containsString("기타 사유")));
         // People who applied still see it with the reason; others get 404 and it leaves the public list.
         mvc.perform(get("/api/activities/" + activity).header("Authorization", "Bearer " + member)).andExpect(status().isOk()).andExpect(jsonPath("$.cancelReason").exists());
         mvc.perform(get("/api/activities/" + activity)).andExpect(status().isNotFound());

@@ -15,7 +15,9 @@ import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
 import { MineScreen } from './mine'
 import { setupNative } from './native'
-import { MyScreen, NicknameScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
+import { WelcomeScreen } from './welcome'
+import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
+import { NoticeSettingsScreen, NoticesScreen } from './notices'
 import { BellLink, Loading, MIcon, TabBar, TopBar, useKeyboardAware } from './ui'
 import type { Tab } from './ui'
 
@@ -94,12 +96,13 @@ export default function MobileApp() {
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen actions={bell} initial={route.query.get('tab') ?? undefined} />; break
-    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break
     case 'news': screen = route.id ? <NewsScreen key={route.id} id={route.id} user={user} /> : null; break
     case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
+    case 'welcome': screen = <WelcomeScreen />; break
     default: screen = null
   }
   if (!screen) { window.location.hash = '#/home'; return <Loading /> }

@@ -89,9 +89,17 @@ public class VolunteerService {
         return answers;
     }
 
-    public record Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting) {}
+    /**
+     * Near a point (lat/lng/radiusKm), or in a chosen region (sido, optional sigungu) without any position.
+     * {@code categories}: Volink category names; {@code recruiting} false also keeps programs known to be closed.
+     */
+    public record Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting, String sido, String sigungu, List<String> categories) {
+        public Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting) { this(lat, lng, radiusKm, q, youth, recruiting, null, null, List.of()); }
+    }
 
     public Map<String, Object> search(Query query) {
+        boolean byRegion = query.sido() != null && !query.sido().isBlank() && (query.lat() == null || query.lng() == null);
+        if (byRegion) return searchRegion(query);
         if (query.lat() == null || query.lng() == null || query.lat() < 33 || query.lat() > 39 || query.lng() < 124 || query.lng() > 132)
             throw ApiException.validation(Map.of("location", "위치를 확인할 수 없습니다. 다시 시도해 주세요."));
         String q = query.q() == null ? "" : query.q().trim();
@@ -135,10 +143,64 @@ public class VolunteerService {
         // Only programs known to be closed are hidden; an unknown status stays (the link shows the live state).
         if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
         items.removeIf(item -> item.get("distanceKm") != null && (Double) item.get("distanceKm") > radiusKm);
+        keepCategories(items, query.categories());
         items.sort(Comparator.comparing(item -> item.get("distanceKm") == null ? Double.MAX_VALUE : (Double) item.get("distanceKm")));
         result.put("items", items);
         result.put("found", list.size());
         return result;
+    }
+
+    /** A chosen 시·도 (and 시·군·구 where 1365 codes are known: Seoul, Gyeonggi) without a position. Same cache and budget. */
+    private Map<String, Object> searchRegion(Query query) {
+        String q = query.q() == null ? "" : query.q().trim();
+        if (q.length() > 50) throw ApiException.validation(Map.of("q", "검색어는 50자 이내로 입력해 주세요."));
+        String sido = query.sido().trim(), sigungu = query.sigungu() == null ? "" : query.sigungu().trim();
+        Optional<RegionCodes.Codes> codes = RegionCodes.of(sido, sigungu);
+        if (codes.isEmpty()) throw ApiException.validation(Map.of("sido", "지역을 확인해 주세요."));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", api.enabled() && kakao.enabled());
+        result.put("region", (sido + " " + sigungu).trim());
+        // A district without its own 1365 code is searched in the whole province and narrowed by the place text.
+        result.put("districtExact", sigungu.isEmpty() || codes.get().city() != null);
+        if (!api.enabled() || !kakao.enabled()) { result.put("items", List.of()); return result; }
+        List<Map<String, String>> list = list(codes.get(), q);
+        List<String> numbers = new ArrayList<>();
+        Map<String, Map<String, String>> entries = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
+        for (Map<String, String> entry : list) {
+            String no = first(entry, "progrmRegistNo");
+            if (no == null || entries.containsKey(no)) continue;
+            entries.put(no, entry);
+            numbers.add(no);
+            Map<String, Object> stored = stored(no);
+            if (stored != null) rows.put(no, stored);
+            if ((stored == null || stale(stored)) && missing.size() < NEW_DETAILS) missing.add(no);
+        }
+        String hint = (sido + " " + sigungu).trim();
+        List<Map<String, Object>> refreshed = together(missing.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), hint)).toList());
+        for (int i = 0; i < missing.size(); i++) if (refreshed.get(i) != null) rows.put(missing.get(i), refreshed.get(i));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (String no : numbers) if (rows.containsKey(no)) items.add(view(rows.get(no), null, null));
+        String today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))).format(YMD);
+        items.removeIf(item -> item.get("periodEnd") != null && ((String) item.get("periodEnd")).replace("-", "").compareTo(today) < 0);
+        if (Boolean.TRUE.equals(query.youth())) items.removeIf(item -> !Boolean.TRUE.equals(item.get("youthOk")));
+        if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
+        if (!sigungu.isEmpty() && codes.get().city() == null) {
+            String stem = sigungu.length() > 2 ? sigungu.substring(0, sigungu.length() - 1) : sigungu;
+            items.removeIf(item -> item.get("place") == null || !String.valueOf(item.get("place")).contains(stem));
+        }
+        keepCategories(items, query.categories());
+        items.sort(Comparator.comparing(item -> item.get("periodStart") == null ? "9999" : (String) item.get("periodStart")));
+        result.put("items", items);
+        result.put("found", list.size());
+        return result;
+    }
+
+    /** Category filter. A program whose field is not known is kept under 기타, so a guess never hides it. */
+    private static void keepCategories(List<Map<String, Object>> items, List<String> categories) {
+        if (categories == null || categories.isEmpty()) return;
+        items.removeIf(item -> !categories.contains(item.get("category")));
     }
 
     /** The centre's region, then the regions 3 km north, south, east and west (a point near a border also needs the next district). */
@@ -183,7 +245,16 @@ public class VolunteerService {
     }
 
     /** Detail → only public program fields are stored (the API's contact person, phone, fax, address, e-mail are dropped here). */
+    /** Region search: no position, so the place text is looked up with the region name in front. */
+    private Map<String, Object> fetch(String no, Map<String, String> listEntry, String regionHint) {
+        return fetch(no, listEntry, 36.5, 127.8, regionHint + " ");
+    }
+
     private Map<String, Object> fetch(String no, Map<String, String> listEntry, double nearLat, double nearLng) {
+        return fetch(no, listEntry, nearLat, nearLng, "");
+    }
+
+    private Map<String, Object> fetch(String no, Map<String, String> listEntry, double nearLat, double nearLng, String prefix) {
         Map<String, String> d = new LinkedHashMap<>(listEntry);
         api.detail(no).ifPresent(d::putAll);
         String title = first(d, "progrmSj");
@@ -192,7 +263,7 @@ public class VolunteerService {
         Map<String, Object> old = stored(no);
         BigDecimal lat = old == null ? null : (BigDecimal) old.get("latitude"), lng = old == null ? null : (BigDecimal) old.get("longitude");
         if (lat == null && place != null) {
-            Optional<KakaoLocal.Place> found = kakao.locate(place, nearLat, nearLng);
+            Optional<KakaoLocal.Place> found = kakao.locate(prefix + place, nearLat, nearLng);
             if (found.isPresent()) { lat = BigDecimal.valueOf(found.get().latitude()); lng = BigDecimal.valueOf(found.get().longitude()); }
         }
         jdbc.update("""
@@ -206,7 +277,7 @@ public class VolunteerService {
         return stored(no);
     }
 
-    private Map<String, Object> view(Map<String, Object> row, double lat, double lng) {
+    private Map<String, Object> view(Map<String, Object> row, Double lat, Double lng) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("programNo", row.get("program_no"));
         item.put("title", row.get("title"));
@@ -224,7 +295,10 @@ public class VolunteerService {
         item.put("youthOk", row.get("youth_ok"));
         item.put("latitude", row.get("latitude"));
         item.put("longitude", row.get("longitude"));
-        item.put("distanceKm", row.get("latitude") == null ? null
+        ProgramCategory.Result kind = ProgramCategory.of((String) row.get("field"), (String) row.get("title"));
+        item.put("category", kind.category());
+        item.put("categoryBasis", kind.basis());
+        item.put("distanceKm", row.get("latitude") == null || lat == null || lng == null ? null
                 : Math.round(meters(lat, lng, ((Number) row.get("latitude")).doubleValue(), ((Number) row.get("longitude")).doubleValue()) / 100.0) / 10.0);
         item.put("link", LINK + row.get("program_no"));
         return item;

@@ -80,7 +80,7 @@ class ParticipationIntegrationTest extends ApiTestSupport {
         LocalDateTime expires = jdbc.queryForObject("SELECT offer_expires_at FROM participations WHERE id = ?", LocalDateTime.class, w[0]);
         assertThat(expires).isBetween(LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusHours(5).plusMinutes(58), LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusHours(6).plusMinutes(1));
         mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + waiting[0]))
-                .andExpect(jsonPath("$.items[0].type").value("WAITLIST_OFFER")).andExpect(jsonPath("$.unread").value(2));
+                .andExpect(jsonPath("$.items[0].type").value("OFFERED")).andExpect(jsonPath("$.unread").value(2));
 
         // P-04: the answer time passes -> expired, the next person is offered.
         jdbc.update("UPDATE participations SET offer_expires_at = ? WHERE id = ?", LocalDateTime.now(ZoneId.of("Asia/Seoul")).minusMinutes(1), w[0]);

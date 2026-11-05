@@ -66,7 +66,8 @@ type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places'
 type Route = { page: Page; activityId?: number; section?: AdminSection; token?: string }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
-export const categories = ['환경 정화', '생활 지원', '지역 돌봄']
+import { categories } from './categories'
+export { categories }
 
 function getRoute(): Route {
   const [path, query = ''] = window.location.hash.replace(/^#\/?/, '').split('?')
@@ -827,7 +828,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   </>
 
   if (section === 'activities') return <>
-    {head('활동 검토', '위험 단어가 있거나 지역 돌봄 분야인 글은 승인해야 공개돼요.')}
+    {head('활동 검토', '위험 단어가 있는 글은 승인해야 공개돼요.')}
     {status}
     <section className="admin-card" aria-label="검토 대기 활동">
       <div className="admin-card-head"><h2>검토 대기 활동 <span className="count">{activities?.length ?? '–'}</span></h2></div>

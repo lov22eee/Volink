@@ -5,8 +5,10 @@
 import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
+import { PushNotifications } from '@capacitor/push-notifications'
 import { setServer } from '../api'
 import { setSocialOpener } from '../social'
+import { goBack } from './ui'
 
 const SERVER = String(import.meta.env.VITE_API_BASE ?? '').trim()
 
@@ -28,4 +30,24 @@ export function setupNative() {
     void Browser.close().catch(() => {})
     window.location.hash = route
   })
+  // Android back key: an open sheet closes first (like Escape), a sub-screen goes back, the home screen puts the app
+  // in the background instead of closing it.
+  void App.addListener('backButton', () => {
+    if (document.querySelector('.m-sheet-wrap')) { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return }
+    const page = window.location.hash.replace(/^#\/?/, '').split(/[/?]/)[0] || 'home'
+    if (page === 'home' || page === 'login') { void App.minimizeApp(); return }
+    goBack('#/home')
+  })
+}
+
+/**
+ * The phone's notification permission (Android 13+ asks; older phones allow by default). Push delivery itself needs
+ * Firebase, which is not connected yet; this only asks so the permission is ready. In a browser: the web prompt.
+ */
+export async function askNotifications(): Promise<boolean> {
+  try {
+    if (Capacitor.isNativePlatform()) return (await PushNotifications.requestPermissions()).receive === 'granted'
+    if ('Notification' in window) return (await Notification.requestPermission()) === 'granted'
+  } catch { /* not supported */ }
+  return false
 }
