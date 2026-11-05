@@ -20,6 +20,8 @@ export type LiveActivity = {
   /** Week 6 (V9): labels, one reschedule, the organizer's cancel reason; counts only in the organizer's own list. */
   difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number
   rescheduleCount?: number; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
+  /** V18: the organizer's cancellation (organizer and applicants only). Counts are null for cancellations before V18. */
+  cancellation?: { reasonCode: string; reasonLabel: string; message: string; statusBefore: string; confirmedCount: number | null; waitingCount: number | null; appliedCount: number | null; cancelledAt: string }
 }
 export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLISTED' | 'OFFERED' | 'EXPIRED' | 'CANCELLED' | 'CHECKED_IN' | 'COMPLETED' | 'NO_SHOW' | 'HELD' | 'INVALIDATED'
 export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number; lateMinutes?: number | null }

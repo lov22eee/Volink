@@ -395,6 +395,14 @@ public class ActivityService {
         if (!visible) throw notFound();
         // The organizer sees how many applications lock the full edit (week 5 adds applying).
         if (organizer) activity.put("applicants", activeApplications(id));
+        // Cancelled by the organizer: reason, message, time and who was affected (shown to the organizer and applicants).
+        if ("CANCELLED".equals(activity.get("status"))) jdbc.queryForList("""
+                SELECT reason_code AS reasonCode, message, status_before AS statusBefore, confirmed_count AS confirmedCount, waiting_count AS waitingCount,
+                       applied_count AS appliedCount, DATE_FORMAT(cancelled_at, '%Y-%m-%d %H:%i') AS cancelledAt
+                FROM activity_cancellations WHERE activity_id = ?""", id).stream().findFirst().ifPresent(c -> {
+            c.put("reasonLabel", ActivityChangeService.REASONS.get(c.get("reasonCode")));
+            activity.put("cancellation", c);
+        });
         return activity;
     }
 

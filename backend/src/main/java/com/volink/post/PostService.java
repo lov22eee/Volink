@@ -27,7 +27,7 @@ public class PostService {
     static final int MAX_LENGTH = 500;
     /** A person can post this many times per activity per hour (keeps the thread readable and stops spam). */
     static final int PER_HOUR = 10;
-    static final Pattern CONTACT = Pattern.compile(
+    public static final Pattern CONTACT = Pattern.compile(
             "01[016789][-\\s.]?\\d{3,4}[-\\s.]?\\d{4}|[\\w.+-]+@[\\w-]+\\.[\\w.]+|open\\.kakao\\.com|오픈\\s*채팅|카톡\\s*아이디|카카오톡\\s*아이디");
 
     private final JdbcTemplate jdbc;

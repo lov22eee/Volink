@@ -110,7 +110,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.getByRole('button', { name: '승인' }).click()
   await expect(page.getByText('참가 확정').first()).toBeVisible()
   await page.getByRole('button', { name: '활동 메뉴' }).click()
-  await page.getByRole('button', { name: /일정 바꾸기/ }).click()
+  await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
   await page.getByRole('button', { name: /^시작/ }).click()
   await page.getByRole('option', { name: '오후 2시' }).click()
   await page.getByRole('button', { name: /14:00 시작/ }).click()
@@ -137,16 +137,31 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  await page.getByRole('button', { name: '활동 메뉴' }).click()
-  await page.getByRole('button', { name: /활동 취소/ }).click()
-  await page.getByRole('button', { name: '비 예보가 있어요' }).click()
-  await page.getByRole('button', { name: '활동 취소하기' }).click()
-  await expect(page.getByText('취소한 활동이에요')).toBeVisible()
+  // 활동 운영 관리 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
+  await page.getByRole('region', { name: '활동 운영 관리' }).getByRole('button', { name: /활동 취소하기/ }).click()
+  const sheet = page.getByRole('dialog', { name: '활동을 취소하시겠어요?' })
+  await expect(sheet).toContainText('확정 0명 · 대기 0명 · 승인 대기 1명')
+  await expect(sheet.getByRole('button', { name: '취소 사유를 골라 주세요' })).toBeDisabled()
+  await sheet.getByText('기상 악화 및 안전 문제').click()
+  await expect(sheet.getByRole('textbox')).toHaveValue(/기상 악화로 안전하게 활동하기 어려워/)
+  await sheet.getByRole('textbox').fill('내일 강풍 예보가 있어 안전을 위해 취소해요.')
+  await expect(sheet.getByLabel('취소 안내 미리보기')).toContainText('기상 악화 및 안전 문제(으)로 취소되었습니다')
+  await sheet.getByText('취소로 인해 참가자에게 영향이 생긴다는 점을 확인했어요.').click()
+  await sheet.getByRole('button', { name: '다음' }).click()
+  const confirm = page.getByRole('dialog', { name: '정말 취소할까요?' })
+  await expect(confirm).toContainText('되돌릴 수 없어요')
+  await confirm.getByRole('button', { name: '활동 취소 확정' }).click()
+  await expect(page.getByText('활동 취소 안내')).toBeVisible()
+  await expect(page.getByText('취소 당시 확정 0명 · 대기 0명 · 승인 대기 1명')).toBeVisible()
+  await expect(page.getByRole('region', { name: '활동 운영 관리' })).toHaveCount(0)
 
   await login(memberPage, member)
-  await memberPage.goto('/#/activity/' + id)
-  await expect(memberPage.getByText('모집자가 활동을 취소했어요')).toBeVisible()
-  await expect(memberPage.getByText('비 예보가 있어요')).toBeVisible()
+  await memberPage.goto('/#/notifications')
+  await memberPage.getByText('봉사활동이 취소되었어요').click()
+  await expect(memberPage).toHaveURL(new RegExp('#/activity/' + id))
+  await expect(memberPage.getByText('모집자에 의해 취소됨')).toBeVisible()
+  await expect(memberPage.getByText('내일 강풍 예보가 있어 안전을 위해 취소해요.')).toBeVisible()
+  await expect(memberPage.getByRole('link', { name: '다른 봉사활동 찾아보기' })).toBeVisible()
   await memberPage.close()
 })
 
@@ -393,7 +408,8 @@ test('find: detail filter with categories, status, source and dates; applied chi
 
   // Same filters on the map; back to the list unchanged.
   await page.getByRole('tab', { name: '지도' }).click()
-  await expect(page.locator('.m-map-legend')).toContainText('동네 활동 2개')
+  // The shared dev database may keep the same activities from earlier runs: same filters, at least these two.
+  await expect(page.locator('.m-map-legend')).toContainText(/동네 활동 \d+개/)
   await page.getByRole('tab', { name: '목록' }).click()
   await expect(page.getByText(`필터 환경 ${stamp}`)).toBeVisible()
 

@@ -26,12 +26,12 @@ public class ActivityController {
         this.changes = changes;
     }
 
-    public record CancelRequest(String reason) {}
+    public record CancelRequest(String reasonCode, String message, String reason) {}
 
     /** Organizer: cancel the whole activity before the start (reason required). Everyone waiting or confirmed is told. */
     @PostMapping("/api/activities/{id}/cancel")
     public Map<String, Object> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody CancelRequest request) {
-        return changes.cancel(Long.parseLong(jwt.getSubject()), id, request.reason());
+        return changes.cancel(Long.parseLong(jwt.getSubject()), id, new ActivityChangeService.Cancel(request.reasonCode(), request.message(), request.reason()));
     }
 
     /** Organizer: move the date/time once, 24 h+ before the current start. Confirmed people keep their place. */
