@@ -51,7 +51,8 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(HttpMethod.GET, "/actuator/health").permitAll();
-                    auth.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll();
+                    auth.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/oauth/complete", "/api/auth/oauth/finish").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/auth/oauth/**").permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/api/activities", "/api/activities/*", "/api/activities/*/my-participation", "/api/places", "/api/places/search", "/api/places/nearby", "/api/places/point", "/api/volunteer-programs").permitAll();
                     if (development) {
                         auth.requestMatchers(HttpMethod.GET, "/api/demo/catalog", "/api/project/status").permitAll();

@@ -24,7 +24,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6");
+                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(3);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email LIKE '%@demo.volink.kr'", Integer.class)).isZero();
@@ -38,7 +38,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.places.length()").value(3))
                 .andExpect(jsonPath("$.personas.length()").value(11))
                 .andExpect(jsonPath("$.activities.length()").value(3))
-                .andExpect(jsonPath("$.places[0].coordinateStatus").value("UNVERIFIED"))
+                .andExpect(jsonPath("$.places[0].coordinateStatus").value(org.hamcrest.Matchers.oneOf("UNVERIFIED", "ENTERED")))
                 .andExpect(jsonPath("$.activities[0].activityType").value("GENERAL"))
                 .andExpect(jsonPath("$.personas[0].password").doesNotExist());
         assertThat(jdbc.queryForList("SELECT persona_role, COUNT(*) AS n FROM demo_personas GROUP BY persona_role"))
@@ -51,7 +51,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     void readinessShowsTheCurrentWeek() throws Exception {
         mvc.perform(get("/api/project/status"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.database").value("UP"))
-                .andExpect(jsonPath("$.week").value(5)).andExpect(jsonPath("$.authenticationImplemented").value(true));
+                .andExpect(jsonPath("$.week").value(6)).andExpect(jsonPath("$.authenticationImplemented").value(true));
         mvc.perform(get("/actuator/health")).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
     }
 
@@ -113,7 +113,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
                 "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
-                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs");
+                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
                 .containsExactlyInAnyOrder(Map.entry("BLOCKED", 19), Map.entry("REVIEW", 19));

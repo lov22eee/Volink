@@ -28,6 +28,7 @@ public class ActivityService {
                    o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint, a.supplies,
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
+                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.reschedule_count AS rescheduleCount, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
                    a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId, u.display_name AS organizerName,
                    ST_Latitude(l.location) AS latitude, ST_Longitude(l.location) AS longitude
@@ -38,6 +39,12 @@ public class ActivityService {
             LEFT JOIN demo_places p ON p.id = a.place_id
             LEFT JOIN activity_locations l ON l.activity_id = a.id
             """;
+    /** For the organizer's own list (home "지금 할 일"): applications to answer, questions without an answer, check-ins. */
+    private static final String TODO = """
+            (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'APPLIED') AS pending,
+            (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'CHECKED_IN') AS checkedIn,
+            (SELECT COUNT(*) FROM activity_posts q WHERE q.activity_id = a.id AND q.kind = 'QUESTION' AND q.deleted_at IS NULL
+                AND NOT EXISTS (SELECT 1 FROM activity_posts r WHERE r.parent_id = q.id AND r.deleted_at IS NULL)) AS unanswered""";
     static final List<String> PUBLIC_STATUSES = List.of("RECRUITING", "IN_PROGRESS", "FINISHED");
 
     private final JdbcTemplate jdbc;
@@ -197,11 +204,13 @@ public class ActivityService {
             long id = ((Number) existing.get("id")).longValue();
             jdbc.update("""
                     UPDATE activities SET category_id = ?, activity_type = ?, organization_id = ?, place_id = ?, meeting_point = ?, supplies = ?,
-                           title = ?, description = ?, starts_at = ?, ends_at = ?, capacity = ?, risk_level = ?, risk_reasons = ?, status = ?, review_note = NULL
+                           title = ?, description = ?, starts_at = ?, ends_at = ?, capacity = ?, risk_level = ?, risk_reasons = ?, status = ?, review_note = NULL,
+                           difficulty = ?, place_kind = ?, newcomer_ok = ?
                     WHERE id = ?
                     """, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint,
                     supplies.isEmpty() ? null : write(supplies), title, description, times[0].startsAt(), times[0].endsAt(), request.capacity(),
-                    result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status, id);
+                    result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
+                    request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), id);
             jdbc.update("DELETE FROM activity_locations WHERE activity_id = ?", id);
             places.locate(id, placeId);
             log(id, userId, (String) existing.get("status"), status, "수정 · 위험도 " + result.level());
@@ -209,12 +218,13 @@ public class ActivityService {
         }
         jdbc.update("""
                 INSERT INTO activities(organizer_id, category_id, activity_type, organization_id, place_id, meeting_point, supplies, title, description,
-                                       starts_at, ends_at, capacity, risk_level, risk_reasons, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       starts_at, ends_at, capacity, risk_level, risk_reasons, status, difficulty, place_kind, newcomer_ok)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, userId, categoryId, institution ? "INSTITUTION" : "GENERAL", organizationId, placeId, meetingPoint.isEmpty() ? null : meetingPoint,
                 supplies.isEmpty() ? null : write(supplies), title, description,
                 times[0].startsAt(), times[0].endsAt(), request.capacity(),
-                result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status);
+                result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
+                request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer());
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         places.locate(id, placeId);
         log(id, userId, null, status, "개설 · 위험도 " + result.level());
@@ -321,7 +331,10 @@ public class ActivityService {
     public Map<String, Object> detail(long id, Long viewerId) {
         Map<String, Object> activity = withSupplies(jdbc.queryForList(SELECT + " WHERE a.id = ?", id)).stream().findFirst().orElseThrow(ActivityService::notFound);
         boolean organizer = viewerId != null && viewerId.equals(((Number) activity.get("organizerId")).longValue());
-        boolean visible = PUBLIC_STATUSES.contains(activity.get("status"))
+        // Week 6: someone who applied still sees an activity the organizer cancelled (with the reason).
+        boolean applied = viewerId != null && "CANCELLED".equals(activity.get("status")) && activity.get("cancelReason") != null
+                && jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND user_id = ?", Integer.class, id, viewerId) > 0;
+        boolean visible = PUBLIC_STATUSES.contains(activity.get("status")) || applied
                 || viewerId != null && !"DELETED".equals(activity.get("status")) && (organizer || auth.findById(viewerId).admin());
         if (!visible) throw notFound();
         // The organizer sees how many applications lock the full edit (week 5 adds applying).
@@ -330,7 +343,7 @@ public class ActivityService {
     }
 
     public List<Map<String, Object>> listMine(long userId) {
-        return withSupplies(jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons, a.review_note AS reviewNote")
+        return withSupplies(jdbc.queryForList(SELECT.replace("a.organizer_id AS organizerId", "a.organizer_id AS organizerId, a.risk_reasons AS riskReasons, a.review_note AS reviewNote, " + TODO)
                 + " WHERE a.organizer_id = ? AND a.status <> 'DELETED' ORDER BY a.created_at DESC, a.id DESC", userId));
     }
 

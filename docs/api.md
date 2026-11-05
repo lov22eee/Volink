@@ -1,6 +1,6 @@
 # API 명세 · 2주차 확정
 
-2026-10-11 확정. **3주차 행(2026-10-13)과 4·5주차 행(2026-10-16, 주차 브랜치)은 구현·테스트 완료**(백엔드 통합 테스트), 6주차 이후 행은 아직 동작하지 않습니다.
+2026-10-11 확정. **3주차 행(2026-10-13), 4·5주차 행(2026-10-16), 6주차 행(2026-11-03 main 기준 이식·고도화)은 구현·테스트 완료**(백엔드 통합 테스트), 7주차 행은 아직 동작하지 않습니다.
 
 ## 공통 규칙
 
@@ -65,11 +65,29 @@
 | 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
 | 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
 | 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
-| 6 | `GET /api/activities/{id}/qr` | 모집자 | 60초 서명 QR 값 |
-| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng}` | 본인(확정자) | 시간(시작 30분 전~30분 후)·QR·200m 확인, 좌표 저장 안 함 |
-| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | 사유 필수 |
-| 6 | `POST /api/participations/{id}/complete` | 모집자 | 종료 후, 체크인한 사람만. 기록 생성 |
-| 6 | `GET /api/me/records` | 본인 | 활동 기록 |
+| 6 | `GET /api/activities/{id}/qr` | 모집자 | **구현.** `{open, token(열려 있을 때만), opensAt, closesAt, validSeconds:60, rotateSeconds:30, expected, checkedIn, toComplete, status}`. 값 = `활동번호.발급초.HMAC`. 화면은 30초마다 새 값을 받아 QR을 바꿈(받은 값은 60초 유효). 남의 활동 404 |
+| 6 | `POST /api/activities/{id}/check-ins` `{qrToken, lat, lng, accuracy?}` | 본인(확정자) | **구현.** 확인 순서: 확정 아니면 403(이미 체크인 409) → 시간 밖 422 `CHECKIN_OUT_OF_TIME` → QR 60초 지남 410 `QR_EXPIRED`, 위조·다른 활동 400 `QR_INVALID` → 위치 없음·장소 좌표 없음·반경 밖 422 `CHECKIN_OUT_OF_RANGE`(“약 Nm 떨어져 있어요”). 휴대폰이 알려 준 GPS 오차는 **최대 50m까지만** 반경에 더해 줌. 좌표 저장 안 함 |
+| 6 | `POST /api/participations/{id}/manual-check-in` `{reason}` | 모집자 | **구현.** 사유 없으면 400, 시작 30분 전~종료 시각, 확정자만 |
+| 6 | `POST /api/participations/{id}/complete` | 모집자 | **구현.** 종료 전·체크인 안 한 사람 409. `activity_records` 생성·`RECORD_CONFIRMED` 알림 |
+| 6 | `POST /api/activities/{id}/complete` | 모집자 | **구현(고도화).** 종료 후 체크인한 사람 **모두** 완료 → `{completed: n}`. 종료 전 409, 남의 활동 404 |
+| 6 | `GET /api/activities/{id}/posts` | 모집자·확정자(체크인·완료·불참 포함)·관리자(읽기만) | **구현(2026-11-04 추가).** 활동 소식 `{canNotice, canAsk, canAnswer, unanswered, notices[], questions[{…, answer}]}`. 이름 일부 가림, 모집자는 ‘모집자’. 그 밖 403 |
+| 6 | `POST /api/activities/{id}/notices` `{body}` | 모집자 | **구현.** 1~500자, 확정·체크인한 참가자에게 알림. 끝난 활동 409 |
+| 6 | `POST /api/activities/{id}/questions` `{body}` | 확정자 | **구현.** 모집자에게 알림. 전화번호·이메일·오픈채팅 링크는 400(연락처 비공개), 한 시간 10개 넘으면 429 |
+| 6 | `POST /api/activity-posts/{id}/answer` `{body}` | 모집자 | **구현.** 질문당 답변 1개(두 번째 409), 질문한 사람에게 알림 |
+| 6 | `DELETE /api/activity-posts/{id}` | 작성자, 질문은 모집자도 | **구현.** 지운 표시만 남기고(답변도 함께) 화면에서 숨김 |
+| 6 | `GET /api/me/saved` · `PUT /api/me/saved/{activityId}` · `DELETE …` | 본인 | **구현(2026-11-05, V10).** 저장한 봉사. 볼 수 없는 활동 PUT은 404, 같은 활동 두 번 저장해도 1개. 목록은 모집 중·진행·종료만 |
+| 6 | `GET /api/community/posts?category=FREE\|QUESTION\|REVIEW&sort=latest\|popular` · `GET …/posts/{id}` · `POST /api/community/posts` `{category, title, body, activityId?}` · `DELETE …/posts/{id}` · `PUT/DELETE …/posts/{id}/like` · `POST …/posts/{id}/comments` `{body}` · `DELETE /api/community/comments/{id}` · `GET /api/community/reviewable` | 회원(쓰기는 관리자·제한 계정 불가) | **구현(2026-11-05, V11).** 제목 2~60자·내용 5~2000자·댓글 1~500자, 연락처 400, 글 하루 10개·댓글 한 시간 30개 429. REVIEW는 내 활동 기록(VALID)이 있는 활동만(아니면 400 `activityId`). 이름 가림, 지우기는 작성자·관리자(표시만 남김). 댓글은 글쓴이에게 `COMMUNITY_COMMENT` 알림 |
+| 6 | `GET /api/community/me` · `PUT /api/community/me` `{nickname, agree}` | 회원 | **구현(2026-11-05, V12).** 커뮤니티 닉네임 2~10자(한글·영문·숫자·공백), 중복 409 `NICKNAME_TAKEN`, ‘관리자·운영자·volink’ 등 사칭 400, 30일에 한 번 변경(409 `NICKNAME_CHANGE_LIMIT`), 규칙 동의 필수. 둘 다 없으면 글·댓글 403 `COMMUNITY_SETUP_REQUIRED` |
+| 6 | `POST /api/activities/{id}/questions` `{body, privately?}` · `POST /api/activities/{id}/posts/seen` | 확정자 / 모집자·확정자 | **보완(2026-11-05, V13).** `privately`면 질문과 답변을 질문한 사람·모집자·관리자만 봄. `seen`은 소식을 연 시각 기록(204). 목록 응답에 `newNotices`·`newAnswers`(마지막으로 연 뒤 새 글)·`audience`(확정 인원), 각 글 `private`·`unseen`, 모집자에게만 공지별 `readCount` |
+| 6 | `GET /api/activities/{id}/qr` → `code`·`codeSecondsLeft` · `POST /api/activities/{id}/check-ins` `{code, lat, lng, accuracy?}` · `POST /api/activities/{id}/manual-check-ins` `{participationIds[], reason}` | 모집자 / 확정자 / 모집자 | **구현(2026-11-05, V14).** 출석 코드 4자리는 QR과 같은 비밀키로 30초 구간마다 만들고 직전 구간까지 인정. 코드 체크인은 QR과 같은 확인(확정·시간·200m), method `CODE`. 틀린 코드는 `CODE_WRONG`으로 기록, 10분에 5번이면 429 `CODE_LOCKED`. 여러 명 수동 확인은 1~10명, 사유 하나, 전부 되거나 전부 안 됨 |
+| 6 | `GET /api/auth/oauth/providers` · `GET /api/auth/oauth/{kakao\|google}/start` → 공급자 → `GET …/callback` · `POST /api/auth/oauth/finish` `{code}` · `POST /api/auth/oauth/complete` `{ticket, name, birthDate, interests, agreedNotice}` | 공개 | **구현(2026-11-05, V15).** 개인(GENERAL) 회원만. 연결된 계정은 콜백이 `/#/oauth?code=`(60초 1회용)로 보내고 `finish`가 세션(로그인과 같은 응답·리프레시 쿠키). 처음이면 `/#/social-signup?ticket=`(30분)으로 가입 양식(만 14세·관심 분야·안내 동의) → `complete`. state는 서명+쿠키(nonce)로 묶음, 실패는 `/#/login?oauth=코드`. 공급자 이메일은 ‘인증됨’이고 아무도 안 쓸 때만 저장, 아니면 `…@social.volink.invalid`. 키 없으면 `providers`가 false |
+| 6 | `GET /api/me/records` | 본인 | **구현.** 제목·일시·출석 방법·완료 확인 시각·상태. Volink 자체 기록이며 공식 봉사실적이 아님 |
+| 6 | `POST /api/activities/{id}/cancel` `{reason}` | 모집자 | **구현(2026-11-04, V9).** 시작 전·DRAFT/RECRUITING만, 사유 2~200자. 활동 CANCELLED + `cancel_reason`, 남은 신청 모두 CANCELLED(본인 취소 횟수는 안 늘림)·알림. 신청했던 사람은 상세에서 사유를 볼 수 있음 |
+| 6 | `POST /api/activities/{id}/reschedule` `{date, time, durationMinutes, reason}` | 모집자 | **구현(V9).** 모집 중·활동마다 1회(409 `RESCHEDULE_USED`)·지금 시작 24시간 전까지(409 `RESCHEDULE_TOO_LATE`). 새 시간은 만들기 규칙과 같고 해 진 뒤 끝나면 400. 확정은 유지, 신청·대기 모두 알림, 하루 전·체크인 알림은 새 시간 기준으로 다시 |
+| 6 | `POST /api/participations/{id}/late` `{minutes: 10\|20\|30}` | 본인(확정자) | **구현(V9).** 시작 3시간 전~종료, 모집자에게 알림, 신청자 목록에 `lateMinutes` |
+| 6 | `POST /api/participations/{id}/cancel` `{reason?}` | 본인 | **보완(V9).** ‘못 가요’: 100자 이내 이유를 모집자 알림에 붙임(본문 없어도 됨) |
+| 6 | 활동 응답 `difficulty`(EASY/NORMAL/HARD)·`placeKind`(OUTDOOR/INDOOR/MIXED)·`newcomerOk` | — | **구현(V9).** 만들기·수정 본문에 선택(기본 EASY·OUTDOOR·true). 내 활동 목록에 `pending`·`unanswered`·`checkedIn`. 스케줄러가 시작 24시간 전 확정자에게 ‘내일 함께해요’ 알림 1회 |
+| 6 | (스케줄러, 1분마다) | — | **구현.** 시작 24시간 전 승인 대기 신청이 있으면 모집자에게 1번 안내 · 시작 30분 전 체크인 열림을 확정자·모집자에게 1번 안내 · 시작 시 RECRUITING→IN_PROGRESS, 남은 승인 대기·대기·제안은 EXPIRED + 당사자 알림 · 종료 시 FINISHED, 체크인 없는 확정자 NO_SHOW + 모집자 안내 |
 | 7 | `POST /api/records/{id}/appeals` | 본인 | 완료 확인 7일 안, 지나면 410 |
 | 7 | `POST /api/reports` · `POST /api/reports/{id}/evidences` | 참여자·모집자 | 신고, 증빙 jpeg·png·pdf 10MB·최대 3개, 메타데이터 제거 후 비공개 S3 |
 | 7 | `GET /api/admin/reports` · `POST /api/admin/reports/{id}/resolve` | 관리자 | 보류·재개·무효, 사유 필수 |

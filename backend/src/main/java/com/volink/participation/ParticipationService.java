@@ -101,6 +101,14 @@ public class ParticipationService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> cancel(long userId, long participationId) {
+        return cancel(userId, participationId, null);
+    }
+
+    /** reason (optional, up to 100 characters) = "못 가요" with a word for the organizer. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> cancel(long userId, long participationId, String rawReason) {
+        String reason = rawReason == null ? "" : rawReason.trim();
+        if (reason.length() > 100) throw ApiException.validation(Map.of("reason", "이유는 100자 이내로 적어 주세요."));
         Map<String, Object> row = own(userId, participationId);
         Activity activity = lock(((Number) row.get("activity_id")).longValue());
         String from = status(participationId);
@@ -109,10 +117,30 @@ public class ParticipationService {
         if (!now().isBefore(activity.startsAt())) throw conflict("INVALID_STATE", "시작한 활동은 취소할 수 없습니다.");
         jdbc.update("UPDATE participations SET status = 'CANCELLED', wait_order = NULL, offer_expires_at = NULL, cancel_count = cancel_count + 1, updated_at = ? WHERE id = ?",
                 now(), participationId);
-        log(activity.id(), participationId, userId, from, "CANCELLED", "본인 취소");
+        log(activity.id(), participationId, userId, from, "CANCELLED", reason.isEmpty() ? "본인 취소" : "본인 취소 · " + reason);
         if ("CONFIRMED".equals(from)) notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "참가 취소",
-                activity.title() + " · 확정된 참가자 한 명이 취소했습니다.", activity.link());
+                activity.title() + " · 확정된 참가자 한 명이 못 온다고 알렸어요." + (reason.isEmpty() ? "" : " 이유: " + reason), activity.link());
         if (SEAT.contains(from)) offerNext(activity, userId);
+        return viewer(activity.id(), userId);
+    }
+
+    /**
+     * "늦어요": a confirmed person tells the organizer they will be 10, 20 or 30 minutes late. From 3 hours before the
+     * start until the end; it changes nothing else (check-in stays open until 30 minutes after the start).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> late(long userId, long participationId, Integer minutes) {
+        if (minutes == null || !List.of(10, 20, 30).contains(minutes)) throw ApiException.validation(Map.of("minutes", "10분, 20분, 30분 중에서 골라 주세요."));
+        Map<String, Object> row = own(userId, participationId);
+        Activity activity = lock(((Number) row.get("activity_id")).longValue());
+        if (!"CONFIRMED".equals(status(participationId))) throw conflict("INVALID_STATE", "참가가 확정된 사람만 알릴 수 있습니다.");
+        LocalDateTime ends = jdbc.queryForObject("SELECT ends_at FROM activities WHERE id = ?", LocalDateTime.class, activity.id());
+        if (now().isBefore(activity.startsAt().minusHours(3)) || !now().isBefore(ends))
+            throw conflict("INVALID_STATE", "시작 3시간 전부터 알릴 수 있어요.");
+        jdbc.update("UPDATE participations SET late_minutes = ?, late_at = ?, updated_at = ? WHERE id = ?", minutes, now(), now(), participationId);
+        log(activity.id(), participationId, userId, "CONFIRMED", "LATE", "약 " + minutes + "분 늦음");
+        String name = mask(jdbc.queryForObject("SELECT display_name FROM users WHERE id = ?", String.class, userId));
+        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", name + " 님이 약 " + minutes + "분 늦어요", activity.title() + " · 도착하면 QR로 체크인해요.", activity.link());
         return viewer(activity.id(), userId);
     }
 
@@ -145,7 +173,9 @@ public class ParticipationService {
         return jdbc.queryForList("""
                 SELECT p.id, p.activity_id AS activityId, a.title, pl.name AS placeName,
                        DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
-                       p.status, p.wait_order AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt
+                       p.status, p.wait_order AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
+                       TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.status AS activityStatus, a.cancel_reason AS cancelReason,
+                       a.organizer_id AS organizerId, p.late_minutes AS lateMinutes
                 FROM participations p JOIN activities a ON a.id = p.activity_id LEFT JOIN demo_places pl ON pl.id = a.place_id
                 WHERE p.user_id = ?""" + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
                 status == null || status.isBlank() ? new Object[]{userId} : new Object[]{userId, status.trim()});
@@ -155,7 +185,7 @@ public class ParticipationService {
     public Map<String, Object> viewer(long activityId, Long userId) {
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
         Map<String, Object> mine = userId == null ? null : jdbc.queryForList("""
-                SELECT id, status, wait_order AS waitOrder, DATE_FORMAT(offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, cancel_count AS cancelCount
+                SELECT id, status, wait_order AS waitOrder, DATE_FORMAT(offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, cancel_count AS cancelCount, late_minutes AS lateMinutes
                 FROM participations WHERE activity_id = ? AND user_id = ?""", activityId, userId).stream().findFirst().orElse(null);
         result.put("participation", mine);
         return result;
@@ -178,9 +208,12 @@ public class ParticipationService {
         if (((Number) activity.get("organizer_id")).longValue() != organizerId) throw activityNotFound();
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
                 SELECT p.id, u.display_name AS name, p.status, p.wait_order AS waitOrder,
-                       DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt
-                FROM participations p JOIN users u ON u.id = p.user_id WHERE p.activity_id = ?
-                ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'OFFERED', 'WAITLISTED') = 0, FIELD(p.status, 'APPLIED', 'CONFIRMED', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
+                       DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt,
+                       c.method AS checkInMethod, c.reason AS checkInReason, DATE_FORMAT(c.checked_at, '%H:%i') AS checkedInAt,
+                       p.late_minutes AS lateMinutes
+                FROM participations p JOIN users u ON u.id = p.user_id LEFT JOIN check_ins c ON c.participation_id = p.id WHERE p.activity_id = ?
+                ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED') = 0,
+                         FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
                 """), activityId);
         rows.forEach(row -> row.put("name", mask((String) row.get("name"))));
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
@@ -304,7 +337,8 @@ public class ParticipationService {
     }
 
     private int seatsTaken(long activityId) {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND status IN ('CONFIRMED', 'OFFERED')", Integer.class, activityId);
+        // A checked-in or completed person still holds their seat (week 6), so a late approval cannot overfill the activity.
+        return jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND status IN ('CONFIRMED', 'OFFERED', 'CHECKED_IN', 'COMPLETED')", Integer.class, activityId);
     }
 
     private int nextWaitOrder(long activityId) {

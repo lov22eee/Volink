@@ -48,8 +48,15 @@ public class ParticipationController {
     }
 
     @PostMapping("/api/participations/{id}/cancel")
-    public Map<String, Object> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
-        return participations.cancel(user(jwt), id);
+    public Map<String, Object> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody(required = false) Decision request) {
+        return participations.cancel(user(jwt), id, request == null ? null : request.reason());
+    }
+
+    public record Late(Integer minutes) {}
+
+    @PostMapping("/api/participations/{id}/late")
+    public Map<String, Object> late(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody Late request) {
+        return participations.late(user(jwt), id, request.minutes());
     }
 
     @PostMapping("/api/participations/{id}/accept-offer")

@@ -1,12 +1,23 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 
 const developmentCopy = /졸업작품|경동대학교|1주차|2주차|WEEK|발표|페르소나|API|DB|개발 진행|사용자 흐름/
 
 const examples = '.activity-card[data-kind="example"]'
 // Evidence screenshots of the current week; earlier weeks' files stay as they were.
 const shot = (name: string) => `../docs/screenshots/week-05-${name}.png`
+const shot6 = (name: string) => `../docs/screenshots/week-06-${name}.png`
+
+// Local dev DB only: move an activity's time so check-in and completion can be tested now (the API never allows this).
+// E2E_MYSQL_DATABASE overrides the database when the backend runs against another one than .env says.
+function moveActivity(id: string, startMinutesFromNow: number) {
+  const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter(row => row.includes('=') && !row.startsWith('#')).map(row => [row.slice(0, row.indexOf('=')), row.slice(row.indexOf('=') + 1).trim()]))
+  const korea = (minutes: number) => new Date(Date.now() + 9 * 3_600_000 + minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ')
+  const sql = `UPDATE activities SET starts_at = '${korea(startMinutesFromNow)}', ends_at = '${korea(startMinutesFromNow + 60)}' WHERE id = ${Number(id)}`
+  execFileSync('docker', ['compose', 'exec', '-T', '-e', 'MYSQL_PWD=' + env.MYSQL_PASSWORD, 'db', 'mysql', '-u', env.MYSQL_USER, process.env.E2E_MYSQL_DATABASE ?? env.MYSQL_DATABASE, '-e', sql], { cwd: '..' })
+}
 const password = 'example123'
 
 // The demo admin account exists only in the local dev environment; its password lives in the ignored ../.env.
@@ -787,4 +798,216 @@ test('signed-in home shows my status and keeps a cancelled activity apart with a
   await cancelled.getByRole('link', { name: '다시 신청' }).click()
   await expect(page).toHaveURL(new RegExp(link! + '$'))
   await expect(page.getByRole('button', { name: /참가 신청/ })).toBeVisible()
+})
+
+// Week 6: nobody presses "start" — check-in opens 30 min before. The organizer shows a rotating QR, the participant scans it
+// with their own phone (opens the check-in page, comes back after login), the server checks time + QR + location (200 m),
+// and after the end the organizer completes everyone who checked in, which makes the participant's activity record.
+test('a confirmed participant checks in with the organizer QR on site and gets an activity record after completion', async ({ page, browser }) => {
+  const place = { lat: 37.81, lng: 127.09 }
+  await loginAs(page, 'admin-01@demo.volink.kr', demoPassword())
+  await page.goto('/#/admin/places')
+  const places = page.getByRole('region', { name: '장소 좌표' })
+  await places.getByLabel('독바위공원 좌표').fill(`${place.lat}, ${place.lng}`)
+  await places.getByRole('listitem').filter({ hasText: '독바위공원' }).getByRole('button', { name: '저장' }).click()
+  await expect(page.getByRole('status')).toContainText('좌표를 저장했습니다')
+  await signOut(page)
+
+  const organizer = await signup(page)
+  const title = '체크인 시험 활동 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.', '10:00', 2)
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = (await page.getByRole('link', { name: /모집글 보기/ }).getAttribute('href'))!
+  const activityId = link.split('/').pop()!
+  await signOut(page)
+  const member = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '승인' }).click()
+  await expect(page.locator('.seat-line')).toContainText('확정 1')
+  // A week away: no attendance panel yet.
+  await expect(page.getByRole('region', { name: '출석 체크' })).toHaveCount(0)
+
+  // Starts in 10 minutes: the QR is live, rotating, with the attendance count.
+  moveActivity(activityId, 10)
+  await page.reload()
+  const attendance = page.getByRole('region', { name: '출석 체크' })
+  const qr = attendance.getByRole('img', { name: '체크인 QR' })
+  await expect(qr).toBeVisible()
+  await expect(attendance).toContainText('0 / 1명 출석')
+  await expect(attendance).toContainText('초 뒤 새 QR로 바뀌어요')
+  const url = (await qr.getAttribute('data-url'))!
+  expect(url).toContain('#/checkin/' + activityId + '?t=')
+  await attendance.screenshot({ path: shot6('attendance') })
+  await page.screenshot({ path: shot6('organizer'), fullPage: true })
+  await attendance.getByRole('button', { name: 'QR 크게 보기' }).first().click()
+  await expect(page.getByRole('dialog', { name: '출석 QR 크게 보기' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: '출석 QR 크게 보기' })).toHaveCount(0)
+
+  // The participant's phone: scanning opens the check-in page; not signed in → login → straight back to check-in.
+  const onSite = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 390, height: 844 }, geolocation: { latitude: place.lat + 0.0005, longitude: place.lng }, permissions: ['geolocation'] })
+  const phone = await onSite.newPage()
+  await phone.goto(url.replace(/^https?:\/\/[^/]+/, 'http://127.0.0.1:5173'))
+  await expect(phone.getByRole('heading', { name: '로그인이 필요합니다' })).toBeVisible()
+  await phone.getByRole('link', { name: '로그인', exact: true }).first().click()
+  await phone.getByRole('textbox', { name: '이메일', exact: true }).fill(member)
+  await phone.getByRole('textbox', { name: '비밀번호', exact: true }).fill(password)
+  await phone.getByRole('button', { name: '로그인', exact: true }).click()
+  await expect(phone.getByRole('heading', { name: title })).toBeVisible()
+  await phone.screenshot({ path: shot6('checkin-ready'), fullPage: true })
+  await phone.getByRole('button', { name: '위치 확인하고 체크인' }).click()
+  await expect(phone.getByRole('heading', { name: /체크인했어요/ })).toBeVisible()
+  await phone.screenshot({ path: shot6('checkin-done'), fullPage: true })
+  // The participant's detail now says they are in.
+  await phone.goto('/' + link)
+  await expect(phone.locator('.my-status')).toHaveText('출석 완료')
+  await expect(phone.getByRole('button', { name: '신청 취소' })).toHaveCount(0)
+
+  // The organizer's screen follows along; the activity ends; complete everyone at once.
+  await page.reload()
+  await expect(page.getByRole('region', { name: '출석 체크' })).toContainText('1 / 1명 출석')
+  await expect(page.getByRole('region', { name: '신청자 관리' })).toContainText('QR·위치 확인')
+  moveActivity(activityId, -90)
+  await page.reload()
+  await page.getByRole('region', { name: '출석 체크' }).getByRole('button', { name: '체크인한 1명 모두 완료' }).click()
+  await expect(page.getByRole('status')).toContainText('1명의 활동 완료를 확인했어요')
+  await expect(page.getByRole('region', { name: '신청자 관리' })).toContainText('활동 완료')
+
+  // The participant's record: Volink's own, never shown as official.
+  await phone.goto('/#/mine')
+  await phone.getByRole('tab', { name: '활동 기록' }).click()
+  await expect(phone.getByRole('tabpanel')).toContainText(title)
+  await expect(phone.getByRole('tabpanel')).toContainText('QR·위치로 출석')
+  await expect(phone.getByRole('tabpanel')).toContainText('공식 봉사실적(1365)이 아니며')
+  await phone.screenshot({ path: shot6('records'), fullPage: true })
+  await onSite.close()
+})
+
+test('a participant outside the radius is refused with the distance, and the organizer checks them in by hand with a reason', async ({ page, browser }) => {
+  const organizer = await signup(page)
+  const title = '수동 확인 시험 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.', '10:00', 2)
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = (await page.getByRole('link', { name: /모집글 보기/ }).getAttribute('href'))!
+  const activityId = link.split('/').pop()!
+  await signOut(page)
+  const member = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  await signOut(page)
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '승인' }).click()
+  await expect(page.locator('.seat-line')).toContainText('확정 1')
+  moveActivity(activityId, 10)
+  await page.reload()
+  const url = (await page.getByRole('img', { name: '체크인 QR' }).getAttribute('data-url'))!
+
+  // About 1 km away.
+  const far = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 390, height: 844 }, geolocation: { latitude: 37.82, longitude: 127.09 }, permissions: ['geolocation'] })
+  const phone = await far.newPage()
+  await loginAs(phone, member, password)
+  // Before scanning, the participant's detail says check-in is open and how to do it.
+  await phone.goto('/' + link)
+  await expect(phone.getByRole('note').filter({ hasText: '체크인이 열렸어요' })).toBeVisible()
+  await phone.screenshot({ path: shot6('participant'), fullPage: true })
+  await phone.goto(url.replace(/^https?:\/\/[^/]+/, 'http://127.0.0.1:5173'))
+  await phone.getByRole('button', { name: '위치 확인하고 체크인' }).click()
+  await expect(phone.getByRole('alert')).toContainText('떨어져 있어요')
+  await expect(phone.getByRole('alert')).toContainText('200m 안에서')
+  await expect(phone.getByRole('button', { name: '다시 시도하기' })).toBeVisible()
+  await far.close()
+
+  // The participant's detail before checking in shows how to do it.
+  const applicants = page.getByRole('region', { name: '신청자 관리' })
+  await applicants.getByRole('button', { name: '수동 확인' }).click()
+  await expect(applicants.getByRole('button', { name: '확인', exact: true })).toBeDisabled()
+  await applicants.getByRole('button', { name: 'GPS가 잡히지 않음' }).click()
+  await applicants.getByRole('button', { name: '확인', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('출석을 수동으로 확인했어요')
+  await expect(applicants).toContainText('수동 확인')
+  await expect(applicants).toContainText('GPS가 잡히지 않음')
+  await applicants.screenshot({ path: shot6('manual') })
+})
+
+// 활동 소식: the organizer's notices and the confirmed participants' Q&A, without contact details.
+test('the organizer posts a notice, a confirmed participant asks, the organizer answers, and others do not see the thread', async ({ page }) => {
+  const organizer = await signup(page)
+  const title = '활동 소식 시험 ' + Date.now()
+  await fillActivity(page, title, '공개된 산책로를 걸으며 주변의 가벼운 쓰레기를 함께 정리합니다.')
+  await page.getByRole('button', { name: '활동 등록' }).click()
+  const link = (await page.getByRole('link', { name: /모집글 보기/ }).getAttribute('href'))!
+  await signOut(page)
+  const member = await signup(page)
+  await page.goto('/' + link)
+  await page.getByRole('button', { name: /참가 신청/ }).click()
+  await expect(page.locator('.my-status')).toHaveText('승인 대기 중')
+  // Not confirmed yet: no thread.
+  await expect(page.getByRole('region', { name: '활동 소식' })).toHaveCount(0)
+  await signOut(page)
+
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  await page.getByRole('region', { name: '신청자 관리' }).getByRole('button', { name: '승인' }).click()
+  await expect(page.locator('.seat-line')).toContainText('확정 1')
+  const news = page.getByRole('region', { name: '활동 소식' })
+  await news.getByRole('textbox', { name: '공지 내용' }).fill('장갑은 제가 챙겨갈게요. 정문 안내판 앞에서 만나요.')
+  await news.getByRole('button', { name: '공지 올리기' }).click()
+  await expect(page.getByRole('status')).toContainText('공지를 올렸어요')
+  await expect(news.getByRole('list', { name: '공지' })).toContainText('장갑은 제가 챙겨갈게요')
+  await signOut(page)
+
+  await loginAs(page, member, password)
+  await page.goto('/' + link)
+  const mine = page.getByRole('region', { name: '활동 소식' })
+  await expect(mine.getByRole('list', { name: '공지' })).toContainText('장갑은 제가 챙겨갈게요')
+  await mine.getByRole('textbox', { name: '질문 내용' }).fill('제 번호 010-1234-5678로 알려 주세요')
+  await mine.getByRole('button', { name: '질문하기' }).click()
+  await expect(mine.getByRole('status')).toContainText('연락처는 올릴 수 없어요')
+  await mine.getByRole('textbox', { name: '질문 내용' }).fill('주차할 곳이 있나요?')
+  await mine.getByRole('button', { name: '질문하기' }).click()
+  await expect(page.getByRole('status')).toContainText('질문을 남겼어요')
+  await expect(mine.getByRole('list', { name: '질문과 답변' })).toContainText('답변을 기다리고 있어요')
+  await signOut(page)
+
+  await loginAs(page, organizer, password)
+  await page.goto('/' + link)
+  const thread = page.getByRole('region', { name: '활동 소식' })
+  await expect(thread).toContainText('답변할 질문 1')
+  await thread.getByRole('button', { name: '답변하기' }).click()
+  await thread.getByRole('textbox', { name: '답변 내용' }).fill('공영주차장 1시간 무료예요.')
+  await thread.getByRole('button', { name: '답변 달기' }).click()
+  await expect(page.getByRole('status')).toContainText('답변을 달았어요')
+  await expect(thread.getByRole('list', { name: '질문과 답변' })).toContainText('모집자 답변')
+  await thread.screenshot({ path: shot6('news-organizer') })
+  await signOut(page)
+
+  await loginAs(page, member, password)
+  await page.goto('/' + link)
+  await expect(page.getByRole('region', { name: '활동 소식' }).getByRole('list', { name: '질문과 답변' })).toContainText('공영주차장 1시간 무료예요.')
+  await page.getByRole('region', { name: '활동 소식' }).screenshot({ path: shot6('news-participant') })
+})
+
+test('Kakao and Google buttons are for personal members and say they are not ready without keys', async ({ page }) => {
+  await page.goto('/#/login')
+  await page.getByRole('button', { name: '카카오로 로그인' }).click()
+  await expect(page.getByText(/카카오 로그인은 준비 중이에요/)).toBeVisible()
+  await page.goto('/#/signup')
+  await expect(page.getByRole('button', { name: '구글로 시작하기' })).toBeVisible()
+  await page.getByRole('radio', { name: /기관회원/ }).check()
+  await expect(page.getByRole('button', { name: '구글로 시작하기' })).toHaveCount(0)
+  // A broken or old signup link is refused by the server.
+  await page.goto('/#/social-signup?provider=kakao&ticket=broken')
+  await page.getByRole('textbox', { name: '이름' }).fill('간편 회원')
+  await page.getByLabel(/생년월일/).fill('2000-01-01')
+  await page.getByRole('checkbox', { name: '환경 정화' }).check()
+  await page.getByRole('checkbox', { name: /공식 봉사실적/ }).check()
+  await page.getByRole('button', { name: '가입하고 시작하기' }).click()
+  await expect(page.getByText(/가입 시간이 지났어요/)).toBeVisible()
 })

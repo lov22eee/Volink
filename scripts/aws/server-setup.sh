@@ -59,6 +59,12 @@ keys=/etc/volink/api-keys.env
 install -m 600 /dev/null "$keys"
 if [ -s /etc/volink/kakao_rest_key ]; then echo "KAKAO_REST_KEY=$(tr -d '[:space:]' < /etc/volink/kakao_rest_key)" >> "$keys"; fi
 if [ -s /etc/volink/data_go_kr_key ]; then echo "DATA_GO_KR_KEY=$(tr -d '[:space:]' < /etc/volink/data_go_kr_key)" >> "$keys"; fi
+# Kakao / Google login: Kakao's client id is the REST key, only when kakao_login_on says y.
+if [ -s /etc/volink/kakao_rest_key ] && grep -qi '^y' /etc/volink/kakao_login_on 2>/dev/null; then echo "KAKAO_LOGIN_CLIENT_ID=$(tr -d '[:space:]' < /etc/volink/kakao_rest_key)" >> "$keys"; fi
+if [ -s /etc/volink/kakao_login_secret ]; then echo "KAKAO_LOGIN_CLIENT_SECRET=$(tr -d '[:space:]' < /etc/volink/kakao_login_secret)" >> "$keys"; fi
+if [ -s /etc/volink/google_client_id ]; then echo "GOOGLE_CLIENT_ID=$(tr -d '[:space:]' < /etc/volink/google_client_id)" >> "$keys"; fi
+if [ -s /etc/volink/google_client_secret ]; then echo "GOOGLE_CLIENT_SECRET=$(tr -d '[:space:]' < /etc/volink/google_client_secret)" >> "$keys"; fi
+if [ -s /etc/volink/oauth_redirect_base ]; then echo "OAUTH_REDIRECT_BASE=$(tr -d '[:space:]' < /etc/volink/oauth_redirect_base)" >> "$keys"; fi
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
 Description=Volink API

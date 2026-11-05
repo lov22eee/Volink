@@ -66,6 +66,8 @@ public class ActivityRules {
         String description = trim(request.description());
         if (description.length() < 20 || description.length() > 2000) errors.put("description", "활동 소개는 20~2000자로 적어 주세요.");
         if (!Boolean.TRUE.equals(request.safetyConfirmed())) errors.put("safety", "안전 안내를 확인해 주세요.");
+        if (!java.util.List.of("EASY", "NORMAL", "HARD").contains(request.difficultyOrDefault())) errors.put("difficulty", "활동 강도를 골라 주세요.");
+        if (!java.util.List.of("OUTDOOR", "INDOOR", "MIXED").contains(request.placeKindOrDefault())) errors.put("placeKind", "실내·야외를 골라 주세요.");
         return errors;
     }
 

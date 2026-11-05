@@ -36,7 +36,11 @@ jobs:
           ./scripts/check-dev.sh
       - name: Browser scenarios
         working-directory: frontend
-        run: npm run test:e2e
+        run: |
+          # The Android app screens (vite --mode app) are tested on their own port next to the web site.
+          nohup npm run dev:app > "$RUNNER_TEMP/vite-app.log" 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:5174/ > /dev/null && break; sleep 1; done
+          npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
