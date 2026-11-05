@@ -8,6 +8,7 @@ import { CategoryCover } from '../covers'
 import { range } from '../explore'
 import type { Program } from '../explore'
 import { currentPosition, remembered } from '../location'
+import { StatsBanner } from './stats'
 import type { PostSummary } from './community'
 import { phaseOf, useNow } from '../checkin'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft, startsAt } from './cards'
@@ -93,6 +94,8 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
     <TopBar brand actions={actions} />
     <div className="m-body">
       <div className="m-hello"><p>{user.name}님, 반가워요</p><h1>작은 참여가 큰 변화를 만들어요</h1></div>
+
+      <StatsBanner />
 
       {todos.length > 0 && <section className="m-todo" aria-label="지금 할 일">{todos.slice(0, 4).map(todo =>
         <a key={todo.key} href={todo.href} className={'m-todo-item' + (todo.tone === 'hot' ? ' hot' : '')}><MIcon name={todo.icon} size={20} /><span>{todo.text}</span><MIcon name="chevron" size={17} /></a>)}</section>}
