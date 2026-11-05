@@ -53,6 +53,43 @@ public class QrService {
         return age > VALID.getSeconds() ? Result.EXPIRED : Result.VALID;
     }
 
+    /** 4-digit attendance code for the 30-second slot the QR is in (same key, so it cannot be guessed from outside). */
+    public String code(long activityId, long slot) {
+        byte[] mac = raw(activityId + ":code:" + slot);
+        int value = ((mac[0] & 0x7f) << 24 | (mac[1] & 0xff) << 16 | (mac[2] & 0xff) << 8 | (mac[3] & 0xff)) % 10000;
+        return String.format("%04d", value);
+    }
+
+    public long slot() {
+        return clock.instant().getEpochSecond() / CODE_SLOT_SECONDS;
+    }
+
+    /** Seconds until the current code changes. */
+    public long codeSecondsLeft() {
+        return CODE_SLOT_SECONDS - clock.instant().getEpochSecond() % CODE_SLOT_SECONDS;
+    }
+
+    public static final long CODE_SLOT_SECONDS = 30;
+
+    /** The current code or the one before it (a code read just before it changed still works, like the 60 s QR). */
+    public boolean checkCode(String code, long activityId) {
+        if (code == null || !code.trim().matches("\\d{4}")) return false;
+        long slot = slot();
+        String value = code.trim();
+        return MessageDigest.isEqual(value.getBytes(StandardCharsets.US_ASCII), code(activityId, slot).getBytes(StandardCharsets.US_ASCII))
+                || MessageDigest.isEqual(value.getBytes(StandardCharsets.US_ASCII), code(activityId, slot - 1).getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private byte[] raw(String body) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(key);
+            return mac.doFinal(body.getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException impossible) {
+            throw new IllegalStateException(impossible);
+        }
+    }
+
     private String sign(String body) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

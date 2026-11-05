@@ -20,7 +20,8 @@ public class CheckInController {
         this.checkIns = checkIns;
     }
 
-    public record CheckInRequest(String qrToken, Double lat, Double lng, Double accuracy) {}
+    public record CheckInRequest(String qrToken, String code, Double lat, Double lng, Double accuracy) {}
+    public record ManyRequest(List<Long> participationIds, String reason) {}
     public record Reason(String reason) {}
 
     @GetMapping("/api/activities/{id}/qr")
@@ -31,7 +32,7 @@ public class CheckInController {
     @PostMapping("/api/activities/{id}/check-ins")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> checkIn(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody CheckInRequest request) {
-        return checkIns.checkIn(user(jwt), id, request.qrToken(), request.lat(), request.lng(), request.accuracy());
+        return checkIns.checkIn(user(jwt), id, request.qrToken(), request.code(), request.lat(), request.lng(), request.accuracy());
     }
 
     /** Organizer, after the end: complete everyone who checked in. */
@@ -44,6 +45,12 @@ public class CheckInController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void manual(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody(required = false) Reason reason) {
         checkIns.manual(user(jwt), id, reason == null ? null : reason.reason());
+    }
+
+    /** Organizer: several confirmed people with one reason (all or nothing). */
+    @PostMapping("/api/activities/{id}/manual-check-ins")
+    public Map<String, Object> manualMany(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody ManyRequest request) {
+        return checkIns.manualMany(user(jwt), id, request.participationIds(), request.reason());
     }
 
     @PostMapping("/api/participations/{id}/complete")

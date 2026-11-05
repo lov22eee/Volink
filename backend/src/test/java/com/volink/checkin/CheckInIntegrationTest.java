@@ -180,11 +180,47 @@ class CheckInIntegrationTest extends ApiTestSupport {
         checkIns.advance();
         checkIns.advance();
         mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.items[0].title").value("체크인이 열렸어요"));
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE title = '체크인이 열렸어요'", Integer.class)).isEqualTo(1);
+        // Count only this activity's reminders: other tests leave activities in the window too.
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE title = '체크인이 열렸어요' AND link_path = ?", Integer.class, "#/activity/" + activity)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = '출석 QR을 띄울 시간이에요'", Integer.class, organizerId)).isEqualTo(1);
         startsIn(-1);
         checkIns.advance();
         mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + late)).andExpect(jsonPath("$.items[0].title").value("승인 전에 활동이 시작됐어요"));
+    }
+
+    @Test
+    void theFourDigitCodeChecksInLikeTheQrAndWrongGuessesAreLimited() throws Exception {
+        startsIn(10);
+        String code = json.readTree(mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
+                .andExpect(jsonPath("$.code").isString()).andExpect(jsonPath("$.codeSecondsLeft").isNumber()).andReturn().getResponse().getContentAsString()).get("code").asText();
+        String wrong = code.equals("0000") ? "1111" : "0000";
+        // Location is still checked with a code.
+        byCode(member, code, LAT + 0.3 * DEG_PER_KM, LNG).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("CHECKIN_OUT_OF_RANGE"));
+        for (int i = 0; i < CheckInService.CODE_TRIES; i++) byCode(member, wrong, LAT, LNG).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("CODE_INVALID"));
+        byCode(member, code, LAT, LNG).andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("CODE_LOCKED"));
+        String other = joinConfirmed();
+        byCode(other, code, LAT, LNG).andExpect(status().isCreated()).andExpect(jsonPath("$.method").value("CODE"));
+    }
+
+    @Test
+    void severalPeopleCanBeCheckedInByHandWithOneReason() throws Exception {
+        startsIn(10);
+        String other = joinConfirmed();
+        long second = jdbc.queryForObject("SELECT p.id FROM participations p WHERE p.activity_id = ? AND p.id <> ? AND p.status = 'CONFIRMED'", Long.class, activity, participation);
+        perform(post("/api/activities/" + activity + "/manual-check-ins"), Map.of("participationIds", java.util.List.of(participation, second), "reason", " "), organizer).andExpect(status().isBadRequest());
+        perform(post("/api/activities/" + activity + "/manual-check-ins"), Map.of("participationIds", java.util.List.of(participation, second), "reason", "휴대폰 없음"), member).andExpect(status().isNotFound());
+        perform(post("/api/activities/" + activity + "/manual-check-ins"), Map.of("participationIds", java.util.List.of(participation, second), "reason", "휴대폰 없음"), organizer)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.checkedIn").value(2));
+        assertThat(jdbc.queryForList("SELECT method FROM check_ins c JOIN participations p ON p.id = c.participation_id WHERE p.activity_id = ?", String.class, activity)).containsOnly("MANUAL").hasSize(2);
+        assertThat(other).isNotBlank();
+    }
+
+    private ResultActions byCode(String token, String code, Double lat, Double lng) throws Exception {
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", code);
+        body.put("lat", lat);
+        body.put("lng", lng);
+        return perform(post("/api/activities/" + activity + "/check-ins"), body, token);
     }
 
     // ---- helpers ----

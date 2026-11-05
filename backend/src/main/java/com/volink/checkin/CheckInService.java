@@ -63,6 +63,8 @@ public class CheckInService {
         boolean open = inWindow(activity, now);
         result.put("open", open);
         result.put("token", open ? qr.issue(activityId) : null);
+        result.put("code", open ? qr.code(activityId, qr.slot()) : null);
+        result.put("codeSecondsLeft", qr.codeSecondsLeft());
         result.put("validSeconds", QrService.VALID.getSeconds());
         result.put("rotateSeconds", ROTATE.getSeconds());
         // Live attendance for the organizer's on-site screen.
@@ -78,8 +80,20 @@ public class CheckInService {
         return result;
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> checkIn(long userId, long activityId, String token, Double lat, Double lng, Double accuracy) {
+        return checkIn(userId, activityId, token, null, lat, lng, accuracy);
+    }
+
+    /** Wrong attendance codes allowed per person in CODE_WINDOW before code entry is blocked. */
+    public static final int CODE_TRIES = 5;
+    public static final Duration CODE_WINDOW = Duration.ofMinutes(10);
+
+    /**
+     * QR value or 4-digit code (one of the two). A wrong code is logged even though the request fails
+     * (noRollbackFor), so guessing is limited; nothing else is written before the checks pass.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED, noRollbackFor = ApiException.class)
+    public Map<String, Object> checkIn(long userId, long activityId, String token, String code, Double lat, Double lng, Double accuracy) {
         Activity activity = load(activityId, true);
         Map<String, Object> participation = jdbc.queryForList("SELECT id, status FROM participations WHERE activity_id = ? AND user_id = ? FOR UPDATE", activityId, userId)
                 .stream().findFirst().orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "참가가 확정된 사람만 체크인할 수 있습니다."));
@@ -89,7 +103,18 @@ public class CheckInService {
         LocalDateTime now = now();
         if (!inWindow(activity, now))
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_OUT_OF_TIME", "체크인은 시작 30분 전부터 시작 후 30분까지 할 수 있습니다.");
-        switch (qr.check(token, activityId)) {
+        long participationId = ((Number) participation.get("id")).longValue();
+        boolean byCode = (token == null || token.isBlank()) && code != null;
+        if (byCode) {
+            int wrong = jdbc.queryForObject("SELECT COUNT(*) FROM activity_logs WHERE participation_id = ? AND to_status = 'CODE_WRONG' AND created_at > NOW() - INTERVAL 10 MINUTE",
+                    Integer.class, participationId);
+            if (wrong >= CODE_TRIES)
+                throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "CODE_LOCKED", "출석 코드를 여러 번 틀렸어요. 잠시 뒤 다시 하거나 QR을 찍어 주세요. 모집자에게 수동 확인을 요청할 수도 있어요.");
+            if (!qr.checkCode(code, activityId)) {
+                log(activityId, participationId, userId, "CONFIRMED", "CODE_WRONG", "출석 코드 틀림");
+                throw new ApiException(HttpStatus.BAD_REQUEST, "CODE_INVALID", "출석 코드가 맞지 않아요. 모집자 화면의 지금 숫자를 입력해 주세요. (" + (CODE_TRIES - wrong - 1) + "번 더 할 수 있어요)");
+            }
+        } else switch (qr.check(token, activityId)) {
             case EXPIRED -> throw new ApiException(HttpStatus.GONE, "QR_EXPIRED", "QR이 만료되었습니다. 모집자 화면의 새 QR을 다시 찍어 주세요.");
             case INVALID -> throw new ApiException(HttpStatus.BAD_REQUEST, "QR_INVALID", "이 활동의 QR이 아닙니다.");
             case VALID -> { }
@@ -108,11 +133,12 @@ public class CheckInService {
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_OUT_OF_RANGE", "활동 장소에서 약 " + Math.round(meters / 10) * 10 + "m 떨어져 있어요. "
                     + radius + "m 안에서 체크인할 수 있습니다. 장소에 도착한 뒤 다시 시도하거나 모집자에게 수동 확인을 요청하세요.");
 
-        long id = ((Number) participation.get("id")).longValue();
-        jdbc.update("INSERT INTO check_ins(participation_id, method, within_radius, checked_by, checked_at) VALUES (?, 'QR', TRUE, ?, ?)", id, userId, now);
+        long id = participationId;
+        String method = byCode ? "CODE" : "QR";
+        jdbc.update("INSERT INTO check_ins(participation_id, method, within_radius, checked_by, checked_at) VALUES (?, ?, TRUE, ?, ?)", id, method, userId, now);
         jdbc.update("UPDATE participations SET status = 'CHECKED_IN', updated_at = ? WHERE id = ?", now, id);
-        log(activityId, id, userId, "CONFIRMED", "CHECKED_IN", "QR·시간·위치 확인");
-        return Map.of("participationId", id, "status", "CHECKED_IN", "method", "QR", "checkedInAt", now.toString().substring(0, 16));
+        log(activityId, id, userId, "CONFIRMED", "CHECKED_IN", (byCode ? "출석 코드" : "QR") + "·시간·위치 확인");
+        return Map.of("participationId", id, "status", "CHECKED_IN", "method", method, "checkedInAt", now.toString().substring(0, 16));
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -128,6 +154,19 @@ public class CheckInService {
         jdbc.update("INSERT INTO check_ins(participation_id, method, within_radius, reason, checked_by, checked_at) VALUES (?, 'MANUAL', NULL, ?, ?, ?)", participationId, reason, organizerId, now);
         jdbc.update("UPDATE participations SET status = 'CHECKED_IN', updated_at = ? WHERE id = ?", now, participationId);
         log(activity.id(), participationId, organizerId, "CONFIRMED", "CHECKED_IN", "수동 확인: " + reason);
+    }
+
+    /** Several people at once with one reason (출석부 "여러 명 선택"). All or nothing. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> manualMany(long organizerId, long activityId, List<Long> participationIds, String reason) {
+        if (participationIds == null || participationIds.isEmpty() || participationIds.size() > 10)
+            throw ApiException.validation(Map.of("participationIds", "출석 처리할 사람을 1~10명 골라 주세요."));
+        for (long id : participationIds) {
+            Long activity = jdbc.queryForList("SELECT activity_id FROM participations WHERE id = ?", Long.class, id).stream().findFirst().orElse(null);
+            if (activity == null || activity != activityId) throw notFound("신청을 찾을 수 없습니다.");
+            manual(organizerId, id, reason);
+        }
+        return Map.of("checkedIn", participationIds.size());
     }
 
     /** After the end, only checked-in participants can be completed; this creates their activity record. */

@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User, ViewerInfo } from '../api'
 import { showToast } from '../App'
-import { AttendancePanel, hhmm, phaseOf, useNow } from '../checkin'
+import { hhmm, phaseOf, useNow } from '../checkin'
 import type { Phase } from '../checkin'
 import { durationLabel } from '../create'
 import { activityRules as r } from '../rules'
 import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, placeKindLabel, seatsLeft } from './cards'
 import { DateSheet, DurationSheet, TimeSheet } from './host'
 import { NewsEntry } from './news'
+import { RollCall } from './rollcall'
 import { statusWord } from './mine'
 import { ActionBar, dayWord, dDay, go, Loading, MIcon, PickField, Sheet, TopBar } from './ui'
 
@@ -191,7 +192,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       <div className="m-choice">{[10, 20, 30].map(m => <button key={m} type="button" className="m-btn line" disabled={busy} onClick={() => act('/api/participations/' + mine.id + '/late', { minutes: m }, `약 ${m}분 늦는다고 알렸어요`)}>약 {m}분</button>)}</div>
       <button type="button" className="m-text-btn danger" onClick={() => setSheet('cancel')}>아예 못 가요</button>
     </Sheet>}
-    {sheet === 'scan' && <ScanSheet onClose={() => setSheet(null)} />}
+    {sheet === 'scan' && <ScanSheet codeHref={'#/checkin/' + id} onClose={() => setSheet(null)} />}
   </div>
 }
 
@@ -211,7 +212,7 @@ function CancelSheet({ confirmed, busy, onClose, onSend }: { confirmed: boolean;
  * Scans the organizer's QR inside the app (camera + the browser's barcode reader). When the phone cannot do that,
  * it says to use the phone camera instead: the QR is a link that opens the same check-in.
  */
-function ScanSheet({ onClose }: { onClose: () => void }) {
+function ScanSheet({ onClose, codeHref }: { onClose: () => void; codeHref: string }) {
   const video = useRef<HTMLVideoElement>(null)
   const [state, setState] = useState<'start' | 'on' | 'no'>('start')
   useEffect(() => {
@@ -237,7 +238,7 @@ function ScanSheet({ onClose }: { onClose: () => void }) {
     }).catch(() => setState('no'))
     return () => { stopped = true; window.clearTimeout(timer); stream?.getTracks().forEach(t => t.stop()) }
   }, [])
-  return <Sheet title="출석 QR 찍기" onClose={onClose}>
+  return <Sheet title="출석 QR 찍기" onClose={onClose} footer={<a className="m-btn line" href={codeHref}>QR이 안 되나요? 출석 코드 4자리 입력</a>}>
     {state === 'no' ? <div className="m-empty"><span className="m-empty-ico"><MIcon name="qr" size={26} /></span><strong>휴대폰 기본 카메라로 찍어 주세요</strong>
       <p>모집자 화면의 QR을 카메라로 찍으면 체크인 화면이 열려요. 위치 확인을 허용해 주세요.</p></div>
       : <div className="m-scan"><video ref={video} playsInline muted aria-label="카메라 화면" /><span className="m-scan-frame" aria-hidden="true" />
@@ -271,11 +272,11 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
 
   if (failed) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><div className="m-body"><div className="m-note bad">{failed}</div></div></div>
   if (!activity) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><Loading /></div>
-  const { phase } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
+  const { phase, opens } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
   const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
   const items = people?.items ?? []
   const count = (s: string) => items.filter(p => p.status === s).length
-  const checked = count('CHECKED_IN'), completed = count('COMPLETED')
+  const checked = count('CHECKED_IN')
   const open = ['RECRUITING', 'DRAFT'].includes(activity.status) && now < start
   const canMove = activity.status === 'RECRUITING' && (activity.rescheduleCount ?? 0) === 0 && start - now >= 24 * 3_600_000
   const statusText = activity.status === 'DRAFT' ? (activity.reviewNote ? '반려됨' : '관리자 검토 중') : activity.status === 'RECRUITING' ? (phase === 'open' || phase === 'late' ? '체크인 중' : '모집 중') : activity.status === 'IN_PROGRESS' ? '진행 중' : activity.status === 'FINISHED' ? '종료' : '취소됨'
@@ -299,7 +300,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const tabs: [ManageTab, string, number][] = [['people', '신청자', count('APPLIED')], ['attendance', '출석', 0]]
   const main = (() => {
     if (activity.status === 'CANCELLED') return null
-    if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />출석 QR 띄우기</button>
+    if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />{phase === 'open' ? '출석부 · QR 띄우기' : '출석부 열기'}</button>
     if (phase === 'ended' && checked > 0) return <button className="m-btn" disabled={busy} onClick={() => run('/api/activities/' + id + '/complete', undefined, `${checked}명 완료를 확인했어요`)}>체크인한 {checked}명 모두 완료</button>
     if (phase === 'ended') return <a className="m-btn line" href={'#/create?from=' + id}><MIcon name="refresh" size={19} />같은 활동 다시 모집</a>
     return <a className="m-btn line" href={'#/news/' + id}><MIcon name="megaphone" size={19} />공지 올리기</a>
@@ -338,11 +339,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
               : <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.status === 'WAITLISTED' ? `대기 ${p.waitOrder}번` : statusWord[p.status]?.text ?? p.status}</span>}
           </span></li>)}</ul>)}
       {tab === 'people' && <p className="m-help">이름 일부만 보이고 연락처는 공개하지 않아요. 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안해요.</p>}
-      {tab === 'attendance' && <>
-        {(phase === 'later' || phase === 'soon') && <div className="m-empty"><span className="m-empty-ico"><MIcon name="qr" size={26} /></span><strong>체크인은 시작 30분 전부터 열려요</strong><p>그때 이 화면에서 QR을 띄워 참가자에게 보여 주세요. QR은 30초마다 바뀌어요.</p></div>}
-        {phase !== 'later' && phase !== 'soon' && <div className="m-legacy"><AttendancePanel activity={activity} phase={phase as Phase} onChanged={load} /></div>}
-        {(phase === 'ended' || checked + completed > 0) && <p className="m-help">출석 {checked + completed}명 · 완료 확인 {completed}명. 완료를 확인하면 참가자에게 활동 기록이 남아요.</p>}
-      </>}
+      {tab === 'attendance' && people && <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} />}
     </div>
     {main && <ActionBar>{main}</ActionBar>}
 

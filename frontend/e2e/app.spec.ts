@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+
+// Local dev only: the ignored ../.env holds the database user and the demo admin password.
+const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter(row => row.includes('=') && !row.startsWith('#')).map(row => [row.slice(0, row.indexOf('=')), row.slice(row.indexOf('=') + 1).trim()]))
+/** Moves an activity's start so check-in is open now (the API never allows this; dev database only). */
+function moveActivity(id: string, startMinutesFromNow: number) {
+  const korea = (minutes: number) => new Date(Date.now() + 9 * 3_600_000 + minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ')
+  const sql = `UPDATE activities SET starts_at = '${korea(startMinutesFromNow)}', ends_at = '${korea(startMinutesFromNow + 60)}' WHERE id = ${Number(id)}`
+  execFileSync('docker', ['compose', 'exec', '-T', '-e', 'MYSQL_PWD=' + env.MYSQL_PASSWORD, 'db', 'mysql', '-u', env.MYSQL_USER, process.env.E2E_MYSQL_DATABASE ?? env.MYSQL_DATABASE, '-e', sql], { cwd: '..' })
+}
 
 // Android app screens (vite --mode app). Login first, five bottom tabs, state-based detail, organizer dashboard.
 const password = 'example123'
@@ -229,4 +240,53 @@ test('activity news: the organizer posts a notice from a template, a member asks
   await expect(memberPage).toHaveURL(new RegExp('#/news/' + id))
   await expect(memberPage.getByText('네, 괜찮아요!')).toBeVisible()
   await memberPage.close()
+})
+
+test('roll call: a member checks in with the 4-digit code, the organizer checks two others in by hand with one reason', async ({ page, browser }) => {
+  const organizer = await signupByApi(page, '출석 모집자')
+  const auth = await tokenFor(page, organizer)
+  // The admin gives place 1 a coordinate so the location check can pass; the test browser is placed there.
+  const adminLogin = await page.request.post('/api/auth/login', { data: { email: 'admin-01@demo.volink.kr', password: env.DEMO_ACCOUNT_PASSWORD } })
+  expect(adminLogin.ok()).toBeTruthy()
+  const admin = 'Bearer ' + (await adminLogin.json()).accessToken
+  await page.request.put('/api/admin/places/1', { headers: { Authorization: admin }, data: { latitude: 37.8156, longitude: 127.0937 } })
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '출석부 확인용 공원 정리', category: '환경 정화', placeId: 1, date: inDays(3), time: '10:00', capacity: 5, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
+  const id = String((await created.json()).id)
+  const members: { email: string; token: string }[] = []
+  for (const name of ['코드 참가자', '폰 없는 참가자', 'PC 참가자']) {
+    const email = await signupByApi(page, name)
+    const token = await tokenFor(page, email)
+    const joined = await (await page.request.post(`/api/activities/${id}/participations`, { headers: { Authorization: token } })).json()
+    await page.request.post(`/api/participations/${joined.participation.id}/approve`, { headers: { Authorization: auth } })
+    members.push({ email, token })
+  }
+  moveActivity(id, 10)
+
+  await login(page, organizer)
+  await page.goto('/#/manage/' + id + '?tab=attendance')
+  await expect(page.getByText('출석 코드')).toBeVisible()
+  const code = (await page.locator('.r-code').textContent())!.trim()
+  expect(code).toMatch(/^\d{4}$/)
+
+  const phone = await browser.newContext({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 }, geolocation: { latitude: 37.8156, longitude: 127.0937 }, permissions: ['geolocation'] })
+  const memberPage = await phone.newPage()
+  await login(memberPage, members[0].email)
+  await memberPage.goto('/#/checkin/' + id)
+  await memberPage.getByLabel('출석 코드').fill(code)
+  await memberPage.getByRole('button', { name: '코드로 체크인' }).click()
+  await expect(memberPage.getByRole('heading', { name: /체크인했어요/ })).toBeVisible()
+  await phone.close()
+
+  await page.reload()
+  await expect(page.locator('.r-tag', { hasText: '코드' })).toBeVisible()
+  await page.getByRole('button', { name: '여러 명 선택' }).click()
+  const boxes = page.getByRole('checkbox', { name: /선택$/ })
+  await expect(boxes).toHaveCount(2)
+  await boxes.nth(0).click()
+  await boxes.nth(1).click()
+  await page.getByRole('button', { name: '2명 출석 처리' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '휴대폰 없음' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '출석 확인' }).click()
+  await expect(page.getByText('모두 출석했어요')).toBeVisible()
+  await expect(page.locator('.r-tag.man')).toHaveCount(2)
 })

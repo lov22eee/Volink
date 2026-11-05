@@ -10,7 +10,7 @@ import type { LiveActivity, User } from './api'
 import { dateLabel, Icon, LoginRequired, Notice, showToast } from './App'
 import { Glyph } from './icons'
 
-export type QrInfo = { open: boolean; token: string | null; opensAt: string; closesAt: string; validSeconds: number; rotateSeconds: number; expected: number; checkedIn: number; toComplete: number; status: string }
+export type QrInfo = { open: boolean; token: string | null; code?: string | null; codeSecondsLeft?: number; opensAt: string; closesAt: string; validSeconds: number; rotateSeconds: number; expected: number; checkedIn: number; toComplete: number; status: string }
 export type Phase = 'later' | 'soon' | 'open' | 'late' | 'ended'
 
 const WINDOW_MS = 30 * 60_000
@@ -89,6 +89,7 @@ export function AttendancePanel({ activity, phase, onChanged }: { activity: Live
       </button>
       <div className="attend-copy">
         <strong>참가자에게 이 QR을 보여 주세요</strong>
+        {info.code && <span className="attend-code" aria-label={'출석 코드 ' + info.code}>출석 코드 <b>{info.code}</b></span>}
         <ol><li>참가자가 휴대폰 카메라로 QR을 찍어요</li><li>열린 화면에서 ‘위치 확인하고 체크인’을 눌러요</li><li>서버가 시간·QR·위치(200m)를 확인해요</li></ol>
         <span className="qr-timer" aria-hidden="true"><i style={{ width: (left / rotate) * 100 + '%' }} /></span>
         <small>{left}초 뒤 새 QR로 바뀌어요 · 캡처한 QR은 1분 뒤 쓸 수 없어요</small>
@@ -107,6 +108,7 @@ export function AttendancePanel({ activity, phase, onChanged }: { activity: Live
       <div className="qr-big" onClick={event => event.stopPropagation()}>
         <strong>{activity.title}</strong>
         <img src={image} alt="체크인 QR (크게)" />
+        {info.code && <span className="attend-code big">QR이 안 찍히면 <b>{info.code}</b></span>}
         {count}
         <span className="qr-timer" aria-hidden="true"><i style={{ width: (left / rotate) * 100 + '%' }} /></span>
         <small>{left}초 뒤 새 QR로 바뀌어요</small>
@@ -135,6 +137,9 @@ export function CheckInPage({ id, token, user, ready }: { id: number; token?: st
   const [message, setMessage] = useState('')
   const [accuracy, setAccuracy] = useState<number | null>(null)
   const [at, setAt] = useState('')
+  // No camera / QR will not scan: the 4-digit code on the organizer's screen does the same (location still checked).
+  const [code, setCode] = useState('')
+  const [byCode, setByCode] = useState(!token)
   useEffect(() => { if (ready) api<LiveActivity>('/api/activities/' + id).then(setActivity).catch(() => setActivity(null)) }, [id, ready])
   // Not signed in yet: come back to this exact page (with the QR value) after logging in.
   useEffect(() => {
@@ -146,7 +151,7 @@ export function CheckInPage({ id, token, user, ready }: { id: number; token?: st
   async function send(lat: number | null, lng: number | null, acc: number | null) {
     setState('sending')
     try {
-      const result = await api<{ checkedInAt: string }>('/api/activities/' + id + '/check-ins', 'POST', { qrToken: token, lat, lng, accuracy: acc })
+      const result = await api<{ checkedInAt: string }>('/api/activities/' + id + '/check-ins', 'POST', byCode ? { code, lat, lng, accuracy: acc } : { qrToken: token, lat, lng, accuracy: acc })
       setAt(result.checkedInAt?.slice(11, 16) ?? '')
       setState('done')
     } catch (cause) {
@@ -174,9 +179,14 @@ export function CheckInPage({ id, token, user, ready }: { id: number; token?: st
     <h1>{activity?.title ?? '체크인'}</h1>
     {facts}
     <p className="checkin-lede">시간 · QR · 위치(활동 장소 200m 안)를 함께 확인해요. 위치는 이번 확인에만 쓰고 저장하지 않아요.</p>
-    {!token ? <Notice text="QR 정보가 없어요. 모집자 화면의 QR을 다시 찍어 주세요." tone="error" />
-      : <button className="pill-button dark checkin-go" disabled={state === 'locating' || state === 'sending'} onClick={start}>
-        {state === 'locating' ? '위치 확인 중…' : state === 'sending' ? '확인 중…' : state === 'error' ? '다시 시도하기' : '위치 확인하고 체크인'}</button>}
+    {byCode && <div className="code-entry">
+      <label htmlFor="checkin-code">모집자 화면의 <b>출석 코드</b> 4자리</label>
+      <input id="checkin-code" className="code-input" inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" maxLength={4} placeholder="0000" aria-label="출석 코드"
+        value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 4)); if (state === 'error') setState('idle') }} />
+    </div>}
+    <button className="pill-button dark checkin-go" disabled={state === 'locating' || state === 'sending' || (byCode && code.length !== 4)} onClick={start}>
+      {state === 'locating' ? '위치 확인 중…' : state === 'sending' ? '확인 중…' : state === 'error' ? '다시 시도하기' : byCode ? '코드로 체크인' : '위치 확인하고 체크인'}</button>
+    {token && <button type="button" className="text-button code-switch" onClick={() => { setByCode(!byCode); setState('idle'); setMessage('') }}>{byCode ? 'QR로 체크인하기' : 'QR이 안 되나요? 출석 코드 입력'}</button>}
     {state === 'error' && <div className="checkin-error" role="alert"><strong>체크인하지 못했어요</strong><span>{message}</span>
       {accuracy != null && accuracy > 100 && <small>지금 위치 정확도가 약 {accuracy}m로 낮아요. 건물 밖이나 트인 곳에서 다시 시도해 보세요.</small>}
       {/만료/.test(message) && <small>QR은 30초마다 바뀌어요. 모집자 화면의 새 QR을 다시 찍어 주세요.</small>}</div>}
