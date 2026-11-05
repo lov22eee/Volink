@@ -60,9 +60,12 @@ test('nothing is shown before signing in, and signup has three steps without an 
   // The birth wheel opens by itself.
   await page.getByRole('option', { name: '2003년' }).click()
   await page.getByRole('button', { name: '완료' }).click()
-  // Interests are no longer asked at signup (마이 > 관심 분야, optional).
-  await expect(page.getByRole('button', { name: '환경' })).toHaveCount(0)
   await next.click()
+  // Interests are optional: pick up to 3 or leave them for later.
+  await expect(page.getByRole('heading', { name: '관심 있는 봉사를 골라 주세요' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '나중에 할게요' })).toBeVisible()
+  await page.getByRole('button', { name: '환경' }).click()
+  await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText('기관 회원', { exact: true })).toHaveCount(0)
   const terms = page.getByRole('dialog', { name: '마지막으로 확인해 주세요' })
   await terms.getByText('모두 동의').click()

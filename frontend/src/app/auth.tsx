@@ -10,6 +10,8 @@ import { showToast } from '../App'
 import type { User } from '../api'
 import { ageOn, signupRules } from '../rules'
 import { ActionBar, MIcon, Sheet, WheelColumn, Wheels, TextInput } from './ui'
+import { categories } from '../categories'
+import { fieldIcon } from './cards'
 
 export function Login({ onSession }: { onSession: (user: User) => void }) {
   const providers = useProviders()
@@ -97,8 +99,9 @@ function Answered({ label, value, onEdit }: { label: string; value: string; onEd
  * the agreements in a bottom sheet. Earlier answers stay below the question and can be changed by tapping them.
  */
 export function Signup({ onSession }: { onSession: (user: User) => void }) {
-  type Step = 'email' | 'password' | 'name' | 'birth'
-  const order: Step[] = ['email', 'password', 'name', 'birth']
+  type Step = 'email' | 'password' | 'name' | 'birth' | 'interests'
+  const order: Step[] = ['email', 'password', 'name', 'birth', 'interests']
+  const [interests, setInterests] = useState<string[]>([])
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -125,7 +128,7 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
   const age = birth ? ageOn(birthDate, new Date()) : null
   const ageOk = age !== null && age >= signupRules.minimumAge
   const nameOk = name.trim().length >= 1 && name.trim().length <= signupRules.nameMax
-  const ok: Record<Step, boolean> = { email: emailOk, password: passwordOk && confirmOk, name: nameOk, birth: ageOk }
+  const ok: Record<Step, boolean> = { email: emailOk, password: passwordOk && confirmOk, name: nameOk, birth: ageOk, interests: true }
   const index = order.indexOf(step)
 
   // The birth wheel opens by itself when that question comes up.
@@ -135,8 +138,8 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
     setBusy(true)
     setError('')
     try {
-      // Interests are no longer asked at signup (마이 > 관심 분야, optional).
-      await api('/api/auth/signup', 'POST', { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate, interests: [], agreedNotice: true })
+      // Interests are optional (0~3): 나중에 할게요 leaves them for 마이 > 관심 분야.
+      await api('/api/auth/signup', 'POST', { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate, interests, agreedNotice: true })
       onSession(await login(email.trim(), password))
       window.location.hash = '#/welcome'
     } catch (cause) {
@@ -155,10 +158,11 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
     // Back after changing an earlier answer: go on to the first question not yet answered well.
     const pending = order.find(s => !ok[s])
     if (pending) setStep(pending)
+    else if (step !== 'interests' && index < order.length - 1) setStep(order[index + 1])
     else setTerms(true)
   }
   const back = () => index === 0 ? (window.location.hash = '#/login') : setStep(order[index - 1])
-  const titles: Record<Step, string> = { email: '이메일을 알려 주세요', password: '비밀번호를 정해 주세요', name: '어떻게 불러 드릴까요?', birth: '생년월일을 알려 주세요' }
+  const titles: Record<Step, string> = { email: '이메일을 알려 주세요', password: '비밀번호를 정해 주세요', name: '어떻게 불러 드릴까요?', birth: '생년월일을 알려 주세요', interests: '관심 있는 봉사를 골라 주세요' }
   const answered = order.slice(0, index).reverse()
 
   return <div className="m-screen m-signup m-ask">
@@ -189,11 +193,12 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
             <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
           {birth && !ageOk && <span className="m-err" role="alert">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}
         </>}
+        {step === 'interests' && <InterestPicker value={interests} onChange={setInterests} />}
       </div>
-      {answered.length > 0 && <div className="m-answers">{answered.map(s => <Answered key={s} label={{ email: '이메일', password: '비밀번호', name: '이름', birth: '생년월일' }[s]}
+      {answered.length > 0 && <div className="m-answers">{answered.map(s => <Answered key={s} label={{ email: '이메일', password: '비밀번호', name: '이름', birth: '생년월일', interests: '관심 분야' }[s]}
         value={s === 'email' ? email : s === 'password' ? '•'.repeat(Math.min(password.length, 12)) : s === 'name' ? name : birthText(birth)} onEdit={() => setStep(s)} />)}</div>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <ActionBar><button className="m-btn" disabled={!ok[step] || busy}>다음</button></ActionBar>
+      <ActionBar><button className="m-btn" disabled={!ok[step] || busy}>{step === 'interests' && !interests.length ? '나중에 할게요' : '다음'}</button></ActionBar>
     </form>
     {picking && <BirthSheet value={birth} onClose={() => setPicking(false)} onPick={value => { setBirth(value); setPicking(false) }} />}
     {terms && <Sheet title="마지막으로 확인해 주세요" onClose={() => setTerms(false)} footer={<button type="button" className="m-btn" disabled={!(agreeNotice && agreeContact) || busy} onClick={finish}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button>}>
@@ -227,7 +232,8 @@ export function SocialDone({ onSession }: { onSession: (user: User) => void }) {
 export function SocialSignup({ onSession }: { onSession: (user: User) => void }) {
   const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const provider = (query.get('provider') ?? 'kakao') as Provider
-  const [step, setStep] = useState<'name' | 'birth'>('name')
+  const [step, setStep] = useState<'name' | 'birth' | 'interests'>('name')
+  const [interests, setInterests] = useState<string[]>([])
   const [name, setName] = useState(query.get('name') ?? '')
   const [birth, setBirth] = useState<Birth | null>(null)
   const [picking, setPicking] = useState(false)
@@ -243,13 +249,14 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
   function next(event?: FormEvent) {
     event?.preventDefault()
     if (step === 'name' && nameOk) setStep('birth')
-    else if (step === 'birth' && ageOk && nameOk) setTerms(true)
+    else if (step === 'birth' && ageOk && nameOk) setStep('interests')
+    else if (step === 'interests' && ageOk && nameOk) setTerms(true)
   }
   async function finish() {
     setBusy(true)
     setError('')
     try {
-      onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests: [], agreedNotice: agree }))
+      onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests, agreedNotice: agree }))
       window.location.hash = '#/welcome'
     } catch (cause) {
       setTerms(false)
@@ -259,19 +266,19 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
     }
   }
   return <div className="m-screen m-signup m-ask">
-    <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={() => { if (step === 'birth') setStep('name'); else window.location.hash = '#/login' }}><MIcon name="back" /></button><h1 className="m-title">{providerName[provider]}로 시작하기</h1><span className="m-top-actions" /></header>
-    <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={2} aria-valuenow={step === 'name' ? 1 : 2} aria-label="가입 단계"><i style={{ width: step === 'name' ? '50%' : '100%' }} /></div>
+    <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={() => { if (step === 'interests') setStep('birth'); else if (step === 'birth') setStep('name'); else window.location.hash = '#/login' }}><MIcon name="back" /></button><h1 className="m-title">{providerName[provider]}로 시작하기</h1><span className="m-top-actions" /></header>
+    <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step === 'name' ? 1 : step === 'birth' ? 2 : 3} aria-label="가입 단계"><i style={{ width: step === 'name' ? '33%' : step === 'birth' ? '66%' : '100%' }} /></div>
     <form className="m-body m-form" onSubmit={next} noValidate>
       <div key={step} className="m-q">
-        <h2 className="m-h2">{step === 'name' ? '어떻게 불러 드릴까요?' : '생년월일을 알려 주세요'}</h2>
-        {step === 'name' ? <TextInput className="m-input big" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />
+        <h2 className="m-h2">{step === 'name' ? '어떻게 불러 드릴까요?' : step === 'birth' ? '생년월일을 알려 주세요' : '관심 있는 봉사를 골라 주세요'}</h2>
+        {step === 'interests' ? <InterestPicker value={interests} onChange={setInterests} /> : step === 'name' ? <TextInput className="m-input big" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />
           : <><button type="button" className="m-input big m-pick" aria-label={'생년월일 ' + (birth ? birthText(birth) : '선택')} onClick={() => setPicking(true)}>
             <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
             {birth && !ageOk && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</>}
       </div>
-      {step === 'birth' && <div className="m-answers"><Answered label="이름" value={name} onEdit={() => setStep('name')} /></div>}
+      {step !== 'name' && <div className="m-answers">{step === 'interests' && <Answered label="생년월일" value={birthText(birth)} onEdit={() => setStep('birth')} />}<Answered label="이름" value={name} onEdit={() => setStep('name')} /></div>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <ActionBar><button className="m-btn" disabled={step === 'name' ? !nameOk : !ageOk || busy}>다음</button></ActionBar>
+      <ActionBar><button className="m-btn" disabled={step === 'name' ? !nameOk : !ageOk || busy}>{step === 'interests' && !interests.length ? '나중에 할게요' : '다음'}</button></ActionBar>
     </form>
     {picking && <BirthSheet value={birth} onClose={() => setPicking(false)} onPick={value => { setBirth(value); setPicking(false) }} />}
     {terms && <Sheet title="마지막으로 확인해 주세요" onClose={() => setTerms(false)} footer={<button type="button" className="m-btn" disabled={!agree || busy} onClick={finish}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button>}>
@@ -279,4 +286,14 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
       <p className="m-help">간편 로그인은 개인 회원으로 가입돼요.</p>
     </Sheet>}
   </div>
+}
+
+/** 관심 분야 at signup (optional, up to 3): used for 나에게 맞는 봉사 on the home screen. */
+function InterestPicker({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  return <>
+    <p className="m-help">최대 {signupRules.maxInterests}개 · 홈에서 맞는 모집글과 1365 봉사를 골라 드려요. 나중에 마이에서 바꿀 수 있어요.</p>
+    <div className="m-tiles">{categories.map(c => { const on = value.includes(c)
+      return <button type="button" key={c} className={'m-tile' + (on ? ' on' : '')} aria-pressed={on}
+        onClick={() => onChange(on ? value.filter(x => x !== c) : value.length < signupRules.maxInterests ? [...value, c] : value)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button> })}</div>
+  </>
 }

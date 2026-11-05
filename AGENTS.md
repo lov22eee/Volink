@@ -31,6 +31,7 @@
 - 휴대폰 푸시(V20, 2026-11-05): Firebase 프로젝트 volink. 앱 설정 파일은 GitHub Secret `GOOGLE_SERVICES_JSON`(APK 빌드 때만 파일로, `VITE_PUSH=1`), 서버 키는 AWS `/etc/volink/firebase-service-account.json`(손으로 넣음, git 금지 → `FIREBASE_SERVICE_ACCOUNT_FILE`). 알림이 저장되고 커밋된 뒤 알림 설정(전체·종류·방해 금지)을 지켜 보냄, 없어진 토큰은 삭제. 테스트는 `FakeExternal.Push`. APK 디버그 서명 키는 main 캐시(`volink-debug-keystore-v2`)에 하나로 고정(지문 SHA-1 37:AD:…:77:58, Firebase에 등록됨). 문자 인증·1인 1계정은 다음 작업.
 - 커뮤니티 개편(V21, 2026-11-05): 글쓰기(종류 칩·등록 버튼·종류별 안내·임시 저장·나가기 확인), 게시글(좋아요 바로 반영·댓글 수·함께한 봉사활동 카드·댓글 등록순/최신순), 글·댓글 수정(`edited_at`, ‘수정됨’). 신고는 7주차라 메뉴 버튼만(‘곧 열려요’). 앱 글자 칸은 `TextInput`/`TextArea`(React가 입력 중 DOM을 건드리지 않음, 맞춤법 검사 끔), 앱 상단바 흐림 효과 없음.
 - 자동 승인(V22, 2026-11-05): `activities.auto_approve`(기본 끔). 켜면 빈자리 있을 때 신청 즉시 확정(차면 대기), 운영 중 켜면 기다리던 신청을 빈자리만큼 확정(`PUT /api/activities/{id}/auto-approve`). 만들기 3단계·모집 관리 신청자 탭에 스위치. 확정자 ‘못 가요’는 사유 필수(앱).
+- 관심 분야(2026-11-05 사용자 결정): 가입 마지막에 선택(0~3개, ‘나중에 할게요’ 가능, 카카오·구글 가입도). 홈 ‘나에게 맞는 봉사’ = 관심 분야 동네 모집글(가까운 날짜 순 3개) + 위치를 이미 허용했으면 10km 안 같은 분야 1365(3개, 누르면 찾기 1365·분야). 관심 분야가 없으면 ‘관심 분야를 설정해 주세요 [설정하러 가기]’.
 - 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), 정식 서명 APK·App Links·푸시(Firebase). GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
 - 서버의 DATETIME은 한국 시간입니다. JDBC에는 `LocalDateTime`을 그대로 넘기고 `Timestamp.valueOf`를 쓰지 마세요(서버 시간대 UTC에서 9시간 밀림).
 - demo_personas는 로그인 계정이 아닙니다. 시연 활동은 실제 모집글이 아닙니다. 현재 UI를 서버 업무 기능으로 오해하지 마세요.

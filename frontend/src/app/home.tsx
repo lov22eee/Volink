@@ -6,6 +6,8 @@ import type { LiveActivity, MyParticipation, MyRecord, User } from '../api'
 import { categories, categoryTone } from '../categories'
 import { CategoryCover } from '../covers'
 import { range } from '../explore'
+import type { Program } from '../explore'
+import { currentPosition, remembered } from '../location'
 import type { PostSummary } from './community'
 import { phaseOf, useNow } from '../checkin'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft, startsAt } from './cards'
@@ -23,6 +25,18 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [reviews, setReviews] = useState<PostSummary[]>([])
   const [allReviews, setAllReviews] = useState<PostSummary[]>([])
+  const [programs, setPrograms] = useState<Program[] | null>(null)
+  // 1365 programs in my 관심 분야 near me (only when the person already allowed location; never asks here).
+  useEffect(() => {
+    if (!user.interests.length || !remembered()) return
+    let live = true
+    currentPosition().then(at => {
+      if (!at || !live) return
+      api<{ items: Program[] }>(`/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(user.interests.join(','))}`)
+        .then(result => { if (live) setPrograms(result.items) }).catch(() => {})
+    })
+    return () => { live = false }
+  }, [user.interests])
   useEffect(() => {
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
     api<PostSummary[]>('/api/community/posts?category=REVIEW&sort=latest').then(list => { setAllReviews(list); setReviews(list.slice(0, 2)) }).catch(() => setReviews([]))
@@ -62,9 +76,10 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   // This weekend (Korean dates), shown as its own row: not repeated below.
   const weekend = range('weekend')
   const weekendPicks = others.filter(a => !urgentIds.has(a.id) && weekend.from && weekend.to && a.date >= weekend.from && a.date <= weekend.to).slice(0, 6)
-  const weekendIds = new Set(weekendPicks.map(a => a.id))
-  const score = (a: LiveActivity) => (user.interests.includes(a.category) ? 2 : 0) + (isNewcomer(a) ? 1 : 0)
-  const picks = others.filter(a => !urgentIds.has(a.id) && !weekendIds.has(a.id)).sort((a, b) => score(b) - score(a) || startsAt(a) - startsAt(b)).slice(0, 4)
+  // 나에게 맞는 봉사 = my 관심 분야: neighbourhood posts in those fields (soonest first, newcomer-friendly first on ties)
+  // and 1365 programs near me in the same fields. No interests yet → a card asking to choose them.
+  const mine3 = user.interests
+  const picks = mine3.length ? others.filter(a => mine3.includes(a.category)).sort((a, b) => startsAt(a) - startsAt(b) || Number(isNewcomer(b)) - Number(isNewcomer(a))).slice(0, 3) : []
   const valid = (records ?? []).filter(r => r.status === 'VALID')
   const hours = Math.round(valid.reduce((sum, r) => sum + r.durationMinutes, 0) / 6) / 10
   const month = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 7)
@@ -107,8 +122,15 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
 
       <section className="m-section" aria-label="나에게 맞는 봉사">
         <div className="m-section-head"><h2>나에게 맞는 봉사</h2><a href="#/find">전체 보기</a></div>
-        {picks.length ? <div className="m-list">{picks.map(a => <ActivityRow key={a.id} activity={a} note={user.interests.includes(a.category) ? '관심 분야 · ' + a.category : undefined} />)}</div>
-          : <Empty icon="sprout" title="지금 모집 중인 활동이 없어요" text="새 활동이 올라오면 여기에 보여 드릴게요." />}
+        {!mine3.length ? <div className="m-interest-ask"><MIcon name="heart" size={22} /><strong>관심 분야를 설정해 주세요</strong>
+          <span>관심 분야에 맞는 동네 모집글과 1365 봉사를 골라 드려요.</span><a className="m-btn sm" href="#/my?view=interests">설정하러 가기</a></div>
+          : picks.length || (programs?.length ?? 0) ? <div className="m-list">
+            {picks.map(a => <ActivityRow key={a.id} activity={a} note={'관심 분야 · ' + a.category} />)}
+            {(programs ?? []).slice(0, 3).map(p => <a key={p.programNo} className="m-row" href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')}>
+              <span className={'m-row-ico ' + (p.category && categoryTone(p.category) ? 'f' + categoryTone(p.category) : 'p')}><MIcon name={(p.category && fieldIcon[p.category]) || 'flag'} size={21} /></span>
+              <span className="m-row-main"><strong>{p.title}</strong><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.category, p.organization].filter(Boolean).join(' · ')}</small></span>
+              <span className="m-badge blue">1365</span></a>)}</div>
+          : <Empty icon="sprout" title={'관심 분야(' + mine3.join(', ') + ') 활동이 아직 없어요'} text="새 활동이 올라오면 여기에 보여 드릴게요." action={<a className="m-btn sm line" href="#/my?view=interests">관심 분야 바꾸기</a>} />}
       </section>
 
       {urgent.length > 0 && <section className="m-section" aria-label="긴급 모집">

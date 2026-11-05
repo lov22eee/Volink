@@ -933,3 +933,9 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-auto { margin-bottom: 4px; }
 .c-empty { background: none; padding: 22px 16px 8px; border-radius: 0; }
 .r-sec h3 svg { color: var(--m-green-ink); }
+
+.m-interest-ask { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
+.m-interest-ask svg { color: #d1495b; }
+.m-interest-ask strong { font-size: 16.5px; }
+.m-interest-ask span { color: var(--ink-2); font-size: 14px; }
+.m-interest-ask .m-btn { margin-top: 6px; }
