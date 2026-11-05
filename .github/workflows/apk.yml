@@ -33,6 +33,12 @@ jobs:
           npm ci
           npm run build:app
           npx cap sync android
+      # Keep one debug signing key between runs so a new test APK installs over the previous one
+      # (a new key each run makes Android refuse the update). Test builds only; never a release key.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: volink-debug-keystore
       - name: Build the APK
         working-directory: frontend/android
         env:
