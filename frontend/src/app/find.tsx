@@ -62,11 +62,11 @@ function volinkParams(f: Filters, q: string, origin: { lat: number; lng: number 
   return params
 }
 
-/** 1365 needs a place to look: the chosen region, or the position (near: the radius; all areas: 20 km around you). */
+/** 1365 needs a place to look: the chosen region, or the position (near: the radius; all areas: 5 km around you). */
 function programParams(f: Filters, q: string, origin: { lat: number; lng: number } | null) {
   const params = new URLSearchParams()
   if (f.area.kind === 'region') { params.set('sido', f.area.sido); if (f.area.sigungu) params.set('sigungu', f.area.sigungu) }
-  else if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', f.area.kind === 'near' ? String(f.area.km) : '20') }
+  else if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', f.area.kind === 'near' ? String(f.area.km) : '5') }
   else return null
   if (q) params.set('q', q)
   if (f.categories.length) params.set('category', f.categories.join(','))
@@ -194,7 +194,7 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
       {loading ? <Loading />
         : view === 'map' ? <div className="m-map-box">
           <PlaceMap label="활동 위치 지도" places={mapPlaces}
-            origin={origin && near ? { ...origin, label: '내 위치' } : null} radiusKm={filters.area.kind === 'near' ? filters.area.km : undefined} selected={selected}
+            origin={origin && filters.area.kind !== 'region' ? { ...origin, label: '내 위치' } : null} radiusKm={filters.area.kind === 'near' ? filters.area.km : undefined} selected={selected}
             onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} />
           <p className="m-map-legend">{showVolink && <><i className="local" />동네 활동 {shown.length}개</>}{show1365 && mapPrograms.length > 0 && <><i className="program" />1365 활동 {mapPrograms.length}개</>}</p>
           {selected && shown.find(a => a.id === selected) && <div className="m-map-card"><ActivityRow activity={shown.find(a => a.id === selected)!} /></div>}
