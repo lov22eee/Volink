@@ -211,7 +211,7 @@ public class AuthService {
     private int countCategories(List<String> names) {
         if (names.isEmpty()) return 0;
         String marks = String.join(",", names.stream().map(ignored -> "?").toList());
-        return jdbc.queryForObject("SELECT COUNT(*) FROM categories WHERE name IN (" + marks + ")", Integer.class, names.toArray());
+        return jdbc.queryForObject("SELECT COUNT(*) FROM categories WHERE active AND name IN (" + marks + ")", Integer.class, names.toArray());
     }
 
     private static LocalDate parseDate(String value) {

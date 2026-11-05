@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 export type GlyphName = 'pin' | 'calendar' | 'clock' | 'timer' | 'users' | 'leaf' | 'hand' | 'search' | 'map' | 'check' | 'bolt'
   | 'sun' | 'arrow' | 'close' | 'target' | 'refresh' | 'external' | 'building' | 'alert' | 'notice' | 'ban' | 'chevron'
-  | 'glove' | 'tongs' | 'bag' | 'water' | 'hat' | 'shoe' | 'plus' | 'link' | 'info' | 'filter'
+  | 'glove' | 'tongs' | 'bag' | 'water' | 'hat' | 'shoe' | 'plus' | 'link' | 'info' | 'filter' | 'book' | 'palette' | 'paw'
 
 const paths: Record<GlyphName, ReactNode> = {
   pin: <><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z" /><circle cx="12" cy="10" r="2.2" /></>,
@@ -11,6 +11,9 @@ const paths: Record<GlyphName, ReactNode> = {
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.5 2" /></>,
   timer: <><circle cx="12" cy="13" r="7" /><path d="M12 13V9.5M10 3h4M18 6l1.5-1.5" /></>,
   users: <><circle cx="9" cy="9" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6.5a3 3 0 0 1 0 5.5M17.5 14.5a5 5 0 0 1 3 4.5" /></>,
+  book: <><path d="M4 6.5c2.8-1 5.4-.8 8 .9 2.6-1.7 5.2-1.9 8-.9v12c-2.8-1-5.4-.8-8 .9-2.6-1.7-5.2-1.9-8-.9Z" /><path d="M12 7.4v12" /></>,
+  palette: <><path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-1 1.6-2.1-.5-1.2.3-2.4 1.6-2.4H17a4 4 0 0 0 4-4c0-5.2-4-9.5-9-9.5Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10" cy="7" r="1" /><circle cx="15" cy="7.5" r="1" /></>,
+  paw: <><circle cx="7" cy="9" r="1.8" /><circle cx="11" cy="6" r="1.8" /><circle cx="15.5" cy="7" r="1.8" /><circle cx="18" cy="11" r="1.8" /><path d="M12 12c-3 0-6 3.5-6 6 0 1.5 1.2 2.2 2.6 2 1.3-.2 2.2-.8 3.4-.8s2.1.6 3.4.8c1.4.2 2.6-.5 2.6-2 0-2.5-3-6-6-6Z" /></>,
   leaf: <><path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14Z" /><path d="m5 19 7-7" /></>,
   hand: <path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11m0-1V5a1.5 1.5 0 0 1 3 0v6m0-1V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5A5.5 5.5 0 0 1 6 17l-2-3.5a1.4 1.4 0 0 1 2.3-1.6L8 14" />,
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>,

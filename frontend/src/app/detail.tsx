@@ -2,6 +2,7 @@
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
+import { categoryTone } from '../categories'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User, ViewerInfo } from '../api'
 import { showToast } from '../App'
@@ -115,7 +116,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   }
 
   const head = <section className="m-detail-head">
-    <span className={'m-cover f' + (['환경 정화', '생활 지원', '지역 돌봄'].indexOf(activity.category) + 1)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
+    <span className={'m-cover f' + categoryTone(activity.category)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
     <Labels activity={activity} />
     <h1>{activity.title}</h1>
     <p className="m-by">{activity.activityType === 'INSTITUTION' ? activity.organizationName : activity.organizerName + ' 님'}이 모집해요</p>

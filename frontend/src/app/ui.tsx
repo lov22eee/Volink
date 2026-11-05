@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
   | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
   | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more' | 'send'
-  | 'userPlus' | 'userX' | 'checkCircle' | 'alert' | 'moon'
+  | 'userPlus' | 'userX' | 'checkCircle' | 'alert' | 'moon' | 'book' | 'palette' | 'paw' | 'sliders'
 
 const paths: Record<MIconName, ReactNode> = {
   home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
@@ -54,6 +54,10 @@ const paths: Record<MIconName, ReactNode> = {
   userX: <><circle cx="10" cy="8" r="4" /><path d="M3 21a7 7 0 0 1 14 0M17 8l5 5M22 8l-5 5" /></>,
   checkCircle: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" /></>,
+  book: <><path d="M4 6.5c2.8-1 5.4-.8 8 .9 2.6-1.7 5.2-1.9 8-.9v12c-2.8-1-5.4-.8-8 .9-2.6-1.7-5.2-1.9-8-.9Z" /><path d="M12 7.4v12" /></>,
+  palette: <><path d="M12 3a9 9 0 0 0 0 18c1.4 0 2-1 1.6-2.1-.5-1.2.3-2.4 1.6-2.4H17a4 4 0 0 0 4-4c0-5.2-4-9.5-9-9.5Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10" cy="7" r="1" /><circle cx="15" cy="7.5" r="1" /></>,
+  paw: <><circle cx="7" cy="9" r="1.8" /><circle cx="11" cy="6" r="1.8" /><circle cx="15.5" cy="7" r="1.8" /><circle cx="18" cy="11" r="1.8" /><path d="M12 12c-3 0-6 3.5-6 6 0 1.5 1.2 2.2 2.6 2 1.3-.2 2.2-.8 3.4-.8s2.1.6 3.4.8c1.4.2 2.6-.5 2.6-2 0-2.5-3-6-6-6Z" /></>,
+  sliders: <><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></>,
   moon: <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />,
   more: <><circle cx="6" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18" cy="12" r="1.3" /></>,
 }
@@ -131,7 +135,7 @@ export function ActionBar({ children }: { children: ReactNode }) {
 }
 
 /** A panel that slides up from the bottom. Closes on the dim area, the close button or Escape. */
-export function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Sheet({ title, onClose, children, footer, headAction, className }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; headAction?: ReactNode; className?: string }) {
   useEffect(() => {
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', key)
@@ -140,9 +144,9 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
   }, [onClose])
   return createPortal(<div className="m-sheet-wrap">
     <div className="m-dim" onClick={onClose} />
-    <section className="m-sheet" role="dialog" aria-modal="true" aria-label={title}>
+    <section className={'m-sheet' + (className ? ' ' + className : '')} role="dialog" aria-modal="true" aria-label={title}>
       <span className="m-grab" aria-hidden="true" />
-      <div className="m-sheet-head"><h2>{title}</h2><button type="button" className="m-icon-btn" aria-label="닫기" onClick={onClose}><MIcon name="close" /></button></div>
+      <div className="m-sheet-head"><h2>{title}</h2>{headAction}<button type="button" className="m-icon-btn" aria-label="닫기" onClick={onClose}><MIcon name="close" /></button></div>
       <div className="m-sheet-body">{children}</div>
       {footer && <div className="m-sheet-foot">{footer}</div>}
     </section>

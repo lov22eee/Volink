@@ -80,8 +80,10 @@ public class ActivityController {
                                           @RequestParam(required = false) Double radiusKm, @RequestParam(required = false) String date,
                                           @RequestParam(required = false) String category, @RequestParam(required = false) String type,
                                           @RequestParam(required = false) String q, @RequestParam(required = false) String from,
-                                          @RequestParam(required = false) String to, @RequestParam(required = false) String part) {
-        return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type, q, from, to, part));
+                                          @RequestParam(required = false) String to, @RequestParam(required = false) String part,
+                                          @RequestParam(required = false) String status, @RequestParam(required = false) String sido,
+                                          @RequestParam(required = false) String sigungu) {
+        return activities.listPublic(new ActivityService.Search(lat, lng, radiusKm, date, category, type, q, from, to, part, status, sido, sigungu));
     }
 
     @GetMapping("/api/activities/{id}")

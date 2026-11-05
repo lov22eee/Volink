@@ -46,7 +46,7 @@ class SocialLoginIntegrationTest extends ApiTestSupport {
         assertThat(back.getRedirectedUrl()).startsWith("/#/social-signup?provider=kakao&ticket=").contains("name=");
         String ticket = param(back.getRedirectedUrl(), "ticket");
 
-        Map<String, Object> form = new HashMap<>(Map.of("ticket", ticket, "name", "카카오 이웃", "birthDate", "2015-01-01", "interests", List.of("환경 정화"), "agreedNotice", true));
+        Map<String, Object> form = new HashMap<>(Map.of("ticket", ticket, "name", "카카오 이웃", "birthDate", "2015-01-01", "interests", List.of("환경"), "agreedNotice", true));
         perform(post("/api/auth/oauth/complete"), form, null).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("UNDER_AGE"));
         form.put("birthDate", "2001-05-14");
         form.put("memberType", "INSTITUTION");
@@ -69,14 +69,14 @@ class SocialLoginIntegrationTest extends ApiTestSupport {
         String free = "g" + System.nanoTime() + "@gmail.example", sub = "g" + System.nanoTime();
         social.profiles.put(sub, new SocialLogin.Profile(sub, free, true, "구글 이웃"));
         String ticket = param(callback("google", sub).getRedirectedUrl(), "ticket");
-        perform(post("/api/auth/oauth/complete"), Map.of("ticket", ticket, "name", "구글 이웃", "birthDate", "2000-01-01", "interests", List.of("생활 지원"), "agreedNotice", true), null)
+        perform(post("/api/auth/oauth/complete"), Map.of("ticket", ticket, "name", "구글 이웃", "birthDate", "2000-01-01", "interests", List.of("복지"), "agreedNotice", true), null)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.user.email").value(free));
         String taken = email();
         perform(post("/api/auth/signup"), signupBody(taken, "GENERAL", TODAY.minusYears(20)), null).andExpect(status().isCreated());
         String other = "g2" + System.nanoTime();
         social.profiles.put(other, new SocialLogin.Profile(other, taken, true, "다른 사람"));
         String second = param(callback("google", other).getRedirectedUrl(), "ticket");
-        perform(post("/api/auth/oauth/complete"), Map.of("ticket", second, "name", "다른 사람", "birthDate", "2000-01-01", "interests", List.of("생활 지원"), "agreedNotice", true), null)
+        perform(post("/api/auth/oauth/complete"), Map.of("ticket", second, "name", "다른 사람", "birthDate", "2000-01-01", "interests", List.of("복지"), "agreedNotice", true), null)
                 .andExpect(status().isOk()).andExpect(jsonPath("$.user.email").value(org.hamcrest.Matchers.endsWith("@social.volink.invalid")));
     }
 
@@ -92,7 +92,7 @@ class SocialLoginIntegrationTest extends ApiTestSupport {
                 .andExpect(redirectedUrl("/#/login?oauth=OAUTH_STATE"));
         mvc.perform(get("/api/auth/oauth/kakao/callback").param("error", "access_denied").param("state", state).cookie(start.getCookie(SocialController.NONCE_COOKIE)))
                 .andExpect(redirectedUrl("/#/login?oauth=OAUTH_DENIED"));
-        perform(post("/api/auth/oauth/complete"), Map.of("ticket", "nope.nope", "name", "a", "birthDate", "2000-01-01", "interests", List.of("생활 지원"), "agreedNotice", true), null)
+        perform(post("/api/auth/oauth/complete"), Map.of("ticket", "nope.nope", "name", "a", "birthDate", "2000-01-01", "interests", List.of("복지"), "agreedNotice", true), null)
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("OAUTH_TICKET"));
     }
 

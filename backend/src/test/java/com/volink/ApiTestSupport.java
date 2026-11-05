@@ -41,7 +41,7 @@ public abstract class ApiTestSupport extends IntegrationTestBase {
 
     protected Map<String, Object> signupBody(String email, String type, LocalDate birthDate) {
         Map<String, Object> body = new HashMap<>(Map.of("memberType", type, "name", "테스트", "email", email, "password", PASSWORD,
-                "birthDate", birthDate.toString(), "interests", List.of("환경 정화"), "agreedNotice", true));
+                "birthDate", birthDate.toString(), "interests", List.of("환경"), "agreedNotice", true));
         if ("INSTITUTION".equals(type)) {
             body.put("organizationName", "예시 기관");
             body.put("organizationContact", "000-0000-0000");
@@ -68,7 +68,7 @@ public abstract class ApiTestSupport extends IntegrationTestBase {
     }
 
     protected static Map<String, Object> activity(String title, String description) {
-        return new HashMap<>(Map.of("activityType", "GENERAL", "title", title, "category", "환경 정화", "placeId", 1,
+        return new HashMap<>(Map.of("activityType", "GENERAL", "title", title, "category", "환경", "placeId", 1,
                 "date", TODAY.plusDays(7).toString(), "time", "10:00", "capacity", 6, "durationMinutes", 90,
                 "description", description, "safetyConfirmed", true));
     }

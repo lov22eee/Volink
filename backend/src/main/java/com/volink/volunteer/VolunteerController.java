@@ -22,9 +22,10 @@ public class VolunteerController {
     public Map<String, Object> search(@RequestParam(required = false) Double lat, @RequestParam(required = false) Double lng,
                                       @RequestParam(required = false) Double radiusKm, @RequestParam(required = false) String q,
                                       @RequestParam(required = false) Boolean youth, @RequestParam(required = false) Boolean recruiting,
-                                      HttpServletRequest request) {
+                                      @RequestParam(required = false) String sido, @RequestParam(required = false) String sigungu,
+                                      @RequestParam(required = false) String category, HttpServletRequest request) {
         limiter.check(request);
-        return volunteers.search(new VolunteerService.Query(lat, lng, radiusKm, q, youth, recruiting));
+        return volunteers.search(new VolunteerService.Query(lat, lng, radiusKm, q, youth, recruiting, sido, sigungu, com.volink.activity.ActivityService.categoryList(category)));
     }
 
     /** Admin only (/api/admin/**): region codes and live field names, without values. */

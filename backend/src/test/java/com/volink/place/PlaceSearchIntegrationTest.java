@@ -60,8 +60,8 @@ class PlaceSearchIntegrationTest extends ApiTestSupport {
         String admin = token(admin());
         place(admin, 2, lat, lng);
         String organizer = token(member("GENERAL"));
-        Map<String, Object> review = at(2, "어르신과 함께 걷는 산책");
-        review.put("description", "동네 공원에서 어르신과 천천히 걸으며 이야기를 나눕니다.");
+        Map<String, Object> review = at(2, "어린이와 함께 걷는 산책");
+        review.put("description", "동네 공원에서 어린이와 천천히 걸으며 이야기를 나눕니다.");
         long id = createActivity(review, organizer);
         mvc.perform(get("/api/activities").param("lat", "" + lat).param("lng", "" + lng)).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
         perform(post("/api/admin/activities/" + id + "/approve"), Map.of(), admin).andExpect(status().isNoContent());
@@ -74,15 +74,15 @@ class PlaceSearchIntegrationTest extends ApiTestSupport {
     @Test
     void dateCategoryAndTypeFiltersAndBadParametersAreRejected() throws Exception {
         String organizer = token(member("GENERAL"));
-        Map<String, Object> body = at(1, "주말 생활 지원 나눔");
-        body.put("category", "생활 지원");
+        Map<String, Object> body = at(1, "주말 지역사회 나눔");
+        body.put("category", "지역사회");
         body.put("date", TODAY.plusDays(9).toString());
         long id = createActivity(body, organizer);
         String day = TODAY.plusDays(9).toString();
-        mvc.perform(get("/api/activities").param("date", day).param("category", "생활 지원").param("type", "GENERAL"))
+        mvc.perform(get("/api/activities").param("date", day).param("category", "지역사회").param("type", "GENERAL"))
                 .andExpect(jsonPath("$[?(@.id == " + id + ")]").isNotEmpty());
         mvc.perform(get("/api/activities").param("date", TODAY.plusDays(8).toString())).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
-        mvc.perform(get("/api/activities").param("category", "환경 정화")).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
+        mvc.perform(get("/api/activities").param("category", "환경")).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
         mvc.perform(get("/api/activities").param("type", "INSTITUTION")).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
 
         mvc.perform(get("/api/activities").param("lat", "37.8")).andExpect(status().isBadRequest())

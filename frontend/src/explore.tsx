@@ -21,6 +21,8 @@ export type Program = {
   periodStart: string | null; periodEnd: string | null; beginTime: string | null; endTime: string | null; weekdays: string | null
   recruitStatus: string | null; recruitEnd: string | null; capacity: number | null; youthOk: boolean | null
   latitude: number | null; longitude: number | null; distanceKm: number | null; link: string
+  /** V17: Volink category from the official 1365 field, or a marked guess from the title (ESTIMATED), or 기타 (UNKNOWN). */
+  category?: string; categoryBasis?: 'OFFICIAL' | 'ESTIMATED' | 'UNKNOWN'
 }
 
 type Source = 'all' | 'local' | '1365'
@@ -354,9 +356,12 @@ const programKinds: [string, string, RegExp][] = [
   ['env', '환경', /환경|정화|플로깅|쓰레기|숲|하천|공원|생태|분리수거/],
   ['event', '행사', /행사|축제|문화|공연|체육|캠페인|전시/],
   ['safety', '안전', /재난|안전|방범|순찰|소방|교통/],
-  ['life', '생활 지원', /식사|배식|급식|도시락|나눔|물품|장보기|생활|주거|김장|빨래/],
+  ['life', '복지', /식사|배식|급식|도시락|나눔|물품|장보기|생활|주거|김장|빨래/],
 ]
-export function programKind(p: Pick<Program, 'field' | 'title'>) {
+const categoryKind: Record<string, string> = { 환경: 'env', 교육: 'edu', 복지: 'care', '문화·예술': 'art', 동물: 'animal', 지역사회: 'town' }
+export function programKind(p: Pick<Program, 'field' | 'title' | 'category' | 'categoryBasis'>) {
+  // The server's category (official field first); an unknown one says nothing rather than guessing again.
+  if (p.category && p.categoryBasis !== 'UNKNOWN' && categoryKind[p.category]) return { icon: categoryKind[p.category], label: p.category + (p.categoryBasis === 'ESTIMATED' ? '(추정)' : '') }
   const text = (p.field ?? '') + ' ' + p.title
   const hit = programKinds.find(([, , words]) => words.test(text))
   return hit ? { icon: hit[0], label: hit[1] } : null

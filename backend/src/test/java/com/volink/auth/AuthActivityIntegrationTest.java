@@ -20,7 +20,7 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         String email = email();
         Map<String, Object> body = signupBody(email, "GENERAL", TODAY.minusYears(20));
         body.put("role", "ADMIN");
-        body.put("interests", List.of("환경 정화", "지역 돌봄"));
+        body.put("interests", List.of("환경", "복지"));
         perform(post("/api/auth/signup"), body, null).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER")).andExpect(jsonPath("$.memberType").value("GENERAL"))
                 .andExpect(jsonPath("$.interests.length()").value(2)).andExpect(jsonPath("$.password_hash").doesNotExist());
@@ -136,9 +136,9 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
     void reviewActivityStaysHiddenUntilAnAdminApprovesAndRejectionNeedsAReason() throws Exception {
         String token = token(member("GENERAL"));
         String admin = token(admin());
-        long id = json.readTree(perform(post("/api/activities"), activity("어르신과 함께 걷는 산책", "동네 공원에서 어르신과 천천히 걸으며 이야기를 나눕니다."), token)
+        long id = json.readTree(perform(post("/api/activities"), activity("어린이와 함께 걷는 산책", "동네 공원에서 어린이와 천천히 걸으며 이야기를 나눕니다."), token)
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.riskLevel").value("REVIEW")).andExpect(jsonPath("$.status").value("DRAFT"))
-                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("어르신")))
+                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("어린이")))
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
         mvc.perform(get("/api/activities")).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
         mvc.perform(get("/api/activities/" + id)).andExpect(status().isNotFound());

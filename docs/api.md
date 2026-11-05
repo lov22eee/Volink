@@ -46,6 +46,8 @@
 | 3 | `GET /api/admin/activities?risk=REVIEW` · `POST /api/admin/activities/{id}/approve` · `.../reject` | 관리자 | REVIEW 검토, 사유 필수 |
 | 5+ | `GET /api/admin/stats/applications?days=14` | 관리자 | **구현(2026-10-28, 관리자 대시보드).** 읽기 전용. `days`(7~60, 기본 14)일 동안 한국 날짜별 신청 수 `days[{date, applications}]`(없는 날 0, 오늘 포함, 첫 신청 시각 기준 · 취소 후 재신청은 같은 행이라 한 번)와 지금 상태별 신청 수 `statuses{APPLIED: n, …}` |
 | 4 | `GET /api/activities?lat&lng&radiusKm&date&category&type` | 공개 | **구현.** 모든 조건 선택. `lat`+`lng`가 있으면 반경(기본 3km, 0.5~10km) 안만 가까운 순·`distanceKm` 포함. `date`=YYYY-MM-DD, `category`=분야 이름, `type`=GENERAL/INSTITUTION. 모집 중·시작 전만(REVIEW 미승인·반려 제외, BLOCKED는 저장 안 함). 위치 하나만 오면 400 `location`. 내 위치는 저장·기록 안 함 |
+| 6 | `GET /api/activities?category=환경,교육&status=OPEN\|WAITLIST\|ALL&sido&sigungu&from&to&q` | 공개 | **구현(V17, 2026-11-05 찾기 상세 필터).** `category` 쉼표로 여러 개(전체=생략). `status` 없으면 예전과 같음(모집 중·시작 전, 꽉 찬 것 포함). OPEN=자리 남음, WAITLIST=+꽉 찼지만 대기 가능(시작 2시간 전까지), ALL=+마감(대기 마감·진행 중·최근 30일 종료, 취소·삭제 제외). `sido`(서울특별시…)·`sigungu`는 장소 주소로 거름 |
+| 6 | `GET /api/volunteer-programs?sido&sigungu&category` | 공개 | **구현(V17).** 위치 없이 지역으로 1365 조회(시·군·구 코드는 서울·경기만, 그 밖은 시·도 전체 + 장소 글자). 항목에 `category`·`categoryBasis`(OFFICIAL/ESTIMATED/UNKNOWN). 호출 제한·3시간 캐시는 그대로 |
 | 4 | `GET /api/places` | 공개 | **구현.** 장소 이름·지역·만남 지점·좌표(없으면 null)·`coordinateStatus`(UNVERIFIED/ENTERED) |
 | 4 | `PUT /api/admin/places/{id}` `{latitude, longitude, meetingPoint, reason?}` | 관리자 | **구현.** 국내 범위(위도 33~39, 경도 124~132) 검사, 그 장소의 활동 위치도 갱신, `admin_actions`(PLACE) 기록 |
 | 4+ | `GET /api/activities?…&q&from&to&part` | 공개 | **구현(2026-10-21 보완).** `q` 제목·소개·장소 이름 검색(50자), `from`·`to` 날짜 범위, `part`=AM(정오 전 시작)/PM, 반경 최대 **20km** |
