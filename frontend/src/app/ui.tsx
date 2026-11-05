@@ -245,22 +245,29 @@ export function useKeyboardAware() {
       window.setTimeout(reveal, 320)
     }
     const onBlur = () => window.setTimeout(() => { if (!typing(document.activeElement)) { focused = null; root.classList.remove('m-typing') } }, 50)
-    // Some Android keyboards (Samsung Korean in the WebView) change the text without an input event, so the screen
-    // shows letters React never received: a button stays off and the next render wipes the field. After each key,
-    // at the end of a composition and on leaving the field, an input event hands the current text to React
-    // (React ignores it when nothing changed).
-    const sync = (event: Event) => {
-      const field = event.target
-      if ((field instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(field.type)) || field instanceof HTMLTextAreaElement) field.dispatchEvent(new Event('input', { bubbles: true }))
+    // Some Android keyboards (Samsung Korean in the WebView) keep a whole word 'composing' and send no input or keyup
+    // event until a space, so React's copy of the text lags behind the screen: a counter shows 2 / 100, a button stays
+    // off, and the next render can break the word. While a text field has focus its value is checked every 80 ms and,
+    // when it changed, an input event hands it to React (React ignores the event when its copy is already the same).
+    const textField = (field: EventTarget | null): field is HTMLInputElement | HTMLTextAreaElement =>
+      (field instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes(field.type)) || field instanceof HTMLTextAreaElement
+    const seen = new WeakMap<HTMLElement, string>()
+    const push = (field: HTMLInputElement | HTMLTextAreaElement) => {
+      if (seen.get(field) === field.value) return
+      seen.set(field, field.value)
+      field.dispatchEvent(new Event('input', { bubbles: true }))
     }
+    const sync = (event: Event) => { if (textField(event.target)) push(event.target) }
+    const poll = window.setInterval(() => { const field = document.activeElement; if (textField(field)) push(field) }, 80)
     viewport?.addEventListener('resize', resize)
     window.addEventListener('resize', resize)
     document.addEventListener('focusin', onFocus)
     document.addEventListener('focusout', onBlur)
-    for (const type of ['keyup', 'compositionend', 'focusout']) document.addEventListener(type, sync, true)
+    for (const type of ['compositionupdate', 'compositionend', 'focusout']) document.addEventListener(type, sync, true)
     return () => {
       viewport?.removeEventListener('resize', resize); window.removeEventListener('resize', resize); document.removeEventListener('focusin', onFocus); document.removeEventListener('focusout', onBlur)
-      for (const type of ['keyup', 'compositionend', 'focusout']) document.removeEventListener(type, sync, true)
+      for (const type of ['compositionupdate', 'compositionend', 'focusout']) document.removeEventListener(type, sync, true)
+      window.clearInterval(poll)
     }
   }, [])
 }
