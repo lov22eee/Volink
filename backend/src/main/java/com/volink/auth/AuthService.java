@@ -178,6 +178,8 @@ public class AuthService {
         profile.put("role", user.role());
         profile.put("memberType", user.memberType());
         profile.put("status", user.status());
+        // KAKAO / GOOGLE when signed up with them; the app shows that instead of a placeholder e-mail.
+        profile.put("providers", jdbc.queryForList("SELECT provider FROM social_accounts WHERE user_id = ? ORDER BY created_at", String.class, id));
         profile.put("interests", jdbc.queryForList("""
                 SELECT c.name FROM user_interests i JOIN categories c ON c.id = i.category_id WHERE i.user_id = ? ORDER BY c.id
                 """, String.class, id));

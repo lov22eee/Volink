@@ -841,3 +841,34 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-review strong { font-size: 15.5px; }
 .m-review span { font-size: 14px; color: var(--ink-2); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .m-review em { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 5px 10px; border-radius: 10px; background: #f4f6f3; font-style: normal; font-size: 12.5px; color: var(--m-green-ink); }
+
+/* 설정 (마이 → 톱니바퀴) */
+:root.m-app.m-big body { zoom: 1.12; }
+.m-set-group { display: flex; flex-direction: column; gap: 8px; }
+.m-set-group h2 { margin: 6px 4px 0; font-size: 14px; font-weight: 650; color: var(--ink-3); }
+.m-set-card { display: flex; flex-direction: column; background: #fff; border-radius: 18px; border: 1px solid var(--line); overflow: hidden; }
+.m-set-card > a, .m-set-card > button { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 0 16px; border: 0; background: none; color: var(--ink); text-decoration: none; font-size: 16px; font-weight: 550; text-align: left; width: 100%; }
+.m-set-card > a + a, .m-set-card > a + button, .m-set-card > button + a, .m-set-card > button + button { border-top: 1px solid var(--line); }
+.m-set-card > * > span { flex: 1; }
+.m-set-card > * > svg:first-child { color: var(--m-green-ink); }
+.m-set-card small { color: var(--ink-3); font-size: 13px; }
+.m-set-card.pad { gap: 10px; padding: 18px; }
+.m-set-card.pad > strong { font-size: 16.5px; }
+.m-set-card.pad > strong.danger { color: var(--red); }
+.m-set-card.pad > p { margin: 0; color: var(--ink-2); font-size: 14.5px; line-height: 1.55; }
+.m-set-card.warn { border-color: var(--red); background: var(--red-soft); }
+.m-set-card .m-btn.line.danger { align-self: flex-start; color: var(--red); background: #fff; }
+.m-set-switch { width: 44px; height: 26px; border-radius: 13px; background: var(--line-2); position: relative; flex: none; transition: background .15s; }
+.m-set-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.m-set-switch.on { background: var(--m-green); }
+.m-set-switch.on::after { transform: translateX(18px); }
+.m-set-links { display: flex; flex-direction: column; gap: 6px; }
+.m-set-links a { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: #fff; color: var(--ink); text-decoration: none; font-weight: 600; }
+.m-set-links a span { flex: 1; }
+.m-login-row { display: flex; align-items: center; gap: 12px; }
+.m-login-ico { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--m-mint); color: var(--m-green-ink); }
+.m-login-ico.kakao { background: #fee500; color: #191600; }
+.m-login-ico.google { background: #fff; border: 1px solid var(--line-2); color: #4285f4; font-size: 18px; }
+.m-login-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.m-login-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-btn.danger:disabled { opacity: .4; }

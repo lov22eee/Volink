@@ -18,6 +18,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -29,9 +32,17 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(10);
     }
 
+    /** A withdrawn member's access token stops working at once (it would otherwise live up to 30 minutes). */
     @Bean
-    JwtDecoder jwtDecoder(TokenService tokens) {
-        return tokens.decoder();
+    JwtDecoder jwtDecoder(TokenService tokens, JdbcTemplate jdbc) {
+        JwtDecoder signed = tokens.decoder();
+        return token -> {
+            Jwt jwt = signed.decode(token);
+            if (jwt.getSubject() != null && jwt.getSubject().matches("\\d{1,18}")
+                    && !jdbc.queryForList("SELECT 1 FROM users WHERE id = ? AND status = 'WITHDRAWN'", Integer.class, Long.valueOf(jwt.getSubject())).isEmpty())
+                throw new BadJwtException("withdrawn");
+            return jwt;
+        };
     }
 
     /**

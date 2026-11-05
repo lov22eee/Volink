@@ -22,9 +22,12 @@ import org.springframework.web.client.RestClient;
 public class HttpSocialLogin implements SocialLogin {
     private final Map<String, String[]> clients;
     private final RestClient http;
+    private final String kakaoAdminKey;
 
     public HttpSocialLogin(@Value("${volink.oauth.kakao-client-id:}") String kakaoId, @Value("${volink.oauth.kakao-client-secret:}") String kakaoSecret,
-                           @Value("${volink.oauth.google-client-id:}") String googleId, @Value("${volink.oauth.google-client-secret:}") String googleSecret) {
+                           @Value("${volink.oauth.google-client-id:}") String googleId, @Value("${volink.oauth.google-client-secret:}") String googleSecret,
+                           @Value("${volink.oauth.kakao-admin-key:}") String kakaoAdminKey) {
+        this.kakaoAdminKey = kakaoAdminKey.trim();
         this.clients = Map.of("kakao", new String[]{kakaoId.trim(), kakaoSecret.trim()}, "google", new String[]{googleId.trim(), googleSecret.trim()});
         SimpleClientHttpRequestFactory timeouts = new SimpleClientHttpRequestFactory();
         timeouts.setConnectTimeout(Duration.ofSeconds(4));
@@ -71,6 +74,21 @@ public class HttpSocialLogin implements SocialLogin {
                     account.path("profile").path("nickname").asText(me.path("properties").path("nickname").asText(null)));
         }
         return new Profile(me.path("sub").asText(), me.path("email").asText(null), me.path("email_verified").asBoolean(false), me.path("name").asText(null));
+    }
+
+    /**
+     * Kakao: POST kapi.kakao.com/v1/user/unlink with the app's admin key (KakaoAK) and the member number. Google has no
+     * server-side revoke without the person's token, which is not kept, so it returns false.
+     */
+    @Override
+    public boolean unlink(String provider, String subject) {
+        if (!"kakao".equals(provider) || kakaoAdminKey.isBlank()) return false;
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("target_id_type", "user_id");
+        form.add("target_id", subject);
+        http.post().uri("https://kapi.kakao.com/v1/user/unlink").header("Authorization", "KakaoAK " + kakaoAdminKey)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form).retrieve().toBodilessEntity();
+        return true;
     }
 
     private static String enc(String value) {

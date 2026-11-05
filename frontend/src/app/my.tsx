@@ -7,16 +7,16 @@ import { categories, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
 import { CommunitySetup } from './community'
+import { loginLabel, shownEmail } from './settings'
 import { ActionBar, Empty, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
 
-export function MyScreen({ user, actions, onSignOut }: { user: User; actions: ReactNode; onSignOut: () => void }) {
+export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
   const [joined, setJoined] = useState<MyParticipation[] | null>(null)
   const [saved, setSaved] = useState<number | null>(null)
   const [about, setAbout] = useState(false)
-  const [leaving, setLeaving] = useState(false)
   const [nickname, setNickname] = useState<string | null>(null)
   useEffect(() => {
     api<{ nickname: string | null }>('/api/community/me').then(p => setNickname(p.nickname)).catch(() => {})
@@ -34,16 +34,14 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') || '선택 안 함' },
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
-    { icon: 'bell', label: '알림', href: '#/notifications' },
-    { icon: 'settings', label: '알림 설정', href: '#/my?view=notice-settings' },
     { icon: 'flag', label: '활동 기록·보험 안내', onClick: () => setAbout(true) },
   ]
   return <div className="m-screen">
-    <TopBar title="마이페이지" actions={actions} />
+    <TopBar title="마이페이지" actions={<>{actions}<a className="m-icon-btn" href="#/settings" aria-label="설정"><MIcon name="settings" /></a></>} />
     <div className="m-body">
       <section className="m-profile">
         <div className="m-profile-top"><span className="m-avatar"><MIcon name="user" size={26} /></span>
-          <div><strong>{user.name}</strong><small>{user.email}</small>
+          <div><strong>{user.name}</strong><small>{shownEmail(user.email) ?? loginLabel(user)}</small>
             <span className="m-tags">{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}
               {user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span></div></div>
         <div className="m-stats">
@@ -56,7 +54,6 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
       <nav className="m-menu" aria-label="마이 메뉴">{menu.map(item => item.href
         ? <a key={item.label} href={item.href}><MIcon name={item.icon} size={21} /><span>{item.label}</span>{item.note && <small>{item.note}</small>}<MIcon name="chevron" size={18} /></a>
         : <button key={item.label} type="button" onClick={item.onClick}><MIcon name={item.icon} size={21} /><span>{item.label}</span><MIcon name="chevron" size={18} /></button>)}</nav>
-      <button type="button" className="m-btn line" onClick={() => setLeaving(true)}><MIcon name="logout" size={19} />로그아웃</button>
       {user.memberType !== 'INSTITUTION' && <p className="m-help center">기관 회원 가입·기관 확인은 PC에서 할 수 있어요.</p>}
     </div>
     {about && <Sheet title="활동 기록·보험 안내" onClose={() => setAbout(false)}>
@@ -68,8 +65,6 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
         <li>사고가 나면 먼저 119에 신고해 주세요.</li>
       </ul>
     </Sheet>}
-    {leaving && <Sheet title="로그아웃할까요?" onClose={() => setLeaving(false)} footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setLeaving(false)}>돌아가기</button><button type="button" className="m-btn" onClick={onSignOut}>로그아웃</button></div>}>
-      </Sheet>}
   </div>
 }
 

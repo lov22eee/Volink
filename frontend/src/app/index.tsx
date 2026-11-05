@@ -2,6 +2,7 @@
 // Login first: nothing else is reachable before signing in. Five bottom tabs: 홈 / 찾기 / 커뮤니티 / 내 활동 / 마이.
 import { useCallback, useEffect, useState } from 'react'
 import { api, logout, mayHaveSession, refresh } from '../api'
+import { AccountScreen, SettingsScreen, applyTextSize } from './settings'
 import type { User } from '../api'
 import { ToastHost } from '../App'
 import { CheckInPage } from '../checkin'
@@ -50,6 +51,7 @@ export default function MobileApp() {
 
   useEffect(() => {
     document.documentElement.classList.add('m-app')
+    applyTextSize()
     if (!mayHaveSession()) { setReady(true); return }
     refresh().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
   }, [])
@@ -96,12 +98,13 @@ export default function MobileApp() {
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen actions={bell} initial={route.query.get('tab') ?? undefined} />; break
-    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : <MyScreen user={user} actions={bell} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break
     case 'news': screen = route.id ? <NewsScreen key={route.id} id={route.id} user={user} /> : null; break
     case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
+    case 'settings': screen = route.query.get('view') === 'account' ? <AccountScreen onWithdrawn={signOut} /> : <SettingsScreen user={user} onSignOut={signOut} />; break
     case 'welcome': screen = <WelcomeScreen />; break
     default: screen = null
   }

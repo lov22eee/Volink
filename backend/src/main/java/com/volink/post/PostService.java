@@ -220,6 +220,7 @@ public class PostService {
     }
 
     static String mask(String name) {
+        if (com.volink.auth.AccountService.WITHDRAWN_NAME.equals(name)) return name;
         if (name == null || name.length() <= 1) return "*";
         if (name.length() == 2) return name.charAt(0) + "*";
         return name.charAt(0) + "*".repeat(name.length() - 2) + name.charAt(name.length() - 1);
