@@ -29,7 +29,16 @@ jobs:
           VITE_API_BASE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
           # Kakao Maps JavaScript key (public, domain-restricted: register https://localhost for the app). Empty = drawn map.
           VITE_KAKAO_JS_KEY: ${{ vars.VOLINK_KAKAO_JS_KEY || secrets.VOLINK_KAKAO_JS_KEY }}
+          # Firebase app config (repository secret, from the Firebase console). Present = phone push in this build.
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            export VITE_PUSH=1
+            echo "Firebase: on (phone push)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Firebase: off (no GOOGLE_SERVICES_JSON secret)" >> "$GITHUB_STEP_SUMMARY"
+          fi
           npm ci
           npm run build:app
           npx cap sync android

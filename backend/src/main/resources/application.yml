@@ -52,6 +52,9 @@ volink:
     origins: ${APP_ORIGINS:https://localhost}
     # Package name the Kakao / Google login hands the result back to (volink:// link).
     package: com.volink.app
+  firebase:
+    # Firebase service account JSON file on the server only (phone push). Empty = no push is sent.
+    service-account-file: ${FIREBASE_SERVICE_ACCOUNT_FILE:}
   data-go-kr:
     # data.go.kr "일반 인증키 (Decoding)" for 1365 봉사참여정보서비스. Empty = 1365 programs are not shown.
     key: ${DATA_GO_KR_KEY:}

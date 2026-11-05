@@ -65,6 +65,11 @@ if [ -s /etc/volink/kakao_login_secret ]; then echo "KAKAO_LOGIN_CLIENT_SECRET=$
 if [ -s /etc/volink/google_client_id ]; then echo "GOOGLE_CLIENT_ID=$(tr -d '[:space:]' < /etc/volink/google_client_id)" >> "$keys"; fi
 if [ -s /etc/volink/google_client_secret ]; then echo "GOOGLE_CLIENT_SECRET=$(tr -d '[:space:]' < /etc/volink/google_client_secret)" >> "$keys"; fi
 if [ -s /etc/volink/kakao_admin_key ]; then echo "KAKAO_ADMIN_KEY=$(tr -d '[:space:]' < /etc/volink/kakao_admin_key)" >> "$keys"; fi
+# Phone push: the Firebase service account JSON put by hand at /etc/volink/firebase-service-account.json (never in git).
+if [ -s /etc/volink/firebase-service-account.json ]; then
+  chown root:volink /etc/volink/firebase-service-account.json && chmod 640 /etc/volink/firebase-service-account.json
+  echo "FIREBASE_SERVICE_ACCOUNT_FILE=/etc/volink/firebase-service-account.json" >> "$keys"
+fi
 if [ -s /etc/volink/oauth_redirect_base ]; then echo "OAUTH_REDIRECT_BASE=$(tr -d '[:space:]' < /etc/volink/oauth_redirect_base)" >> "$keys"; fi
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
