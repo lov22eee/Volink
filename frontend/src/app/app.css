@@ -872,3 +872,15 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-login-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .m-login-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-btn.danger:disabled { opacity: .4; }
+
+/* 홈 메인 카드: 상태별 (첫 방문 · 신청 대기 · 자리 제안 · 참여 확정 · 봉사 완료 · 모집 중) */
+.m-hero-top .m-hero-state { padding: 4px 11px; border-radius: 99px; background: #fff; color: var(--m-green-ink); font-size: 13px; font-weight: 700; }
+.m-hero-top .m-hero-state.wait { color: #b4541c; background: #fdeee4; }
+.m-hero-top .m-hero-state.hot { color: #fff; background: #c2552a; }
+.m-hero.wait { background: #fbf6ee; }
+.m-hero.hot { background: #fdf0e8; }
+.m-hero p.m-hero-sub { color: #6a756f; font-size: 13.5px; }
+.m-hero-row { display: flex; gap: 10px; margin-top: 8px; }
+.m-hero-row .m-btn { margin-top: 0; flex: 1; }
+.m-hero-row .m-hero-plus { flex: 0 0 56px; padding: 0; border: 0; color: var(--m-green-ink); }
+.m-hero p + p.m-hero-sub { margin-top: -4px; }

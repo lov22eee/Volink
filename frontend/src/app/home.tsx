@@ -22,9 +22,10 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const [open, setOpen] = useState<LiveActivity[] | null>(null)
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [reviews, setReviews] = useState<PostSummary[]>([])
+  const [allReviews, setAllReviews] = useState<PostSummary[]>([])
   useEffect(() => {
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
-    api<PostSummary[]>('/api/community/posts?category=REVIEW&sort=latest').then(list => setReviews(list.slice(0, 2))).catch(() => setReviews([]))
+    api<PostSummary[]>('/api/community/posts?category=REVIEW&sort=latest').then(list => { setAllReviews(list); setReviews(list.slice(0, 2)) }).catch(() => setReviews([]))
     api<MyParticipation[]>('/api/me/participations').then(setMine).catch(() => setMine([]))
     api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
     api<LiveActivity[]>('/api/activities').then(setOpen).catch(() => setOpen([]))
@@ -68,7 +69,10 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const hours = Math.round(valid.reduce((sum, r) => sum + r.durationMinutes, 0) / 6) / 10
   const month = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 7)
   const thisMonth = valid.filter(r => r.date.startsWith(month)).length
-  const statusWord: Record<string, string> = { APPLIED: '승인 대기', CONFIRMED: '참가 확정', WAITLISTED: '대기 중', OFFERED: '자리 제안', CHECKED_IN: '출석 완료' }
+  // A Volink activity finished in the last 7 days that I have not reviewed yet (my reviews are among the latest 50).
+  const reviewed = new Set(allReviews.filter(r => r.mine && r.activityId).map(r => r.activityId))
+  const weekAgo = new Date(now + 9 * 3_600_000 - 7 * 86_400_000).toISOString().slice(0, 10)
+  const justDone = valid.filter(r => r.date >= weekAgo && !reviewed.has(r.activityId)).sort((a, b) => b.date.localeCompare(a.date))[0]
 
   return <div className="m-screen">
     <TopBar brand actions={actions} />
@@ -78,24 +82,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       {todos.length > 0 && <section className="m-todo" aria-label="지금 할 일">{todos.slice(0, 4).map(todo =>
         <a key={todo.key} href={todo.href} className={'m-todo-item' + (todo.tone === 'hot' ? ' hot' : '')}><MIcon name={todo.icon} size={20} /><span>{todo.text}</span><MIcon name="chevron" size={17} /></a>)}</section>}
 
-      {next ? <section className="m-hero" aria-label="다가오는 내 활동">
-        <div className="m-hero-top"><span>다가오는 내 활동</span>{dDay(next.date) && <b>{dDay(next.date)}</b>}</div>
-        <h2>{next.title}</h2>
-        <p>{dayWord(next.date)} {next.startTime}{next.placeName ? ' · ' + next.placeName : ''} · <em>{statusWord[next.status]}</em></p>
-        <a className="m-btn" href={'#/activity/' + next.activityId}>{next.status === 'OFFERED' ? '자리 제안 확인하기' : next.status === 'CONFIRMED' ? '활동 준비하기' : '내 신청 보기'}</a>
-      </section>
-        : hostNext ? <section className="m-hero" aria-label="내가 모집 중인 활동">
-          <div className="m-hero-top"><span>내가 모집 중</span>{dDay(hostNext.date) && <b>{dDay(hostNext.date)}</b>}</div>
-          <h2>{hostNext.title}</h2>
-          <p>{dayWord(hostNext.date)} {hostNext.startTime} · 확정 {hostNext.confirmed}/{hostNext.capacity}명</p>
-          <a className="m-btn" href={'#/manage/' + hostNext.id}>모집 관리하기</a>
-        </section>
-        : <section className="m-hero soft" aria-label="첫 활동">
-          <div className="m-hero-top"><span>아직 예정된 활동이 없어요</span></div>
-          <h2>가까운 곳에서 첫 봉사를 시작해 보세요</h2>
-          <div className="m-hero-pair"><a className="m-btn" href="#/find">내 주변 봉사 찾기</a>
-            <a className="m-btn line" href="#/host">활동 만들기</a></div>
-        </section>}
+      <MainCard next={next} hostNext={hostNext} done={justDone} />
 
       <section className="m-section" aria-label="분야별 봉사">
         <div className="m-section-head"><h2>어떤 봉사에 관심 있나요?</h2><a href="#/find">전체 보기</a></div>
@@ -143,4 +130,48 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       </section>
     </div>
   </div>
+}
+
+const statusWord: Record<string, string> = { APPLIED: '승인 대기', CONFIRMED: '참여 확정', WAITLISTED: '대기 중', OFFERED: '자리 제안', CHECKED_IN: '출석 완료' }
+
+/**
+ * The main card changes with where the person is: applied (waiting) → offered → confirmed → just finished → hosting →
+ * nothing yet. One card, one main action.
+ */
+function MainCard({ next, hostNext, done }: { next?: MyParticipation; hostNext?: LiveActivity; done?: MyRecord }) {
+  if (next) {
+    const waiting = next.status === 'APPLIED' || next.status === 'WAITLISTED'
+    const offered = next.status === 'OFFERED'
+    const tone = offered ? ' hot' : waiting ? ' wait' : ''
+    return <section className={'m-hero' + tone} aria-label="나의 다음 봉사">
+      <div className="m-hero-top"><span>{waiting ? '신청한 봉사가 있어요' : offered ? '빈자리가 났어요' : '다가오는 나의 봉사'}</span>
+        <b className={'m-hero-state' + tone}>{statusWord[next.status]}{!waiting && !offered && dDay(next.date) ? ' · ' + dDay(next.date) : ''}</b></div>
+      <h2>{next.title}</h2>
+      <p>{dayWord(next.date)} {next.startTime}{next.placeName ? ' · ' + next.placeName : ''}</p>
+      <p className="m-hero-sub">{waiting ? (next.status === 'APPLIED' ? '모집자가 확정하면 알림으로 알려 드려요.' : '자리가 나면 순서대로 알려 드려요.')
+        : offered ? '정해진 시간 안에 수락하면 참여가 확정돼요.' : '일정·장소·모집자 공지를 한눈에 확인하세요.'}</p>
+      <a className="m-btn" href={'#/activity/' + next.activityId}>{offered ? '자리 제안 확인하기' : waiting ? '내 신청 보기' : '활동 일정 확인'}</a>
+    </section>
+  }
+  if (done) return <section className="m-hero" aria-label="봉사 완료">
+    <div className="m-hero-top"><span>봉사 완료!</span><b className="m-hero-state">활동 완료</b></div>
+    <h2>오늘도 따뜻한 변화를 만들었어요</h2>
+    <p>{done.title}</p>
+    <p className="m-hero-sub">활동 후기를 남기고 다음 봉사도 찾아보세요.</p>
+    <div className="m-hero-pair"><a className="m-btn" href={'#/write?category=REVIEW&activity=' + done.activityId}>후기 작성</a>
+      <a className="m-btn line" href="#/mine?tab=done">내 활동 보기</a></div>
+  </section>
+  if (hostNext) return <section className="m-hero" aria-label="내가 모집 중인 활동">
+    <div className="m-hero-top"><span>내가 모집 중</span>{dDay(hostNext.date) && <b className="m-hero-state">{dDay(hostNext.date)}</b>}</div>
+    <h2>{hostNext.title}</h2>
+    <p>{dayWord(hostNext.date)} {hostNext.startTime} · 확정 {hostNext.confirmed}/{hostNext.capacity}명</p>
+    <a className="m-btn" href={'#/manage/' + hostNext.id}>모집 관리하기</a>
+  </section>
+  return <section className="m-hero" aria-label="나의 다음 봉사">
+    <div className="m-hero-top"><span>나의 다음 봉사</span><MIcon name="calendar" size={22} /></div>
+    <h2>아직 예정된 활동이 없어요</h2>
+    <p className="m-hero-sub">가까운 곳에서 첫 봉사를 찾아볼까요?</p>
+    <div className="m-hero-row"><a className="m-btn" href="#/find">봉사 찾아보기</a>
+      <a className="m-btn line m-hero-plus" href="#/host" aria-label="활동 만들기"><MIcon name="plus" size={22} /></a></div>
+  </section>
 }
