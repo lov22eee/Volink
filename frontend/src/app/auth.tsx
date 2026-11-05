@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError, login } from '../api'
+import { showToast } from '../App'
 import type { User } from '../api'
 import { categories } from '../App'
 import { ageOn, signupRules } from '../rules'
@@ -46,6 +47,16 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
       {error && <p className="m-err" role="alert">{error}</p>}
       <button className="m-btn" disabled={busy}>{busy ? '로그인 중…' : '로그인'}</button>
       <p className="m-splash-links">처음이신가요? <a href="#/signup">회원가입</a></p>
+      {/* Social login is not connected yet (needs Kakao/Google app keys and server OAuth): the buttons only say so. */}
+      <div className="m-social" role="group" aria-label="간편 로그인">
+        <span className="m-social-line">간편 로그인</span>
+        <div className="m-social-row">
+          <button type="button" className="m-social-btn kakao" aria-label="카카오로 로그인 (준비 중)" onClick={() => showToast('카카오 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')}>
+            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="#191919" d="M12 3.5c-5 0-9 3.1-9 7 0 2.5 1.7 4.7 4.2 6l-1 3.7c-.1.3.3.6.6.4l4.4-2.9h.8c5 0 9-3.1 9-7s-4-7.2-9-7.2Z" /></svg></button>
+          <button type="button" className="m-social-btn google" aria-label="구글로 로그인 (준비 중)" onClick={() => showToast('구글 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')}>
+            <svg width="24" height="24" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5Z" /><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7Z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44Z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5Z" /></svg></button>
+        </div>
+      </div>
       <p className="m-fine">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요.</p>
     </form>
   </main>

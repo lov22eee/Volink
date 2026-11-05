@@ -64,12 +64,12 @@ export default function MobileApp() {
   // A QR scanned with the phone camera opens the check-in link; after signing in it continues there.
   if (!user) {
     if (route.page === 'checkin' && route.id) try { sessionStorage.setItem('volink.next', window.location.hash) } catch { /* private mode */ }
-    return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <Login onSession={user => {
+    return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
       onSession(user)
       let next: string | null = null
       try { next = sessionStorage.getItem('volink.next'); sessionStorage.removeItem('volink.next') } catch { /* private mode */ }
       window.location.hash = next ?? '#/home'
-    }} />
+    }} /></>
   }
   if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
 

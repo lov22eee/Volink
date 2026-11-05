@@ -442,3 +442,14 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-org-hint { color: #8d948f; justify-content: center; margin-top: -4px; }
 .m-inline .m-btn { flex: none; white-space: nowrap; }
 .m-pick span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* social login icons (not connected yet) */
+.m-social { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 4px; }
+.m-social-line { display: flex; align-items: center; gap: 10px; width: 100%; color: #8d948f; font-size: 12.5px; }
+.m-social-line::before, .m-social-line::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
+.m-social-row { display: flex; gap: 16px; }
+.m-social-btn { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; border: 0; }
+.m-social-btn.kakao { background: #fee500; }
+.m-social-btn.google { background: #fff; border: 1px solid var(--line-2); }
+.m-social-btn:active { transform: scale(.95); }
+:root.m-kb .m-social { display: none; }
