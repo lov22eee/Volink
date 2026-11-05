@@ -128,6 +128,12 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await memberPage.reload()
   await expect(memberPage.getByText('참가가 확정됐어요')).toBeVisible()
   await expect(memberPage.getByRole('button', { name: '못 가요' })).toBeVisible()
+  // 못 가요 needs a reason before it can be sent.
+  await memberPage.getByRole('button', { name: '못 가요' }).click()
+  await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeDisabled()
+  await memberPage.getByRole('button', { name: '몸이 좋지 않아요' }).click()
+  await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeEnabled()
+  await memberPage.keyboard.press('Escape')
   await memberPage.goto('/#/notifications')
   await expect(memberPage.getByText('활동 일정이 바뀌었어요')).toBeVisible()
   await memberPage.close()

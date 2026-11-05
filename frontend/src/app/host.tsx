@@ -68,6 +68,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
   const [difficulty, setDifficulty] = useState<'EASY' | 'NORMAL' | 'HARD'>('EASY')
   const [placeKind, setPlaceKind] = useState<'OUTDOOR' | 'INDOOR' | 'MIXED'>('OUTDOOR')
   const [newcomer, setNewcomer] = useState(true)
+  const [autoApprove, setAutoApprove] = useState(false)
   const [place, setPlace] = useState<PlaceResult | null>(null)
   const [meeting, setMeeting] = useState('')
   const [date, setDate] = useState(addDays(today, 2))
@@ -93,7 +94,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
     if (!id) return
     api<LiveActivity>('/api/activities/' + id).then(a => {
       setKind(a.activityType); setTitle(a.title); setCategory(a.category); setDifficulty(a.difficulty ?? 'EASY'); setPlaceKind(a.placeKind ?? 'OUTDOOR')
-      setNewcomer(a.newcomerOk === undefined || Boolean(a.newcomerOk)); setMeeting(a.meetingPoint ?? '')
+      setNewcomer(a.newcomerOk === undefined || Boolean(a.newcomerOk)); setAutoApprove(Boolean(a.autoApprove)); setMeeting(a.meetingPoint ?? '')
       // Keep the start on the form's 10-minute grid inside 06:00 ~ 21:30.
       setStart(clock(Math.min(minutes(r.latestEnd) - r.durationMin, Math.max(minutes(r.earliestStart), Math.round(minutes(a.startTime) / 10) * 10)))); setDuration(a.durationMinutes)
       setCapacity(a.capacity); setDescription(a.description); setSupplies((a.supplies ?? []).map((s: Supply) => ({ ...s, provided: false })))
@@ -144,7 +145,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       }
       const chosen = place?.placeId ? { placeId: place.placeId } : place ? { place: { kakaoId: place.kakaoId, name: place.name, address: place.address, categoryName: place.categoryName, latitude: place.latitude, longitude: place.longitude, placeClass: place.placeClass, classLabel: place.classLabel, token: place.token } } : {}
       const body = { activityType: kind, title: title.trim(), category, ...chosen, meetingPoint: meeting, date, time: start, capacity, durationMinutes: duration,
-        description: description.trim(), safetyConfirmed: safety, supplies, difficulty, placeKind, newcomerOk: newcomer }
+        description: description.trim(), safetyConfirmed: safety, supplies, difficulty, placeKind, newcomerOk: newcomer, autoApprove }
       const activity = await api<LiveActivity>(editId ? '/api/activities/' + editId : '/api/activities', editId ? 'PUT' : 'POST', body)
       setSaved({ kind: activity.status === 'RECRUITING' ? 'published' : 'review', activity })
     } catch (cause) {
@@ -235,6 +236,8 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
             <output name="capacity" aria-live="polite">{capacity}명</output>
             <button type="button" aria-label="한 명 늘리기" disabled={capacity >= r.capacityMax} onClick={() => setCapacity(capacity + 1)}>+</button></div>
           <span className="m-help">나 포함 {capacity + 1}명 · 정원이 차면 대기 순번을 받아요</span>{err('capacity')}</div>}
+        <label className="m-switch"><span><strong>신청 바로 확정 (자동 승인)</strong><small>{autoApprove ? '빈자리가 있으면 신청하는 순간 참가가 확정돼요' : '신청을 하나씩 보고 승인하거나 거절해요'}</small></span>
+          <input type="checkbox" role="switch" checked={autoApprove} onChange={event => setAutoApprove(event.target.checked)} /><i /></label>
         <div className="m-summary">
           <strong>{title || '활동 이름'}</strong>
           <span>{category} · {difficultyLabel[difficulty]} · {placeKindLabel[placeKind]}{newcomer ? ' · 처음 환영' : ''}</span>

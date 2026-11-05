@@ -62,6 +62,31 @@ class ParticipationIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void autoApproveConfirmsWhileSeatsAreFreeAndTurningItOnConfirmsWaitingApplications() throws Exception {
+        String organizer = token(member("GENERAL"));
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>(withCapacity(2));
+        body.put("autoApprove", true);
+        long activity = createActivity(body, organizer);
+        apply(activity, token(member("GENERAL"))).andExpect(jsonPath("$.participation.status").value("CONFIRMED"));
+        apply(activity, token(member("GENERAL"))).andExpect(jsonPath("$.participation.status").value("CONFIRMED"));
+        apply(activity, token(member("GENERAL"))).andExpect(jsonPath("$.participation.status").value("WAITLISTED"));
+
+        // Off by default: applications wait; turning it on confirms them in order while seats are free.
+        long manual = createActivity(withCapacity(2), organizer);
+        long a = pid(apply(manual, token(member("GENERAL"))));
+        long b = pid(apply(manual, token(member("GENERAL"))));
+        long c = pid(apply(manual, token(member("GENERAL"))));
+        assertThat(statusOf(a)).isEqualTo("APPLIED");
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/activities/" + manual + "/auto-approve"), Map.of("on", true), token(member("GENERAL"))).andExpect(status().isNotFound());
+        perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/activities/" + manual + "/auto-approve"), Map.of("on", true), organizer)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.confirmed").value(2));
+        assertThat(statusOf(a)).isEqualTo("CONFIRMED");
+        assertThat(statusOf(b)).isEqualTo("CONFIRMED");
+        assertThat(statusOf(c)).isEqualTo("APPLIED");
+        perform(get("/api/activities/" + manual), null, organizer).andExpect(jsonPath("$.autoApprove").value(true));
+    }
+
+    @Test
     void cancellationOffersTheSeatInOrderAndOffersExpireOrCanBeDeclined() throws Exception {
         String organizer = token(member("GENERAL"));
         long activity = createActivity(withCapacity(2), organizer);
