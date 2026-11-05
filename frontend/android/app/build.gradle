@@ -17,6 +17,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Test builds: one fixed debug key kept by GitHub Actions (VOLINK_DEBUG_KEYSTORE), so every new APK installs over
+    // the previous one and Firebase knows the app's fingerprint. Never a release key.
+    signingConfigs {
+        debug {
+            def keystore = System.getenv("VOLINK_DEBUG_KEYSTORE")
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false

@@ -849,8 +849,14 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-set-card { display: flex; flex-direction: column; background: #fff; border-radius: 18px; border: 1px solid var(--line); overflow: hidden; }
 .m-set-card > a, .m-set-card > button { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 0 16px; border: 0; background: none; color: var(--ink); text-decoration: none; font-size: 16px; font-weight: 550; text-align: left; width: 100%; }
 .m-set-card > a + a, .m-set-card > a + button, .m-set-card > button + a, .m-set-card > button + button { border-top: 1px solid var(--line); }
-.m-set-card > * > span { flex: 1; }
-.m-set-card > * > svg:first-child { color: var(--m-green-ink); }
+.m-set-card > a > span, .m-set-card > button > span, .m-set-card > .m-set-row > span:not(.m-login-ico):not(.m-badge):not(.m-set-ok) { flex: 1; min-width: 0; }
+.m-set-card > a > svg:first-child, .m-set-card > button > svg:first-child { color: var(--m-green-ink); }
+.m-set-row { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; }
+.m-set-row + .m-set-row, .m-set-row + a, .m-set-row + button { border-top: 1px solid var(--line); }
+.m-set-row b { display: block; font-size: 16px; font-weight: 650; }
+.m-set-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-set-ok { color: var(--m-green-ink); font-size: 13.5px; font-weight: 650; flex: none; }
+.m-set-card > button.danger, .m-set-card > button.danger svg { color: var(--red); }
 .m-set-card small { color: var(--ink-3); font-size: 13px; }
 .m-set-card.pad { gap: 10px; padding: 18px; }
 .m-set-card.pad > strong { font-size: 16.5px; }
@@ -872,3 +878,16 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-login-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .m-login-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-btn.danger:disabled { opacity: .4; }
+
+/* 홈 메인 카드: 상태별 (첫 방문 · 신청 대기 · 자리 제안 · 참여 확정 · 봉사 완료 · 모집 중) */
+.m-hero-top .m-hero-state { padding: 4px 11px; border-radius: 99px; background: #fff; color: var(--m-green-ink); font-size: 13px; font-weight: 700; }
+.m-hero-top .m-hero-state.wait { color: #b4541c; background: #fdeee4; }
+.m-hero-top .m-hero-state.hot { color: #fff; background: #c2552a; }
+.m-hero.wait { background: #fbf6ee; }
+.m-hero.hot { background: #fdf0e8; }
+.m-hero p.m-hero-sub { color: #6a756f; font-size: 13.5px; }
+.m-hero-row { display: flex; gap: 10px; margin-top: 8px; }
+.m-hero-row .m-btn { margin-top: 0; flex: 1; }
+.m-hero-row .m-hero-plus { flex: 0 0 56px; padding: 0; border: 0; color: var(--m-green-ink); }
+.m-hero p + p.m-hero-sub { margin-top: -4px; }
+.m-quiet { display: contents; }

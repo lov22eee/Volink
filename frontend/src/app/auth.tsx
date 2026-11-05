@@ -9,7 +9,7 @@ import type { Provider } from '../social'
 import { showToast } from '../App'
 import type { User } from '../api'
 import { ageOn, signupRules } from '../rules'
-import { ActionBar, MIcon, Sheet, WheelColumn, Wheels } from './ui'
+import { ActionBar, MIcon, Sheet, WheelColumn, Wheels, TextInput } from './ui'
 
 export function Login({ onSession }: { onSession: (user: User) => void }) {
   const providers = useProviders()
@@ -46,9 +46,9 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
     </div>
     <form className="m-splash-form" onSubmit={submit} noValidate>
       <label className="m-input m-reveal with-icon"><MIcon name="mail" size={20} /><span className="sr-only">이메일</span>
-        <input type="email" inputMode="email" autoComplete="username" placeholder="이메일" aria-label="이메일" value={email} onChange={event => { setEmail(event.target.value); setError('') }} enterKeyHint="next" /></label>
+        <TextInput type="email" inputMode="email" autoComplete="username" placeholder="이메일" aria-label="이메일" value={email} onChange={event => { setEmail(event.target.value); setError('') }} enterKeyHint="next" /></label>
       <label className="m-input m-reveal with-icon"><MIcon name="lock" size={20} /><span className="sr-only">비밀번호</span>
-        <input type={show ? 'text' : 'password'} autoComplete="current-password" placeholder="비밀번호" aria-label="비밀번호" value={password} onChange={event => { setPassword(event.target.value); setError('') }} enterKeyHint="go" />
+        <TextInput type={show ? 'text' : 'password'} autoComplete="current-password" placeholder="비밀번호" aria-label="비밀번호" value={password} onChange={event => { setPassword(event.target.value); setError('') }} enterKeyHint="go" />
         <button type="button" className="m-peek" aria-label={show ? '비밀번호 숨기기' : '비밀번호 보기'} onClick={() => setShow(!show)}><MIcon name={show ? 'eyeOff' : 'eye'} size={20} /></button></label>
       {error && <p className="m-err" role="alert">{error}</p>}
       <button className="m-btn" disabled={busy}>{busy ? '로그인 중…' : '로그인'}</button>
@@ -168,22 +168,22 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
       <div key={step} className="m-q">
         <h2 className="m-h2">{titles[step]}</h2>
         {step === 'email' && <>
-          <input className="m-input big" type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" aria-label="이메일" autoFocus value={email}
+          <TextInput className="m-input big" type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" aria-label="이메일" autoFocus value={email}
             onChange={event => { setEmail(event.target.value); setError('') }} enterKeyHint="next" />
           {email && !emailOk && <span className="m-err">이메일 형식을 확인해 주세요.</span>}
           <p className="m-help m-org-hint">기관 가입은 PC에서 진행해 주세요.</p>
         </>}
         {step === 'password' && <>
           <span className="m-input big with-peek">
-            <input type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="영문·숫자 포함 8자 이상" aria-label="비밀번호" autoFocus value={password} onChange={event => setPassword(event.target.value)} enterKeyHint="next" />
+            <TextInput type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="영문·숫자 포함 8자 이상" aria-label="비밀번호" autoFocus value={password} onChange={event => setPassword(event.target.value)} enterKeyHint="next" />
             <button type="button" className="m-peek" aria-label={show ? '비밀번호 숨기기' : '비밀번호 보기'} onClick={() => setShow(!show)}><MIcon name={show ? 'eyeOff' : 'eye'} size={20} /></button></span>
           <span className="m-rules">{rules.map(rule => <span key={rule.label} className={'m-rule' + (rule.ok ? ' ok' : '')}>{rule.ok && <MIcon name="check" size={13} />}{rule.label}</span>)}</span>
           {passwordOk && <div className="m-q-more">
-            <input className={'m-input big' + (confirm && !confirmOk ? ' bad' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="한 번 더 입력" aria-label="비밀번호 확인" value={confirm}
+            <TextInput className={'m-input big' + (confirm && !confirmOk ? ' bad' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="한 번 더 입력" aria-label="비밀번호 확인" value={confirm}
               onChange={event => setConfirm(event.target.value)} enterKeyHint="done" />
             {confirm && !confirmOk && <span className="m-err">비밀번호가 달라요.</span>}</div>}
         </>}
-        {step === 'name' && <input className="m-input big" autoComplete="name" placeholder="이름" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />}
+        {step === 'name' && <TextInput className="m-input big" autoComplete="name" placeholder="이름" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />}
         {step === 'birth' && <>
           <button type="button" className="m-input big m-pick" aria-label={'생년월일 ' + (birth ? birthText(birth) : '선택')} onClick={() => setPicking(true)}>
             <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
@@ -264,7 +264,7 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
     <form className="m-body m-form" onSubmit={next} noValidate>
       <div key={step} className="m-q">
         <h2 className="m-h2">{step === 'name' ? '어떻게 불러 드릴까요?' : '생년월일을 알려 주세요'}</h2>
-        {step === 'name' ? <input className="m-input big" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />
+        {step === 'name' ? <TextInput className="m-input big" aria-label="이름" autoFocus maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="next" />
           : <><button type="button" className="m-input big m-pick" aria-label={'생년월일 ' + (birth ? birthText(birth) : '선택')} onClick={() => setPicking(true)}>
             <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? birthText(birth) : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
             {birth && !ageOk && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</>}

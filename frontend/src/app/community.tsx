@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { api, ApiError } from '../api'
 import { friendlyTime, showToast } from '../App'
-import { ActionBar, dayWord, Empty, go, Loading, MIcon, Sheet, TopBar } from './ui'
+import { ActionBar, dayWord, Empty, go, Loading, MIcon, Sheet, TopBar, TextArea, TextInput } from './ui'
 
 type Category = 'FREE' | 'QUESTION' | 'REVIEW'
 export type PostSummary = { id: number; category: Category; title: string; preview: string; author: string; mine: boolean; createdAt: string; likes: number; comments: number; liked: boolean; verified: boolean; activityId: number | null; activityTitle: string | null; activityDate: string | null }
@@ -61,7 +61,7 @@ export function CommunitySetup({ profile, onDone, change }: { profile: Profile |
   return <form className="m-body m-form" onSubmit={submit} noValidate>
     {!change && <section className="c-banner"><strong><MIcon name="sprout" size={20} />커뮤니티를 시작해요</strong><span>여기서는 실제 이름 대신 닉네임으로 보여요.</span></section>}
     <label className="m-field"><span className="m-label">닉네임 <small>{CommunityNick.min}~{CommunityNick.max}자 · 한글·영문·숫자</small></span>
-      <span className="m-input with-peek"><input aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="done" />
+      <span className="m-input with-peek"><TextInput aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="done" />
         <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
       <span className="m-help">닉네임은 30일에 한 번 바꿀 수 있어요.{profile?.nextChange && change ? ` (${profile.nextChange.slice(5).replace('-', '/')}부터)` : ''}</span></label>
     {!change && <div className="m-field"><span className="m-label">커뮤니티 이용 규칙</span>
@@ -108,7 +108,7 @@ function CommunityOnboarding({ profile, onDone }: { profile: Profile | null; onD
     <div className="c-hello" aria-live="polite"><span className="c-hello-ico"><MIcon name="chat" size={34} /></span><h1>커뮤니티를 시작할게요!</h1><p>여기서는 실제 이름 대신 닉네임으로 보여요.</p></div>
     <form className="c-nick" onSubmit={event => { event.preventDefault(); if (valid) { (document.activeElement as HTMLElement | null)?.blur(); setRulesOpen(true) } }} noValidate aria-hidden={stage === 'hello'}>
       <label className="m-field"><span className="m-label">닉네임 <small>{CommunityNick.min}~{CommunityNick.max}자 · 한글·영문·숫자</small></span>
-        <span className={'m-input with-peek' + (error && !rulesOpen ? ' bad' : '')}><input aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} tabIndex={stage === 'hello' ? -1 : 0}
+        <span className={'m-input with-peek' + (error && !rulesOpen ? ' bad' : '')}><TextInput aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} tabIndex={stage === 'hello' ? -1 : 0}
           onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="next" />
           <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" tabIndex={stage === 'hello' ? -1 : 0} onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
         <span className="m-help">닉네임은 30일에 한 번 바꿀 수 있어요.</span>
@@ -222,7 +222,7 @@ export function PostScreen({ id, onChange }: { id: number; onChange: () => void 
     </div>
     <form className="c-reply" onSubmit={comment}>
       {error && <p className="m-err" role="alert">{error}</p>}
-      <div><input className="m-input" aria-label="댓글 내용" placeholder="댓글 달기" maxLength={500} value={text} onChange={event => { setText(event.target.value); setError('') }} enterKeyHint="send" />
+      <div><TextInput className="m-input" aria-label="댓글 내용" placeholder="댓글 달기" maxLength={500} value={text} onChange={event => { setText(event.target.value); setError('') }} enterKeyHint="send" />
         <button className="c-send" aria-label="댓글 보내기" disabled={busy || !text.trim()}><MIcon name="send" size={20} /></button></div>
     </form>
     {menu && <Sheet title="글 메뉴" onClose={() => setMenu(false)}>
@@ -277,7 +277,7 @@ export function WriteScreen({ initial, activity }: { initial?: string; activity?
           value={title} onChange={event => setTitle(event.target.value)} enterKeyHint="next" />
         <span className="m-count">{title.trim().length} / 60</span>{errors.title && <span className="m-err">{errors.title}</span>}</label>
       <label className="m-field"><span className="m-label">내용</span>
-        <textarea name="body" className={'m-input' + (errors.body ? ' bad' : '')} rows={7} maxLength={2000} placeholder="이웃에게 나누고 싶은 이야기를 적어 주세요." value={body} onChange={event => setBody(event.target.value)} />
+        <TextArea name="body" className={'m-input' + (errors.body ? ' bad' : '')} rows={7} maxLength={2000} placeholder="이웃에게 나누고 싶은 이야기를 적어 주세요." value={body} onChange={event => setBody(event.target.value)} />
         <span className="m-count">{body.trim().length} / 2000</span>{errors.body && <span className="m-err">{errors.body}</span>}</label>
       {looksLikeMeetup && <div className="m-note warm"><strong>같이 할 사람을 찾고 있나요?</strong>모집으로 열면 안전 검토와 출석 확인을 받을 수 있고, 연락처를 주고받지 않아도 돼요. <a className="c-inline-link" href="#/host">모집하러 가기 →</a></div>}
       <p className="m-help">전화번호·이메일·오픈채팅은 올릴 수 없어요. 글에는 내 커뮤니티 닉네임이 보여요.</p>

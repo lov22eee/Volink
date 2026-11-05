@@ -34,16 +34,36 @@ jobs:
           npm run build:app
           npx cap sync android
       # Keep one debug signing key between runs so a new test APK installs over the previous one
-      # (a new key each run makes Android refuse the update). Test builds only; never a release key.
-      - uses: actions/cache@v4
+      # (a new key each run makes Android refuse the update) and Firebase sees the same fingerprint.
+      # Test builds only; never a release key. Gradle signs with it through VOLINK_DEBUG_KEYSTORE.
+      # Saved only from main: a branch can read main's key but never makes its own lasting one.
+      - id: key
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.android/debug.keystore
-          key: volink-debug-keystore
+          path: ~/volink-keys/debug.keystore
+          key: volink-debug-keystore-v2
+      - name: Make the debug key once
+        run: |
+          mkdir -p ~/volink-keys
+          if [ ! -s ~/volink-keys/debug.keystore ]; then
+            keytool -genkeypair -keystore ~/volink-keys/debug.keystore -storepass android -keypass android \
+              -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - name: Build the APK
         working-directory: frontend/android
         env:
           VOLINK_VERSION_CODE: ${{ github.run_number }}
-        run: ./gradlew assembleDebug --no-daemon
+        run: VOLINK_DEBUG_KEYSTORE="$HOME/volink-keys/debug.keystore" ./gradlew assembleDebug --no-daemon
+      - if: github.ref == 'refs/heads/main' && steps.key.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/volink-keys/debug.keystore
+          key: volink-debug-keystore-v2
+      # Firebase (phone sign-in) asks for the app's signing fingerprints; they are public, not secrets.
+      - name: Show the signing fingerprints (SHA-1 / SHA-256) for Firebase
+        run: |
+          set -o pipefail
+          keytool -list -v -keystore ~/volink-keys/debug.keystore -storepass android -alias androiddebugkey | grep -E 'SHA1|SHA256' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Name the file
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk "volink-0.6-${{ github.run_number }}.apk"
       - uses: actions/upload-artifact@v4

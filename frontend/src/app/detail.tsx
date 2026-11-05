@@ -15,7 +15,7 @@ import { DateSheet, DurationSheet, TimeSheet } from './host'
 import { NewsEntry } from './news'
 import { RollCall } from './rollcall'
 import { statusWord } from './mine'
-import { ActionBar, dayWord, dDay, go, Loading, MIcon, PickField, Sheet, TopBar } from './ui'
+import { ActionBar, dayWord, dDay, go, Loading, MIcon, PickField, Sheet, TopBar, TextArea, TextInput } from './ui'
 
 const message = (cause: unknown) => cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : cause instanceof Error ? cause.message : '처리하지 못했어요.'
 
@@ -206,7 +206,7 @@ function CancelSheet({ confirmed, busy, onClose, onSend }: { confirmed: boolean;
     <p className="m-help">{confirmed ? '자리는 대기 1번에게 넘어가요 (시작 2시간 전부터는 넘기지 않아요). ' : ''}취소한 활동은 한 번 더 신청할 수 있어요.</p>
     {confirmed && <><div className="m-chips wrap">{reasons.map(x => <button key={x} type="button" className={'m-chip' + (reason === x ? ' on' : '')} aria-pressed={reason === x} onClick={() => setReason(x)}>{x}</button>)}</div>
       <label className="m-field"><span className="m-label">모집자에게 한마디 <small>선택 · 100자</small></span>
-        <input className="m-input" maxLength={100} value={reason} placeholder="직접 적기" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label></>}
+        <TextInput className="m-input" maxLength={100} value={reason} placeholder="직접 적기" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label></>}
   </Sheet>
 }
 
@@ -399,7 +399,7 @@ function ManualForm({ busy, onSend }: { busy: boolean; onSend: (reason: string) 
   return <>
     <p className="m-help">QR·위치로 확인하지 못한 사람을 직접 확인해요. 사유는 기록에 남아요.</p>
     <div className="m-chips wrap">{manualReasons.map(x => <button key={x} type="button" className={'m-chip' + (reason === x ? ' on' : '')} aria-pressed={reason === x} onClick={() => setReason(x)}>{x}</button>)}</div>
-    <label className="m-field"><span className="m-label">사유</span><input className="m-input" maxLength={500} value={reason} placeholder="직접 적기" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label>
+    <label className="m-field"><span className="m-label">사유</span><TextInput className="m-input" maxLength={500} value={reason} placeholder="직접 적기" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label>
     <button className="m-btn" disabled={busy || !reason.trim()} onClick={() => onSend(reason.trim())}>출석 확인</button>
   </>
 }
@@ -451,7 +451,7 @@ function ActivityCancelSheet({ activity, counts, busy, onClose, onSend }: { acti
       <div className="m-radios" role="radiogroup">{cancelReasons.map(([value, text]) => <label key={value} className={code === value ? 'on' : ''}>
         <input type="radio" name="cancel-reason" checked={code === value} onChange={() => pick(value)} /><i aria-hidden="true" />{text}</label>)}</div></fieldset>
     <label className="m-field"><span className="m-label">참가자에게 전달할 안내 <small>필수 · 5~300자</small></span>
-      <textarea className="m-input" rows={4} maxLength={300} value={text} placeholder="참가자에게 취소 사유를 안내해 주세요." onChange={event => setText(event.target.value)} onBlur={() => setTouched(true)} />
+      <TextArea className="m-input" rows={4} maxLength={300} value={text} placeholder="참가자에게 취소 사유를 안내해 주세요." onChange={event => setText(event.target.value)} onBlur={() => setTouched(true)} />
       <span className="m-help">개인정보나 자세한 개인 사정은 적지 않아도 돼요. 연락처는 적을 수 없어요.</span>
       {touched && message.length < 5 && <span className="m-err">안내를 5자 이상 적어 주세요.</span>}</label>
     <div className="m-note"><strong>취소하면 이렇게 처리돼요</strong>
@@ -495,7 +495,7 @@ function RescheduleSheet({ activity, busy, onClose, onSend }: { activity: LiveAc
     <PickField label="새 날짜" icon="calendar" value={dayWord(date)} onOpen={() => setPick('date')} />
     <div className="m-two"><PickField label="시작" icon="clock" value={time} onOpen={() => setPick('time')} /><PickField label="활동 시간" icon="timer" value={durationLabel(duration)} onOpen={() => setPick('duration')} /></div>
     <label className="m-field"><span className="m-label">바꾸는 이유 <small>참가자에게 보여요</small></span>
-      <input className="m-input" maxLength={200} value={reason} placeholder="예: 장소 사정으로 오후로 옮겨요" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label>
+      <TextInput className="m-input" maxLength={200} value={reason} placeholder="예: 장소 사정으로 오후로 옮겨요" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label>
     {pick === 'date' && <DateSheet value={date} first={shift(1)} last={shift(r.maxDaysAhead)} onClose={() => setPick(null)} onPick={value => { setDate(value); setPick(null) }} />}
     {pick === 'time' && <TimeSheet value={time} onClose={() => setPick(null)} onPick={value => { setTime(value); setPick(null) }} />}
     {pick === 'duration' && <DurationSheet value={duration} start={time} options={lengths} onClose={() => setPick(null)} onPick={value => { setDuration(value); setPick(null) }} />}

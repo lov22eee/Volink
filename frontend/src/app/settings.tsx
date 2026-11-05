@@ -102,22 +102,24 @@ export function AccountScreen({ onWithdrawn }: { onWithdrawn: () => void }) {
 
   return <div className="m-screen"><TopBar title="연결된 로그인 계정" back="#/settings" />
     <div className="m-body">{account === undefined ? <Loading /> : account === null ? <p className="m-help">계정 정보를 불러오지 못했어요.</p> : <>
-      <section className="m-set-card pad" aria-label="로그인 계정">
-        <strong>로그인 계정</strong>
-        <div className="m-login-row">
-          <span className={'m-login-ico ' + account.method.toLowerCase()} aria-hidden="true">{account.method === 'KAKAO' ? <MIcon name="chat" size={20} /> : account.method === 'GOOGLE' ? <b>G</b> : <MIcon name="mail" size={20} />}</span>
-          <span className="m-login-main"><b>{providerName[account.method]}</b><small>{account.email ?? (account.method === 'EMAIL' ? '' : providerName[account.method] + ' 계정으로 로그인')}</small></span>
-          <span className="m-badge mint">연결됨</span>
+      <section className="m-set-group" aria-label="로그인 계정"><h2>로그인 계정</h2><div className="m-set-card">
+        <div className="m-set-row">
+          <span className={'m-login-ico ' + account.method.toLowerCase()} aria-hidden="true">{account.method === 'KAKAO' ? <KakaoMark /> : account.method === 'GOOGLE' ? <b>G</b> : <MIcon name="mail" size={20} />}</span>
+          <span><b>{account.method === 'EMAIL' ? '이메일' : providerName[account.method] + ' 로그인'}</b><small>{account.email ?? '이메일 정보 없음'}</small></span>
+          <span className="m-set-ok">연결됨</span>
         </div>
-        <p className="m-help">가입일 {account.joinedOn.replaceAll('-', '. ')}</p>
-      </section>
-      <section className="m-set-card pad" aria-label="회원 탈퇴">
-        <strong className="danger">회원 탈퇴</strong>
-        <p>탈퇴하면 이름·이메일 같은 개인 정보와 알림·저장한 봉사가 지워지고 되돌릴 수 없어요.</p>
+      </div></section>
+      <section className="m-set-group" aria-label="계정 관리"><h2>계정 관리</h2><div className="m-set-card">
+        <div className="m-set-row"><span><b>가입일</b></span><small>{account.joinedOn.replaceAll('-', '. ')}</small></div>
         {account.memberType === 'GENERAL'
-          ? <button type="button" className="m-btn line sm danger" onClick={() => setStep('confirm')}>회원 탈퇴</button>
-          : <p className="m-help">기관 회원 탈퇴는 관리자에게 문의해 주세요.</p>}
-      </section>
+          ? <button type="button" className="danger" onClick={() => setStep('confirm')}><MIcon name="userX" size={21} /><span>회원 탈퇴</span><MIcon name="chevron" size={18} /></button>
+          : <div className="m-set-row"><span><b>회원 탈퇴</b><small>기관 회원 탈퇴는 관리자에게 문의해 주세요.</small></span></div>}
+      </div></section>
     </>}</div>
   </div>
+}
+
+/** Kakao's speech-bubble mark on its yellow (a plain shape, no wordmark). */
+function KakaoMark() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#191600" d="M12 3.5c-5 0-9 3.1-9 7 0 2.5 1.7 4.7 4.2 5.9l-.9 3.4c-.1.3.3.6.6.4l4-2.6h1.1c5 0 9-3.1 9-7s-4-7.1-9-7.1z" /></svg>
 }

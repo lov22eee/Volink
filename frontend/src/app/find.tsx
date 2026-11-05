@@ -11,7 +11,7 @@ import { currentPosition, declined, decline, remember, remembered } from '../loc
 import { PlaceMap } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
-import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar } from './ui'
+import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar, TextInput } from './ui'
 
 type Area = { kind: 'all' } | { kind: 'near'; km: 2 | 5 | 10 } | { kind: 'region'; sido: string; sigungu: string }
 type When = { kind: 'all' | 'today' | 'tomorrow' | 'weekend' } | { kind: 'range'; from: string; to: string }
@@ -170,7 +170,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
       <div className="m-search-row">
         <form className="m-search" role="search" onSubmit={search}>
           <MIcon name="search" size={20} />
-          <input ref={input} type="search" enterKeyHint="search" placeholder="지역, 활동명 검색" aria-label="검색어" value={query} onChange={event => { setQuery(event.target.value); if (!event.target.value) setQ('') }} />
+          <TextInput ref={input} type="search" enterKeyHint="search" placeholder="지역, 활동명 검색" aria-label="검색어" value={query} onChange={event => { setQuery(event.target.value); if (!event.target.value) setQ('') }} />
           {query && <button type="button" className="m-icon-btn sm" aria-label="검색어 지우기" onClick={() => { setQuery(''); setQ('') }}><MIcon name="close" size={18} /></button>}
         </form>
         <button type="button" className={'m-filter-btn' + (applied.length ? ' on' : '')} aria-label={'상세 필터' + (applied.length ? ` (${applied.length}개 적용 중)` : '')} onClick={() => setSheet(true)}>
