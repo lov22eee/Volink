@@ -533,3 +533,20 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .c-rules { margin: 0; padding: 14px; list-style: none; border-radius: 16px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 9px; }
 .c-rules li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
 .c-rules svg { color: var(--m-green); flex: none; margin-top: 3px; }
+
+/* community first visit: greeting fades in at the centre, then moves up and shrinks; the nickname field follows */
+.c-onb { position: relative; overflow: hidden; }
+.c-hello { position: absolute; left: 0; right: 0; top: 36%; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 0 24px;
+  transition: top .6s cubic-bezier(.2, .8, .2, 1), transform .6s cubic-bezier(.2, .8, .2, 1); animation: c-fade-in .8s ease both; }
+.c-hello-ico { width: 76px; height: 76px; border-radius: 24px; background: var(--m-mint); color: var(--m-green); display: grid; place-items: center; }
+.c-hello h1 { font-size: 24px; font-weight: 750; letter-spacing: -0.035em; }
+.c-hello p { color: var(--ink-3); font-size: 15px; transition: opacity .4s; }
+.c-onb.nick .c-hello { top: calc(var(--m-top) + var(--m-safe-top) + 8px); transform: scale(.78); transform-origin: top center; }
+.c-nick { position: absolute; left: 0; right: 0; top: calc(var(--m-top) + var(--m-safe-top) + 190px); padding: 0 var(--m-x); display: flex; flex-direction: column; gap: 14px;
+  opacity: 0; transform: translateY(18px); transition: opacity .45s ease .35s, transform .45s ease .35s; pointer-events: none; }
+.c-onb.nick .c-nick { opacity: 1; transform: none; pointer-events: auto; }
+:root.m-kb .c-onb.nick .c-hello { transform: scale(.6); }
+:root.m-kb .c-onb.nick .c-hello p { opacity: 0; }
+:root.m-kb .c-nick { top: calc(var(--m-top) + var(--m-safe-top) + 130px); }
+@keyframes c-fade-in { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .c-hello, .c-nick { transition: none; animation: none; } }

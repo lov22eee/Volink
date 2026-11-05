@@ -137,11 +137,14 @@ test('community: a question, a like and a comment, and a review only after compl
   await login(page, writer)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '커뮤니티' }).click()
   // First visit: a nickname and the rules before the board opens.
-  const start = page.getByRole('button', { name: '동의하고 시작하기' })
-  await expect(start).toBeDisabled()
+  await expect(page.getByRole('heading', { name: '커뮤니티를 시작할게요!' })).toBeVisible()
   const nickname = '테스트' + Date.now() % 10000
   await page.getByLabel('닉네임', { exact: true }).fill(nickname)
-  await page.getByText('이용 규칙을 읽었고 지킬게요').click()
+  await page.getByRole('button', { name: '다음' }).click()
+  const rules = page.getByRole('dialog', { name: '커뮤니티 이용 규칙' })
+  const start = rules.getByRole('button', { name: '시작하기' })
+  await expect(start).toBeDisabled()
+  await rules.getByText('이용 규칙을 읽었고 지킬게요').click()
   await start.click()
   await expect(page.getByText('나는 ' + nickname)).toBeVisible()
   await page.getByRole('radio', { name: '인기순' }).click()

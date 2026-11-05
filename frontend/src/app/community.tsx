@@ -73,11 +73,62 @@ export function CommunitySetup({ profile, onDone, change }: { profile: Profile |
 }
 export const CommunityNick = { min: 2, max: 10 }
 
+/**
+ * First visit, step by step (user's idea 2026-11-05): the greeting fades in at the centre, then moves up and shrinks;
+ * the nickname field appears under it; after 다음 the rules come up in a bottom sheet; 시작하기 opens the board.
+ */
+function CommunityOnboarding({ profile, onDone }: { profile: Profile | null; onDone: (profile: Profile) => void }) {
+  const calm = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const [stage, setStage] = useState<'hello' | 'nick'>(calm ? 'nick' : 'hello')
+  const [nickname, setNickname] = useState(profile?.nickname ?? randomNickname())
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [agree, setAgree] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { if (stage === 'hello') { const t = window.setTimeout(() => setStage('nick'), 1400); return () => window.clearTimeout(t) } }, [stage])
+  const length = nickname.trim().length
+  const valid = length >= CommunityNick.min && length <= CommunityNick.max && /^[가-힣A-Za-z0-9 ]+$/.test(nickname.trim())
+  async function start() {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await api<Profile>('/api/community/me', 'PUT', { nickname: nickname.trim(), agree })
+      showToast('커뮤니티에 오신 걸 환영해요', saved.nickname + ' 님')
+      onDone(saved)
+    } catch (cause) {
+      const message = cause instanceof ApiError ? (cause.fieldErrors.nickname ?? cause.fieldErrors.agree ?? cause.message) : '저장하지 못했어요.'
+      setError(message)
+      if (cause instanceof ApiError && cause.fieldErrors.nickname) setRulesOpen(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <div className={'m-screen c-onb ' + stage}>
+    <TopBar title="" />
+    <div className="c-hello" aria-live="polite"><span className="c-hello-ico"><MIcon name="chat" size={34} /></span><h1>커뮤니티를 시작할게요!</h1><p>여기서는 실제 이름 대신 닉네임으로 보여요.</p></div>
+    <form className="c-nick" onSubmit={event => { event.preventDefault(); if (valid) { (document.activeElement as HTMLElement | null)?.blur(); setRulesOpen(true) } }} noValidate aria-hidden={stage === 'hello'}>
+      <label className="m-field"><span className="m-label">닉네임 <small>{CommunityNick.min}~{CommunityNick.max}자 · 한글·영문·숫자</small></span>
+        <span className={'m-input with-peek' + (error && !rulesOpen ? ' bad' : '')}><input aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} tabIndex={stage === 'hello' ? -1 : 0}
+          onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="next" />
+          <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" tabIndex={stage === 'hello' ? -1 : 0} onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
+        <span className="m-help">돌림 버튼으로 새 닉네임을 추천받을 수 있어요. 바꾸기는 30일에 한 번이에요.</span>
+        {error && !rulesOpen && <span className="m-err" role="alert">{error}</span>}</label>
+      <ActionBar><button className="m-btn" disabled={!valid || stage === 'hello'} tabIndex={stage === 'hello' ? -1 : 0}>다음</button></ActionBar>
+    </form>
+    {rulesOpen && <Sheet title="커뮤니티 이용 규칙" onClose={() => setRulesOpen(false)}
+      footer={<>{error && <p className="m-err" role="alert">{error}</p>}<button type="button" className="m-btn" disabled={!agree || busy} onClick={start}>{busy ? '들어가는 중…' : '시작하기'}</button></>}>
+      <p className="m-help"><b>{nickname.trim()}</b> 님, 함께 지켜 주세요.</p>
+      <ul className="c-rules">{rules.map(rule => <li key={rule}><MIcon name="check" size={16} />{rule}</li>)}</ul>
+      <label className="m-check box"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" /><span>이용 규칙을 읽었고 지킬게요 (필수)</span></label>
+    </Sheet>}
+  </div>
+}
+
 export function CommunityScreen({ actions }: { actions: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
   useEffect(() => { api<Profile>('/api/community/me').then(setProfile).catch(() => setProfile(null)) }, [])
   if (profile === undefined) return <div className="m-screen"><TopBar title="커뮤니티" actions={actions} /><Loading /></div>
-  if (!profile?.ready) return <div className="m-screen m-create"><TopBar title="커뮤니티" actions={actions} /><CommunitySetup profile={profile ?? null} onDone={setProfile} /></div>
+  if (!profile?.ready) return <CommunityOnboarding profile={profile ?? null} onDone={setProfile} />
   return <CommunityBoard actions={actions} nickname={profile.nickname ?? ''} />
 }
 
