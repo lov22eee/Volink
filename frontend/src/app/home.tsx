@@ -122,8 +122,8 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
 
       <section className="m-section" aria-label="나에게 맞는 봉사">
         <div className="m-section-head"><h2>나에게 맞는 봉사</h2><a href="#/find">전체 보기</a></div>
-        {!mine3.length ? <div className="m-interest-ask"><MIcon name="heart" size={22} /><strong>관심 분야를 설정해 주세요</strong>
-          <span>관심 분야에 맞는 동네 모집글과 1365 봉사를 골라 드려요.</span><a className="m-btn sm" href="#/my?view=interests">설정하러 가기</a></div>
+        {!mine3.length ? <div className="m-interest-ask"><span className="m-interest-text"><MIcon name="heart" size={22} /><strong>관심 분야를 설정해 주세요</strong>
+          <span>관심 분야에 맞는 동네 모집글과 1365 봉사를 골라 드려요.</span></span><a className="m-btn sm" href="#/my?view=interests">설정하러 가기</a></div>
           : picks.length || (programs?.length ?? 0) ? <div className="m-list">
             {picks.map(a => <ActivityRow key={a.id} activity={a} note={'관심 분야 · ' + a.category} />)}
             {(programs ?? []).slice(0, 3).map(p => <a key={p.programNo} className="m-row" href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')}>

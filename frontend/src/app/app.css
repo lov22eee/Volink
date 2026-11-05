@@ -939,3 +939,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-interest-ask strong { font-size: 16.5px; }
 .m-interest-ask span { color: var(--ink-2); font-size: 14px; }
 .m-interest-ask .m-btn { margin-top: 6px; }
+
+.m-interest-ask { flex-direction: row; align-items: center; gap: 12px; }
+.m-interest-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.m-interest-ask .m-btn { margin-top: 0; flex: none; }
