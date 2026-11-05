@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Refused while the member hosts an activity that has not ended and still has applicants (cancel it first).</li>
  *   <li>The member's own applications to activities that have not started are cancelled (the next waiting person is
  *       offered the seat, the organizer is told when a confirmed person leaves).</li>
- *   <li>Hosted activities without applicants that have not ended are deleted (hidden, like the organizer's delete).</li>
+ *   <li>All the member's recruitment posts are deleted (hidden, like the organizer's delete), past ones included.</li>
  *   <li>Personal data is cleared; posts and comments stay and show "탈퇴한 회원"; Kakao is unlinked when the server has
  *       the Kakao admin key (Google cannot be revoked without the person's token: they remove it in their Google account).</li>
  * </ul>
@@ -82,7 +82,7 @@ public class AccountService {
                 SELECT COUNT(*) FROM participations p JOIN activities a ON a.id = p.activity_id
                 WHERE p.user_id = ? AND p.status IN ('APPLIED', 'WAITLISTED', 'OFFERED', 'CONFIRMED') AND a.starts_at > ?
                 """, Integer.class, userId, now));
-        out.put("hosted", jdbc.queryForObject("SELECT COUNT(*) FROM activities a WHERE " + LIVE_HOSTED + " AND NOT " + HAS_PEOPLE, Integer.class, userId, now));
+        out.put("hosted", jdbc.queryForObject("SELECT COUNT(*) FROM activities WHERE organizer_id = ? AND status <> 'DELETED'", Integer.class, userId));
         out.put("allowed", ((List<?>) out.get("blocking")).isEmpty() && "GENERAL".equals(auth.findById(userId).memberType()));
         return out;
     }
@@ -108,7 +108,9 @@ public class AccountService {
             participations.cancel(userId, id, "탈퇴");
             cancelled++;
         }
-        int closed = jdbc.update("UPDATE activities a SET a.status = 'DELETED' WHERE " + LIVE_HOSTED + " AND NOT " + HAS_PEOPLE, userId, now);
+        // Every recruitment post goes (user decision): upcoming ones without applicants and past ones alike. Participants'
+        // own records stay (activity_records); community reviews keep "참여 확인" but lose the link to the activity.
+        int closed = jdbc.update("UPDATE activities SET status = 'DELETED' WHERE organizer_id = ? AND status <> 'DELETED'", userId);
 
         List<Link> links = jdbc.query("SELECT provider, subject FROM social_accounts WHERE user_id = ?", (rs, i) -> new Link(rs.getString(1), rs.getString(2)), userId);
         jdbc.update("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now, userId);

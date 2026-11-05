@@ -86,7 +86,7 @@ export function AccountScreen({ onWithdrawn }: { onWithdrawn: () => void }) {
         <strong>탈퇴하면 이렇게 돼요</strong>
         <ul className="m-bullets">
           {preview.applications > 0 && <li>시작 전인 신청 <b>{preview.applications}개</b>가 취소되고, 자리는 다음 대기자에게 넘어가요.</li>}
-          {preview.hosted > 0 && <li>신청자가 없는 내 모집 활동 <b>{preview.hosted}개</b>가 내려가요.</li>}
+          {preview.hosted > 0 && <li>내가 올린 모집글 <b>{preview.hosted}개</b>가 지난 것까지 모두 삭제돼요. 커뮤니티 후기에 붙은 모집글 연결도 사라져요.</li>}
           <li>이름·이메일·생년월일·닉네임·관심 분야·저장한 봉사·알림이 지워져요.</li>
           <li>커뮤니티 글과 댓글은 남고 작성자는 ‘탈퇴한 회원’으로 보여요. 지우고 싶은 글은 탈퇴 전에 지워 주세요.</li>
           <li>Volink 활동 기록은 되살릴 수 없어요. 같은 카카오·구글 계정으로 다시 가입하면 새 계정이 돼요.</li>

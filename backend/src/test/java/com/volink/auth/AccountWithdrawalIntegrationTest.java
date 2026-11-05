@@ -71,6 +71,12 @@ class AccountWithdrawalIntegrationTest extends ApiTestSupport {
         String waiting = token(member("GENERAL"));
         long next = pid(perform(post("/api/activities/" + activity + "/participations"), Map.of(), waiting).andReturn().getResponse().getContentAsString());
         emptyHosted = createActivity(activity("아무도 없는 내 활동", "신청자가 없어서 탈퇴하면 함께 내려가는 활동이에요."), leaver);
+        // A past activity of theirs that someone reviewed in the community.
+        long past = createActivity(activity("지난 내 모집 활동", "이미 끝난 활동도 탈퇴하면 함께 지워지는지 보는 활동이에요."), leaver);
+        jdbc.update("UPDATE activities SET status = 'FINISHED', starts_at = NOW() - INTERVAL 3 DAY, ends_at = NOW() - INTERVAL 3 DAY + INTERVAL 1 HOUR WHERE id = ?", past);
+        long waiterId = jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, next);
+        jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id) VALUES (?, 'REVIEW', '지난 활동 후기', '함께해서 즐거웠어요 고마워요', ?)", waiterId, past);
+        long review = jdbc.queryForObject("SELECT MAX(id) FROM community_posts WHERE author_id = ?", Long.class, waiterId);
 
         // A community post with a nickname, Kakao linked.
         perform(put("/api/community/me"), Map.of("nickname", "떠나는" + (System.nanoTime() % 10000), "agree", true), leaver).andExpect(status().isOk());
@@ -79,13 +85,14 @@ class AccountWithdrawalIntegrationTest extends ApiTestSupport {
         jdbc.update("INSERT INTO social_accounts(user_id, provider, subject) VALUES (?, 'KAKAO', ?)", id, "kakao-" + id);
         social.unlinked.clear();
 
-        perform(get("/api/me/withdrawal"), null, leaver).andExpect(jsonPath("$.applications").value(1)).andExpect(jsonPath("$.hosted").value(1));
+        perform(get("/api/me/withdrawal"), null, leaver).andExpect(jsonPath("$.applications").value(1)).andExpect(jsonPath("$.hosted").value(2));
         perform(post("/api/me/withdraw"), Map.of("confirm", true), leaver).andExpect(status().isNoContent());
 
         // The seat went to the next person; the empty hosted activity is gone from view.
         assertThat(jdbc.queryForObject("SELECT status FROM participations WHERE id = ?", String.class, mine)).isEqualTo("CANCELLED");
         assertThat(jdbc.queryForObject("SELECT status FROM participations WHERE id = ?", String.class, next)).isEqualTo("OFFERED");
         assertThat(jdbc.queryForObject("SELECT status FROM activities WHERE id = ?", String.class, emptyHosted)).isEqualTo("DELETED");
+        assertThat(jdbc.queryForObject("SELECT status FROM activities WHERE id = ?", String.class, past)).isEqualTo("DELETED");
 
         // Personal data cleared, the old token and login stop working, Kakao unlinked.
         Map<String, Object> row = jdbc.queryForMap("SELECT email, display_name, community_nickname, status FROM users WHERE id = ?", id);
@@ -104,5 +111,8 @@ class AccountWithdrawalIntegrationTest extends ApiTestSupport {
         perform(get("/api/community/me"), null, waiting);
         perform(put("/api/community/me"), Map.of("nickname", "남은이" + (System.nanoTime() % 10000), "agree", true), waiting).andExpect(status().isOk());
         perform(get("/api/community/posts/" + post), null, waiting).andExpect(status().isOk()).andExpect(jsonPath("$.author").value(AccountService.WITHDRAWN_NAME));
+        // A review of their (now deleted) activity stays, still verified, without the link or title.
+        perform(get("/api/community/posts/" + review), null, waiting).andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified").value(true)).andExpect(jsonPath("$.activityId").doesNotExist()).andExpect(jsonPath("$.activityTitle").doesNotExist());
     }
 }

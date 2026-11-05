@@ -38,13 +38,13 @@ public class CommunityService {
     }
 
     private static final String COLUMNS = """
-            p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, p.activity_id AS activityId,
+            p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, a.id AS activityId, (p.activity_id IS NOT NULL) AS reviewed,
             a.title AS activityTitle, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS activityDate,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
             EXISTS (SELECT 1 FROM community_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
-            FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id
+            FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id AND a.status <> 'DELETED'
             """;
 
     /** sort = latest (default) or popular (likes, then comments, then newest). Up to 50. */
@@ -88,7 +88,7 @@ public class CommunityService {
         return jdbc.queryForList("""
                 SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes
                 FROM activity_records r JOIN participations p ON p.id = r.participation_id JOIN activities a ON a.id = p.activity_id
-                WHERE p.user_id = ? AND r.status = 'VALID' ORDER BY a.starts_at DESC
+                WHERE p.user_id = ? AND r.status = 'VALID' AND a.status <> 'DELETED' ORDER BY a.starts_at DESC
                 """, userId);
     }
 
@@ -166,7 +166,8 @@ public class CommunityService {
         row.put("author", shown(row));
         row.put("mine", author == viewerId);
         row.put("liked", ((Number) row.get("liked")).intValue() == 1);
-        row.put("verified", row.get("activityId") != null);
+        // A deleted activity (organizer withdrew or deleted it) drops its title and link; the review stays verified.
+        row.put("verified", ((Number) row.remove("reviewed")).intValue() == 1);
         if (!row.containsKey("body")) row.remove("authorIdRaw");
     }
 
