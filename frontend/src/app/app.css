@@ -548,11 +548,13 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .c-nick { position: absolute; left: 0; right: 0; top: calc(var(--m-top) + var(--m-safe-top) + 190px); padding: 0 var(--m-x); display: flex; flex-direction: column; gap: 14px;
   opacity: 0; transform: translateY(18px); transition: opacity .45s ease .35s, transform .45s ease .35s; pointer-events: none; }
 .c-onb.nick .c-nick { opacity: 1; transform: none; pointer-events: auto; }
+.c-onb .m-action { transition: opacity .45s ease .35s; }
+.c-onb.hello .m-action { opacity: 0; pointer-events: none; }
 :root.m-kb .c-onb.nick .c-hello { transform: scale(.6); }
 :root.m-kb .c-onb.nick .c-hello p { opacity: 0; }
 :root.m-kb .c-nick { top: calc(var(--m-top) + var(--m-safe-top) + 130px); }
 @keyframes c-fade-in { from { opacity: 0; transform: translateY(10px); } }
-@media (prefers-reduced-motion: reduce) { .c-hello, .c-nick { transition: none; animation: none; } }
+@media (prefers-reduced-motion: reduce) { .c-hello, .c-nick, .c-onb .m-action { transition: none; animation: none; } }
 
 /* 활동 소식 (own screen) */
 .n-entry { display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 14px; border-radius: 18px; background: #fff; border: 1px solid var(--line); color: var(--ink); text-decoration: none; }

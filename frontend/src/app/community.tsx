@@ -105,15 +105,16 @@ function CommunityOnboarding({ profile, onDone }: { profile: Profile | null; onD
   return <div className={'m-screen c-onb ' + stage}>
     <TopBar title="" />
     <div className="c-hello" aria-live="polite"><span className="c-hello-ico"><MIcon name="chat" size={34} /></span><h1>커뮤니티를 시작할게요!</h1><p>여기서는 실제 이름 대신 닉네임으로 보여요.</p></div>
-    <form className="c-nick" onSubmit={event => { event.preventDefault(); if (valid) { (document.activeElement as HTMLElement | null)?.blur(); setRulesOpen(true) } }} noValidate aria-hidden={stage === 'hello'}>
+    <form id="c-nick" className="c-nick" onSubmit={event => { event.preventDefault(); if (valid) { (document.activeElement as HTMLElement | null)?.blur(); setRulesOpen(true) } }} noValidate aria-hidden={stage === 'hello'}>
       <label className="m-field"><span className="m-label">닉네임 <small>{CommunityNick.min}~{CommunityNick.max}자 · 한글·영문·숫자</small></span>
         <span className={'m-input with-peek' + (error && !rulesOpen ? ' bad' : '')}><TextInput aria-label="닉네임" maxLength={CommunityNick.max} value={nickname} tabIndex={stage === 'hello' ? -1 : 0}
           onChange={event => { setNickname(event.target.value); setError('') }} enterKeyHint="next" />
           <button type="button" className="m-peek" aria-label="닉네임 새로 추천받기" tabIndex={stage === 'hello' ? -1 : 0} onClick={() => { setNickname(randomNickname()); setError('') }}><MIcon name="refresh" size={20} /></button></span>
         <span className="m-help">닉네임은 30일에 한 번 바꿀 수 있어요.</span>
         {error && !rulesOpen && <span className="m-err" role="alert">{error}</span>}</label>
-      <ActionBar><button className="m-btn" disabled={!valid || stage === 'hello'} tabIndex={stage === 'hello' ? -1 : 0}>다음</button></ActionBar>
     </form>
+    {/* Outside the sliding form: a fixed bar inside a transformed parent sticks to that parent (it covered the field). */}
+    <ActionBar><button form="c-nick" className="m-btn" disabled={!valid || stage === 'hello'} tabIndex={stage === 'hello' ? -1 : 0}>다음</button></ActionBar>
     {rulesOpen && <Sheet title="커뮤니티 이용 규칙" onClose={() => setRulesOpen(false)}
       footer={<>{error && <p className="m-err" role="alert">{error}</p>}<button type="button" className="m-btn" disabled={!agree || busy} onClick={start}>{busy ? '들어가는 중…' : '시작하기'}</button></>}>
       <p className="m-help"><b>{nickname.trim()}</b> 님, 함께 지켜 주세요.</p>
