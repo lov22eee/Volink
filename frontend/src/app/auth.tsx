@@ -23,6 +23,12 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
   const [show, setShow] = useState(false)
   const [error, setError] = useState(() => socialError(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth')))
   const [busy, setBusy] = useState(false)
+  // The app returns here from the phone browser (volink://login?oauth=…) while this screen is already open.
+  useEffect(() => {
+    const read = () => { const code = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth'); if (code) setError(socialError(code)) }
+    window.addEventListener('hashchange', read)
+    return () => window.removeEventListener('hashchange', read)
+  }, [])
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!email.trim() || !password) { setError('이메일과 비밀번호를 입력해 주세요.'); return }
