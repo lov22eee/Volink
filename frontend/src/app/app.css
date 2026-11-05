@@ -465,6 +465,8 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-newbtns a.main { background: var(--m-green); color: #fff; border: 0; }
 .m-newbtns small { font-weight: 400; font-size: 12.5px; opacity: .8; }
 .m-hero .m-btn.line { margin-top: 0; }
+.m-hero-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.m-hero-pair .m-btn { margin-top: 0; }
 
 /* community */
 .c-banner { padding: 16px 18px; border-radius: 20px; background: var(--m-mint); display: flex; flex-direction: column; gap: 4px; }
