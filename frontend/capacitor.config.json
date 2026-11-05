@@ -1,0 +1,16 @@
+{
+  "appId": "com.volink.app",
+  "appName": "Volink",
+  "webDir": "dist-app",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "LIGHT"
+    }
+  },
+  "backgroundColor": "#ffffff"
+}

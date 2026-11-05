@@ -59,10 +59,23 @@ public class SocialAuthService {
     public record Start(String url, String nonce) {}
 
     public Start start(String provider, String redirectUri) {
+        return start(provider, redirectUri, false);
+    }
+
+    /** {@code app}: started from the Android app, so the callback sends the result back into the app (signed into the state). */
+    public Start start(String provider, String redirectUri, boolean app) {
         check(provider);
         String nonce = HexFormat.of().formatHex(bytes(16));
-        String state = seal(Map.of("p", provider, "n", nonce, "e", clock.instant().plus(STATE_TTL).getEpochSecond()));
+        Map<String, Object> claims = new LinkedHashMap<>(Map.of("p", provider, "n", nonce, "e", clock.instant().plus(STATE_TTL).getEpochSecond()));
+        if (app) claims.put("a", true);
+        String state = seal(claims);
         return new Start(login.authorizeUrl(provider, redirectUri, state), nonce);
+    }
+
+    /** Whether a (validly signed, unexpired) state was started from the Android app. */
+    public boolean fromApp(String state) {
+        Map<String, Object> claims = state == null ? null : open(state);
+        return claims != null && Boolean.TRUE.equals(claims.get("a"));
     }
 
     /** What the callback leads to: a user id to log in, or a ticket for the signup form (with a name to suggest). */

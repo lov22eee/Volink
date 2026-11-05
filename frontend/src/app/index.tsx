@@ -1,5 +1,5 @@
 // Android app (APK) screens. Built with `vite --mode app`; the web site keeps its own design (src/App.tsx).
-// Login first: nothing else is reachable before signing in. Five bottom tabs: 홈 / 찾기 / 모집 / 내 활동 / 마이.
+// Login first: nothing else is reachable before signing in. Five bottom tabs: 홈 / 찾기 / 커뮤니티 / 내 활동 / 마이.
 import { useCallback, useEffect, useState } from 'react'
 import { api, logout, mayHaveSession, refresh } from '../api'
 import type { User } from '../api'
@@ -14,9 +14,12 @@ import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
 import { MineScreen } from './mine'
+import { setupNative } from './native'
 import { MyScreen, NicknameScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
 import { BellLink, Loading, MIcon, TabBar, TopBar, useKeyboardAware } from './ui'
 import type { Tab } from './ui'
+
+setupNative()
 
 type Route = { page: string; id?: number; query: URLSearchParams }
 

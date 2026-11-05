@@ -36,15 +36,17 @@ public class SecurityConfig {
 
     /**
      * Stateless Bearer tokens. CSRF protection is off because no API trusts a cookie for authorization;
-     * the only cookie is the SameSite=Strict refresh token limited to /api/auth.
+     * the only cookie is the SameSite=Strict refresh token limited to /api/auth. Cross-site calls are allowed only
+     * from the Android app's origin (AppClients), without cookies.
      */
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment, ObjectMapper json) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment, ObjectMapper json, AppClients apps) throws Exception {
         boolean development = environment.acceptsProfiles(Profiles.of("dev", "test"));
         JwtAuthenticationConverter roles = new JwtAuthenticationConverter();
         roles.setJwtGrantedAuthoritiesConverter(jwt -> List.of(new SimpleGrantedAuthority("ROLE_" + jwt.getClaimAsString("role"))));
         return http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(apps.cors()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(cache -> cache.disable())
                 .formLogin(login -> login.disable())

@@ -54,8 +54,25 @@ npm run build:app    # dist-app/ (APK에 넣을 묶음, git에 올리지 않음)
 - 360·390·430px에서 모든 화면을 찍어 가로 넘침이 없는지 확인(스크립트는 개발 환경 임시 폴더, 저장소에 넣지 않음).
 - 실제 휴대폰·실제 키보드·카메라 QR 인식은 APK를 만든 뒤 기기에서 확인해야 합니다. 개발 환경 브라우저에는 바코드 인식 기능이 없어 “휴대폰 기본 카메라로 찍어 주세요” 안내가 나옵니다.
 
-## APK 전에 남은 일
+## APK (2026-11-05, 테스트용)
 
-- 앱 안 로그인 유지: 지금은 웹과 같은 리프레시 쿠키 방식. 앱(다른 주소에서 서버 호출)에서는 토큰 보관·CORS가 필요합니다.
-- Capacitor 프로젝트·서명 키(사용자가 보관, git 제외)·버전 번호.
-- 이 개발 환경은 안드로이드 SDK 주소(`dl.google.com`)가 막혀 있어, APK 빌드는 GitHub Actions나 Android Studio에서 합니다.
+- 구조: Capacitor 8.5.3이 `dist-app/`을 `frontend/android/`에 넣어 APK로 만듦. 앱 이름 Volink, 패키지 `com.volink.app`, 아이콘·시작 화면은 `node scripts/make-app-icons.mjs`로 다시 그림.
+- 서버 주소: 빌드할 때 `VITE_API_BASE`(Actions는 저장소 변수 `VOLINK_SITE`, 없으면 현재 AWS 주소). 앱이 아닌 브라우저(`npm run dev:app`)는 예전처럼 같은 주소·쿠키 방식.
+- 로그인 유지: 앱은 `https://localhost`에서 열리므로 쿠키 대신 서버가 응답 본문으로 준 리프레시 토큰을 앱 저장소에 보관하고 `/api/auth/refresh`에 본문으로 보냄(한 번 쓰면 바뀜, 로그아웃 때 지움). 서버는 `APP_ORIGINS`(기본 `https://localhost`)에서 온 요청에만 이렇게 함.
+- 카카오·구글: 휴대폰 브라우저(Custom Tab)로 `…/start?app=1` → 끝나면 서버 페이지가 `intent://oauth?code=…#Intent;scheme=volink;package=com.volink.app;end`로 앱을 엶 → 앱이 `#/oauth`로 이어서 로그인. 브라우저가 자동으로 안 넘기면 ‘앱으로 돌아가기’ 버튼.
+- 권한: 카메라(출석 QR 찍기), 위치(체크인 200m·내 주변). 처음 쓸 때 휴대폰이 물어봄.
+- 상단·하단 안전 영역: Capacitor가 넣는 `--safe-area-inset-*` 값을 먼저 쓰고 없으면 `env(safe-area-inset-*)`.
+- 빌드: `.github/workflows/apk.yml` → 실행 결과 Artifacts의 `volink-apk`. 로컬은 Android Studio에서 `frontend/android`를 열어도 됨(`npm run build:app` 뒤 `npx cap sync android`).
+
+### 폰에 설치하기
+
+1. GitHub 저장소 → Actions → ‘Android APK (test build)’ → 가장 위 초록 실행 → 아래 Artifacts의 `volink-apk` 받기(zip 안에 apk).
+2. apk를 휴대폰으로 옮겨(카톡 나에게 보내기·구글 드라이브 등) 누르기 → ‘출처를 알 수 없는 앱 설치’ 허용.
+3. Play 프로텍트 경고가 나오면 ‘무시하고 설치’(정식 서명 전 테스트용이라 나오는 경고).
+4. 새 APK가 ‘앱이 설치되지 않았습니다’로 막히면 기존 Volink 앱을 지우고 설치(실행마다 디버그 서명 키가 달라서).
+
+## 아직 남은 일
+
+- 실제 기기 확인(설치·키보드·카메라 QR·GPS·카카오/구글 왕복).
+- 정식 서명 키(사용자가 보관, git 제외)·버전 관리, 휴대폰 기본 카메라로 찍은 QR이 앱으로 열리는 App Links(`assetlinks.json`), 푸시 알림, 앱 안 카카오 지도(카카오 콘솔에 `https://localhost` 등록 필요).
+- `volink://` 링크는 다른 앱도 같은 이름을 쓸 수 있어 완벽한 보호가 아님(1회용·60초 코드로 피해를 줄임). 정식 출시 전 App Links로 바꾸기.

@@ -1,6 +1,7 @@
 // Activity detail for a participant, shown by state: 신청 전 / 대기 중 / 확정 후 / 활동 당일 / 완료 후.
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import jsQR from 'jsqr'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User, ViewerInfo } from '../api'
 import { showToast } from '../App'
@@ -209,27 +210,38 @@ function CancelSheet({ confirmed, busy, onClose, onSend }: { confirmed: boolean;
 }
 
 /**
- * Scans the organizer's QR inside the app (camera + the browser's barcode reader). When the phone cannot do that,
- * it says to use the phone camera instead: the QR is a link that opens the same check-in.
+ * Scans the organizer's QR inside the app: camera + the browser's barcode reader, or jsQR on camera frames where
+ * the WebView has no barcode reader. Without a camera it says to use the phone camera: the QR is a link to the same check-in.
  */
 function ScanSheet({ onClose, codeHref }: { onClose: () => void; codeHref: string }) {
   const video = useRef<HTMLVideoElement>(null)
   const [state, setState] = useState<'start' | 'on' | 'no'>('start')
   useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) { setState('no'); return }
     const Detector = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => { detect: (v: HTMLVideoElement) => Promise<{ rawValue: string }[]> } }).BarcodeDetector
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) { setState('no'); return }
     let stream: MediaStream | null = null, timer = 0, stopped = false
+    const canvas = document.createElement('canvas')
+    const read = async (frame: HTMLVideoElement): Promise<string[]> => {
+      if (Detector) return (await new Detector({ formats: ['qr_code'] }).detect(frame)).map(code => code.rawValue)
+      const width = frame.videoWidth, height = frame.videoHeight
+      if (!width || !height) return []
+      const scale = Math.min(1, 640 / Math.max(width, height))
+      canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale)
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) return []
+      context.drawImage(frame, 0, 0, canvas.width, canvas.height)
+      const found = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' })
+      return found ? [found.data] : []
+    }
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(media => {
       if (stopped) { media.getTracks().forEach(t => t.stop()); return }
       stream = media
       if (video.current) { video.current.srcObject = media; video.current.play().catch(() => {}) }
       setState('on')
-      const detector = new Detector({ formats: ['qr_code'] })
       const tick = async () => {
         if (stopped || !video.current) return
         try {
-          const found = await detector.detect(video.current)
-          const link = found.map(code => code.rawValue).find(value => /#\/checkin\/\d+\?t=/.test(value))
+          const link = (await read(video.current)).find(value => /#\/checkin\/\d+\?t=/.test(value))
           if (link) { go(link.slice(link.indexOf('#'))); return }
         } catch { /* next frame */ }
         timer = window.setTimeout(tick, 300)
