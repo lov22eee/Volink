@@ -11,4 +11,7 @@ public interface SocialLogin {
 
     /** Code → token → profile. Throws when the provider refuses. */
     Profile exchange(String provider, String code, String redirectUri);
+
+    /** Withdrawal: cut the app's link on the provider side. False when it cannot be done (no key, or a provider without it). */
+    default boolean unlink(String provider, String subject) { return false; }
 }

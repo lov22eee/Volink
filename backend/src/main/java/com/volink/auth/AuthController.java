@@ -25,11 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     static final String REFRESH_COOKIE = "volink_refresh";
     private final AuthService auth;
+    private final AccountService accounts;
     private final AppClients apps;
     private final boolean secureCookie;
 
-    public AuthController(AuthService auth, AppClients apps, @Value("${volink.auth.cookie-secure:true}") boolean secureCookie) {
+    public AuthController(AuthService auth, AccountService accounts, AppClients apps, @Value("${volink.auth.cookie-secure:true}") boolean secureCookie) {
         this.auth = auth;
+        this.accounts = accounts;
         this.apps = apps;
         this.secureCookie = secureCookie;
     }
@@ -38,6 +40,7 @@ public class AuthController {
     public record InterestsRequest(List<String> interests) {}
     /** The Android app keeps its refresh token itself and sends it in the body (no cookie across sites). */
     public record RefreshRequest(String refreshToken) {}
+    public record WithdrawRequest(Boolean confirm) {}
 
     @PostMapping("/api/auth/signup")
     @ResponseStatus(HttpStatus.CREATED)
@@ -79,6 +82,27 @@ public class AuthController {
         long id = Long.parseLong(jwt.getSubject());
         auth.updateInterests(id, request.interests());
         return auth.profile(id);
+    }
+
+    /** 설정 → 연결된 로그인 계정. */
+    @GetMapping("/api/me/account")
+    public Map<String, Object> account(@AuthenticationPrincipal Jwt jwt) {
+        return accounts.account(Long.parseLong(jwt.getSubject()));
+    }
+
+    /** What 회원 탈퇴 would do now (applications cancelled, activities closed, activities that block it). */
+    @GetMapping("/api/me/withdrawal")
+    public Map<String, Object> withdrawal(@AuthenticationPrincipal Jwt jwt) {
+        return accounts.preview(Long.parseLong(jwt.getSubject()));
+    }
+
+    @PostMapping("/api/me/withdraw")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void withdraw(@AuthenticationPrincipal Jwt jwt, @RequestBody(required = false) WithdrawRequest request, HttpServletResponse response) {
+        long id = Long.parseLong(jwt.getSubject());
+        List<AccountService.Link> links = accounts.withdraw(id, request == null ? null : request.confirm());
+        accounts.unlink(id, links);
+        setCookie(response, "", Duration.ZERO);
     }
 
     /** The site gets the refresh token as an HttpOnly cookie; the Android app gets it in the body (it has no same-site cookie). */

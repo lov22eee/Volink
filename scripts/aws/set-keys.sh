@@ -22,6 +22,7 @@ ask kakao_login_on "카카오 로그인 켜기: y 입력 (끄려면 n)"
 ask kakao_login_secret "카카오 로그인 Client Secret (쓰지 않으면 Enter)"
 ask google_client_id "구글 OAuth 클라이언트 ID"
 ask google_client_secret "구글 OAuth 클라이언트 보안 비밀"
+ask kakao_admin_key "카카오 Admin 키 (탈퇴 때 카카오 연결 끊기, 쓰지 않으면 Enter)"
 ask oauth_redirect_base "사이트 주소 (예: https://volink.example.com, 끝에 / 없이)"
 echo "사이트를 다시 만듭니다 (몇 분 걸립니다)."
 exec bash /opt/volink/scripts/aws/server-setup.sh

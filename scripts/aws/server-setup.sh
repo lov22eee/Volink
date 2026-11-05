@@ -64,6 +64,7 @@ if [ -s /etc/volink/kakao_rest_key ] && grep -qi '^y' /etc/volink/kakao_login_on
 if [ -s /etc/volink/kakao_login_secret ]; then echo "KAKAO_LOGIN_CLIENT_SECRET=$(tr -d '[:space:]' < /etc/volink/kakao_login_secret)" >> "$keys"; fi
 if [ -s /etc/volink/google_client_id ]; then echo "GOOGLE_CLIENT_ID=$(tr -d '[:space:]' < /etc/volink/google_client_id)" >> "$keys"; fi
 if [ -s /etc/volink/google_client_secret ]; then echo "GOOGLE_CLIENT_SECRET=$(tr -d '[:space:]' < /etc/volink/google_client_secret)" >> "$keys"; fi
+if [ -s /etc/volink/kakao_admin_key ]; then echo "KAKAO_ADMIN_KEY=$(tr -d '[:space:]' < /etc/volink/kakao_admin_key)" >> "$keys"; fi
 if [ -s /etc/volink/oauth_redirect_base ]; then echo "OAUTH_REDIRECT_BASE=$(tr -d '[:space:]' < /etc/volink/oauth_redirect_base)" >> "$keys"; fi
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]

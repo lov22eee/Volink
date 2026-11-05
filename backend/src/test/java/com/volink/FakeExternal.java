@@ -59,7 +59,13 @@ public class FakeExternal {
     public static class Social implements com.volink.auth.social.SocialLogin {
         public boolean enabled;
         public Map<String, Profile> profiles = new HashMap<>();
-        public void reset() { enabled = false; profiles = new HashMap<>(); }
+        public List<String> unlinked = new ArrayList<>();
+        public void reset() { enabled = false; profiles = new HashMap<>(); unlinked = new ArrayList<>(); }
+        @Override public boolean unlink(String provider, String subject) {
+            if (!"kakao".equals(provider)) return false;
+            unlinked.add(subject);
+            return true;
+        }
         @Override public boolean enabled(String provider) { return enabled; }
         @Override public String authorizeUrl(String provider, String redirectUri, String state) {
             return "https://login.example/" + provider + "?redirect_uri=" + redirectUri + "&state=" + state;

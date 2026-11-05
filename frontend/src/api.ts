@@ -7,6 +7,8 @@ export type Organization = { id: number; name: string; status: 'PENDING' | 'APPR
 export type User = {
   id: number; email: string; name: string; role: 'USER' | 'ADMIN'; memberType: 'GENERAL' | 'INSTITUTION'
   status: string; interests: string[]; organization: Organization | null
+  /** KAKAO / GOOGLE when the member signed up with them (V15). */
+  providers?: string[]
 }
 export type LiveActivity = {
   id: number; title: string; description: string; category: string; activityType: 'GENERAL' | 'INSTITUTION'

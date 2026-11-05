@@ -38,6 +38,7 @@
 | 3 | `POST /api/auth/signup` | 공개 | 일반·기관 가입. 만 14세 미만 422 `UNDER_AGE`, `role` 필드 무시(ADMIN 불가), 기관이면 organizations PENDING 생성 |
 | 3 | `POST /api/auth/login` · `POST /api/auth/refresh` · `POST /api/auth/logout` | 공개/회원 | 토큰 발급·갱신·폐기 |
 | 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 0~3개(2026-11-05부터 가입 때 묻지 않음, 선택) |
+| 6+ | `GET /api/me/account` · `GET /api/me/withdrawal` · `POST /api/me/withdraw {confirm:true}` | 본인 | **구현(V19, 2026-11-05 설정·회원 탈퇴).** 계정: 가입 방법(EMAIL/KAKAO/GOOGLE)·연결일·가입일, 가짜 이메일(`…@social.volink.invalid`)은 `email: null`. `GET /api/me`에 `providers`. 탈퇴 미리보기: 취소될 신청 수·내려갈 모집 수·막는 활동 목록·`allowed`. 탈퇴: 확인 없으면 400, 신청자 있는 모집 활동이 있으면 409 `HOSTING_ACTIVE`, 기관 409 `INSTITUTION_ACCOUNT`, 관리자 409. 성공 204 + 리프레시 쿠키 삭제, 이후 그 액세스 토큰도 401 |
 | 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원, 관리자 불가) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
 | 3 | `GET /api/activities` | 공개 | **구현 추가:** 모집 중(RECRUITING)이고 시작 전인 활동, 시작 시각 순. 4주차에 반경·날짜·분야 조건 추가 |
 | 3 | `GET /api/me/activities` | 본인 | **구현 추가:** 내가 개설한 활동 전체(검토 이유·반려 사유 포함) |
