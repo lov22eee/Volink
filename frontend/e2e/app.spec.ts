@@ -198,10 +198,10 @@ test('community: a question, a like and a comment, and a review only after compl
   const title = '첫 봉사 준비물 질문 ' + Date.now() % 100000
   await page.locator('input[name=title]').fill(title)
   await page.locator('textarea[name=body]').fill('연락 주세요 010-1234-5678')
-  await page.getByRole('button', { name: '올리기' }).click()
+  await page.getByRole('button', { name: '게시글 등록하기' }).click()
   await expect(page.getByText(/연락처는 올릴 수 없어요/).first()).toBeVisible()
   await page.locator('textarea[name=body]').fill('이번 주말 처음 참여하는데 무엇을 챙기면 좋을까요?')
-  await page.getByRole('button', { name: '올리기' }).click()
+  await page.getByRole('button', { name: '게시글 등록하기' }).click()
   await expect(page).toHaveURL(/#\/post\/\d+$/)
   const postUrl = page.url()
 
@@ -215,13 +215,27 @@ test('community: a question, a like and a comment, and a review only after compl
   await reader.getByLabel('댓글 내용').fill('장갑이랑 물 챙기세요!')
   await reader.getByRole('button', { name: '댓글 보내기' }).click()
   await expect(reader.getByText('장갑이랑 물 챙기세요!')).toBeVisible()
+  // Someone else's post: the menu offers 신고 (week 7: the button only), not edit or delete.
+  await reader.getByRole('button', { name: '글 메뉴', exact: true }).click()
+  await expect(reader.getByRole('button', { name: '글 수정' })).toHaveCount(0)
+  await reader.getByRole('button', { name: '신고하기' }).click()
+  await expect(reader.getByText('신고 기능은 곧 열려요')).toBeVisible()
   await reader.close()
+
+  // The writer fixes the title; the post says 수정됨.
+  await page.goto(postUrl.slice(postUrl.indexOf('#')).replace(/^/, '/'))
+  await page.getByRole('button', { name: '글 메뉴', exact: true }).click()
+  await page.getByRole('button', { name: '글 수정' }).click()
+  await page.locator('input[name=title]').fill(title + ' (수정)')
+  await page.getByRole('button', { name: '수정 저장하기' }).click()
+  await expect(page.getByRole('heading', { name: title + ' (수정)' })).toBeVisible()
+  await expect(page.getByText(/수정됨/)).toBeVisible()
 
   await page.goto('/#/notifications')
   await expect(page.getByText('내 글에 댓글이 달렸어요')).toBeVisible()
   await page.goto('/#/community')
   // The shared dev database keeps posts from earlier runs, so the title is unique.
-  await expect(page.getByText(title)).toBeVisible()
+  await expect(page.getByText(title + ' (수정)')).toBeVisible()
 })
 
 test('activity news: the organizer posts a notice from a template, a member asks privately, the organizer answers and sees who read it', async ({ page, browser }) => {

@@ -101,6 +101,21 @@ class CommunityIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/community/posts/" + id).header("Authorization", "Bearer " + other)).andExpect(status().isNotFound());
     }
 
+    @Test
+    void authorsEditTheirOwnPostsAndComments() throws Exception {
+        long id = postId(writer, Map.of("category", "FREE", "title", "고칠 글이에요", "body", "처음에 쓴 내용이에요 고쳐 볼게요"));
+        perform(put("/api/community/posts/" + id), Map.of("title", "고친 글이에요", "body", "고친 내용이에요 잘 보이나요"), other).andExpect(status().isNotFound());
+        perform(put("/api/community/posts/" + id), Map.of("title", "고친 글이에요", "body", "연락 주세요 010-1234-5678"), writer).andExpect(status().isBadRequest());
+        perform(put("/api/community/posts/" + id), Map.of("title", "고친 글이에요", "body", "고친 내용이에요 잘 보이나요"), writer).andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("고친 글이에요")).andExpect(jsonPath("$.edited").value(true));
+        long comment = json.readTree(perform(post("/api/community/posts/" + id + "/comments"), Map.of("body", "댓글이에요"), other)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("comments").get(0).path("id").asLong();
+        perform(put("/api/community/comments/" + comment), Map.of("body", "고친 댓글"), writer).andExpect(status().isNotFound());
+        perform(put("/api/community/comments/" + comment), Map.of("body", "고친 댓글"), other).andExpect(status().isOk())
+                .andExpect(jsonPath("$.comments[0].body").value("고친 댓글")).andExpect(jsonPath("$.comments[0].edited").value(true));
+
+    }
+
     private long postId(String token, Map<String, Object> body) throws Exception {
         return json.readTree(perform(post("/api/community/posts"), body, token).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
     }

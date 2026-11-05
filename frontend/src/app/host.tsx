@@ -12,7 +12,7 @@ import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
 import { difficultyLabel, fieldIcon, placeKindLabel } from './cards'
-import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels, TextInput } from './ui'
+import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels, TextInput, TextArea } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
@@ -223,7 +223,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
             {err('supplies')}</div>
         </>}
         <label className="m-field"><span className="m-label">활동 소개</span>
-          <textarea name="description" className={'m-input' + (errors.description ? ' bad' : '')} rows={5} maxLength={r.descriptionMax} placeholder="무엇을 하는지, 처음 오는 분이 알아야 할 것을 적어 주세요. 연락처는 적지 마세요."
+          <TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '')} rows={5} maxLength={r.descriptionMax} placeholder="무엇을 하는지, 처음 오는 분이 알아야 할 것을 적어 주세요. 연락처는 적지 마세요."
             value={description} onChange={event => setDescription(event.target.value)} />
           <span className="m-count">{description.trim().length} / {r.descriptionMax}</span>{err('description')}</label>
       </>}

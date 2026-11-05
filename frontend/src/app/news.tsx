@@ -7,7 +7,7 @@ import type { FormEvent } from 'react'
 import { api, ApiError } from '../api'
 import type { LiveActivity, User } from '../api'
 import { friendlyTime, showToast } from '../App'
-import { dayWord, Loading, MIcon, Sheet, TopBar } from './ui'
+import { dayWord, Loading, MIcon, Sheet, TopBar, TextArea } from './ui'
 
 type Post = { id: number; kind: 'NOTICE' | 'QUESTION' | 'ANSWER'; body: string; createdAt: string; author: string; mine: boolean; private?: boolean; unseen?: boolean; readCount?: number; answer?: Post | null }
 export type Thread = { canNotice: boolean; canAsk: boolean; canAnswer: boolean; unanswered: number; newNotices: number; newAnswers: number; audience: number; notices: Post[]; questions: Post[] }
@@ -149,7 +149,7 @@ export function NewsScreen({ id, user }: { id: number; user: User }) {
       {error && <p className="m-err" role="alert">{error}</p>}
       <div className="n-row">
         {!organizer && <button type="button" className={'n-private' + (privately ? ' on' : '')} aria-pressed={privately} aria-label="모집자에게만 보이기" onClick={() => setPrivately(!privately)}><MIcon name="lock" size={18} /></button>}
-        <textarea ref={input} rows={1} className="m-input n-input" aria-label={answering ? '답변 내용' : organizer ? '공지 내용' : '질문 내용'} maxLength={500}
+        <TextArea ref={input} rows={1} className="m-input n-input" aria-label={answering ? '답변 내용' : organizer ? '공지 내용' : '질문 내용'} maxLength={500}
           placeholder={answering ? '답변 쓰기' : organizer ? (tab === 'question' ? '질문을 골라 답변하거나 공지를 써요' : '공지 쓰기') : privately ? '모집자에게만 보이는 질문' : '모집자에게 질문하기'}
           value={text} onChange={event => { setText(event.target.value); setError('') }} onFocus={() => { if (organizer && tab === 'question' && !answering) setTab('notice') }} />
         <button className="n-send" aria-label="보내기" disabled={busy || !text.trim()}><MIcon name="send" size={20} /></button>

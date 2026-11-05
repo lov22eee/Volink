@@ -82,6 +82,16 @@ public class CommunityController {
         return community.comment(user(jwt), id, request);
     }
 
+    @PutMapping("/api/community/posts/{id}")
+    public Map<String, Object> edit(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody CommunityService.EditRequest request) {
+        return community.edit(user(jwt), id, request);
+    }
+
+    @PutMapping("/api/community/comments/{id}")
+    public Map<String, Object> editComment(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody CommunityService.CommentRequest request) {
+        return community.editComment(user(jwt), id, request);
+    }
+
     @DeleteMapping("/api/community/comments/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteComment(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {

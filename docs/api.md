@@ -40,6 +40,7 @@
 | 3 | `GET /api/me` · `PUT /api/me/interests` | 본인 | 내 정보(회원 유형·기관 상태), 관심 분야 0~3개(2026-11-05부터 가입 때 묻지 않음, 선택) |
 | 6+ | `GET /api/me/account` · `GET /api/me/withdrawal` · `POST /api/me/withdraw {confirm:true}` | 본인 | **구현(V19, 2026-11-05 설정·회원 탈퇴).** 계정: 가입 방법(EMAIL/KAKAO/GOOGLE)·연결일·가입일, 가짜 이메일(`…@social.volink.invalid`)은 `email: null`. `GET /api/me`에 `providers`. 탈퇴 미리보기: 취소될 신청 수·내려갈 모집 수·막는 활동 목록·`allowed`. 탈퇴: 확인 없으면 400, 신청자 있는 모집 활동이 있으면 409 `HOSTING_ACTIVE`, 기관 409 `INSTITUTION_ACCOUNT`, 관리자 409. 성공 204 + 리프레시 쿠키 삭제, 이후 그 액세스 토큰도 401 |
 | 6+ | `PUT /api/me/push-token {token, platform}` · `POST /api/me/push-token/remove {token}` | 본인 | **구현(V20, 2026-11-05 휴대폰 푸시).** 앱이 알림 허용 뒤 Firebase 토큰을 보냄(같은 토큰을 다른 회원이 등록하면 그 회원으로 옮김), 로그아웃 때 지움. 알림이 저장·커밋되면 알림 설정을 지켜 FCM으로 보냄(제목·내용·누르면 열 화면), 사라진 토큰은 삭제. 서버에 Firebase 키가 없으면 보내지 않음 |
+| 6+ | `PUT /api/community/posts/{id} {title, body}` · `PUT /api/community/comments/{id} {body}` | 본인 | **구현(V21, 2026-11-05).** 글쓴이만 제목·내용(댓글은 내용) 수정, 연락처 거절 규칙 동일, `edited` 표시. 글 목록·상세에 `activityCategory`. 신고는 7주차(앱은 버튼만) |
 | 3 | `POST /api/activities` | 회원 (기관 주관은 확인된 기관회원, 관리자 불가) | 입력 검증 → 위험도 검사. LOW 201 공개, REVIEW 201 비공개, BLOCKED 422 |
 | 3 | `GET /api/activities` | 공개 | **구현 추가:** 모집 중(RECRUITING)이고 시작 전인 활동, 시작 시각 순. 4주차에 반경·날짜·분야 조건 추가 |
 | 3 | `GET /api/me/activities` | 본인 | **구현 추가:** 내가 개설한 활동 전체(검토 이유·반려 사유 포함) |
