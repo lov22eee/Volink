@@ -56,7 +56,7 @@ public class AuthService {
         if (birthDate == null) errors.put("birthDate", "생년월일을 입력해 주세요.");
         List<String> interests = request.interests() == null ? List.of()
                 : List.copyOf(new LinkedHashSet<>(request.interests()));
-        if (interests.isEmpty() || interests.size() > 3) errors.put("interests", "관심 분야를 1~3개 골라 주세요.");
+        if (interests.size() > 3) errors.put("interests", "관심 분야는 3개까지 고를 수 있어요.");
         else if (countCategories(interests) != interests.size()) errors.put("interests", "없는 관심 분야가 있습니다.");
         if (institution) {
             String organization = trim(request.organizationName());
@@ -138,7 +138,7 @@ public class AuthService {
         LocalDate birthDate = parseDate(rawBirthDate);
         if (birthDate == null) errors.put("birthDate", "생년월일을 입력해 주세요.");
         List<String> interests = requested == null ? List.of() : List.copyOf(new LinkedHashSet<>(requested));
-        if (interests.isEmpty() || interests.size() > 3) errors.put("interests", "관심 분야를 1~3개 골라 주세요.");
+        if (interests.size() > 3) errors.put("interests", "관심 분야는 3개까지 고를 수 있어요.");
         else if (countCategories(interests) != interests.size()) errors.put("interests", "없는 관심 분야가 있습니다.");
         if (!Boolean.TRUE.equals(agreed)) errors.put("notice", "이용 안내를 확인해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
@@ -190,8 +190,8 @@ public class AuthService {
     @Transactional
     public void updateInterests(long userId, List<String> requested) {
         List<String> interests = requested == null ? List.of() : List.copyOf(new LinkedHashSet<>(requested));
-        if (interests.isEmpty() || interests.size() > 3 || countCategories(interests) != interests.size())
-            throw ApiException.validation(Map.of("interests", "관심 분야를 1~3개 골라 주세요."));
+        if (interests.size() > 3 || countCategories(interests) != interests.size())
+            throw ApiException.validation(Map.of("interests", "관심 분야는 3개까지 고를 수 있어요."));
         jdbc.update("DELETE FROM user_interests WHERE user_id = ?", userId);
         for (String interest : interests)
             jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT ?, id FROM categories WHERE name = ?", userId, interest);
@@ -209,6 +209,7 @@ public class AuthService {
     }
 
     private int countCategories(List<String> names) {
+        if (names.isEmpty()) return 0;
         String marks = String.join(",", names.stream().map(ignored -> "?").toList());
         return jdbc.queryForObject("SELECT COUNT(*) FROM categories WHERE name IN (" + marks + ")", Integer.class, names.toArray());
     }

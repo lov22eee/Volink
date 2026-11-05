@@ -93,8 +93,8 @@ public class ParticipationService {
             jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ? WHERE id = ?", to, order, now, id);
         }
         log(activityId, id, userId, from, to, from == null ? "신청" : "다시 신청");
-        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link());
-        if (full) notifications.send(userId, "APPLICATION_RESULT", "대기 " + order + "번으로 신청했습니다",
+        notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link());
+        if (full) notifications.send(userId, "WAITLISTED", "대기 " + order + "번으로 신청했습니다",
                 activity.title() + " · 빈자리가 생기면 순서대로 자리를 제안합니다.", activity.link());
         return viewer(activityId, userId);
     }
@@ -118,7 +118,7 @@ public class ParticipationService {
         jdbc.update("UPDATE participations SET status = 'CANCELLED', wait_order = NULL, offer_expires_at = NULL, cancel_count = cancel_count + 1, updated_at = ? WHERE id = ?",
                 now(), participationId);
         log(activity.id(), participationId, userId, from, "CANCELLED", reason.isEmpty() ? "본인 취소" : "본인 취소 · " + reason);
-        if ("CONFIRMED".equals(from)) notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "참가 취소",
+        if ("CONFIRMED".equals(from)) notifications.send(activity.organizerId(), "CANCELLED", "참가 취소",
                 activity.title() + " · 확정된 참가자 한 명이 못 온다고 알렸어요." + (reason.isEmpty() ? "" : " 이유: " + reason), activity.link());
         if (SEAT.contains(from)) offerNext(activity, userId);
         return viewer(activity.id(), userId);
@@ -140,7 +140,7 @@ public class ParticipationService {
         jdbc.update("UPDATE participations SET late_minutes = ?, late_at = ?, updated_at = ? WHERE id = ?", minutes, now(), now(), participationId);
         log(activity.id(), participationId, userId, "CONFIRMED", "LATE", "약 " + minutes + "분 늦음");
         String name = mask(jdbc.queryForObject("SELECT display_name FROM users WHERE id = ?", String.class, userId));
-        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", name + " 님이 약 " + minutes + "분 늦어요", activity.title() + " · 도착하면 QR로 체크인해요.", activity.link());
+        notifications.send(activity.organizerId(), "LATE", name + " 님이 약 " + minutes + "분 늦어요", activity.title() + " · 도착하면 QR로 체크인해요.", activity.link());
         return viewer(activity.id(), userId);
     }
 
@@ -154,7 +154,7 @@ public class ParticipationService {
             throw new ApiException(HttpStatus.GONE, "OFFER_EXPIRED", "응답 시간이 지나 자리 제안이 만료되었습니다.");
         jdbc.update("UPDATE participations SET status = 'CONFIRMED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now(), participationId);
         log(activity.id(), participationId, userId, "OFFERED", "CONFIRMED", "자리 제안 수락");
-        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "대기자 참가 확정", activity.title() + " · 대기자가 자리 제안을 수락했습니다.", activity.link());
+        notifications.send(activity.organizerId(), "OFFER_ACCEPTED", "대기자 참가 확정", activity.title() + " · 대기자가 자리 제안을 수락했습니다.", activity.link());
         return viewer(activity.id(), userId);
     }
 
@@ -231,7 +231,7 @@ public class ParticipationService {
         if (seatsTaken(activity.id()) >= activity.capacity()) throw conflict("CAPACITY_FULL", "정원이 모두 찼습니다. 취소가 생기면 대기자에게 먼저 자리가 제안됩니다.");
         jdbc.update("UPDATE participations SET status = 'CONFIRMED', updated_at = ? WHERE id = ?", now(), participationId);
         log(activity.id(), participationId, organizerId, "APPLIED", "CONFIRMED", "모집자 승인");
-        notifications.send(applicant(participationId), "APPLICATION_RESULT", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+        notifications.send(applicant(participationId), "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -243,7 +243,7 @@ public class ParticipationService {
         if (reason.length() > 500) throw ApiException.validation(Map.of("reason", "사유는 500자 이내로 입력해 주세요."));
         jdbc.update("UPDATE participations SET status = 'REJECTED', wait_order = NULL, updated_at = ? WHERE id = ?", now(), participationId);
         log(activity.id(), participationId, organizerId, from, "REJECTED", reason);
-        notifications.send(applicant(participationId), "APPLICATION_RESULT", "참가 신청이 거절되었습니다", activity.title() + " · " + reason, activity.link());
+        notifications.send(applicant(participationId), "REJECTED", "참가 신청이 거절되었습니다", activity.title() + " · " + reason, activity.link());
     }
 
     // ---- scheduler ----
@@ -266,7 +266,7 @@ public class ParticipationService {
                 long id = ((Number) offer.get("id")).longValue();
                 jdbc.update("UPDATE participations SET status = 'EXPIRED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now, id);
                 log(activityId, id, activity.organizerId(), "OFFERED", "EXPIRED", "응답 시간 초과");
-                notifications.send(((Number) offer.get("user_id")).longValue(), "WAITLIST_OFFER", "자리 제안이 만료되었습니다", activity.title() + " · 응답 시간이 지나 다음 대기자에게 넘어갔습니다.", activity.link());
+                notifications.send(((Number) offer.get("user_id")).longValue(), "OFFER_EXPIRED", "자리 제안이 만료되었습니다", activity.title() + " · 응답 시간이 지나 다음 대기자에게 넘어갔습니다.", activity.link());
                 changed++;
             }
             changed += offerNext(activity, activity.organizerId());
@@ -275,7 +275,7 @@ public class ParticipationService {
                     long id = ((Number) waiting.get("id")).longValue();
                     jdbc.update("UPDATE participations SET status = 'EXPIRED', wait_order = NULL, updated_at = ? WHERE id = ?", now, id);
                     log(activityId, id, activity.organizerId(), "WAITLISTED", "EXPIRED", "대기 마감(시작 2시간 전)");
-                    notifications.send(((Number) waiting.get("user_id")).longValue(), "WAITLIST_OFFER", "대기가 마감되었습니다", activity.title() + " · 시작 2시간 전이라 대기 신청이 마감되었습니다.", activity.link());
+                    notifications.send(((Number) waiting.get("user_id")).longValue(), "WAITLIST_CLOSED", "대기가 마감되었습니다", activity.title() + " · 시작 2시간 전이라 대기 신청이 마감되었습니다.", activity.link());
                     changed++;
                 }
             }
@@ -300,7 +300,7 @@ public class ParticipationService {
             long id = ((Number) next.get("id")).longValue();
             jdbc.update("UPDATE participations SET status = 'OFFERED', offer_expires_at = ?, updated_at = ? WHERE id = ?", expires, now, id);
             log(activity.id(), id, actorId, "WAITLISTED", "OFFERED", "빈자리 제안 · " + SHORT.format(expires) + "까지");
-            notifications.send(((Number) next.get("user_id")).longValue(), "WAITLIST_OFFER", "빈자리가 생겼어요",
+            notifications.send(((Number) next.get("user_id")).longValue(), "OFFERED", "빈자리가 생겼어요",
                     activity.title() + " · " + SHORT.format(expires) + "까지 수락하면 참가가 확정됩니다.", activity.link());
             offered++;
         }

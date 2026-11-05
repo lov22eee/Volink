@@ -24,11 +24,12 @@
 - 6주차 추가(2026-11-04~05): V9(모집자 활동 취소·일정 변경 1회·늦어요·못 가요 이유·활동 강도/실내외/처음 환영·하루 전 알림), V10(저장한 봉사). **APK 전용 화면**은 `frontend/src/app/`(`npm run dev:app`, `vite --mode app`)이며 PC 웹 화면(`App.tsx`)은 바꾸지 않음(사용자 결정). 앱은 로그인 필수·일반 회원만 가입(기관은 PC). 하단 탭은 홈/찾기/커뮤니티/내 활동/마이(V11 커뮤니티: 자유·질문·봉사후기, 후기는 완료한 활동만 / V12 첫 진입 닉네임·규칙 동의). `docs/app.md` 참고.
 - 카카오·구글 로그인(V15, 2026-11-05): 웹·앱 모두, **개인 회원만**(기관은 이메일). 키는 서버 전용(`KAKAO_LOGIN_CLIENT_ID`·`KAKAO_LOGIN_CLIENT_SECRET`·`GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`OAUTH_REDIRECT_BASE`, `scripts/aws/set-keys.sh`). 키가 없으면 버튼이 ‘준비 중’. 테스트는 `FakeExternal.Social`.
 - APK(2026-11-05): Capacitor 8.5.3 `frontend/android/`, 앱은 `https://localhost`에서 서버 주소(`VITE_API_BASE`)를 부르고 리프레시 토큰을 본문으로 받아 보관(서버 `AppClients`·`APP_ORIGINS`, 사이트는 쿠키 그대로). 카카오·구글은 브라우저 → `volink://`로 복귀. 빌드는 `.github/workflows/apk.yml`(이 환경은 안드로이드 SDK 다운로드 불가). 아이콘 `frontend/scripts/make-app-icons.mjs`.
-- 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), 정식 서명 APK·App Links·푸시. GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
+- 알림센터 A안(V16, 2026-11-05): 알림 유형 세분화·category·activity_id·dedupe_key, `NotificationService.send(..., activityId, dedupeKey)`(링크에서 활동 번호 자동), `/api/me/notification-center`(페이지·칩·30분 신청 묶기), 당일 아침 안내(DAY_OF), 수동 출석·후기 안내 알림, 푸시 설정 표. 가입 때 관심 분야는 묻지 않음(0~3개 허용). 휴대폰 푸시는 계획서 제외 항목이지만 사용자가 2026-11-05에 하기로 결정(Firebase 준비 후).
+- 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), 정식 서명 APK·App Links·푸시(Firebase). GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
 - 서버의 DATETIME은 한국 시간입니다. JDBC에는 `LocalDateTime`을 그대로 넘기고 `Timestamp.valueOf`를 쓰지 마세요(서버 시간대 UTC에서 9시간 밀림).
 - demo_personas는 로그인 계정이 아닙니다. 시연 활동은 실제 모집글이 아닙니다. 현재 UI를 서버 업무 기능으로 오해하지 마세요.
 - 모집자는 USER + 해당 활동 organizer_id입니다. ADMIN은 회원가입에서 선택하지 못하도록 구현하세요.
-- 적용된 Flyway V1~V15는 수정하지 말고 새 마이그레이션(V16~)을 추가하세요. 좌표는 추측해서 넣지 말고 관리자 화면 입력을 씁니다. SRID 4326 WKT는 `axis-order=long-lat`(경도 먼저)로 다룹니다(`PlaceService.POINT`).
+- 적용된 Flyway V1~V16은 수정하지 말고 새 마이그레이션(V17~)을 추가하세요. 좌표는 추측해서 넣지 말고 관리자 화면 입력을 씁니다. SRID 4326 WKT는 `axis-order=long-lat`(경도 먼저)로 다룹니다(`PlaceService.POINT`).
 - 장소 후보는 경동대학교 양주 메트로폴 생활권 기준입니다. 좌표·허용 조건은 아직 미확인입니다.
 - 사용자가 실제 제출한 20261006 보고서에는 일반회원·기관회원·관리자, 기관 승인·기관 주관 활동 설계가 포함됩니다. `docs/submitted-report-presentation.md`를 확인하고 후속 명세에 반영하세요. 발표 HTML의 기관·로그인·내 활동 와이어프레임은 업무 기능 구현이 아닙니다. 제출 기간은 9/28~10/5이며 10/7 추가 구현을 그 기간의 실적으로 소급하지 마세요.
 - 사용자는 PPT보다 지금 구현한 서비스 화면을 직접 눌러보기를 원합니다. `docs/ui/Volink_서비스화면.html`은 현재 React UI를 묶은 오프라인 파일이며 발표 슬라이드와 다릅니다. 화면 변경 후 `frontend/`에서 `npm run ui:export`로 갱신합니다. 저장된 시연 데이터를 라이브 API·DB 연결로 표시하지 마세요.

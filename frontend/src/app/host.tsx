@@ -11,7 +11,7 @@ import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
 import { difficultyLabel, fieldIcon, placeKindLabel } from './cards'
-import { ActionBar, dayWord, Empty, go, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels } from './ui'
+import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [mine, setMine] = useState<LiveActivity[] | null>(null)
@@ -173,7 +173,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
   const stepTitle = ['기본 정보', '참여 안내', '운영 설정'][step - 1]
   const err = (key: string) => errors[key] && <span className="m-err" role="alert">{errors[key]}</span>
   return <div className="m-screen m-create">
-    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : go(editId ? '#/manage/' + editId : '#/host')} />
+    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : goUp(editId ? '#/manage/' + editId : '#/host')} />
     <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label="만들기 단계"><i style={{ width: step * 33.34 + '%' }} /></div>
     {loading ? <Loading /> : <form className="m-body m-form" noValidate onSubmit={event => { event.preventDefault(); next() }}>
       <span className="m-step">{step} / 3 · {stepTitle}</span>

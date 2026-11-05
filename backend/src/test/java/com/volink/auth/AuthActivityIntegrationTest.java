@@ -43,7 +43,7 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         perform(post("/api/auth/signup"), Map.of(), null).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.fieldErrors[*].field").value(org.hamcrest.Matchers.hasItems(
-                        "memberType", "name", "birthDate", "interests", "email", "password", "notice")));
+                        "memberType", "name", "birthDate", "email", "password", "notice")));
         Map<String, Object> weak = signupBody(email(), "GENERAL", TODAY.minusYears(20));
         weak.put("password", "onlyletters");
         perform(post("/api/auth/signup"), weak, null).andExpect(status().isBadRequest())

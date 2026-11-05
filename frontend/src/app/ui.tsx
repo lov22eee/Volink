@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
   | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
   | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more' | 'send'
+  | 'userPlus' | 'userX' | 'checkCircle' | 'alert'
 
 const paths: Record<MIconName, ReactNode> = {
   home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
@@ -49,6 +50,10 @@ const paths: Record<MIconName, ReactNode> = {
   sprout: <><path d="M12 21v-9" /><path d="M12 12c0-4-3-6-7-6 0 4 3 6 7 6ZM12 10c0-4 3-6 7-6 0 4-3 6-7 6Z" /></>,
   outward: <path d="M7 17 17 7M9 7h8v8" />,
   send: <path d="M4 12 20 4l-6 16-3-7Z" />,
+  userPlus: <><circle cx="10" cy="8" r="4" /><path d="M3 21a7 7 0 0 1 14 0M19 8v6M16 11h6" /></>,
+  userX: <><circle cx="10" cy="8" r="4" /><path d="M3 21a7 7 0 0 1 14 0M17 8l5 5M22 8l-5 5" /></>,
+  checkCircle: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,
+  alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" /></>,
   more: <><circle cx="6" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18" cy="12" r="1.3" /></>,
 }
 
@@ -58,9 +63,38 @@ export function MIcon({ name, size = 22 }: { name: MIconName; size?: number }) {
 
 export const go = (hash: string) => { window.location.hash = hash }
 
+// The screens this app visited, newest last, so a back button returns instead of piling up a new copy. (Going
+// "back" by opening the parent again made 만들기 → 봉사 만들기 → (뒤로) 만들기 → … loop forever.)
+const visited: string[] = []
+const norm = (hash: string) => '#/' + hash.replace(/^#\/?/, '')
+function track() {
+  const now = norm(window.location.hash || '#/home')
+  if (visited.length > 1 && visited[visited.length - 2] === now) visited.pop()
+  else if (visited[visited.length - 1] !== now) visited.push(now)
+}
+if (typeof window !== 'undefined') { track(); window.addEventListener('hashchange', track) }
+
+/** Back to the previous screen of this app; with nothing before it (fresh start), to {@code fallback} without stacking. */
+export function goBack(fallback = '#/home') {
+  if (visited.length > 1) window.history.back()
+  else replace(fallback)
+}
+
+/** Up to a parent screen: back when that is where we came from, otherwise replace this screen with it. */
+export function goUp(target: string) {
+  if (visited.length > 1 && visited[visited.length - 2].split('?')[0] === norm(target).split('?')[0]) window.history.back()
+  else replace(target)
+}
+
+/** Swap this screen for another without a new history entry (the list follows: the old one leaves it). */
+function replace(target: string) {
+  visited.pop()
+  window.location.replace(norm(target))
+}
+
 /** Screen title row: back button (sub screens) or the brand, then at most two icons. */
 export function TopBar({ title, sub, back, brand, actions }: { title?: string; sub?: string; back?: string | (() => void); brand?: boolean; actions?: ReactNode }) {
-  const onBack = () => typeof back === 'function' ? back() : back === 'history' ? window.history.back() : go(back ?? '#/home')
+  const onBack = () => typeof back === 'function' ? back() : back === 'history' ? goBack() : goUp(back ?? '#/home')
   return <header className="m-top">
     {back && <button type="button" className="m-icon-btn" aria-label="뒤로" onClick={onBack}><MIcon name="back" /></button>}
     {brand ? <span className="m-brand">volink<i>.</i></span> : <h1 className="m-title">{title}{sub && <small className="m-title-sub">{sub}</small>}</h1>}

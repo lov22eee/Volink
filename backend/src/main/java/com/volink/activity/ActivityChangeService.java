@@ -58,7 +58,7 @@ public class ActivityChangeService {
             jdbc.update("UPDATE participations SET status = 'CANCELLED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now(), pid);
             jdbc.update("INSERT INTO activity_logs(activity_id, participation_id, actor_id, from_status, to_status, reason) VALUES (?, ?, ?, ?, 'CANCELLED', '활동 취소')",
                     id, pid, organizerId, p.get("status"));
-            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CHANGED", "활동이 취소됐어요",
+            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CANCELLED", "활동이 취소됐어요",
                     row.get("title") + " · 모집자가 취소했어요. 이유: " + reason, "#/activity/" + id);
         }
         return activities.detail(id, organizerId);
@@ -105,7 +105,7 @@ public class ActivityChangeService {
         // RESCHEDULED also resets the one-off reminders (they are sent again for the new time).
         activities.log(id, organizerId, "RECRUITING", "RESCHEDULED", WHEN.format(from) + " → " + WHEN.format(startsAt) + " · " + reason);
         for (Map<String, Object> p : jdbc.queryForList("SELECT user_id, status FROM participations WHERE activity_id = ? AND status IN ('APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED')", id))
-            notifications.send(((Number) p.get("user_id")).longValue(), "ACTIVITY_CHANGED", "활동 일정이 바뀌었어요",
+            notifications.send(((Number) p.get("user_id")).longValue(), "RESCHEDULED", "활동 일정이 바뀌었어요",
                     row.get("title") + " · " + WHEN.format(from) + " → " + WHEN.format(startsAt) + " (" + reason + ")"
                             + ("CONFIRMED".equals(p.get("status")) ? " · 참가 확정은 그대로예요. 시간이 안 맞으면 취소해 주세요." : ""), "#/activity/" + id);
         return activities.detail(id, organizerId);
