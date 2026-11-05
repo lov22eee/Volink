@@ -6,6 +6,7 @@ import type { AppNotification, LiveActivity, MyParticipation, MyRecord, User } f
 import { categories, friendlyTime, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
+import { CommunitySetup } from './community'
 import { ActionBar, Empty, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
 
@@ -16,7 +17,9 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
   const [saved, setSaved] = useState<number | null>(null)
   const [about, setAbout] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [nickname, setNickname] = useState<string | null>(null)
   useEffect(() => {
+    api<{ nickname: string | null }>('/api/community/me').then(p => setNickname(p.nickname)).catch(() => {})
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
     api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
     api<MyParticipation[]>('/api/me/participations').then(setJoined).catch(() => setJoined([]))
@@ -30,6 +33,7 @@ export function MyScreen({ user, actions, onSignOut }: { user: User; actions: Re
     { icon: 'record', label: '내 활동 기록', href: '#/mine?tab=done', note: valid.length ? valid.length + '개' : undefined },
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') },
+    { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
     { icon: 'bell', label: '알림', href: '#/notifications' },
     { icon: 'flag', label: '활동 기록·보험 안내', onClick: () => setAbout(true) },
   ]
@@ -99,6 +103,13 @@ export function InterestsScreen({ user, onChange }: { user: User; onChange: (use
           <MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button> })}</div>
       <ActionBar><button className="m-btn" disabled={busy || picked.length === 0} onClick={save}>저장</button></ActionBar></div>
   </div>
+}
+
+export function NicknameScreen() {
+  const [profile, setProfile] = useState<{ nickname: string | null; agreed: boolean; ready: boolean; nextChange: string | null } | null | undefined>(undefined)
+  useEffect(() => { api<NonNullable<typeof profile>>('/api/community/me').then(setProfile).catch(() => setProfile(null)) }, [])
+  return <div className="m-screen m-create"><TopBar title="커뮤니티 닉네임" back="#/my" />
+    {profile === undefined ? <Loading /> : <CommunitySetup profile={profile} change={Boolean(profile?.ready)} onDone={() => { window.location.hash = '#/my' }} />}</div>
 }
 
 const noticeIcon = (type: string): MIconName => type === 'WAITLIST_OFFER' ? 'bolt' : type === 'ACTIVITY_REMINDER' ? 'clock' : type === 'RECORD_CONFIRMED' ? 'record' : type === 'APPLICATION_RESULT' ? 'check' : type.startsWith('POST') || type === 'ACTIVITY_POST' ? 'chat' : 'bell'

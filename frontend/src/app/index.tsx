@@ -13,7 +13,7 @@ import { FindScreen } from './find'
 import { HomeScreen } from './home'
 import { CreateWizard, HostScreen } from './host'
 import { MineScreen } from './mine'
-import { MyScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
+import { MyScreen, NicknameScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
 import { BellLink, Loading, MIcon, TabBar, TopBar, useKeyboardAware } from './ui'
 import type { Tab } from './ui'
 
@@ -88,7 +88,7 @@ export default function MobileApp() {
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen actions={bell} initial={route.query.get('tab') ?? undefined} />; break
-    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : <MyScreen user={user} actions={bell} onSignOut={signOut} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break

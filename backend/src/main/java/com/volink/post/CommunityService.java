@@ -38,7 +38,7 @@ public class CommunityService {
     }
 
     private static final String COLUMNS = """
-            p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, p.activity_id AS activityId,
+            p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, p.activity_id AS activityId,
             a.title AS activityTitle, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS activityDate,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
@@ -68,12 +68,12 @@ public class CommunityService {
         Long organizer = post.get("activityId") == null ? null
                 : jdbc.queryForObject("SELECT organizer_id FROM activities WHERE id = ?", Long.class, post.get("activityId"));
         List<Map<String, Object>> comments = jdbc.queryForList(Sql.kst("""
-                SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt
+                SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt
                 FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL ORDER BY c.created_at, c.id
                 """), id);
         comments.forEach(comment -> {
             long author = ((Number) comment.remove("authorId")).longValue();
-            comment.put("author", PostService.mask((String) comment.remove("name")));
+            comment.put("author", shown(comment));
             comment.put("mine", author == viewerId);
             comment.put("organizer", organizer != null && organizer == author);
             comment.put("postAuthor", author == ((Number) post.get("authorIdRaw")).longValue());
@@ -163,7 +163,7 @@ public class CommunityService {
     private void shape(Map<String, Object> row, long viewerId) {
         long author = ((Number) row.remove("authorId")).longValue();
         row.put("authorIdRaw", author);
-        row.put("author", PostService.mask((String) row.remove("name")));
+        row.put("author", shown(row));
         row.put("mine", author == viewerId);
         row.put("liked", ((Number) row.get("liked")).intValue() == 1);
         row.put("verified", row.get("activityId") != null);
@@ -174,6 +174,59 @@ public class CommunityService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 글을 쓸 수 없습니다.");
         if (!user.canWrite()) throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_RESTRICTED", "이용이 제한된 계정은 글을 쓸 수 없습니다.");
+        if (!Boolean.TRUE.equals(profile(userId).get("ready")))
+            throw new ApiException(HttpStatus.FORBIDDEN, "COMMUNITY_SETUP_REQUIRED", "커뮤니티 닉네임을 정하고 이용 규칙에 동의해 주세요.");
+    }
+
+    /** Nickname when set; otherwise the partly hidden real name (posts from before nicknames existed). */
+    private static String shown(Map<String, Object> row) {
+        Object nickname = row.remove("nickname");
+        String name = (String) row.remove("name");
+        return nickname != null ? (String) nickname : PostService.mask(name);
+    }
+
+    // ---- nickname and rules ----
+
+    static final int NICK_MIN = 2, NICK_MAX = 10, NICK_CHANGE_DAYS = 30;
+    private static final java.util.regex.Pattern NICK = java.util.regex.Pattern.compile("[가-힣A-Za-z0-9 ]+");
+    private static final List<String> RESERVED = List.of("관리자", "운영자", "운영팀", "volink", "볼링크", "admin", "모집자");
+
+    public Map<String, Object> profile(long userId) {
+        Map<String, Object> row = jdbc.queryForMap("SELECT community_nickname AS nickname, community_agreed_at IS NOT NULL AS agreed, nickname_changed_at AS changedAt FROM users WHERE id = ?", userId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("nickname", row.get("nickname"));
+        result.put("agreed", ((Number) row.get("agreed")).intValue() == 1);
+        result.put("ready", row.get("nickname") != null && ((Number) row.get("agreed")).intValue() == 1);
+        LocalDateTime changed = (LocalDateTime) row.get("changedAt");
+        result.put("nextChange", changed == null ? null : changed.plusDays(NICK_CHANGE_DAYS).toLocalDate().toString());
+        return result;
+    }
+
+    public record ProfileRequest(String nickname, Boolean agree) {}
+
+    @Transactional
+    public Map<String, Object> setProfile(long userId, ProfileRequest request) {
+        AuthUser user = auth.findById(userId);
+        if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 커뮤니티 닉네임을 쓰지 않습니다.");
+        String nickname = clean(request.nickname()).replaceAll("\\s+", " ");
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (nickname.length() < NICK_MIN || nickname.length() > NICK_MAX) errors.put("nickname", "닉네임은 " + NICK_MIN + "~" + NICK_MAX + "자로 정해 주세요.");
+        else if (!NICK.matcher(nickname).matches()) errors.put("nickname", "한글·영문·숫자만 쓸 수 있어요.");
+        else if (RESERVED.stream().anyMatch(word -> nickname.replace(" ", "").toLowerCase(java.util.Locale.ROOT).contains(word))) errors.put("nickname", "운영자로 오해할 수 있는 닉네임은 쓸 수 없어요.");
+        else if (contact(nickname)) errors.put("nickname", "연락처가 들어간 닉네임은 쓸 수 없어요.");
+        if (!Boolean.TRUE.equals(request.agree())) errors.put("agree", "커뮤니티 이용 규칙에 동의해 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        Map<String, Object> current = jdbc.queryForMap("SELECT community_nickname AS nickname, nickname_changed_at AS changedAt FROM users WHERE id = ? FOR UPDATE", userId);
+        boolean changing = current.get("nickname") != null && !nickname.equals(current.get("nickname"));
+        LocalDateTime changed = (LocalDateTime) current.get("changedAt");
+        Integer taken = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE community_nickname = ? AND id <> ?", Integer.class, nickname, userId);
+        if (taken > 0) throw new ApiException(HttpStatus.CONFLICT, "NICKNAME_TAKEN", "이미 쓰는 닉네임이에요. 다른 닉네임을 골라 주세요.", Map.of("nickname", "이미 쓰는 닉네임이에요."));
+        if (changing && changed != null && changed.plusDays(NICK_CHANGE_DAYS).isAfter(now()))
+            throw new ApiException(HttpStatus.CONFLICT, "NICKNAME_CHANGE_LIMIT", "닉네임은 " + NICK_CHANGE_DAYS + "일에 한 번 바꿀 수 있어요. " + changed.plusDays(NICK_CHANGE_DAYS).toLocalDate() + "부터 바꿀 수 있어요.");
+        // MySQL applies SET left to right, so the change time is decided before the nickname is overwritten.
+        jdbc.update("UPDATE users SET nickname_changed_at = CASE WHEN community_nickname IS NULL OR community_nickname <> ? THEN ? ELSE nickname_changed_at END, community_nickname = ?, community_agreed_at = COALESCE(community_agreed_at, ?) WHERE id = ?",
+                nickname, now(), nickname, now(), userId);
+        return profile(userId);
     }
 
     private long authorOf(String table, long id) {

@@ -525,3 +525,11 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .c-pick small { color: var(--ink-3); font-size: 13px; }
 .c-inline-link { color: var(--amber-ink); font-weight: 700; text-decoration: underline; padding: 6px 0; display: inline-block; }
 .m-shell.has-tabs .m-screen:has(.m-fab) .m-body { padding-bottom: calc(var(--m-tab) + 96px + var(--m-safe)); }
+.c-sort { display: flex; gap: 2px; }
+.c-sort button { min-height: 44px; padding: 0 8px; border: 0; background: none; color: #9aa19d; font-size: 14.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+.c-sort button.on { color: var(--m-green); }
+.c-sort button + button::before { content: ''; width: 1px; height: 12px; background: var(--line-2); margin-right: 10px; }
+.c-banner b { color: var(--m-green-ink); }
+.c-rules { margin: 0; padding: 14px; list-style: none; border-radius: 16px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 9px; }
+.c-rules li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+.c-rules svg { color: var(--m-green); flex: none; margin-top: 3px; }

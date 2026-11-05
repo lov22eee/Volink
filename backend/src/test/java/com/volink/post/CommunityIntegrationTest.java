@@ -26,6 +26,33 @@ class CommunityIntegrationTest extends ApiTestSupport {
         other = token(member("GENERAL"));
         organizer = token(member("GENERAL"));
         activity = createActivity(activity("공원 산책로 함께 정리하기", "편한 신발을 신고 공원 산책로의 가벼운 쓰레기를 함께 줍습니다."), organizer);
+        nickname(writer, "글쓴이" + seq());
+        nickname(other, "읽는이" + seq());
+    }
+
+    static int counter = 0;
+    static String seq() { return String.valueOf(System.nanoTime() % 10000 + (counter++)); }
+
+    private void nickname(String token, String nick) throws Exception {
+        perform(put("/api/community/me"), Map.of("nickname", nick, "agree", true), token).andExpect(status().isOk()).andExpect(jsonPath("$.ready").value(true));
+    }
+
+    @Test
+    void aNicknameAndTheRulesComeFirst() throws Exception {
+        String fresh = token(member("GENERAL"));
+        mvc.perform(get("/api/community/me").header("Authorization", "Bearer " + fresh)).andExpect(jsonPath("$.ready").value(false));
+        perform(post("/api/community/posts"), Map.of("category", "FREE", "title", "안녕하세요", "body", "처음 인사드려요 반가워요"), fresh)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("COMMUNITY_SETUP_REQUIRED"));
+        perform(put("/api/community/me"), Map.of("nickname", "따뜻한 자몽", "agree", false), fresh).andExpect(status().isBadRequest());
+        perform(put("/api/community/me"), Map.of("nickname", "운영자 자몽", "agree", true), fresh).andExpect(status().isBadRequest());
+        perform(put("/api/community/me"), Map.of("nickname", "자", "agree", true), fresh).andExpect(status().isBadRequest());
+        String nick = "자몽" + seq();
+        nickname(fresh, nick);
+        perform(put("/api/community/me"), Map.of("nickname", nick, "agree", true), writer).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NICKNAME_TAKEN"));
+        // A change within 30 days is refused; the same nickname again is fine.
+        perform(put("/api/community/me"), Map.of("nickname", "새자몽" + seq(), "agree", true), fresh).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("NICKNAME_CHANGE_LIMIT"));
+        long id = postId(fresh, Map.of("category", "FREE", "title", "안녕하세요", "body", "처음 인사드려요 반가워요"));
+        mvc.perform(get("/api/community/posts/" + id).header("Authorization", "Bearer " + other)).andExpect(jsonPath("$.author").value(nick));
     }
 
     @Test
@@ -33,7 +60,7 @@ class CommunityIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/community/posts")).andExpect(status().isUnauthorized());
         long id = postId(writer, Map.of("category", "QUESTION", "title", "첫 봉사 준비물이 있을까요?", "body", "이번 주말 처음 참여하는데 무엇을 챙기면 좋을까요?"));
         mvc.perform(get("/api/community/posts?category=QUESTION").header("Authorization", "Bearer " + other))
-                .andExpect(jsonPath("$[0].id").value(id)).andExpect(jsonPath("$[0].author").value(containsString("*")))
+                .andExpect(jsonPath("$[0].id").value(id)).andExpect(jsonPath("$[0].author").value(containsString("글쓴이")))
                 .andExpect(jsonPath("$[0].mine").value(false)).andExpect(jsonPath("$[0].verified").value(false)).andExpect(jsonPath("$[0].preview").exists());
         mvc.perform(get("/api/community/posts?category=REVIEW").header("Authorization", "Bearer " + other)).andExpect(jsonPath("$.length()").value(0));
     }

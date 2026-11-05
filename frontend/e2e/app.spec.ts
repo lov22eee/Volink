@@ -136,6 +136,16 @@ test('community: a question, a like and a comment, and a review only after compl
   const writer = await signupByApi(page, '글쓴 회원')
   await login(page, writer)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '커뮤니티' }).click()
+  // First visit: a nickname and the rules before the board opens.
+  const start = page.getByRole('button', { name: '동의하고 시작하기' })
+  await expect(start).toBeDisabled()
+  const nickname = '테스트' + Date.now() % 10000
+  await page.getByLabel('닉네임', { exact: true }).fill(nickname)
+  await page.getByText('이용 규칙을 읽었고 지킬게요').click()
+  await start.click()
+  await expect(page.getByText('나는 ' + nickname)).toBeVisible()
+  await page.getByRole('radio', { name: '인기순' }).click()
+  await expect(page.getByRole('radio', { name: '인기순' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('link', { name: '글쓰기' }).first().click()
   await page.getByRole('button', { name: '봉사후기' }).click()
   await expect(page.getByText('아직 후기를 쓸 수 있는 활동이 없어요')).toBeVisible()
@@ -153,7 +163,9 @@ test('community: a question, a like and a comment, and a review only after compl
   const postUrl = page.url()
 
   const reader = await browser.newPage({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
-  await login(reader, await signupByApi(reader, '읽는 회원'))
+  const readerEmail = await signupByApi(reader, '읽는 회원')
+  await reader.request.put('/api/community/me', { headers: { Authorization: await tokenFor(reader, readerEmail) }, data: { nickname: '읽는이' + Date.now() % 10000, agree: true } })
+  await login(reader, readerEmail)
   await reader.goto(postUrl.slice(postUrl.indexOf('#')).replace(/^/, '/'))
   await reader.getByRole('button', { name: /좋아요 0/ }).click()
   await expect(reader.getByRole('button', { name: /좋아요 1/ })).toBeVisible()

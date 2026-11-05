@@ -28,6 +28,17 @@ public class CommunityController {
         return Long.parseLong(jwt.getSubject());
     }
 
+    @GetMapping("/api/community/me")
+    public Map<String, Object> me(@AuthenticationPrincipal Jwt jwt) {
+        return community.profile(user(jwt));
+    }
+
+    /** First visit: nickname + rules; later: nickname change (once in 30 days). */
+    @PutMapping("/api/community/me")
+    public Map<String, Object> setMe(@AuthenticationPrincipal Jwt jwt, @RequestBody CommunityService.ProfileRequest request) {
+        return community.setProfile(user(jwt), request);
+    }
+
     @GetMapping("/api/community/posts")
     public List<Map<String, Object>> list(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String category, @RequestParam(required = false) String sort) {
         return community.list(user(jwt), category, sort);
