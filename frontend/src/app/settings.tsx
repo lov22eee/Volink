@@ -32,6 +32,9 @@ function Group({ title, rows }: { title: string; rows: Row[] }) {
   })}</div></section>
 }
 
+/** Which build this is (APK: version · run number · commit), so a test phone shows which code it runs. */
+const buildLabel = `앱 ${import.meta.env.VITE_APP_VERSION ?? '0.6'}${import.meta.env.VITE_BUILD_NUMBER ? ' (빌드 ' + import.meta.env.VITE_BUILD_NUMBER + ')' : ''} · 커밋 ${import.meta.env.VITE_COMMIT ?? 'local'}`
+
 export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [big, setBig] = useState(() => document.documentElement.classList.contains('m-big'))
   const [leaving, setLeaving] = useState(false)
@@ -49,6 +52,7 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
         { icon: 'user', label: '연결된 로그인 계정', href: '#/settings?view=account', note: loginLabel(user) },
       ]} />
       <button type="button" className="m-btn line" onClick={() => setLeaving(true)}><MIcon name="logout" size={19} />로그아웃</button>
+      <p className="m-help center m-build">{buildLabel}</p>
     </div>
     {leaving && <Sheet title="로그아웃할까요?" onClose={() => setLeaving(false)} footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setLeaving(false)}>돌아가기</button><button type="button" className="m-btn" onClick={onSignOut}>로그아웃</button></div>} />}
   </div>
