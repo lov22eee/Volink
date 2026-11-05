@@ -114,5 +114,7 @@ class AccountWithdrawalIntegrationTest extends ApiTestSupport {
         // A review of their (now deleted) activity stays, still verified, without the link or title.
         perform(get("/api/community/posts/" + review), null, waiting).andExpect(status().isOk())
                 .andExpect(jsonPath("$.verified").value(true)).andExpect(jsonPath("$.activityId").doesNotExist()).andExpect(jsonPath("$.activityTitle").doesNotExist());
+        // Shared test database: the hand-made review must not show up in other tests' review lists.
+        jdbc.update("UPDATE community_posts SET deleted_at = NOW() WHERE id = ?", review);
     }
 }
