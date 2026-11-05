@@ -15,7 +15,7 @@ import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
 import { MineScreen } from './mine'
-import { setupNative } from './native'
+import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
@@ -66,7 +66,9 @@ export default function MobileApp() {
     return () => window.clearInterval(timer)
   }, [user, pollUnread, route.page])
 
-  const signOut = useCallback(async () => { await logout(); setUser(null); window.location.hash = '#/login' }, [])
+  const signOut = useCallback(async () => { await stopPush(); await logout(); setUser(null); window.location.hash = '#/login' }, [])
+  // Signed in on the phone: hand this phone's push token to the server (only when notifications are allowed).
+  useEffect(() => { if (user) void startPush() }, [user?.id])
   const onSession = (signed: User) => { setUser(signed); if (['login', 'signup', ''].includes(parse(window.location.hash).page)) window.location.hash = '#/home' }
 
   if (!ready) return <div className="m-boot"><span className="m-logo"><MIcon name="leaf" size={44} /></span></div>

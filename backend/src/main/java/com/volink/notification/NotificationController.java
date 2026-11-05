@@ -8,6 +8,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,9 +17,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class NotificationController {
     private final NotificationService notifications;
+    private final PushService push;
 
-    public NotificationController(NotificationService notifications) {
+    public NotificationController(NotificationService notifications, PushService push) {
         this.notifications = notifications;
+        this.push = push;
+    }
+
+    public record PushToken(String token, String platform) {}
+
+    /** The app sends its Firebase token after the person allows notifications (and again when it changes). */
+    @PutMapping("/api/me/push-token")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void pushToken(@AuthenticationPrincipal Jwt jwt, @RequestBody PushToken body) {
+        push.register(Long.parseLong(jwt.getSubject()), body.token(), body.platform());
+    }
+
+    @PostMapping("/api/me/push-token/remove")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removePushToken(@AuthenticationPrincipal Jwt jwt, @RequestBody PushToken body) {
+        push.unregister(Long.parseLong(jwt.getSubject()), body.token());
     }
 
     @GetMapping("/api/me/notifications")

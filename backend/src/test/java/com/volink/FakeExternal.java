@@ -77,6 +77,19 @@ public class FakeExternal {
         }
     }
 
+    /** Phone push: records what would be sent; a token in {@code gone} answers like an uninstalled app. */
+    public static class Push implements com.volink.notification.PushSender {
+        public final List<String> sent = java.util.Collections.synchronizedList(new ArrayList<>());
+        public final java.util.Set<String> gone = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+        @Override public boolean enabled() { return true; }
+        @Override public Result send(String token, String title, String body, String link) {
+            if (gone.contains(token)) return Result.GONE;
+            sent.add(token + "|" + title + "|" + link);
+            return Result.SENT;
+        }
+    }
+
+    @Bean @Primary public Push fakePush() { return new Push(); }
     @Bean @Primary public Social fakeSocial() { return new Social(); }
     @Bean @Primary public Kakao fakeKakao() { return new Kakao(); }
     @Bean @Primary public Volunteer fakeVolunteer() { return new Volunteer(); }

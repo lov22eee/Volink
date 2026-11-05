@@ -28,11 +28,12 @@
 - 분야 7개(V17, 2026-11-05): 환경·교육·복지·문화·예술·동물·지역사회·기타. 목록은 `frontend/src/categories.ts` 하나만 쓰고 3개 분야를 하드코딩하지 마세요. 분야만으로 검토하지 않음(복지·동물 포함 바로 공개, 위험 단어 ‘동물’·‘어르신’ 제외). 1365 분야는 `ProgramCategory`(공식 → 추정 → 기타).
 - 모집자 긴급 취소(V18): `activity_cancellations`(활동당 1개), 사유 코드·안내·당시 인원, 시작 전·출석 없음만, 삭제(신청자 0명)와 별개. 시작 후 중단·조기 종료와 운영자 인계는 미구현.
 - 설정·회원 탈퇴(V19, 2026-11-05): 마이 → 톱니 → 설정. 탈퇴는 신청자 있는 모집이 있으면 막힘, 내 신청 취소·내 모집글은 지난 것까지 삭제(후기의 모집글 연결도 사라짐)·개인 정보 지움·커뮤니티 글은 ‘탈퇴한 회원’으로 남김, 탈퇴 계정 토큰 즉시 거절(`docs/rules.md`). 카카오 연결 끊기는 서버 `KAKAO_ADMIN_KEY`가 있을 때만. 휴대폰 문자 인증·1인 1계정은 Firebase 준비 후.
+- 휴대폰 푸시(V20, 2026-11-05): Firebase 프로젝트 volink. 앱 설정 파일은 GitHub Secret `GOOGLE_SERVICES_JSON`(APK 빌드 때만 파일로, `VITE_PUSH=1`), 서버 키는 AWS `/etc/volink/firebase-service-account.json`(손으로 넣음, git 금지 → `FIREBASE_SERVICE_ACCOUNT_FILE`). 알림이 저장되고 커밋된 뒤 알림 설정(전체·종류·방해 금지)을 지켜 보냄, 없어진 토큰은 삭제. 테스트는 `FakeExternal.Push`. APK 디버그 서명 키는 main 캐시(`volink-debug-keystore-v2`)에 하나로 고정(지문 SHA-1 37:AD:…:77:58, Firebase에 등록됨). 문자 인증·1인 1계정은 다음 작업.
 - 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), 정식 서명 APK·App Links·푸시(Firebase). GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
 - 서버의 DATETIME은 한국 시간입니다. JDBC에는 `LocalDateTime`을 그대로 넘기고 `Timestamp.valueOf`를 쓰지 마세요(서버 시간대 UTC에서 9시간 밀림).
 - demo_personas는 로그인 계정이 아닙니다. 시연 활동은 실제 모집글이 아닙니다. 현재 UI를 서버 업무 기능으로 오해하지 마세요.
 - 모집자는 USER + 해당 활동 organizer_id입니다. ADMIN은 회원가입에서 선택하지 못하도록 구현하세요.
-- 적용된 Flyway V1~V19는 수정하지 말고 새 마이그레이션(V20~)을 추가하세요(V19는 2026-11-05 추가, AWS 적용은 사용자가 `server-setup.sh`로). 좌표는 추측해서 넣지 말고 관리자 화면 입력을 씁니다. SRID 4326 WKT는 `axis-order=long-lat`(경도 먼저)로 다룹니다(`PlaceService.POINT`).
+- 적용된 Flyway V1~V20은 수정하지 말고 새 마이그레이션(V21~)을 추가하세요(V20은 2026-11-05 추가, AWS 적용은 사용자가 `server-setup.sh`로). 좌표는 추측해서 넣지 말고 관리자 화면 입력을 씁니다. SRID 4326 WKT는 `axis-order=long-lat`(경도 먼저)로 다룹니다(`PlaceService.POINT`).
 - 장소 후보는 경동대학교 양주 메트로폴 생활권 기준입니다. 좌표·허용 조건은 아직 미확인입니다.
 - 사용자가 실제 제출한 20261006 보고서에는 일반회원·기관회원·관리자, 기관 승인·기관 주관 활동 설계가 포함됩니다. `docs/submitted-report-presentation.md`를 확인하고 후속 명세에 반영하세요. 발표 HTML의 기관·로그인·내 활동 와이어프레임은 업무 기능 구현이 아닙니다. 제출 기간은 9/28~10/5이며 10/7 추가 구현을 그 기간의 실적으로 소급하지 마세요.
 - 사용자는 PPT보다 지금 구현한 서비스 화면을 직접 눌러보기를 원합니다. `docs/ui/Volink_서비스화면.html`은 현재 React UI를 묶은 오프라인 파일이며 발표 슬라이드와 다릅니다. 화면 변경 후 `frontend/`에서 `npm run ui:export`로 갱신합니다. 저장된 시연 데이터를 라이브 API·DB 연결로 표시하지 마세요.

@@ -6,7 +6,7 @@ import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
 import { PushNotifications } from '@capacitor/push-notifications'
-import { setServer } from '../api'
+import { api, setServer } from '../api'
 import { setSocialOpener } from '../social'
 import { goBack } from './ui'
 
@@ -40,13 +40,55 @@ export function setupNative() {
   })
 }
 
+/** Phone push is in this build only when GitHub Actions had the Firebase file (GOOGLE_SERVICES_JSON); without it
+ * registering would crash the app, so nothing here runs. */
+const PUSH = import.meta.env.VITE_PUSH === '1'
+const PUSH_TOKEN = 'volink.pushToken'
+let pushReady = false
+
 /**
- * The phone's notification permission (Android 13+ asks; older phones allow by default). Push delivery itself needs
- * Firebase, which is not connected yet; this only asks so the permission is ready. In a browser: the web prompt.
+ * After sign-in (and right after the person allows notifications): get this phone's Firebase token and give it to the
+ * server, which pushes each new notification here (respecting 알림 설정). Tapping a push opens its screen.
+ */
+export async function startPush() {
+  if (!PUSH || !Capacitor.isNativePlatform()) return
+  try {
+    if ((await PushNotifications.checkPermissions()).receive !== 'granted') return
+    if (!pushReady) {
+      pushReady = true
+      await PushNotifications.createChannel({ id: 'volink', name: 'Volink 알림', importance: 4, visibility: 1 }).catch(() => {})
+      void PushNotifications.addListener('registration', ({ value }) => {
+        try { localStorage.setItem(PUSH_TOKEN, value) } catch { /* storage blocked */ }
+        void api('/api/me/push-token', 'PUT', { token: value, platform: 'ANDROID' }).catch(() => {})
+      })
+      void PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+        const link = String(notification.data?.link ?? '')
+        if (/^#\/[a-z-]+/.test(link)) window.location.hash = link
+      })
+    }
+    await PushNotifications.register()
+  } catch { /* push not available on this phone */ }
+}
+
+/** Sign-out: this phone stops getting the member's pushes (before the session ends, while the call is still allowed). */
+export async function stopPush() {
+  if (!PUSH) return
+  let token: string | null = null
+  try { token = localStorage.getItem(PUSH_TOKEN); localStorage.removeItem(PUSH_TOKEN) } catch { /* storage blocked */ }
+  if (token) await api('/api/me/push-token/remove', 'POST', { token }).catch(() => {})
+}
+
+/**
+ * The phone's notification permission (Android 13+ asks; older phones allow by default); when allowed, push starts.
+ * In a browser: the web prompt.
  */
 export async function askNotifications(): Promise<boolean> {
   try {
-    if (Capacitor.isNativePlatform()) return (await PushNotifications.requestPermissions()).receive === 'granted'
+    if (Capacitor.isNativePlatform()) {
+      const granted = (await PushNotifications.requestPermissions()).receive === 'granted'
+      if (granted) void startPush()
+      return granted
+    }
     if ('Notification' in window) return (await Notification.requestPermission()) === 'granted'
   } catch { /* not supported */ }
   return false

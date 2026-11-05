@@ -519,6 +519,14 @@ git push origin main
 - **실행·테스트 결과(2026-11-05, 로컬):** 서버 `ActivityCancellationIntegrationTest` 3개(사유·안내 검증, 남의 활동 404, 스냅샷, 두 번째 409·알림 1번, 참가자 상세, 신청 차단, 참가자 0명, 출석 있음 409·기록 보존, 시작 후 409, 신청 4건과 취소 동시 실행) + 전체 127개(새 마이그레이션 기대값 2곳 고친 뒤 다시 실행해 통과). Playwright: 앱 취소 시나리오(시트·자동 문장·미리보기·최종 확인·취소 카드·알림 → 상세) 통과.
 - **후속:** 시작 후 중단·조기 종료 정책, 운영자 인계(P2), 일정 변경 동의 받기(지금은 일정 변경 1회·24시간 전까지·알림, 신청자가 있으면 고치기는 소개·만나는 곳만).
 
+### 휴대폰 푸시 (Firebase) · 2026-11-05
+
+- **사용자 준비 완료:** Firebase 프로젝트 volink, 안드로이드 앱 com.volink.app, GitHub Secret `GOOGLE_SERVICES_JSON`, 전화 로그인 사용 설정(테스트 번호), SHA-1·SHA-256 등록, 서비스 계정 키 다운로드(서버에 넣기 전).
+- **완료(V20):** `push_tokens`, `PushSender`/`FcmPushSender`(FCM HTTP v1, 서비스 계정 JWT → 액세스 토큰 캐시), `PushService`(커밋 뒤·설정 확인·별도 스레드·사라진 토큰 삭제), API `PUT /api/me/push-token`·`POST /api/me/push-token/remove`, 탈퇴 때 토큰 삭제. 앱: 알림 허용 뒤 토큰 등록, 누르면 해당 화면, 로그아웃 때 해제, 채널 `volink`. APK 빌드가 Secret으로 `google-services.json`을 만들고 `VITE_PUSH=1`. 디버그 서명 키를 main 캐시에 고정(빌드마다 키가 바뀌던 문제 수정).
+- **실행·테스트 결과(2026-11-05, 로컬):** 서버 `PushIntegrationTest` 2개(신청 → 모집자 휴대폰 푸시, 토큰 이동·전체 끔·다시 켬·사라진 토큰 삭제·로그아웃 해제). 실제 FCM 전송·휴대폰 수신은 이 환경에서 확인 불가(AWS에 키를 넣은 뒤 휴대폰으로 확인).
+- **AWS:** V20 적용 + `/etc/volink/firebase-service-account.json`에 서비스 계정 키를 붙여 넣고 `server-setup.sh`.
+- **미완료:** 문자 인증·1인 1계정(Firebase 전화 인증 플러그인 + 서버 ID 토큰 확인), iOS.
+
 ### 설정 · 회원 탈퇴 · 2026-11-05
 
 - **사용자 결정 추가:** 탈퇴하면 모집글은 지난 것까지 모두 삭제, 커뮤니티 글은 남김, 커뮤니티 후기에 붙은 모집글 연결은 제거.

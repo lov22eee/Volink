@@ -114,7 +114,7 @@ public class AccountService {
 
         List<Link> links = jdbc.query("SELECT provider, subject FROM social_accounts WHERE user_id = ?", (rs, i) -> new Link(rs.getString(1), rs.getString(2)), userId);
         jdbc.update("UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now, userId);
-        for (String table : List.of("social_accounts", "user_interests", "saved_activities", "notification_settings", "notifications", "activity_post_seen"))
+        for (String table : List.of("social_accounts", "user_interests", "saved_activities", "notification_settings", "notifications", "activity_post_seen", "push_tokens"))
             jdbc.update("DELETE FROM " + table + " WHERE user_id = ?", userId);
         jdbc.update("""
                 UPDATE users SET email = ?, display_name = ?, password_hash = ?, birth_date = '1900-01-01', community_nickname = NULL,

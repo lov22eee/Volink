@@ -18,7 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * In-app notifications (the list on the screen; phone push is not connected yet). Each one has a type, a category for
+ * In-app notifications (the list on the screen), each also sent as a phone push when Firebase is set up (PushService). Each one has a type, a category for
  * the filter chips (V16), the activity it is about, and an optional key so the same event is stored only once.
  */
 @Service
@@ -43,10 +43,13 @@ public class NotificationService {
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final PushService push;
 
-    public NotificationService(JdbcTemplate jdbc, Clock clock) {
+    public NotificationService(JdbcTemplate jdbc, Clock clock, PushService push) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.push = push;
+        push.attach(this);
     }
 
     /** The activity is read from the link (#/activity/12 …); links that name no activity store none. */
@@ -59,10 +62,13 @@ public class NotificationService {
      * repeat it). {@code activityId}: for links that do not name the activity (the records page, the search page).
      */
     public void send(long userId, String type, String title, String body, String link, Long activityId, String dedupeKey) {
-        jdbc.update("""
+        String category = CATEGORY.getOrDefault(type, "OTHER");
+        int saved = jdbc.update("""
                 INSERT INTO notifications(user_id, type, category, title, body, link_path, activity_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE id = id""",
-                userId, type, CATEGORY.getOrDefault(type, "OTHER"), cut(title, 100), cut(body, 500), link, activityId, dedupeKey);
+                userId, type, category, cut(title, 100), cut(body, 500), link, activityId, dedupeKey);
+        // A repeated dedupe key changes nothing (0 rows) and is not pushed again.
+        if (saved == 1) push.queue(userId, category, cut(title, 100), cut(body, 500), link);
     }
 
     static Long activityOf(String link) {
