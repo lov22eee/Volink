@@ -1,0 +1,45 @@
+name: Android APK (test build)
+# Builds the Android app (frontend/src/app via Capacitor) as a debug APK to install on a phone for testing.
+# Download it from the run's "Artifacts" (volink-apk). Not a store release: it is signed with this run's debug key.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/apk.yml'
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build the app screens
+        working-directory: frontend
+        env:
+          # The server the app calls (the public site). Override with the repository variable VOLINK_SITE.
+          VITE_API_BASE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
+        run: |
+          npm ci
+          npm run build:app
+          npx cap sync android
+      - name: Build the APK
+        working-directory: frontend/android
+        env:
+          VOLINK_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Name the file
+        run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk "volink-0.6-${{ github.run_number }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volink-apk
+          path: volink-0.6-*.apk
+          retention-days: 14

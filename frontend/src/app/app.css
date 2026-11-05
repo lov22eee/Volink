@@ -3,8 +3,8 @@
   --m-x: 16px;
   --m-top: 56px;
   --m-tab: 64px;
-  --m-safe: env(safe-area-inset-bottom, 0px);
-  --m-safe-top: env(safe-area-inset-top, 0px);
+  --m-safe: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --m-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --kb: 0px;
   --m-mint: #e7f1ea;
   --m-mint-2: #d5e8dc;

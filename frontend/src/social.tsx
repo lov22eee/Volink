@@ -16,8 +16,12 @@ export function useProviders() {
   return on
 }
 
+// The site goes there in the same tab; the Android app opens the phone browser instead (setSocialOpener).
+let opener = (path: string) => { window.location.href = path }
+export function setSocialOpener(open: (path: string) => void) { opener = open }
+
 export function startSocial(provider: Provider) {
-  window.location.href = '/api/auth/oauth/' + provider + '/start'
+  opener('/api/auth/oauth/' + provider + '/start')
 }
 
 /** Why a social login came back to the login page (?oauth=CODE). */

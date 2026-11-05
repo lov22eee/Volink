@@ -42,6 +42,18 @@ export class ApiError extends Error {
 
 let accessToken: string | null = null
 
+// The Android app (Capacitor) runs its bundled pages at https://localhost, so it calls the server by its address and
+// keeps the refresh token itself (the server returns it in the body only to the app's origin). The site leaves this
+// empty: same-origin calls and the HttpOnly cookie.
+let server = ''
+const KEEP = 'volink.refresh'
+export function setServer(base: string) { server = base.replace(/\/+$/, '') }
+export function serverBase() { return server }
+/** The public site address, for links people open outside the app (the check-in QR). */
+export function siteUrl() { return server ? server + '/' : window.location.origin + window.location.pathname }
+function kept() { try { return localStorage.getItem(KEEP) } catch { return null } }
+function keep(token: string | null | undefined) { try { if (token) localStorage.setItem(KEEP, token); else localStorage.removeItem(KEEP) } catch { /* storage blocked */ } }
+
 export function setToken(token: string | null) {
   accessToken = token
 }
@@ -50,7 +62,7 @@ async function send(path: string, method: string, body: unknown, withToken: bool
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (withToken && accessToken) headers.Authorization = 'Bearer ' + accessToken
-  return fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin' })
+  return fetch(server + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: server ? 'omit' : 'same-origin' })
 }
 
 async function parse(response: Response) {
@@ -74,7 +86,14 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
   return parse(response)
 }
 
-type Session = { accessToken: string; user: User }
+type Session = { accessToken: string; user: User; refreshToken?: string }
+
+function start(session: Session) {
+  accessToken = session.accessToken
+  if (server) keep(session.refreshToken)
+  hint(true)
+  return session.user
+}
 
 // The refresh cookie is single-use (rotated on every refresh). Two refreshes at once (React's double effect in
 // development, or two requests renewing an expired token together) would send the same cookie twice, and the
@@ -85,17 +104,16 @@ let refreshing: Promise<User | null> | null = null
 // request that can only fail. The session itself still lives in the HttpOnly cookie.
 const SIGNED_IN = 'volink.signedIn'
 function hint(on: boolean) { try { if (on) localStorage.setItem(SIGNED_IN, '1'); else localStorage.removeItem(SIGNED_IN) } catch { /* storage blocked */ } }
-export function mayHaveSession() { try { return localStorage.getItem(SIGNED_IN) === '1' } catch { return true } }
+export function mayHaveSession() { if (server) return Boolean(kept()); try { return localStorage.getItem(SIGNED_IN) === '1' } catch { return true } }
 
 export function refresh(): Promise<User | null> {
   refreshing ??= (async () => {
     try {
-      const response = await send('/api/auth/refresh', 'POST', undefined, false)
-      if (!response.ok) { accessToken = null; hint(false); return null }
-      const session: Session = await response.json()
-      accessToken = session.accessToken
-      hint(true)
-      return session.user
+      const token = server ? kept() : null
+      if (server && !token) { accessToken = null; return null }
+      const response = await send('/api/auth/refresh', 'POST', server ? { refreshToken: token } : undefined, false)
+      if (!response.ok) { accessToken = null; hint(false); if (response.status === 401) keep(null); return null }
+      return start(await response.json())
     } finally {
       refreshing = null
     }
@@ -104,28 +122,19 @@ export function refresh(): Promise<User | null> {
 }
 
 export async function login(email: string, password: string): Promise<User> {
-  const session = await api<Session>('/api/auth/login', 'POST', { email, password })
-  accessToken = session.accessToken
-  hint(true)
-  return session.user
+  return start(await api<Session>('/api/auth/login', 'POST', { email, password }))
 }
 
 /** Kakao / Google: after the provider sends the browser back, a one-time code becomes the session. */
 export async function finishSocial(code: string): Promise<User> {
-  const session = await api<Session>('/api/auth/oauth/finish', 'POST', { code })
-  accessToken = session.accessToken
-  hint(true)
-  return session.user
+  return start(await api<Session>('/api/auth/oauth/finish', 'POST', { code }))
 }
 
 /** First Kakao / Google login: the signup form (personal member) and then the session. */
 export async function completeSocial(body: { ticket: string; name: string; birthDate: string; interests: string[]; agreedNotice: boolean }): Promise<User> {
-  const session = await api<Session>('/api/auth/oauth/complete', 'POST', body)
-  accessToken = session.accessToken
-  hint(true)
-  return session.user
+  return start(await api<Session>('/api/auth/oauth/complete', 'POST', body))
 }
 
 export async function logout() {
-  try { await send('/api/auth/logout', 'POST', undefined, false) } finally { accessToken = null; hint(false) }
+  try { await send('/api/auth/logout', 'POST', server ? { refreshToken: kept() } : undefined, false) } finally { accessToken = null; hint(false); keep(null) }
 }

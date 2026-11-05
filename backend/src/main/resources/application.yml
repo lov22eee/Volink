@@ -45,6 +45,11 @@ volink:
     google-client-secret: ${GOOGLE_CLIENT_SECRET:}
     # e.g. https://volink.example.com. Empty = taken from the request (works behind the Vite proxy in development).
     redirect-base: ${OAUTH_REDIRECT_BASE:}
+  app:
+    # Android app (Capacitor) origin that may call /api across sites and keeps its refresh token itself.
+    origins: ${APP_ORIGINS:https://localhost}
+    # Package name the Kakao / Google login hands the result back to (volink:// link).
+    package: com.volink.app
   data-go-kr:
     # data.go.kr "일반 인증키 (Decoding)" for 1365 봉사참여정보서비스. Empty = 1365 programs are not shown.
     key: ${DATA_GO_KR_KEY:}

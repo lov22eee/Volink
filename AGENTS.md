@@ -23,7 +23,8 @@
 - 6주차(2026-11-03, 10/16 브랜치를 main에 이식·고도화): V7, QR(30초 교체·60초 유효)·시간·위치(200m, GPS 오차 최대 50m 보정) 체크인, 수동 확인(사유 필수), 종료 뒤 개별·일괄 완료 → `activity_records`, 스케줄러가 체크인 열림·시작·종료·노쇼·알림 처리. 정원 계산에 CHECKED_IN·COMPLETED 포함. 시작 버튼·근접 자동 체크인은 없음. 2026-11-04 사용자 요청으로 활동 소식(공지·Q&A, V8 `activity_posts`)을 6주차에 추가: 모집자·확정자만, 연락처 패턴 거절, 이름 가림.
 - 6주차 추가(2026-11-04~05): V9(모집자 활동 취소·일정 변경 1회·늦어요·못 가요 이유·활동 강도/실내외/처음 환영·하루 전 알림), V10(저장한 봉사). **APK 전용 화면**은 `frontend/src/app/`(`npm run dev:app`, `vite --mode app`)이며 PC 웹 화면(`App.tsx`)은 바꾸지 않음(사용자 결정). 앱은 로그인 필수·일반 회원만 가입(기관은 PC). 하단 탭은 홈/찾기/커뮤니티/내 활동/마이(V11 커뮤니티: 자유·질문·봉사후기, 후기는 완료한 활동만 / V12 첫 진입 닉네임·규칙 동의). `docs/app.md` 참고.
 - 카카오·구글 로그인(V15, 2026-11-05): 웹·앱 모두, **개인 회원만**(기관은 이메일). 키는 서버 전용(`KAKAO_LOGIN_CLIENT_ID`·`KAKAO_LOGIN_CLIENT_SECRET`·`GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`OAUTH_REDIRECT_BASE`, `scripts/aws/set-keys.sh`). 키가 없으면 버튼이 ‘준비 중’. 테스트는 `FakeExternal.Social`.
-- 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), APK 빌드. GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
+- APK(2026-11-05): Capacitor 8.5.3 `frontend/android/`, 앱은 `https://localhost`에서 서버 주소(`VITE_API_BASE`)를 부르고 리프레시 토큰을 본문으로 받아 보관(서버 `AppClients`·`APP_ORIGINS`, 사이트는 쿠키 그대로). 카카오·구글은 브라우저 → `volink://`로 복귀. 빌드는 `.github/workflows/apk.yml`(이 환경은 안드로이드 SDK 다운로드 불가). 아이콘 `frontend/scripts/make-app-icons.mjs`.
+- 미구현: 신고·S3·이의제기·제재·추천·감사 카드(7주차), 정식 서명 APK·App Links·푸시. GitHub Pages는 서버가 없는 미리보기라 로그인·저장이 되지 않습니다.
 - 서버의 DATETIME은 한국 시간입니다. JDBC에는 `LocalDateTime`을 그대로 넘기고 `Timestamp.valueOf`를 쓰지 마세요(서버 시간대 UTC에서 9시간 밀림).
 - demo_personas는 로그인 계정이 아닙니다. 시연 활동은 실제 모집글이 아닙니다. 현재 UI를 서버 업무 기능으로 오해하지 마세요.
 - 모집자는 USER + 해당 활동 organizer_id입니다. ADMIN은 회원가입에서 선택하지 못하도록 구현하세요.
