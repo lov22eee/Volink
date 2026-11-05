@@ -78,6 +78,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
           <div className="m-hero-top"><span>아직 예정된 활동이 없어요</span></div>
           <h2>가까운 곳에서 첫 봉사를 시작해 보세요</h2>
           <a className="m-btn" href="#/find">내 주변 봉사 찾기</a>
+          <a className="m-btn line" href="#/host">내가 활동 만들기</a>
         </section>}
 
       <section className="m-section" aria-label="나에게 맞는 봉사">

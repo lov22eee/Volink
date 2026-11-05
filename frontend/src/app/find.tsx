@@ -9,7 +9,7 @@ import type { Program } from '../explore'
 import { currentPosition, remember, remembered } from '../location'
 import { PlaceMap } from '../map'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
-import { Empty, Loading, MIcon, Sheet, TopBar } from './ui'
+import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar } from './ui'
 
 type Chip = 'near' | 'weekend' | 'newcomer' | '1365'
 const chipLabels: Record<Chip, string> = { near: '내 주변', weekend: '이번 주말', newcomer: '처음 환영', '1365': '1365' }
@@ -121,6 +121,7 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
           : <div className="m-list">{shown.map(a => <ActivityRow key={a.id} activity={a} />)}</div>}
       </>}
     </div>
+    {!only1365 && view === 'list' && <RecruitFab />}
     {program && <Sheet title="1365 활동" onClose={() => setProgram(null)} footer={<a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer">1365에서 신청하기 <MIcon name="outward" size={18} /></a>}>
       <h3 className="m-h3">{program.title}</h3>
       <dl className="m-dl">

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
   | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
-  | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more'
+  | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more' | 'send'
 
 const paths: Record<MIconName, ReactNode> = {
   home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
@@ -48,6 +48,7 @@ const paths: Record<MIconName, ReactNode> = {
   record: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
   sprout: <><path d="M12 21v-9" /><path d="M12 12c0-4-3-6-7-6 0 4 3 6 7 6ZM12 10c0-4 3-6 7-6 0 4-3 6-7 6Z" /></>,
   outward: <path d="M7 17 17 7M9 7h8v8" />,
+  send: <path d="M4 12 20 4l-6 16-3-7Z" />,
   more: <><circle cx="6" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18" cy="12" r="1.3" /></>,
 }
 
@@ -72,9 +73,9 @@ export function BellLink({ unread }: { unread: number }) {
     <MIcon name="bell" />{unread > 0 && <span className="m-dot">{unread > 9 ? '9+' : unread}</span>}</a>
 }
 
-export type Tab = 'home' | 'find' | 'host' | 'mine' | 'my'
+export type Tab = 'home' | 'find' | 'community' | 'mine' | 'my'
 const tabs: { id: Tab; label: string; icon: MIconName }[] = [
-  { id: 'home', label: '홈', icon: 'home' }, { id: 'find', label: '찾기', icon: 'compass' }, { id: 'host', label: '모집', icon: 'plus' },
+  { id: 'home', label: '홈', icon: 'home' }, { id: 'find', label: '찾기', icon: 'compass' }, { id: 'community', label: '커뮤니티', icon: 'chat' },
   { id: 'mine', label: '내 활동', icon: 'calendar' }, { id: 'my', label: '마이', icon: 'user' },
 ]
 
@@ -82,6 +83,11 @@ export function TabBar({ active }: { active: Tab | null }) {
   return <nav className="m-tabs" aria-label="주요 메뉴">{tabs.map(tab =>
     <a key={tab.id} href={'#/' + tab.id} className={'m-tab' + (active === tab.id ? ' on' : '')} aria-current={active === tab.id ? 'page' : undefined}>
       <span className="m-tab-ico"><MIcon name={tab.icon} size={23} /></span>{tab.label}</a>)}</nav>
+}
+
+/** Round "+ 모집하기" button above the tab bar (모집 is no longer a tab, 2026-11-05). */
+export function RecruitFab() {
+  return <a className="m-fab" href="#/host"><MIcon name="plus" size={20} />모집하기</a>
 }
 
 /** The one main action of a screen, fixed above the bottom edge (and above the keyboard). */

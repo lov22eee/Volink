@@ -20,7 +20,7 @@ export function HostScreen({ user, actions }: { user: User; actions: ReactNode }
   const live = (mine ?? []).filter(a => ['RECRUITING', 'IN_PROGRESS', 'DRAFT'].includes(a.status) && new Date(`${a.date}T${a.startTime}:00+09:00`).getTime() + a.durationMinutes * 60_000 > now)
   const past = (mine ?? []).filter(a => !live.includes(a)).slice(0, 5)
   return <div className="m-screen">
-    <TopBar title="봉사 만들기" actions={actions} />
+    <TopBar title="봉사 만들기" back="history" actions={actions} />
     <div className="m-body">
       <p className="m-lede">처음부터 복잡하게 입력하지 않아도 돼요.</p>
       <section className="m-hero">

@@ -453,3 +453,75 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-social-btn.google { background: #fff; border: 1px solid var(--line-2); }
 .m-social-btn:active { transform: scale(.95); }
 :root.m-kb .m-social { display: none; }
+
+/* round main action above the tabs (+ 모집하기, 글쓰기) */
+.m-fab { position: fixed; z-index: 26; right: 16px; bottom: calc(var(--m-tab) + 16px + var(--m-safe)); height: 52px; padding: 0 18px 0 14px; border-radius: 26px; background: var(--m-green); color: #fff;
+  display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15.5px; text-decoration: none; box-shadow: 0 8px 20px rgb(47 111 82 / 35%); }
+.m-fab:active { transform: scale(.97); }
+:root.m-typing .m-fab { display: none; }
+.m-newbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.m-newbtns a { min-height: 84px; border-radius: 18px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 14px; color: var(--ink); font-weight: 650; font-size: 15px; text-decoration: none; }
+.m-newbtns a.main { background: var(--m-green); color: #fff; border: 0; }
+.m-newbtns small { font-weight: 400; font-size: 12.5px; opacity: .8; }
+.m-hero .m-btn.line { margin-top: 0; }
+
+/* community */
+.c-banner { padding: 16px 18px; border-radius: 20px; background: var(--m-mint); display: flex; flex-direction: column; gap: 4px; }
+.c-banner strong { display: flex; align-items: center; gap: 6px; font-size: 17px; color: var(--m-green-ink); }
+.c-banner span { color: #4f5d55; font-size: 14px; }
+.c-card { display: flex; flex-direction: column; gap: 7px; padding: 16px; border-radius: 20px; background: #fff; border: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.c-card:active { background: #fafbf9; }
+.c-card-top { display: flex; align-items: center; gap: 8px; }
+.c-card-top small { margin-left: auto; color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.c-verified { display: inline-flex; align-items: center; gap: 3px; color: var(--m-green); font-size: 12.5px; font-weight: 650; }
+.c-card strong { font-size: 16.5px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.4; }
+.c-card p { color: var(--ink-3); font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.c-act { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 8px; background: var(--m-mint); color: var(--m-green-ink); font-size: 12.5px; font-weight: 600; }
+.c-foot { display: flex; gap: 14px; color: var(--ink-3); font-size: 13.5px; }
+.c-foot span { display: inline-flex; align-items: center; gap: 4px; }
+.c-foot .on { color: #d1495b; }
+.c-foot .on svg path { fill: currentColor; }
+.c-list .m-list { gap: 10px; }
+.c-article { display: flex; flex-direction: column; gap: 12px; }
+.c-article h1 { font-size: 22px; font-weight: 750; line-height: 1.38; letter-spacing: -0.035em; }
+.c-author { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.c-author span:last-child { display: flex; flex-direction: column; }
+.c-author b { font-size: 14.5px; }
+.c-author small { color: var(--ink-3); font-size: 12.5px; }
+.c-body { font-size: 16px; line-height: 1.75; color: var(--ink); white-space: pre-line; }
+.c-linked { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.c-linked span { display: flex; align-items: center; gap: 6px; color: var(--m-green-ink); font-size: 14px; }
+.c-linked strong { font-size: 15.5px; margin-top: 4px; }
+.c-linked small { color: var(--ink-3); font-size: 13px; }
+.c-linked em { align-self: flex-end; font-style: normal; color: var(--m-green-ink); font-weight: 650; font-size: 14px; display: inline-flex; align-items: center; }
+.c-actions { display: flex; gap: 8px; }
+.c-actions .m-btn { flex: none; }
+.c-actions .liked { color: #d1495b; border-color: #f3c3ca; background: #fff5f6; }
+.c-actions .liked svg path { fill: currentColor; }
+.c-comments { padding-top: 6px; border-top: 1px solid var(--line); }
+.c-comments h2 { font-size: 16px; font-weight: 700; margin: 6px 0 4px; }
+.c-comments ul { margin: 0; padding: 0; list-style: none; }
+.c-comments li { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.c-comments li > div { flex: 1; min-width: 0; }
+.c-comments b { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.c-comments b .m-badge { height: 20px; font-size: 11px; padding: 0 7px; }
+.c-comments p { font-size: 14.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.55; white-space: pre-line; }
+.c-comments small { color: var(--ink-3); font-size: 12px; }
+.c-post .m-body { padding-bottom: calc(96px + var(--m-safe)); }
+.c-reply { position: fixed; z-index: 25; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 12px calc(10px + var(--m-safe)); }
+:root.m-kb .c-reply { bottom: var(--kb); padding-bottom: 10px; }
+.c-reply > div { display: flex; gap: 8px; align-items: center; }
+.c-reply .m-input { min-height: 46px; border-radius: 23px; font-size: 15.5px; }
+.c-reply .m-err { padding: 0 6px 6px; }
+.c-send { width: 46px; height: 46px; border-radius: 50%; border: 0; background: var(--m-green); color: #fff; display: grid; place-items: center; flex: none; }
+.c-send:disabled { background: #c9d3cc; }
+.c-picks { display: flex; flex-direction: column; gap: 8px; }
+.c-pick { display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 60px; border-radius: 16px; background: #fff; border: 1px solid var(--line-2); text-align: left; font: inherit; color: var(--ink); }
+.c-pick.on { border: 2px solid var(--m-green); background: var(--m-mint); }
+.c-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-2); flex: none; background: #fff; }
+.c-pick.on .c-dot { border: 7px solid var(--m-green); }
+.c-pick span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.c-pick b { font-size: 15px; }
+.c-pick small { color: var(--ink-3); font-size: 13px; }
+.c-inline-link { color: var(--amber-ink); font-weight: 700; text-decoration: underline; padding: 6px 0; display: inline-block; }
+.m-shell.has-tabs .m-screen:has(.m-fab) .m-body { padding-bottom: calc(var(--m-tab) + 96px + var(--m-safe)); }

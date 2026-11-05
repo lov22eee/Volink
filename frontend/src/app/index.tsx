@@ -8,6 +8,7 @@ import { CheckInPage } from '../checkin'
 import './app.css'
 import { Login, Signup } from './auth'
 import { ActivityScreen, ManageScreen } from './detail'
+import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
 import { HomeScreen } from './home'
 import { CreateWizard, HostScreen } from './host'
@@ -75,12 +76,15 @@ export default function MobileApp() {
 
   const bell = <BellLink unread={unread} />
   const search = <a href="#/find?focus=1" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
-  const tab: Tab | null = (['home', 'find', 'host', 'mine', 'my'] as Tab[]).includes(route.page as Tab) ? route.page as Tab : null
+  const tab: Tab | null = (['home', 'find', 'community', 'mine', 'my'] as Tab[]).includes(route.page as Tab) ? route.page as Tab : null
   let screen
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
+    case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break
+    case 'post': screen = route.id ? <PostScreen key={route.id} id={route.id} onChange={pollUnread} /> : null; break
+    case 'write': screen = <WriteScreen initial={route.query.get('category') ?? undefined} activity={Number(route.query.get('activity')) || undefined} />; break
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen actions={bell} initial={route.query.get('tab') ?? undefined} />; break

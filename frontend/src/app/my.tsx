@@ -118,7 +118,7 @@ export function NoticesScreen({ onChange }: { onChange: () => void }) {
     <div className="m-body">{!items ? <Loading /> : items.length ? <ul className="m-notices">{items.map(item =>
       <li key={item.id}><button type="button" className={item.read ? '' : 'new'} onClick={() => open(item)}>
         <span className={'m-n-ico' + (item.type === 'WAITLIST_OFFER' ? ' hot' : '')}><MIcon name={noticeIcon(item.type)} size={19} /></span>
-        <span className="m-n-main"><strong>{item.title}</strong><span>{item.body}</span><small>{friendlyTime(item.createdAt)}</small></span></button></li>)}</ul>
+        <span className="m-n-main"><strong>{item.title}</strong><span>{item.body}</span><small>{friendlyTime(item.createdAt.replace('T', ' '))}</small></span></button></li>)}</ul>
       : <Empty icon="bell" title="아직 알림이 없어요" text="신청 결과, 자리 제안, 공지와 답변을 여기서 알려 드려요." />}</div>
   </div>
 }
