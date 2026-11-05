@@ -100,35 +100,35 @@ export function StatsBanner() {
     if (position) { remember(true); void load(position) }
   }
 
+  const head = <div className="s-head"><MIcon name="sprout" size={18} />우리 동네 지금</div>
   if (failed && !stats) return <section className="s-banner" aria-label="우리 동네 지금">
-    <div className="s-head"><span><MIcon name="sprout" size={18} />우리 동네 지금</span></div>
+    {head}
     <p className="s-lead">지금은 모집 현황을 불러오지 못했어요.</p>
-    <button type="button" className="m-btn line sm s-retry" onClick={() => { setFailed(false); void load(null) }}>다시 불러오기</button>
+    <button type="button" className="s-link" onClick={() => { setFailed(false); void load(null) }}>다시 불러오기</button>
   </section>
-  if (!stats) return <section className="s-banner loading" aria-label="우리 동네 지금" aria-busy="true"><div className="s-head"><span><MIcon name="sprout" size={18} />우리 동네 지금</span></div><div className="s-skel" /><div className="s-skel short" /></section>
+  if (!stats) return <section className="s-banner loading" aria-label="우리 동네 지금" aria-busy="true">{head}<div className="s-skel" /><div className="s-skel short" /></section>
 
   const n = stats.nearby
   const total = (n.volink ?? 0) + (n.program ?? 0)
   const m = stats.monthly
   return <section className="s-banner in" aria-label="우리 동네 지금">
-    <div className="s-head"><span><MIcon name="sprout" size={18} />우리 동네 지금</span><b>모집 현황</b></div>
+    {head}
     {n.located ? <>
-      <p className="s-lead">지금 내 주변 {n.radiusKm}km에는</p>
-      <p className="s-big"><strong><CountUp value={total} /></strong>개의 봉사활동이<br />새로운 참여를 기다리고 있어요!</p>
+      <p className="s-lead">내 주변 {n.radiusKm}km에서 참여를 기다리는 봉사활동</p>
+      <p className="s-big"><strong><CountUp value={total} /></strong>개</p>
       <p className="s-split">동네 모집 {n.volink ?? 0}개 · {n.program === null ? '1365는 지금 확인할 수 없어요' : `1365 공개 모집 ${n.program}개`}</p>
     </> : <>
-      <p className="s-lead">위치를 허용하면 내 주변에서 모집 중인 봉사 수를 보여 드려요.</p>
-      <p className="s-big small">지금 Volink 전체에서 <strong><CountUp value={n.volinkAll} /></strong>개 모집 중</p>
-      <button type="button" className="m-btn line sm s-locate" disabled={locating} onClick={locate}><MIcon name="pin" size={17} />{locating ? '위치 확인 중…' : '내 주변 보기'}</button>
+      <p className="s-lead">지금 Volink에서 참여를 기다리는 봉사활동</p>
+      <p className="s-big"><strong><CountUp value={n.volinkAll} /></strong>개</p>
+      <button type="button" className="s-link" disabled={locating} onClick={locate}><MIcon name="pin" size={16} />{locating ? '위치 확인 중…' : '위치를 허용하면 내 주변 숫자를 보여 드려요'}</button>
     </>}
 
-    <div className="s-rule" />
-    <div className="s-head sub"><span className="s-title">우리의 작은 변화</span><b>최근 6개월</b></div>
-    <p className="s-note">Volink 월별 참여 완료 인원 · 한 달에 여러 번 참여해도 1명으로 세요</p>
-    {enoughForChart(m) ? <MonthlyChart points={m.points} />
-      : <div className="s-empty"><MIcon name="sprout" size={24} /><strong>아직 참여 기록이 쌓이는 중이에요</strong><span>{m.people > 0 ? `최근 6개월 동안 ${m.people}명이 참여를 마쳤어요. ` : ''}첫 기록의 주인공이 되어 보세요.</span></div>}
+    {enoughForChart(m) && <div className="s-trend">
+      <p className="s-trend-head"><b>우리의 작은 변화</b><small>최근 6개월 참여 완료 인원</small></p>
+      <MonthlyChart points={m.points} />
+    </div>}
 
-    <a className="m-btn s-cta" href="#/find">나도 작은 변화 만들기 <MIcon name="chevron" size={18} /></a>
-    <p className="s-source">동네 모집·참여 인원: Volink 기록 · 1365: 1365 공개 모집 정보 · 공식 봉사실적이 아니에요</p>
+    <a className="m-btn s-cta" href="#/find?chip=near">내 주변 봉사 둘러보기 <MIcon name="chevron" size={18} /></a>
+    <p className="s-source">Volink 기록{n.program !== null && n.located ? '·1365 공개 모집 정보' : ''} 기준 · 공식 봉사실적이 아니에요</p>
   </section>
 }

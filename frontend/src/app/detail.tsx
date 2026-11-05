@@ -334,39 +334,53 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   }
 
   const tabs: [ManageTab, string, number][] = [['people', '신청자', count('APPLIED')], ['attendance', '출석', 0]]
+  // The bottom button only for what the moment needs; 공지 is written in 활동 소식.
   const main = (() => {
     if (activity.status === 'CANCELLED') return null
     if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />{phase === 'open' ? '출석부 · QR 띄우기' : '출석부 열기'}</button>
     if (phase === 'ended' && checked > 0) return <button className="m-btn" disabled={busy} onClick={() => run('/api/activities/' + id + '/complete', undefined, `${checked}명 완료를 확인했어요`)}>체크인한 {checked}명 모두 완료</button>
     if (phase === 'ended') return <a className="m-btn line" href={'#/create?from=' + id}><MIcon name="refresh" size={19} />같은 활동 다시 모집</a>
-    return <a className="m-btn line" href={'#/news/' + id}><MIcon name="megaphone" size={19} />공지 올리기</a>
+    return null
   })()
+  // On the day, before check-in opens: the attendance tab one tap away near the top. Once it opens, the bottom button does it.
+  const today = activity.date === new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(now))
+  const qrLine = activity.status === 'RECRUITING' && tab !== 'attendance' && today && (phase === 'soon' || phase === 'later')
+  const dday = dDay(activity.date)
+  const waiting = count('WAITLISTED') + count('OFFERED')
+  const confirmedList = items.filter(p => ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(p.status)).length
 
   return <div className="m-screen m-manage">
     <TopBar title="모집 관리" back="#/mine?tab=host" actions={<button type="button" className="m-icon-btn" aria-label="활동 메뉴" onClick={() => setSheet('menu')}><MIcon name="more" /></button>} />
     <div className="m-body">
-      <section className="m-dash-head">
-        <div className="m-labels"><span className={'m-badge ' + (activity.status === 'RECRUITING' ? 'mint' : activity.status === 'DRAFT' ? 'amber' : 'gray')}>{statusText}</span>{dDay(activity.date) && <span className="m-badge gray">{dDay(activity.date)}</span>}</div>
+      <section className="d-head">
+        <div className="d-state"><span className={'m-badge ' + (activity.status === 'RECRUITING' ? 'mint' : activity.status === 'DRAFT' ? 'amber' : activity.status === 'CANCELLED' ? 'hot' : 'gray')}>{statusText}</span>
+          {dday && activity.status !== 'CANCELLED' && phase !== 'ended' && <small>{dday === 'D-DAY' ? '오늘 활동' : '활동까지 ' + dday.slice(2) + '일'}</small>}</div>
         <h1>{activity.title}</h1>
-        <p>{dayWord(activity.date)} {activity.startTime} · {durationLabel(activity.durationMinutes)} · {activity.meetingPoint ?? activity.placeName}</p>
+        <p className="d-fact"><MIcon name="calendar" size={18} />{dayWord(activity.date)} {activity.startTime} · {durationLabel(activity.durationMinutes)}</p>
+        <p className="d-fact"><MIcon name="pin" size={18} />{[activity.placeName, activity.meetingPoint].filter(Boolean).join(' · ')}</p>
         {activity.status === 'CANCELLED' && (activity.cancellation ? <CancelledCard activity={activity} organizer /> : <div className="m-state bad"><strong>취소된 활동이에요</strong><span>{activity.cancelReason ?? activity.reviewNote}</span></div>)}
         {activity.status === 'DRAFT' && <div className="m-state amber"><strong>{activity.reviewNote ? '관리자가 반려했어요' : '관리자 확인 후 공개돼요'}</strong><span>{activity.reviewNote ?? activity.riskReasons ?? ''}</span></div>}
-        <div className="m-kpis">
-          <div><b>{people?.confirmed ?? activity.confirmed}<small>/{activity.capacity}</small></b><span>확정</span></div>
-          <div className={count('APPLIED') ? 'hot' : ''}><b>{count('APPLIED')}</b><span>승인 대기</span></div>
-          <div><b>{count('WAITLISTED') + count('OFFERED')}</b><span>대기</span></div>
-          <div className={unanswered ? 'hot' : ''}><b>{unanswered}</b><span>새 질문</span></div>
-        </div>
       </section>
+      <dl className="d-nums" aria-label="모집 현황">
+        <div><dt>확정</dt><dd>{people?.confirmed ?? activity.confirmed}<small>/{activity.capacity}</small></dd></div>
+        <div className={count('APPLIED') ? 'hot' : ''}><dt>승인 대기</dt><dd>{count('APPLIED')}</dd></div>
+        <div><dt>대기자</dt><dd>{waiting}</dd></div>
+        <div className={unanswered ? 'hot' : ''}><dt>새 질문</dt><dd>{unanswered}</dd></div>
+      </dl>
+      {qrLine && <button type="button" className="d-qr" onClick={() => setTab('attendance')}>
+        <MIcon name="qr" size={22} /><span><b>오늘 출석 QR</b><small>체크인은 {hhmm(opens)}부터 열려요 · 출석부 미리 보기</small></span><MIcon name="chevron" size={18} /></button>}
       {activity.status !== 'DRAFT' && <NewsEntry activityId={id} organizer />}
-      <div className="m-seg-tabs inset" role="tablist" aria-label="관리 화면">{tabs.map(([key, label, badge]) =>
+
+      <div className="d-tabs" role="tablist" aria-label="관리 화면">{tabs.map(([key, label, badge]) =>
         <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{label}{badge > 0 && <i>{badge}</i>}</button>)}</div>
 
-      {tab === 'people' && activity.status === 'RECRUITING' && phase !== 'ended' && <label className="m-switch m-auto">
+      {tab === 'people' && activity.status === 'RECRUITING' && phase !== 'ended' && <label className="m-switch m-auto d-plain">
         <span><strong>자동 승인</strong><small>{activity.autoApprove ? '빈자리가 있으면 신청이 바로 확정돼요' : '켜면 기다리는 신청도 빈자리만큼 바로 확정돼요'}</small></span>
         <input type="checkbox" role="switch" checked={Boolean(activity.autoApprove)} disabled={busy} onChange={event => toggleAuto(event.target.checked)} /><i /></label>}
-      {tab === 'people' && (!people ? <Loading /> : items.length === 0 ? <div className="m-empty"><span className="m-empty-ico"><MIcon name="users" size={26} /></span><strong>아직 신청자가 없어요</strong><p>신청이 들어오면 알림으로 알려 드려요.</p></div>
-        : <ul className="m-people">{items.map(p => <li key={p.id}>
+      {tab === 'people' && (!people ? <Loading /> : items.length === 0 ? <div className="d-empty"><MIcon name="users" size={24} /><strong>아직 신청자가 없어요</strong><span>신청이 들어오면 알림으로 알려 드려요.</span></div>
+        : <>
+        <div className="d-list-head"><h2>신청자 {items.length}명{confirmedList > 0 && <small> · 확정 {confirmedList}</small>}</h2><small>신청 순</small></div>
+        <ul className="m-people d-people">{items.map(p => <li key={p.id}>
           <span className="m-avatar sm"><MIcon name="user" size={18} /></span>
           <span className="m-people-main"><strong>{p.name}{p.lateMinutes ? <em className="m-badge amber">{p.lateMinutes}분 늦음</em> : null}</strong>
             <small>{p.checkInMethod ? (p.checkInMethod === 'QR' ? 'QR·위치 확인' : '수동 확인') + (p.checkedInAt ? ' ' + p.checkedInAt : '') + (p.checkInReason ? ' · ' + p.checkInReason : '') : '신청 ' + p.appliedAt}</small></span>
@@ -375,13 +389,13 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
               <button className="m-btn xs" disabled={busy} onClick={() => run('/api/participations/' + p.id + '/approve', {}, p.name + ' 님 참가를 확정했어요')}>승인</button></>
               : p.status === 'CONFIRMED' && (phase === 'open' || phase === 'late') ? <button className="m-btn xs line" onClick={() => setManual(p)}>수동 확인</button>
               : p.status === 'CHECKED_IN' && phase === 'ended' ? <button className="m-btn xs" disabled={busy} onClick={() => run('/api/participations/' + p.id + '/complete', {}, p.name + ' 님 완료를 확인했어요')}>완료 확인</button>
-              : <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.status === 'WAITLISTED' ? `대기 ${p.waitOrder}번` : statusWord[p.status]?.text ?? p.status}</span>}
-          </span></li>)}</ul>)}
+              : <span className={'d-status ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.status === 'WAITLISTED' ? `대기 ${p.waitOrder}번` : statusWord[p.status]?.text ?? p.status}</span>}
+          </span></li>)}</ul></>)}
       {tab === 'attendance' && people && <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} />}
-      {open && <section className="m-ops" aria-label="활동 운영 관리"><h2>활동 운영 관리</h2>
-        <nav className="m-menu flat">
+      {open && <section className="d-settings" aria-label="활동 설정"><h2>활동 설정</h2>
+        <nav>
           <a href={'#/edit/' + id}><MIcon name="edit" size={20} /><span>활동 정보 수정<small>{(activity.applicants ?? 0) > 0 ? '신청자가 있어 소개·만나는 곳만 바꿀 수 있어요' : '모든 정보를 바꿀 수 있어요'}</small></span><MIcon name="chevron" size={18} /></a>
-          {canMove && <button type="button" onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 바꾸기<small>한 번만, 시작 24시간 전까지 · 신청자에게 알려요</small></span><MIcon name="chevron" size={18} /></button>}
+          {canMove && <button type="button" onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 변경<small>한 번만, 시작 24시간 전까지 · 신청자에게 알려요</small></span><MIcon name="chevron" size={18} /></button>}
           {checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소하기<small>참가자 전원에게 취소 안내</small></span><MIcon name="chevron" size={18} /></button>}
         </nav></section>}
     </div>

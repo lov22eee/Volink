@@ -15,7 +15,7 @@ type Reviewable = { id: number; title: string; date: string; durationMinutes: nu
 export const categoryLabel: Record<Category, string> = { FREE: '자유', QUESTION: '질문', REVIEW: '봉사후기' }
 const order: Category[] = ['FREE', 'QUESTION', 'REVIEW']
 // The server sends "yyyy-MM-ddTHH:mm"; friendlyTime reads "yyyy-MM-dd HH:mm".
-const ago = (value: string) => friendlyTime(value.replace('T', ' '))
+export const ago = (value: string) => friendlyTime(value.replace('T', ' '))
 // "같이 할 분 구해요" kind of posts belong in 모집 (safety review, no contact exchange).
 const meetup = /(같이|함께).{0,12}(하실|할|가실|갈|하실래|해요|모여)|(구해요|구합니다|모여요|모집해요|모집합니다|만나요)/
 
