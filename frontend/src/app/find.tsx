@@ -61,20 +61,34 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
     return () => { current = false }
   }, [q, category, chips, near, origin, only1365])
 
+  // The map shows the 1365 programs around you next to our activities (like the web map), once the location is known.
+  const mapAsked = useRef(false)
   useEffect(() => {
-    if (!only1365 || !origin) return
+    if (view !== 'map' || origin || mapAsked.current) return
+    mapAsked.current = true
+    currentPosition().then(position => { if (position) { setOrigin(position); remember(true) } })
+  }, [view, origin])
+  const programsWanted = only1365 || view === 'map'
+  useEffect(() => {
+    if (!programsWanted || !origin) return
     let current = true
     setPrograms(null)
-    const params = new URLSearchParams({ lat: origin.lat.toFixed(6), lng: origin.lng.toFixed(6), radiusKm: '20' })
+    const params = new URLSearchParams({ lat: origin.lat.toFixed(6), lng: origin.lng.toFixed(6), radiusKm: only1365 ? '20' : '5' })
     if (q) params.set('q', q)
     api<{ enabled: boolean; items: Program[] }>('/api/volunteer-programs?' + params)
       .then(result => { if (current) { setProgramsOn(result.enabled); setPrograms(result.items) } })
       .catch(() => { if (current) { setProgramsOn(false); setPrograms([]) } })
     return () => { current = false }
-  }, [only1365, origin, q])
+  }, [programsWanted, only1365, origin, q])
 
   // Full activities go to the end (still visible: the waitlist may be open).
   const shown = useMemo(() => (items ?? []).filter(a => !chips.has('newcomer') || isNewcomer(a)).sort((a, b) => Number(seatsLeft(a) === 0) - Number(seatsLeft(b) === 0)), [items, chips])
+  // 1365 programs get negative ids on the map so a tap can tell them from our activities.
+  const mapPrograms = useMemo(() => view === 'map' && !only1365 ? (programs ?? []).filter(p => p.latitude != null && p.longitude != null) : [], [view, only1365, programs])
+  const mapPlaces = useMemo(() => [
+    ...shown.map(a => ({ id: a.id, name: a.title, latitude: a.latitude ?? null, longitude: a.longitude ?? null, tone: 'local' as const })),
+    ...mapPrograms.map((p, i) => ({ id: -(i + 1), name: p.title, latitude: p.latitude, longitude: p.longitude, tone: 'program' as const })),
+  ], [shown, mapPrograms])
   function search(event: FormEvent) { event.preventDefault(); setQ(query.trim()); input.current?.blur() }
 
   return <div className="m-screen m-find">
@@ -111,10 +125,12 @@ export function FindScreen({ actions, focus, initial }: { actions: ReactNode; fo
             <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}><MIcon name="map" size={17} />지도</button></div></div>
         {!items ? <Loading />
           : view === 'map' ? <div className="m-map-box">
-            <PlaceMap label="활동 위치 지도" places={shown.map(a => ({ id: a.id, name: a.title, latitude: a.latitude ?? null, longitude: a.longitude ?? null }))}
-              origin={origin ? { ...origin, label: '내 위치' } : null} radiusKm={near ? 5 : undefined} selected={selected} onSelect={setSelected} />
+            <PlaceMap label="활동 위치 지도" places={mapPlaces}
+              origin={origin ? { ...origin, label: '내 위치' } : null} radiusKm={near ? 5 : undefined} selected={selected}
+              onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} />
+            <p className="m-map-legend"><i className="local" />동네 활동{mapPrograms.length > 0 && <><i className="program" />1365 활동 {mapPrograms.length}개</>}</p>
             {selected && shown.find(a => a.id === selected) && <div className="m-map-card"><ActivityRow activity={shown.find(a => a.id === selected)!} /></div>}
-            {!shown.some(a => a.latitude != null) && <p className="m-help center">장소 좌표가 있는 활동만 지도에 보여요.</p>}
+            {!mapPlaces.some(a => a.latitude != null) && <p className="m-help center">장소 좌표가 있는 활동만 지도에 보여요.</p>}
           </div>
           : shown.length === 0 ? <Empty icon="search" title="조건에 맞는 활동이 없어요" text={near ? '내 주변 5km 안에는 아직 없어요. 조건을 줄여 보세요.' : '검색어나 조건을 바꿔 보세요.'}
             action={(chips.size > 0 || q || category) ? <button className="m-btn line sm" onClick={() => { setChips(new Set()); setQ(''); setQuery(''); setCategory('') }}>조건 모두 지우기</button> : undefined} />

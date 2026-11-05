@@ -652,3 +652,9 @@ textarea.n-input { min-height: 46px; max-height: 120px; padding: 12px 16px; bord
 .r-full .r-timer { max-width: 240px; }
 .r-full small { color: var(--ink-3); }
 .r-full .m-btn { width: 200px; }
+/* Map legend: our activities (green) and 1365 programs (blue) on one map. */
+.m-map-legend { display: flex; align-items: center; gap: 6px; margin: 8px 2px 0; font-size: 13px; color: var(--m-sub, #6b7280); }
+.m-map-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.m-map-legend i.local { background: #245e48; }
+.m-map-legend i.program { background: #2f62a8; margin-left: 8px; }
+:root.m-app .map-pin.program { border-color: #2f62a8; color: #2f62a8; }

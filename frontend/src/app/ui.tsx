@@ -206,11 +206,23 @@ export function useKeyboardAware() {
       window.setTimeout(reveal, 320)
     }
     const onBlur = () => window.setTimeout(() => { if (!typing(document.activeElement)) { focused = null; root.classList.remove('m-typing') } }, 50)
+    // Some Android keyboards (Samsung Korean in the WebView) change the text without an input event, so the screen
+    // shows letters React never received: a button stays off and the next render wipes the field. After each key,
+    // at the end of a composition and on leaving the field, an input event hands the current text to React
+    // (React ignores it when nothing changed).
+    const sync = (event: Event) => {
+      const field = event.target
+      if ((field instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(field.type)) || field instanceof HTMLTextAreaElement) field.dispatchEvent(new Event('input', { bubbles: true }))
+    }
     viewport?.addEventListener('resize', resize)
     window.addEventListener('resize', resize)
     document.addEventListener('focusin', onFocus)
     document.addEventListener('focusout', onBlur)
-    return () => { viewport?.removeEventListener('resize', resize); window.removeEventListener('resize', resize); document.removeEventListener('focusin', onFocus); document.removeEventListener('focusout', onBlur) }
+    for (const type of ['keyup', 'compositionend', 'focusout']) document.addEventListener(type, sync, true)
+    return () => {
+      viewport?.removeEventListener('resize', resize); window.removeEventListener('resize', resize); document.removeEventListener('focusin', onFocus); document.removeEventListener('focusout', onBlur)
+      for (const type of ['keyup', 'compositionend', 'focusout']) document.removeEventListener(type, sync, true)
+    }
   }, [])
 }
 
