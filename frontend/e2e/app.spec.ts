@@ -17,7 +17,7 @@ async function login(page: Page, email: string) {
   await page.goto('/#/login')
   await page.getByLabel('이메일').fill(email)
   await page.getByLabel('비밀번호', { exact: true }).fill(password)
-  await page.getByRole('button', { name: '로그인' }).click()
+  await page.getByRole('button', { name: '로그인', exact: true }).click()
   await expect(page).toHaveURL(/#\/home$/)
 }
 
@@ -28,7 +28,7 @@ async function tokenFor(page: Page, email: string) {
 
 test('nothing is shown before signing in, and signup has three steps without an institution choice', async ({ page }) => {
   await page.goto('/#/find')
-  await expect(page.getByRole('button', { name: '로그인' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '로그인', exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0)
   await page.getByRole('link', { name: '회원가입' }).click()
   await expect(page.getByText('기관 가입은 PC에서 진행해 주세요.')).toBeVisible()
