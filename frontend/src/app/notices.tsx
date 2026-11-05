@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { showToast } from '../App'
-import { Empty, Loading, MIcon, TopBar } from './ui'
+import { askNotifications } from './native'
+import { Empty, Loading, MIcon, Sheet, TopBar, WheelColumn, Wheels } from './ui'
 import type { MIconName } from './ui'
 
 type Category = 'ALL' | 'APPLY' | 'ACTIVITY' | 'TALK'
@@ -151,31 +152,75 @@ export function NoticesScreen({ onChange }: { onChange: () => void }) {
   </div>
 }
 
-type Settings = { apply: boolean; activity: boolean; talk: boolean; quiet: boolean }
+export type NoticeSettings = { push: boolean; apply: boolean; activity: boolean; talk: boolean; quiet: boolean; quietStart: string; quietEnd: string }
+const defaults: NoticeSettings = { push: true, apply: true, activity: true, talk: true, quiet: true, quietStart: '22:00', quietEnd: '08:00' }
+const ampm = (time: string) => { const h = Number(time.slice(0, 2)); return (h < 12 ? '오전 ' : '오후 ') + (h % 12 === 0 ? 12 : h % 12) + '시' + (time.slice(3) === '00' ? '' : ' ' + Number(time.slice(3)) + '분') }
 
-/** 마이 > 알림 설정: which kinds reach the phone as a push, and quiet hours. The in-app list always keeps all. */
+/**
+ * 마이 > 알림 설정: phone notifications on/off (and the phone's own permission), which kinds, and quiet hours
+ * (방해 금지) at times the person picks. The in-app list always keeps everything.
+ */
 export function NoticeSettingsScreen() {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  useEffect(() => { api<Settings>('/api/me/notification-settings').then(setSettings).catch(() => setSettings({ apply: true, activity: true, talk: true, quiet: true })) }, [])
-  async function toggle(key: keyof Settings) {
+  const [settings, setSettings] = useState<NoticeSettings | null>(null)
+  const [phoneOff, setPhoneOff] = useState(false)
+  const [picking, setPicking] = useState<'quietStart' | 'quietEnd' | null>(null)
+  useEffect(() => { api<NoticeSettings>('/api/me/notification-settings').then(setSettings).catch(() => setSettings(defaults)) }, [])
+  async function save(change: Partial<NoticeSettings>) {
     if (!settings) return
-    const next = { ...settings, [key]: !settings[key] }
-    setSettings(next)
-    try { setSettings(await api<Settings>('/api/me/notification-settings', 'PUT', { [key]: next[key] })) }
-    catch { setSettings(settings); showToast('저장하지 못했어요', '잠시 후 다시 시도해 주세요') }
+    const before = settings
+    setSettings({ ...settings, ...change })
+    try { setSettings(await api<NoticeSettings>('/api/me/notification-settings', 'PUT', change)) }
+    catch (cause) { setSettings(before); showToast('저장하지 못했어요', cause instanceof Error ? cause.message : '잠시 후 다시 시도해 주세요') }
   }
-  const rows: [keyof Settings, string, string][] = [
+  async function togglePush() {
+    if (!settings) return
+    if (!settings.push) setPhoneOff(!(await askNotifications()))
+    void save({ push: !settings.push })
+  }
+  const kinds: [keyof NoticeSettings, string, string][] = [
     ['apply', '신청·참여', '새 신청, 승인·거절, 자리 제안, 대기'],
     ['activity', '활동', '하루 전·당일 안내, 체크인, 일정 변경, 활동 기록'],
     ['talk', '공지·소통', '공지, 질문과 답변, 커뮤니티 댓글'],
-    ['quiet', '조용한 시간', '밤 10시~아침 8시에는 소리 없이 보내요'],
   ]
+  const off = settings ? !settings.push : false
   return <div className="m-screen"><TopBar title="알림 설정" back="#/my" />
     <div className="m-body">
-      <p className="m-help">휴대폰 알림(푸시)에 적용돼요. 앱 안 알림 목록에는 모두 그대로 남아요.</p>
-      <div className="m-note">휴대폰 푸시는 준비 중이에요. 지금은 앱 안 알림으로 알려 드려요.</div>
-      {!settings ? <Loading /> : <ul className="m-switches">{rows.map(([key, title, text]) => <li key={key}>
-        <label><span><strong>{title}</strong><small>{text}</small></span>
-          <input type="checkbox" role="switch" checked={settings[key]} onChange={() => toggle(key)} /><i aria-hidden="true" /></label></li>)}</ul>}
-    </div></div>
+      {!settings ? <Loading /> : <>
+        <ul className="m-switches"><li><label><span><strong>휴대폰 알림 받기</strong><small>끄면 휴대폰으로 알림이 오지 않아요</small></span>
+          <input type="checkbox" role="switch" checked={settings.push} onChange={togglePush} /><i aria-hidden="true" /></label></li></ul>
+        {phoneOff && settings.push && <p className="m-err" role="alert">휴대폰에서 알림이 꺼져 있어요. 휴대폰 설정 › 애플리케이션 › Volink › 알림에서 켜 주세요.</p>}
+
+        <h2 className="m-set-title">받을 알림</h2>
+        <ul className={'m-switches' + (off ? ' off' : '')}>{kinds.map(([key, title, text]) => <li key={key}>
+          <label><span><strong>{title}</strong><small>{text}</small></span>
+            <input type="checkbox" role="switch" disabled={off} checked={Boolean(settings[key])} onChange={() => save({ [key]: !settings[key] })} /><i aria-hidden="true" /></label></li>)}</ul>
+
+        <h2 className="m-set-title">방해 금지 시간</h2>
+        <ul className={'m-switches' + (off ? ' off' : '')}>
+          <li><label><span><strong>방해 금지</strong><small>{settings.quiet ? `${ampm(settings.quietStart)} ~ ${ampm(settings.quietEnd)}에는 알림을 보내지 않아요` : '하루 종일 알림을 받아요'}</small></span>
+            <input type="checkbox" role="switch" disabled={off} checked={settings.quiet} onChange={() => save({ quiet: !settings.quiet })} /><i aria-hidden="true" /></label></li>
+          {settings.quiet && <li className="m-set-times">
+            <button type="button" disabled={off} onClick={() => setPicking('quietStart')}><small>시작</small><strong>{ampm(settings.quietStart)}</strong></button>
+            <span aria-hidden="true">~</span>
+            <button type="button" disabled={off} onClick={() => setPicking('quietEnd')}><small>끝</small><strong>{ampm(settings.quietEnd)}{settings.quietEnd <= settings.quietStart ? ' (다음 날)' : ''}</strong></button></li>}
+        </ul>
+        <p className="m-help">앱 안 알림 목록에는 모두 그대로 남아요. 휴대폰 푸시는 연결을 준비하고 있어요.</p>
+      </>}
+    </div>
+    {picking && settings && <QuietTimeSheet title={picking === 'quietStart' ? '방해 금지 시작' : '방해 금지 끝'} value={settings[picking]} other={settings[picking === 'quietStart' ? 'quietEnd' : 'quietStart']}
+      onClose={() => setPicking(null)} onPick={time => { void save({ [picking]: time }); setPicking(null) }} />}
+  </div>
+}
+
+function QuietTimeSheet({ title, value, other, onPick, onClose }: { title: string; value: string; other: string; onPick: (time: string) => void; onClose: () => void }) {
+  const hours = Array.from({ length: 24 }, (_, i) => i)
+  const [h, setH] = useState(Number(value.slice(0, 2)))
+  const [m, setM] = useState(Number(value.slice(3)) >= 30 ? 30 : 0)
+  const time = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0')
+  return <Sheet title={title} onClose={onClose} footer={<button type="button" className="m-btn" disabled={time === other} onClick={() => onPick(time)}>{time === other ? '시작과 끝이 같아요' : ampm(time) + '로 정하기'}</button>}>
+    <Wheels>
+      <WheelColumn label="시" items={hours} value={h} render={x => (x < 12 ? '오전 ' : '오후 ') + (x % 12 === 0 ? 12 : x % 12) + '시'} onChange={setH} />
+      <WheelColumn label="분" items={[0, 30]} value={m} render={x => String(x).padStart(2, '0') + '분'} onChange={setM} />
+    </Wheels>
+  </Sheet>
 }

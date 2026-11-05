@@ -169,23 +169,58 @@ public class NotificationService {
         jdbc.update("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL", LocalDateTime.now(clock), userId);
     }
 
-    /** Push preferences (V16). Nobody has a row until they change something: everything on, quiet hours on. */
+    private static final Pattern HHMM = Pattern.compile("^([01]\\d|2[0-3]):([0-5]\\d)$");
+
+    /**
+     * Push preferences (V16). Nobody has a row until they change something: all on, quiet hours 22:00–08:00 on.
+     * {@code push}: every phone notification; {@code quiet}: none between {@code quietStart} and {@code quietEnd}.
+     */
     public Map<String, Object> settings(long userId) {
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT apply_on, activity_on, talk_on, quiet_on FROM notification_settings WHERE user_id = ?", userId);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT push_on, apply_on, activity_on, talk_on, quiet_on, TIME_FORMAT(quiet_start, '%H:%i') AS quiet_start, TIME_FORMAT(quiet_end, '%H:%i') AS quiet_end
+                FROM notification_settings WHERE user_id = ?""", userId);
         Map<String, Object> row = rows.isEmpty() ? Map.of() : rows.get(0);
         Map<String, Object> out = new LinkedHashMap<>();
-        for (String key : List.of("apply", "activity", "talk", "quiet")) out.put(key, rows.isEmpty() || truthy(row.get(key + "_on")));
+        for (String key : List.of("push", "apply", "activity", "talk", "quiet")) out.put(key, rows.isEmpty() || truthy(row.get(key + "_on")));
+        out.put("quietStart", rows.isEmpty() ? "22:00" : row.get("quiet_start"));
+        out.put("quietEnd", rows.isEmpty() ? "08:00" : row.get("quiet_end"));
         return out;
     }
 
     public Map<String, Object> saveSettings(long userId, Map<String, Object> request) {
         Map<String, Object> current = settings(userId);
-        for (String key : current.keySet()) if (request != null && request.get(key) instanceof Boolean on) current.put(key, on);
+        if (request != null) {
+            for (String key : List.of("push", "apply", "activity", "talk", "quiet")) if (request.get(key) instanceof Boolean on) current.put(key, on);
+            for (String key : List.of("quietStart", "quietEnd")) if (request.get(key) != null) {
+                String time = String.valueOf(request.get(key));
+                if (!HHMM.matcher(time).matches()) throw ApiException.validation(Map.of(key, "시간은 00:00~23:59 형식으로 골라 주세요."));
+                current.put(key, time);
+            }
+        }
+        if (current.get("quietStart").equals(current.get("quietEnd"))) throw ApiException.validation(Map.of("quietEnd", "시작과 끝 시간이 같을 수 없어요."));
         jdbc.update("""
-                INSERT INTO notification_settings(user_id, apply_on, activity_on, talk_on, quiet_on) VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE apply_on = VALUES(apply_on), activity_on = VALUES(activity_on), talk_on = VALUES(talk_on), quiet_on = VALUES(quiet_on)""",
-                userId, current.get("apply"), current.get("activity"), current.get("talk"), current.get("quiet"));
+                INSERT INTO notification_settings(user_id, push_on, apply_on, activity_on, talk_on, quiet_on, quiet_start, quiet_end) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE push_on = VALUES(push_on), apply_on = VALUES(apply_on), activity_on = VALUES(activity_on), talk_on = VALUES(talk_on),
+                  quiet_on = VALUES(quiet_on), quiet_start = VALUES(quiet_start), quiet_end = VALUES(quiet_end)""",
+                userId, current.get("push"), current.get("apply"), current.get("activity"), current.get("talk"), current.get("quiet"),
+                current.get("quietStart") + ":00", current.get("quietEnd") + ":00");
         return current;
+    }
+
+    /**
+     * Whether a push of this category may go to this person now (Korean time): all on, the category on, and outside
+     * quiet hours (which may cross midnight, e.g. 22:00–08:00). For the push sender once Firebase is connected; the
+     * in-app list is never filtered.
+     */
+    public boolean pushAllowed(long userId, String category, java.time.LocalTime now) {
+        Map<String, Object> s = settings(userId);
+        if (!Boolean.TRUE.equals(s.get("push"))) return false;
+        String key = switch (category) { case "APPLY" -> "apply"; case "ACTIVITY" -> "activity"; case "TALK" -> "talk"; default -> null; };
+        if (key != null && !Boolean.TRUE.equals(s.get(key))) return false;
+        if (!Boolean.TRUE.equals(s.get("quiet"))) return true;
+        java.time.LocalTime start = java.time.LocalTime.parse((String) s.get("quietStart")), end = java.time.LocalTime.parse((String) s.get("quietEnd"));
+        boolean quiet = start.isBefore(end) ? !now.isBefore(start) && now.isBefore(end) : !now.isBefore(start) || now.isBefore(end);
+        return !quiet;
     }
 
     /** Korean time as text from SQL (never a Timestamp, which would move with the server's time zone). */

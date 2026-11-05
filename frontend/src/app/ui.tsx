@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
   | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
   | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more' | 'send'
-  | 'userPlus' | 'userX' | 'checkCircle' | 'alert'
+  | 'userPlus' | 'userX' | 'checkCircle' | 'alert' | 'moon'
 
 const paths: Record<MIconName, ReactNode> = {
   home: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M10 20v-5h4v5" /></>,
@@ -54,6 +54,7 @@ const paths: Record<MIconName, ReactNode> = {
   userX: <><circle cx="10" cy="8" r="4" /><path d="M3 21a7 7 0 0 1 14 0M17 8l5 5M22 8l-5 5" /></>,
   checkCircle: <><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5v.01" /></>,
+  moon: <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z" />,
   more: <><circle cx="6" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="18" cy="12" r="1.3" /></>,
 }
 

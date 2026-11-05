@@ -68,13 +68,18 @@ ALTER TABLE notifications
     ADD INDEX ix_notification_user_category (user_id, category, id);
 
 -- Phone notification (push) preferences, per person. The in-app list always keeps everything; these apply to push
--- once it is connected. Quiet hours: 22:00–08:00 without sound.
+-- once it is connected. push_on: all phone notifications on/off. Quiet hours (방해 금지): no push between
+-- quiet_start and quiet_end (may cross midnight), chosen by the person; asked once after signup.
 CREATE TABLE notification_settings (
     user_id BIGINT PRIMARY KEY,
+    push_on BOOLEAN NOT NULL DEFAULT TRUE,
     apply_on BOOLEAN NOT NULL DEFAULT TRUE,
     activity_on BOOLEAN NOT NULL DEFAULT TRUE,
     talk_on BOOLEAN NOT NULL DEFAULT TRUE,
     quiet_on BOOLEAN NOT NULL DEFAULT TRUE,
+    quiet_start TIME NOT NULL DEFAULT '22:00:00',
+    quiet_end TIME NOT NULL DEFAULT '08:00:00',
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT ck_notification_quiet CHECK (quiet_start <> quiet_end),
     CONSTRAINT fk_notification_settings_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

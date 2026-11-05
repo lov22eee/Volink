@@ -128,12 +128,28 @@ class NotificationCenterIntegrationTest extends ApiTestSupport {
     }
 
     @Test
-    void pushSettingsDefaultOnAndSave() throws Exception {
+    void pushSettingsDefaultOnAndSaveWithChosenQuietHours() throws Exception {
         String member = token(member("GENERAL"));
-        perform(get("/api/me/notification-settings"), null, member).andExpect(jsonPath("$.apply").value(true)).andExpect(jsonPath("$.quiet").value(true));
-        perform(put("/api/me/notification-settings"), Map.of("talk", false, "quiet", false), member).andExpect(status().isOk());
-        perform(get("/api/me/notification-settings"), null, member).andExpect(jsonPath("$.talk").value(false)).andExpect(jsonPath("$.activity").value(true))
-                .andExpect(jsonPath("$.quiet").value(false));
+        long user = organizerId(member);
+        perform(get("/api/me/notification-settings"), null, member).andExpect(jsonPath("$.push").value(true)).andExpect(jsonPath("$.apply").value(true))
+                .andExpect(jsonPath("$.quiet").value(true)).andExpect(jsonPath("$.quietStart").value("22:00")).andExpect(jsonPath("$.quietEnd").value("08:00"));
+        // Default quiet hours cross midnight.
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(23, 30))).isFalse();
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(7, 59))).isFalse();
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(8, 0))).isTrue();
+        // Own quiet hours inside a day, one kind off.
+        perform(put("/api/me/notification-settings"), Map.of("talk", false, "quietStart", "13:00", "quietEnd", "14:30"), member).andExpect(status().isOk())
+                .andExpect(jsonPath("$.quietStart").value("13:00"));
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(13, 15))).isFalse();
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(23, 30))).isTrue();
+        assertThat(notifications.pushAllowed(user, "TALK", java.time.LocalTime.of(10, 0))).isFalse();
+        // Night allowed (onboarding "밤에도 받기"), then everything off.
+        perform(put("/api/me/notification-settings"), Map.of("quiet", false), member).andExpect(status().isOk());
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(13, 15))).isTrue();
+        perform(put("/api/me/notification-settings"), Map.of("push", false), member).andExpect(jsonPath("$.push").value(false));
+        assertThat(notifications.pushAllowed(user, "APPLY", java.time.LocalTime.of(10, 0))).isFalse();
+        perform(put("/api/me/notification-settings"), Map.of("quietStart", "25:00"), member).andExpect(status().isBadRequest());
+        perform(put("/api/me/notification-settings"), Map.of("quietStart", "09:00", "quietEnd", "09:00"), member).andExpect(status().isBadRequest());
     }
 
     @Test
