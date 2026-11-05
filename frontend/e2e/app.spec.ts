@@ -142,7 +142,8 @@ test('community: a question, a like and a comment, and a review only after compl
   await page.getByRole('button', { name: '질문' }).click()
   await page.locator('input[name=title]').fill('주말에 같이 하실 분 구해요')
   await expect(page.getByText('같이 할 사람을 찾고 있나요?')).toBeVisible()
-  await page.locator('input[name=title]').fill('첫 봉사인데 준비물이 있을까요?')
+  const title = '첫 봉사 준비물 질문 ' + Date.now() % 100000
+  await page.locator('input[name=title]').fill(title)
   await page.locator('textarea[name=body]').fill('연락 주세요 010-1234-5678')
   await page.getByRole('button', { name: '올리기' }).click()
   await expect(page.getByText(/연락처는 올릴 수 없어요/).first()).toBeVisible()
@@ -164,5 +165,6 @@ test('community: a question, a like and a comment, and a review only after compl
   await page.goto('/#/notifications')
   await expect(page.getByText('내 글에 댓글이 달렸어요')).toBeVisible()
   await page.goto('/#/community')
-  await expect(page.getByText('첫 봉사인데 준비물이 있을까요?')).toBeVisible()
+  // The shared dev database keeps posts from earlier runs, so the title is unique.
+  await expect(page.getByText(title)).toBeVisible()
 })
