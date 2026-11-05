@@ -110,6 +110,22 @@ export async function login(email: string, password: string): Promise<User> {
   return session.user
 }
 
+/** Kakao / Google: after the provider sends the browser back, a one-time code becomes the session. */
+export async function finishSocial(code: string): Promise<User> {
+  const session = await api<Session>('/api/auth/oauth/finish', 'POST', { code })
+  accessToken = session.accessToken
+  hint(true)
+  return session.user
+}
+
+/** First Kakao / Google login: the signup form (personal member) and then the session. */
+export async function completeSocial(body: { ticket: string; name: string; birthDate: string; interests: string[]; agreedNotice: boolean }): Promise<User> {
+  const session = await api<Session>('/api/auth/oauth/complete', 'POST', body)
+  accessToken = session.accessToken
+  hint(true)
+  return session.user
+}
+
 export async function logout() {
   try { await send('/api/auth/logout', 'POST', undefined, false) } finally { accessToken = null; hint(false) }
 }

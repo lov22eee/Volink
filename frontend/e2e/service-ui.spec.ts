@@ -993,3 +993,21 @@ test('the organizer posts a notice, a confirmed participant asks, the organizer 
   await expect(page.getByRole('region', { name: '활동 소식' }).getByRole('list', { name: '질문과 답변' })).toContainText('공영주차장 1시간 무료예요.')
   await page.getByRole('region', { name: '활동 소식' }).screenshot({ path: shot6('news-participant') })
 })
+
+test('Kakao and Google buttons are for personal members and say they are not ready without keys', async ({ page }) => {
+  await page.goto('/#/login')
+  await page.getByRole('button', { name: '카카오로 로그인' }).click()
+  await expect(page.getByText(/카카오 로그인은 준비 중이에요/)).toBeVisible()
+  await page.goto('/#/signup')
+  await expect(page.getByRole('button', { name: '구글로 시작하기' })).toBeVisible()
+  await page.getByRole('radio', { name: /기관회원/ }).check()
+  await expect(page.getByRole('button', { name: '구글로 시작하기' })).toHaveCount(0)
+  // A broken or old signup link is refused by the server.
+  await page.goto('/#/social-signup?provider=kakao&ticket=broken')
+  await page.getByRole('textbox', { name: '이름' }).fill('간편 회원')
+  await page.getByLabel(/생년월일/).fill('2000-01-01')
+  await page.getByRole('checkbox', { name: '환경 정화' }).check()
+  await page.getByRole('checkbox', { name: /공식 봉사실적/ }).check()
+  await page.getByRole('button', { name: '가입하고 시작하기' }).click()
+  await expect(page.getByText(/가입 시간이 지났어요/)).toBeVisible()
+})

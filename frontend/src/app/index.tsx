@@ -6,7 +6,7 @@ import type { User } from '../api'
 import { ToastHost } from '../App'
 import { CheckInPage } from '../checkin'
 import './app.css'
-import { Login, Signup } from './auth'
+import { Login, Signup, SocialDone, SocialSignup } from './auth'
 import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
@@ -66,6 +66,8 @@ export default function MobileApp() {
   // A QR scanned with the phone camera opens the check-in link; after signing in it continues there.
   if (!user) {
     if (route.page === 'checkin' && route.id) try { sessionStorage.setItem('volink.next', window.location.hash) } catch { /* private mode */ }
+    if (route.page === 'oauth') return <SocialDone onSession={signed => { onSession(signed); window.location.hash = '#/home' }} />
+    if (route.page === 'social-signup') return <><SocialSignup onSession={onSession} /><ToastHost /></>
     return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
       onSession(user)
       let next: string | null = null

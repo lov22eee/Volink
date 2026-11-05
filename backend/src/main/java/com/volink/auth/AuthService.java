@@ -125,6 +125,46 @@ public class AuthService {
                 LocalDateTime.now(clock), TokenService.hash(refreshToken));
     }
 
+    /**
+     * Kakao / Google signup: always a GENERAL member (institutions sign up with e-mail on the PC). The same age,
+     * name and interest rules as the e-mail signup. The provider e-mail is kept only when verified and free;
+     * otherwise a placeholder that cannot receive mail. There is no usable password (random hash).
+     */
+    @Transactional
+    public long signupSocial(String provider, String subject, String providerEmail, boolean verified, String rawName, String rawBirthDate, List<String> requested, Boolean agreed) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String name = trim(rawName);
+        if (name.isEmpty() || name.length() > 40) errors.put("name", "이름을 1~40자로 입력해 주세요.");
+        LocalDate birthDate = parseDate(rawBirthDate);
+        if (birthDate == null) errors.put("birthDate", "생년월일을 입력해 주세요.");
+        List<String> interests = requested == null ? List.of() : List.copyOf(new LinkedHashSet<>(requested));
+        if (interests.isEmpty() || interests.size() > 3) errors.put("interests", "관심 분야를 1~3개 골라 주세요.");
+        else if (countCategories(interests) != interests.size()) errors.put("interests", "없는 관심 분야가 있습니다.");
+        if (!Boolean.TRUE.equals(agreed)) errors.put("notice", "이용 안내를 확인해 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        if (Period.between(birthDate, LocalDate.now(clock)).getYears() < MINIMUM_AGE)
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "UNDER_AGE", "만 14세 미만은 가입할 수 없습니다.", Map.of("birthDate", "만 14세 미만은 가입할 수 없습니다."));
+        if (!jdbc.queryForList("SELECT user_id FROM social_accounts WHERE provider = ? AND subject = ?", Long.class, provider, subject).isEmpty())
+            throw new ApiException(HttpStatus.CONFLICT, "SOCIAL_TAKEN", "이미 가입한 계정이에요. 다시 로그인해 주세요.");
+        String email = providerEmail == null ? "" : providerEmail.trim().toLowerCase(Locale.ROOT);
+        if (!verified || !EMAIL.matcher(email).matches() || findByEmail(email).isPresent())
+            email = provider.toLowerCase(Locale.ROOT) + "-" + subject.replaceAll("[^A-Za-z0-9]", "") + "@social.volink.invalid";
+        jdbc.update("INSERT INTO users(email, display_name, password_hash, role, member_type, birth_date) VALUES (?, ?, ?, 'USER', 'GENERAL', ?)",
+                email, name, passwords.encode(java.util.UUID.randomUUID().toString()), birthDate);
+        long id = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+        for (String interest : interests)
+            jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT ?, id FROM categories WHERE name = ?", id, interest);
+        jdbc.update("INSERT INTO social_accounts(user_id, provider, subject) VALUES (?, ?, ?)", id, provider, subject);
+        return id;
+    }
+
+    /** A new session for someone already proven (social login). */
+    @Transactional
+    public Session sessionFor(long userId) {
+        AuthUser user = findById(userId);
+        return new Session(user, tokens.accessToken(user), issueRefresh(user.id()));
+    }
+
     public AuthUser findById(long id) {
         return jdbc.query("SELECT * FROM users WHERE id = ?", USER, id).stream().findFirst().orElseThrow(AuthService::unauthenticated);
     }

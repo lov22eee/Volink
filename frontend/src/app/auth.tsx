@@ -1,9 +1,11 @@
 // App start: nothing is shown before signing in. Login on the first screen, signup in three steps.
 // Institution members sign up on the PC web site (documents and a contact person are needed), so the app signs up
 // general members only (a grey line on step 1 says so; there is no type choice). The server rules are the same as on the web (age 14+, ADMIN never selectable).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { api, ApiError, login } from '../api'
+import { api, ApiError, completeSocial, finishSocial, login } from '../api'
+import { GoogleMark, KakaoMark, providerName, socialError, startSocial, useProviders } from '../social'
+import type { Provider } from '../social'
 import { showToast } from '../App'
 import type { User } from '../api'
 import { categories } from '../App'
@@ -14,10 +16,12 @@ import type { MIconName } from './ui'
 const fieldIcon: Record<string, MIconName> = { '환경 정화': 'leaf', '생활 지원': 'hand', '지역 돌봄': 'users' }
 
 export function Login({ onSession }: { onSession: (user: User) => void }) {
+  const providers = useProviders()
+  const social = (provider: Provider) => providers[provider] ? startSocial(provider) : showToast(providerName[provider] + ' 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => socialError(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth')))
   const [busy, setBusy] = useState(false)
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -49,12 +53,10 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
       <p className="m-splash-links">처음이신가요? <a href="#/signup">회원가입</a></p>
       {/* Social login is not connected yet (needs Kakao/Google app keys and server OAuth): the buttons only say so. */}
       <div className="m-social" role="group" aria-label="간편 로그인">
-        <span className="m-social-line">간편 로그인</span>
+        <span className="m-social-line">간편 로그인 · 개인 회원</span>
         <div className="m-social-row">
-          <button type="button" className="m-social-btn kakao" aria-label="카카오로 로그인 (준비 중)" onClick={() => showToast('카카오 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')}>
-            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="#191919" d="M12 3.5c-5 0-9 3.1-9 7 0 2.5 1.7 4.7 4.2 6l-1 3.7c-.1.3.3.6.6.4l4.4-2.9h.8c5 0 9-3.1 9-7s-4-7.2-9-7.2Z" /></svg></button>
-          <button type="button" className="m-social-btn google" aria-label="구글로 로그인 (준비 중)" onClick={() => showToast('구글 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')}>
-            <svg width="24" height="24" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5Z" /><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7Z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44Z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5Z" /></svg></button>
+          <button type="button" className="m-social-btn kakao" aria-label="카카오로 로그인" onClick={() => social('kakao')}><KakaoMark size={26} /></button>
+          <button type="button" className="m-social-btn google" aria-label="구글로 로그인" onClick={() => social('google')}><GoogleMark size={24} /></button>
         </div>
       </div>
       <p className="m-fine">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요.</p>
@@ -176,6 +178,79 @@ export function Signup({ onSession }: { onSession: (user: User) => void }) {
     {picking && <Sheet title="생년월일" onClose={() => setPicking(false)} footer={<>
       <p className="m-help center">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요</p>
       <button type="button" className="m-btn" onClick={() => { const d = Math.min(draft.d, days.length); setBirth({ ...draft, d }); touch('birth'); setPicking(false) }}>완료</button></>}>
+      <Wheels>
+        <WheelColumn label="년" items={years} value={draft.y} render={y => y + '년'} onChange={y => setDraft(v => ({ ...v, y }))} />
+        <WheelColumn label="월" items={months} value={draft.m} render={m => m + '월'} onChange={m => setDraft(v => ({ ...v, m }))} />
+        <WheelColumn label="일" items={days} value={Math.min(draft.d, days.length)} render={d => d + '일'} onChange={d => setDraft(v => ({ ...v, d }))} />
+      </Wheels>
+    </Sheet>}
+  </div>
+}
+
+/** Back from Kakao / Google: the one-time code becomes the session. */
+export function SocialDone({ onSession }: { onSession: (user: User) => void }) {
+  const [error, setError] = useState('')
+  const once = useRef(false)
+  useEffect(() => {
+    // The code works once; React may run this effect twice in development.
+    if (once.current) return
+    once.current = true
+    const code = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('code')
+    if (!code) { setError('로그인 정보가 없어요.'); return }
+    finishSocial(code).then(onSession).catch(cause => setError(cause instanceof Error ? cause.message : '로그인하지 못했어요.'))
+  }, [onSession])
+  return <main className="m-splash" aria-label="로그인"><div className="m-splash-brand"><span className="m-logo"><MIcon name="leaf" size={44} /></span>
+    {error ? <><p>{error}</p><a className="m-btn line" href="#/login">로그인으로</a></> : <p>로그인하는 중이에요…</p>}</div></main>
+}
+
+/** First Kakao / Google login in the app: name, birth date (14+), interests and the notice, then in. */
+export function SocialSignup({ onSession }: { onSession: (user: User) => void }) {
+  const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
+  const provider = (query.get('provider') ?? 'kakao') as Provider
+  const [name, setName] = useState(query.get('name') ?? '')
+  const [birth, setBirth] = useState<{ y: number; m: number; d: number } | null>(null)
+  const [draft, setDraft] = useState({ y: 2003, m: 1, d: 1 })
+  const [picking, setPicking] = useState(false)
+  const [interests, setInterests] = useState<string[]>([])
+  const [agree, setAgree] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const days = useMemo(() => Array.from({ length: new Date(draft.y, draft.m, 0).getDate() }, (_, i) => i + 1), [draft.y, draft.m])
+  const birthDate = birth ? `${birth.y}-${pad(birth.m)}-${pad(birth.d)}` : ''
+  const age = birth ? ageOn(birthDate, new Date()) : null
+  const can = name.trim().length > 0 && age !== null && age >= signupRules.minimumAge && interests.length > 0 && agree
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate, interests, agreedNotice: agree }))
+      window.location.hash = '#/home'
+    } catch (cause) {
+      setError(cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : '가입하지 못했어요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <div className="m-screen m-signup">
+    <header className="m-top"><button type="button" className="m-icon-btn" aria-label="뒤로" onClick={() => { window.location.hash = '#/login' }}><MIcon name="back" /></button><h1 className="m-title">{providerName[provider]}로 시작하기</h1><span className="m-top-actions" /></header>
+    <form className="m-body m-form" onSubmit={submit} noValidate>
+      <h2 className="m-h2" style={{ marginTop: 8 }}>처음 한 번만<br />확인해 주세요</h2>
+      <label className="m-field"><span className="m-label">이름</span><input className="m-input" maxLength={signupRules.nameMax} value={name} onChange={event => setName(event.target.value)} enterKeyHint="done" /></label>
+      <div className="m-field"><span className="m-label">생년월일</span>
+        <button type="button" className="m-input m-pick" aria-label={'생년월일 ' + (birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '선택')} onClick={() => setPicking(true)}>
+          <MIcon name="calendar" size={19} /><span className={birth ? '' : 'ph'}>{birth ? `${birth.y}년 ${birth.m}월 ${birth.d}일` : '생년월일을 골라 주세요'}</span>{age !== null && <small>만 {age}세</small>}</button>
+        {age !== null && age < signupRules.minimumAge && <span className="m-err">만 {signupRules.minimumAge}세 이상만 가입할 수 있어요.</span>}</div>
+      <div className="m-field"><span className="m-label">관심 분야 <small>1~{signupRules.maxInterests}개</small></span>
+        <div className="m-tiles">{categories.map(category => { const on = interests.includes(category)
+          return <button type="button" key={category} className={'m-tile' + (on ? ' on' : '')} aria-pressed={on} onClick={() => setInterests(on ? interests.filter(x => x !== category) : interests.length < signupRules.maxInterests ? [...interests, category] : interests)}>
+            <MIcon name={fieldIcon[category] ?? 'sprout'} size={24} />{category}</button> })}</div></div>
+      <div className="m-agree"><label className="m-check"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" />공식 봉사실적·자원봉사 종합보험이 아님을 이해해요</label></div>
+      <p className="m-help">간편 로그인은 개인 회원으로 가입돼요. 기관 가입은 PC에서 진행해 주세요.</p>
+      {error && <p className="m-err" role="alert">{error}</p>}
+      <ActionBar><button className="m-btn" disabled={!can || busy}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button></ActionBar>
+    </form>
+    {picking && <Sheet title="생년월일" onClose={() => setPicking(false)} footer={<button type="button" className="m-btn" onClick={() => { setBirth({ ...draft, d: Math.min(draft.d, days.length) }); setPicking(false) }}>완료</button>}>
       <Wheels>
         <WheelColumn label="년" items={years} value={draft.y} render={y => y + '년'} onChange={y => setDraft(v => ({ ...v, y }))} />
         <WheelColumn label="월" items={months} value={draft.m} render={m => m + '월'} onChange={m => setDraft(v => ({ ...v, m }))} />

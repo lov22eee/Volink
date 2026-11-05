@@ -72,14 +72,14 @@ public class AuthController {
         return auth.profile(id);
     }
 
-    private Map<String, Object> session(AuthService.Session session, HttpServletResponse response) {
+    Map<String, Object> session(AuthService.Session session, HttpServletResponse response) {
         setCookie(response, session.refreshToken(), TokenService.REFRESH_TTL);
         return Map.of("accessToken", session.accessToken(), "expiresIn", TokenService.ACCESS_TTL.toSeconds(),
                 "user", auth.profile(session.user().id()));
     }
 
     /** HttpOnly + SameSite=Strict refresh cookie, sent only to /api/auth. */
-    private void setCookie(HttpServletResponse response, String value, Duration maxAge) {
+    void setCookie(HttpServletResponse response, String value, Duration maxAge) {
         response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from(REFRESH_COOKIE, value)
                 .httpOnly(true).secure(secureCookie).sameSite("Strict").path("/api/auth").maxAge(maxAge).build().toString());
     }

@@ -4,7 +4,9 @@ import type { FormEvent, ReactNode } from 'react'
 import type { DisplayCatalog as Catalog } from './data'
 import { signupRules, validateSignup } from './rules'
 import type { Errors } from './rules'
-import { api, ApiError, login, logout, mayHaveSession, preview, refresh } from './api'
+import { api, ApiError, completeSocial, finishSocial, login, logout, mayHaveSession, preview, refresh } from './api'
+import { GoogleMark, KakaoMark, providerName, socialError, startSocial, useProviders } from './social'
+import type { Provider } from './social'
 import type { Applicant, AppNotification, MyRecord, LiveActivity, MyParticipation, Participation, PlaceInfo, User, ViewerInfo } from './api'
 import { kakaoEnabled, PlaceMap } from './map'
 import CreateActivity from './create'
@@ -59,7 +61,7 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 }
 
 
-type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications' | 'checkin'
+type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications' | 'checkin' | 'oauth' | 'social-signup'
 type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places'
 type Route = { page: Page; activityId?: number; section?: AdminSection; token?: string }
 type MemberType = 'general' | 'institution'
@@ -79,7 +81,7 @@ function getRoute(): Route {
   if (admin) return { page: 'admin', section: (admin[1] ?? 'dashboard') as AdminSection }
   const edit = /^activity\/(\d+)\/edit$/.exec(path)
   if (edit) return { page: 'edit', activityId: Number(edit[1]) }
-  return { page: ['explore', 'create', 'mine', 'login', 'signup', 'admin', 'notifications'].includes(path) ? path as Page : 'home' }
+  return { page: ['explore', 'create', 'mine', 'login', 'signup', 'admin', 'notifications', 'oauth', 'social-signup'].includes(path) ? path as Page : 'home' }
 }
 
 // One card shape for example templates and real (saved) activities.
@@ -178,7 +180,7 @@ export default function App() {
   useEffect(() => {
     if (isAdmin && ['home', 'explore', 'detail', 'create', 'edit', 'mine', 'notifications', 'login', 'signup'].includes(route.page)) window.location.hash = '#/admin'
   }, [isAdmin, route.page])
-  const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림', checkin: '체크인' }
+  const titles: Record<Page, string> = { home: '홈', explore: '활동 찾기', detail: '활동 상세', live: '활동 상세', edit: '활동 수정', create: '활동 만들기', mine: '내 활동', login: '로그인', signup: '회원가입', admin: '관리', notifications: '알림', checkin: '체크인', oauth: '로그인', 'social-signup': '회원가입' }
   const example = catalog?.activities.find(item => item.id === route.activityId)
 
   const accountNav = isAdmin && user
@@ -218,6 +220,8 @@ export default function App() {
       {route.page === 'mine' && <MyActivities user={user} ready={ready} />}
       {route.page === 'admin' && <AdminPage section={route.section ?? 'dashboard'} user={user} ready={ready} places={places} onPlacesChanged={reloadPlaces} />}
       {(route.page === 'login' || route.page === 'signup') && <AccountForm key={route.page} signup={route.page === 'signup'} onSession={setUser} />}
+      {route.page === 'oauth' && <SocialDone onSession={setUser} />}
+      {route.page === 'social-signup' && <SocialSignup onSession={setUser} />}
     </main>
     <ToastHost />
     <footer className="footer"><div className="footer-inner"><div className="footer-top"><span><strong>volink.</strong> · {isAdmin ? '관리자' : '우리 동네의 작은 변화'}</span><span className="footer-tag">Local volunteering community</span></div>{!isAdmin && <p>{preview ? '화면 미리보기 · 예시 활동이며 실제 신청·로그인은 제공하지 않습니다.' : '예시 활동은 실제 모집이 아닙니다. 신청·확정 안내는 화면 안 알림으로만 드리며 연락처는 공개하지 않습니다.'}<br />활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않습니다.</p>}</div></footer>
@@ -990,9 +994,74 @@ function ReviewItem({ title, detail, reasons, href, onDecide }: { title: string;
   </li>
 }
 
+function SocialButtons({ signup }: { signup: boolean }) {
+  const on = useProviders()
+  const [note, setNote] = useState('')
+  const go = (provider: Provider) => on[provider] ? startSocial(provider) : setNote(providerName[provider] + ' 로그인은 준비 중이에요. 이메일로 ' + (signup ? '가입해' : '로그인해') + ' 주세요.')
+  return <div className="social-buttons">
+    <button type="button" className="social-button kakao" onClick={() => go('kakao')}><KakaoMark />카카오로 {signup ? '시작하기' : '로그인'}</button>
+    <button type="button" className="social-button google" onClick={() => go('google')}><GoogleMark />구글로 {signup ? '시작하기' : '로그인'}</button>
+    <span className="social-note">간편 로그인은 개인 회원만 쓸 수 있어요. 기관 회원은 이메일로 {signup ? '가입해' : '로그인해'} 주세요.</span>
+    {note && <Notice text={note} tone="info" />}
+    <span className="social-or">또는 이메일로</span>
+  </div>
+}
+
+/** Back from Kakao / Google with a one-time code: exchange it for the session. */
+function SocialDone({ onSession }: { onSession: (user: User) => void }) {
+  const [error, setError] = useState('')
+  const once = useRef(false)
+  useEffect(() => {
+    // The code works once; React may run this effect twice in development.
+    if (once.current) return
+    once.current = true
+    const code = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('code')
+    if (!code) { setError('로그인 정보가 없어요. 다시 시도해 주세요.'); return }
+    finishSocial(code).then(user => { onSession(user); window.location.replace(takeNext() ?? '#/home') }).catch(cause => setError(cause instanceof Error ? cause.message : '로그인하지 못했어요.'))
+  }, [onSession])
+  return <section className="empty-state">{error ? <><h1>로그인하지 못했어요</h1><p>{error}</p><a className="pill-button dark" href="#/login">로그인으로</a></> : <div className="loading-state" role="status">로그인하는 중이에요…</div>}</section>
+}
+
+/** First Kakao / Google login: a short signup (personal member) with the same rules as the e-mail signup. */
+function SocialSignup({ onSession }: { onSession: (user: User) => void }) {
+  const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
+  const provider = (query.get('provider') ?? 'kakao') as Provider
+  const [errors, setErrors] = useState<Errors>({})
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    setBusy(true)
+    setMessage('')
+    try {
+      const user = await completeSocial({ ticket: query.get('ticket') ?? '', name: String(data.get('name') ?? ''), birthDate: String(data.get('birthDate') ?? ''), interests: data.getAll('interests').map(String), agreedNotice: Boolean(data.get('notice')) })
+      onSession(user)
+      window.location.replace('#/home')
+    } catch (cause) {
+      if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setErrors(cause.fieldErrors)
+      else setMessage(cause instanceof Error ? cause.message : '가입하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <div className="account-layout auth-v2 is-signup social-signup">
+    <form className="activity-form account-form" noValidate onSubmit={submit}>
+      <h2>{providerName[provider]} 계정으로 시작해요</h2><p className="form-description">처음 한 번만 아래 정보를 확인해 주세요. 간편 로그인은 개인 회원으로 가입돼요.</p>
+      <label>이름<input name="name" defaultValue={query.get('name') ?? ''} maxLength={signupRules.nameMax} autoComplete="name" {...invalid('name', errors)} /><FieldError name="name" errors={errors} /></label>
+      <label>생년월일 <span className="field-hint">만 {signupRules.minimumAge}세 이상</span><input name="birthDate" type="date" {...invalid('birthDate', errors)} /><FieldError name="birthDate" errors={errors} /></label>
+      <fieldset className="interest-picker" {...invalid('interests', errors)}><legend>관심 분야 <span className="field-hint">1–{signupRules.maxInterests}개</span></legend>{categories.map(value => <label key={value}><input type="checkbox" name="interests" value={value} />{value}</label>)}<FieldError name="interests" errors={errors} /></fieldset>
+      <fieldset className="safety-checks" {...invalid('notice', errors)}><legend>이용 안내</legend><label><input type="checkbox" name="notice" value="agreed" />활동 기록은 공식 봉사실적으로 인정되지 않으며 종합보험이 적용되지 않음을 확인합니다.</label><FieldError name="notice" errors={errors} /></fieldset>
+      <button type="submit" className="pill-button dark" disabled={busy}>{busy ? '가입하는 중…' : '가입하고 시작하기'}</button>
+      {message && <Notice text={message} tone="error" />}
+      <p className="small-print">기관 회원은 이메일 회원가입에서 기관 회원을 골라 주세요.</p>
+    </form>
+  </div>
+}
+
 function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user: User) => void }) {
   const [memberType, setMemberType] = useState<MemberType>('general')
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(() => socialError(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth')))
   const [errors, setErrors] = useState<Errors>({})
   const [busy, setBusy] = useState(false)
 
@@ -1047,6 +1116,7 @@ function AccountForm({ signup, onSession }: { signup: boolean; onSession: (user:
     <form className="activity-form account-form" noValidate onSubmit={submit} onChange={() => setMessage('')}>
       <nav className="auth-tabs" aria-label="로그인·회원가입 전환"><a href="#/login" aria-current={!signup ? 'page' : undefined}>로그인</a><a href="#/signup" aria-current={signup ? 'page' : undefined}>회원가입</a></nav>
       <h2>{signup ? '함께할 준비가 되셨나요?' : '다시 만나 반가워요!'}</h2><p className="form-description">{signup ? '어떤 모습으로 함께하시겠어요?' : '이메일과 비밀번호로 로그인해 주세요.'}</p>
+      {!preview && (!signup || memberType === 'general') && <SocialButtons signup={signup} />}
       {signup && <><fieldset className="member-picker"><legend>회원 유형</legend><label className={memberType === 'general' ? 'selected' : ''}><input type="radio" name="memberType" value="general" checked={memberType === 'general'} onChange={() => setMemberType('general')} /><span className="member-icon"><Icon name="user" /></span><strong>개인 회원</strong><span>일반회원 · 이웃과 함께 자율 활동</span></label><label className={memberType === 'institution' ? 'selected' : ''}><input type="radio" name="memberType" value="institution" checked={memberType === 'institution'} onChange={() => setMemberType('institution')} /><span className="member-icon"><Icon name="building" /></span><strong>기관 회원</strong><span>기관회원 · 기관 확인 후 주관 활동</span></label></fieldset>
         <label>이름<input name="name" autoComplete="name" maxLength={signupRules.nameMax} placeholder="이름을 입력해 주세요" {...invalid('name', errors)} /><FieldError name="name" errors={errors} /></label>
         <label>생년월일 <span className="field-hint">만 {signupRules.minimumAge}세 이상 가입 가능</span><input name="birthDate" type="date" autoComplete="bday" {...invalid('birthDate', errors)} /><FieldError name="birthDate" errors={errors} /></label>

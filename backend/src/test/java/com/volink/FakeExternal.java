@@ -55,6 +55,23 @@ public class FakeExternal {
         }
     }
 
+    /** Kakao / Google login stand-in: the "code" is the subject, and the profile comes from this map. */
+    public static class Social implements com.volink.auth.social.SocialLogin {
+        public boolean enabled;
+        public Map<String, Profile> profiles = new HashMap<>();
+        public void reset() { enabled = false; profiles = new HashMap<>(); }
+        @Override public boolean enabled(String provider) { return enabled; }
+        @Override public String authorizeUrl(String provider, String redirectUri, String state) {
+            return "https://login.example/" + provider + "?redirect_uri=" + redirectUri + "&state=" + state;
+        }
+        @Override public Profile exchange(String provider, String code, String redirectUri) {
+            Profile profile = profiles.get(code);
+            if (profile == null) throw new IllegalStateException("refused");
+            return profile;
+        }
+    }
+
+    @Bean @Primary public Social fakeSocial() { return new Social(); }
     @Bean @Primary public Kakao fakeKakao() { return new Kakao(); }
     @Bean @Primary public Volunteer fakeVolunteer() { return new Volunteer(); }
 }
