@@ -183,3 +183,50 @@ test('community: a question, a like and a comment, and a review only after compl
   // The shared dev database keeps posts from earlier runs, so the title is unique.
   await expect(page.getByText(title)).toBeVisible()
 })
+
+test('activity news: the organizer posts a notice from a template, a member asks privately, the organizer answers and sees who read it', async ({ page, browser }) => {
+  const organizer = await signupByApi(page, '소식 모집자')
+  const auth = await tokenFor(page, organizer)
+  const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '소식 확인용 공원 정리', category: '환경 정화', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true, meetingPoint: '정문 안내판 앞' } })
+  const id = (await created.json()).id
+  const memberPage = await browser.newPage({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
+  const member = await signupByApi(memberPage, '소식 참가자')
+  const joined = await (await memberPage.request.post(`/api/activities/${id}/participations`, { headers: { Authorization: await tokenFor(memberPage, member) } })).json()
+  await page.request.post(`/api/participations/${joined.participation.id}/approve`, { headers: { Authorization: auth } })
+
+  await login(page, organizer)
+  await page.goto('/#/manage/' + id)
+  await page.getByRole('link', { name: '공지 올리기' }).click()
+  await page.getByRole('button', { name: '집결 장소' }).click()
+  await expect(page.getByLabel('공지 내용')).toHaveValue(/정문 안내판 앞에서 10:00에 만나요/)
+  await page.getByRole('button', { name: '보내기' }).click()
+  await expect(page.getByText('확정 1명 중 0명 읽음')).toBeVisible()
+
+  await login(memberPage, member)
+  await memberPage.goto('/#/activity/' + id)
+  await expect(memberPage.getByRole('link', { name: /활동 소식.*새 공지 1/ })).toBeVisible()
+  await memberPage.getByRole('link', { name: /활동 소식/ }).click()
+  await expect(memberPage.getByText('최신 공지')).toBeVisible()
+  await memberPage.getByRole('button', { name: '모집자에게만 보이기' }).click()
+  await memberPage.getByLabel('질문 내용').fill('무릎이 조금 안 좋은데 천천히 걸어도 될까요?')
+  await memberPage.getByRole('button', { name: '보내기' }).click()
+  await expect(memberPage.getByText('모집자에게만').first()).toBeVisible()
+  await expect(memberPage.getByText('답변을 기다리고 있어요')).toBeVisible()
+
+  await page.reload()
+  // With an unanswered question the organizer lands on the 질문 tab; the read count is under 공지.
+  await expect(page.getByRole('tab', { name: /질문/ })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: '공지' }).click()
+  await expect(page.getByText('확정 1명 중 1명 읽음')).toBeVisible()
+  await page.getByRole('tab', { name: /질문/ }).click()
+  await page.getByRole('button', { name: '답변하기' }).click()
+  await page.getByRole('button', { name: '네, 괜찮아요!' }).click()
+  await page.getByRole('button', { name: '보내기' }).click()
+  await expect(page.getByText('내 답변')).toBeVisible()
+
+  await memberPage.goto('/#/notifications')
+  await memberPage.getByText('질문에 답변이 달렸어요').click()
+  await expect(memberPage).toHaveURL(new RegExp('#/news/' + id))
+  await expect(memberPage.getByText('네, 괜찮아요!')).toBeVisible()
+  await memberPage.close()
+})

@@ -39,7 +39,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
     const phase = phaseOf(a.date, a.startTime, a.durationMinutes, now).phase
     if (phase === 'open' || phase === 'late') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석 QR을 띄울 시간이에요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
     if ((a.pending ?? 0) > 0) todos.push({ key: 'p' + a.id, icon: 'users', text: `승인할 신청 ${a.pending}건 · ${a.title}`, href: '#/manage/' + a.id })
-    if ((a.unanswered ?? 0) > 0) todos.push({ key: 'u' + a.id, icon: 'chat', text: `답변할 질문 ${a.unanswered}개 · ${a.title}`, href: '#/manage/' + a.id + '?tab=news' })
+    if ((a.unanswered ?? 0) > 0) todos.push({ key: 'u' + a.id, icon: 'chat', text: `답변할 질문 ${a.unanswered}개 · ${a.title}`, href: '#/news/' + a.id })
   }
   for (const a of hosted.filter(a => a.status === 'FINISHED' && (a.checkedIn ?? 0) > 0))
     todos.push({ key: 'f' + a.id, icon: 'check', text: `완료 확인할 참가자 ${a.checkedIn}명 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })

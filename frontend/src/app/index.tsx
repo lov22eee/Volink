@@ -11,6 +11,7 @@ import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
 import { HomeScreen } from './home'
+import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
 import { MineScreen } from './mine'
 import { MyScreen, NicknameScreen, NoticesScreen, SavedScreen, InterestsScreen } from './my'
@@ -92,6 +93,7 @@ export default function MobileApp() {
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break
+    case 'news': screen = route.id ? <NewsScreen key={route.id} id={route.id} user={user} /> : null; break
     case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
     default: screen = null
   }

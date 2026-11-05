@@ -7,6 +7,7 @@ import { categories, friendlyTime, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
 import { CommunitySetup } from './community'
+import { newsTitles } from './news'
 import { ActionBar, Empty, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
 
@@ -112,7 +113,7 @@ export function NicknameScreen() {
     {profile === undefined ? <Loading /> : <CommunitySetup profile={profile} change={Boolean(profile?.ready)} onDone={() => { window.location.hash = '#/my' }} />}</div>
 }
 
-const noticeIcon = (type: string): MIconName => type === 'WAITLIST_OFFER' ? 'bolt' : type === 'ACTIVITY_REMINDER' ? 'clock' : type === 'RECORD_CONFIRMED' ? 'record' : type === 'APPLICATION_RESULT' ? 'check' : type.startsWith('POST') || type === 'ACTIVITY_POST' ? 'chat' : 'bell'
+const noticeIcon = (type: string, title = ''): MIconName => newsTitles.some(t => title.startsWith(t)) ? 'chat' : type === 'WAITLIST_OFFER' ? 'bolt' : type === 'ACTIVITY_REMINDER' ? 'clock' : type === 'RECORD_CONFIRMED' ? 'record' : type === 'APPLICATION_RESULT' ? 'check' : type.startsWith('POST') || type === 'ACTIVITY_POST' ? 'chat' : 'bell'
 
 export function NoticesScreen({ onChange }: { onChange: () => void }) {
   const [items, setItems] = useState<AppNotification[] | null>(null)
@@ -121,14 +122,16 @@ export function NoticesScreen({ onChange }: { onChange: () => void }) {
   async function open(item: AppNotification) {
     if (!item.read) await api('/api/notifications/' + item.id + '/read', 'POST').catch(() => {})
     onChange()
-    if (item.link) window.location.hash = item.link.replace('#/explore', '#/find')
+    // News notifications open the news screen itself, not the top of the activity.
+    if (item.link && newsTitles.some(title => item.title.startsWith(title))) window.location.hash = item.link.replace('#/activity/', '#/news/')
+    else if (item.link) window.location.hash = item.link.replace('#/explore', '#/find')
     else load()
   }
   const unread = (items ?? []).filter(item => !item.read).length
   return <div className="m-screen"><TopBar title="알림" back="history" actions={unread > 0 ? <button type="button" className="m-text-btn" onClick={async () => { await api('/api/notifications/read-all', 'POST'); onChange(); load() }}>모두 읽음</button> : undefined} />
     <div className="m-body">{!items ? <Loading /> : items.length ? <ul className="m-notices">{items.map(item =>
       <li key={item.id}><button type="button" className={item.read ? '' : 'new'} onClick={() => open(item)}>
-        <span className={'m-n-ico' + (item.type === 'WAITLIST_OFFER' ? ' hot' : '')}><MIcon name={noticeIcon(item.type)} size={19} /></span>
+        <span className={'m-n-ico' + (item.type === 'WAITLIST_OFFER' ? ' hot' : '')}><MIcon name={noticeIcon(item.type, item.title)} size={19} /></span>
         <span className="m-n-main"><strong>{item.title}</strong><span>{item.body}</span><small>{friendlyTime(item.createdAt.replace('T', ' '))}</small></span></button></li>)}</ul>
       : <Empty icon="bell" title="아직 알림이 없어요" text="신청 결과, 자리 제안, 공지와 답변을 여기서 알려 드려요." />}</div>
   </div>

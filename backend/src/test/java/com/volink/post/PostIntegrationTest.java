@@ -90,4 +90,34 @@ class PostIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + confirmed))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.canAsk").value(false));
     }
+
+    @Test
+    void privateQuestionsAndWhatIsNewAndWhoReadTheNotice() throws Exception {
+        String other = token(member("GENERAL"));
+        long id = json.readTree(perform(post("/api/activities/" + activity + "/participations"), Map.of(), other)
+                .andReturn().getResponse().getContentAsString()).get("participation").get("id").asLong();
+        perform(post("/api/participations/" + id + "/approve"), Map.of(), organizer).andExpect(status().isNoContent());
+
+        perform(post("/api/activities/" + activity + "/notices"), Map.of("body", "우비를 챙겨 주세요"), organizer).andExpect(status().isCreated());
+        long secret = json.readTree(perform(post("/api/activities/" + activity + "/questions"), Map.of("body", "무릎이 안 좋은데 괜찮을까요?", "privately", true), confirmed)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        // The other participant does not see the private question; the organizer and the asker do.
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + other))
+                .andExpect(jsonPath("$.questions.length()").value(0)).andExpect(jsonPath("$.newNotices").value(1)).andExpect(jsonPath("$.notices[0].readCount").doesNotExist());
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + confirmed))
+                .andExpect(jsonPath("$.questions[0].private").value(true));
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + organizer))
+                .andExpect(jsonPath("$.questions[0].id").value(secret)).andExpect(jsonPath("$.notices[0].readCount").value(0)).andExpect(jsonPath("$.audience").value(2));
+        // Opening the news marks it as seen: the organizer sees 1 of 2 read, the badge goes away.
+        Thread.sleep(1100);
+        perform(post("/api/activities/" + activity + "/posts/seen"), null, other).andExpect(status().isNoContent());
+        perform(post("/api/activities/" + activity + "/posts/seen"), null, pending).andExpect(status().isForbidden());
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + other)).andExpect(jsonPath("$.newNotices").value(0));
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + organizer)).andExpect(jsonPath("$.notices[0].readCount").value(1));
+        // An answer is new for the asker until they open the news again.
+        Thread.sleep(1100);
+        perform(post("/api/activity-posts/" + secret + "/answer"), Map.of("body", "천천히 걸으셔도 괜찮아요"), organizer).andExpect(status().isCreated());
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + confirmed)).andExpect(jsonPath("$.newAnswers").value(1));
+        mvc.perform(get("/api/activities/" + activity + "/posts").header("Authorization", "Bearer " + other)).andExpect(jsonPath("$.questions.length()").value(0));
+    }
 }

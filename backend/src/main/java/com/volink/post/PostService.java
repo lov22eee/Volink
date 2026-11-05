@@ -51,11 +51,21 @@ public class PostService {
         Activity activity = activity(activityId);
         Role role = role(viewerId, activity);
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
-                SELECT p.id, p.kind, p.parent_id AS parentId, p.body, p.author_id AS authorId, u.display_name AS name,
-                       DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt
+                SELECT p.id, p.kind, p.parent_id AS parentId, p.body, p.author_id AS authorId, u.display_name AS name, p.private_post AS privatePost,
+                       DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
+                       p.created_at > COALESCE((SELECT s.seen_at FROM activity_post_seen s WHERE s.activity_id = p.activity_id AND s.user_id = ?), '1970-01-02') AS unseen,
+                       (SELECT COUNT(*) FROM activity_post_seen s JOIN participations m ON m.activity_id = s.activity_id AND m.user_id = s.user_id
+                         WHERE s.activity_id = p.activity_id AND s.seen_at >= p.created_at AND m.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS readCount
                 FROM activity_posts p JOIN users u ON u.id = p.author_id
                 WHERE p.activity_id = ? AND p.deleted_at IS NULL ORDER BY p.created_at DESC, p.id DESC
-                """), activityId);
+                """), viewerId, activityId);
+        // A private question (and its answer) is shown only to the asker, the organizer and admins.
+        boolean staff = role != Role.PARTICIPANT;
+        java.util.Set<Long> hidden = new java.util.HashSet<>();
+        for (Map<String, Object> row : rows)
+            if ("QUESTION".equals(row.get("kind")) && truthy(row.get("privatePost")) && !staff && ((Number) row.get("authorId")).longValue() != viewerId)
+                hidden.add(((Number) row.get("id")).longValue());
+        rows.removeIf(row -> hidden.contains(((Number) row.get("id")).longValue()) || row.get("parentId") != null && hidden.contains(((Number) row.get("parentId")).longValue()));
         Map<Long, Map<String, Object>> answers = new LinkedHashMap<>();
         for (Map<String, Object> row : rows)
             if ("ANSWER".equals(row.get("kind"))) answers.putIfAbsent(((Number) row.get("parentId")).longValue(), row);
@@ -74,6 +84,10 @@ public class PostService {
         result.put("canAsk", role == Role.PARTICIPANT && activity.open());
         result.put("canAnswer", role == Role.ORGANIZER && activity.open());
         result.put("unanswered", questions.stream().filter(q -> q.get("answer") == null).count());
+        // For the entry card: what is new since this person last opened the news (their own posts do not count).
+        result.put("newNotices", rows.stream().filter(r -> "NOTICE".equals(r.get("kind")) && truthy(r.get("unseen")) && ((Number) r.get("authorId")).longValue() != viewerId).count());
+        result.put("newAnswers", questions.stream().filter(q -> Boolean.TRUE.equals(q.get("mine")) && q.get("answer") != null && Boolean.TRUE.equals(((Map<?, ?>) q.get("answer")).get("unseen"))).count());
+        result.put("audience", jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')", Integer.class, activityId));
         result.put("notices", notices);
         result.put("questions", questions);
         return result;
@@ -92,11 +106,18 @@ public class PostService {
 
     @Transactional
     public Map<String, Object> ask(long userId, long activityId, String rawBody) {
+        return ask(userId, activityId, rawBody, false);
+    }
+
+    /** privately = only the organizer (and the asker) sees the question and its answer. */
+    @Transactional
+    public Map<String, Object> ask(long userId, long activityId, String rawBody, boolean privately) {
         Activity activity = activity(activityId);
         if (role(userId, activity) != Role.PARTICIPANT) throw forbidden("참가가 확정된 사람만 질문할 수 있습니다.");
         String body = checked(userId, activity, rawBody);
         long id = insert(activity.id(), userId, "QUESTION", null, body);
-        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link());
+        if (privately) jdbc.update("UPDATE activity_posts SET private_post = TRUE WHERE id = ?", id);
+        notifications.send(activity.organizerId(), "ACTIVITY_CHANGED", privately ? "모집자에게만 보이는 질문이 있어요" : "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link());
         return Map.of("id", id);
     }
 
@@ -112,6 +133,17 @@ public class PostService {
         long id = insert(activity.id(), organizerId, "ANSWER", questionId, body);
         notifications.send(((Number) question.get("author_id")).longValue(), "ACTIVITY_CHANGED", "질문에 답변이 달렸어요", activity.title() + " · " + preview(body), activity.link());
         return Map.of("id", id);
+    }
+
+    /** The person opened the news: everything up to now counts as seen (entry card badge, notice read count). */
+    @Transactional
+    public void seen(long userId, long activityId) {
+        role(userId, activity(activityId));
+        jdbc.update("INSERT INTO activity_post_seen(activity_id, user_id, seen_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON DUPLICATE KEY UPDATE seen_at = CURRENT_TIMESTAMP", activityId, userId);
+    }
+
+    private static boolean truthy(Object value) {
+        return value instanceof Boolean b ? b : value instanceof Number n && n.intValue() != 0;
     }
 
     /** The author deletes their own post; the organizer may also remove a participant's question from their activity. */
@@ -165,6 +197,10 @@ public class PostService {
         // Names stay partly hidden, as in the applicant list; the organizer is just "모집자".
         item.put("author", author == activity.organizerId() ? "모집자" : mask((String) row.get("name")));
         item.put("mine", author == viewerId);
+        item.put("private", truthy(row.get("privatePost")));
+        item.put("unseen", truthy(row.get("unseen")) && author != viewerId);
+        // Only the organizer sees how many confirmed people opened the news after a notice.
+        if ("NOTICE".equals(row.get("kind")) && activity.organizerId() == viewerId) item.put("readCount", row.get("readCount"));
         return item;
     }
 

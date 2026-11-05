@@ -21,7 +21,7 @@ public class PostController {
         this.posts = posts;
     }
 
-    public record Body(String body) {}
+    public record Body(String body, Boolean privately) {}
 
     @GetMapping("/api/activities/{id}/posts")
     public Map<String, Object> list(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
@@ -37,7 +37,13 @@ public class PostController {
     @PostMapping("/api/activities/{id}/questions")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> ask(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody Body body) {
-        return posts.ask(user(jwt), id, body.body());
+        return posts.ask(user(jwt), id, body.body(), Boolean.TRUE.equals(body.privately()));
+    }
+
+    @PostMapping("/api/activities/{id}/posts/seen")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void seen(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        posts.seen(Long.parseLong(jwt.getSubject()), id);
     }
 
     @PostMapping("/api/activity-posts/{id}/answer")

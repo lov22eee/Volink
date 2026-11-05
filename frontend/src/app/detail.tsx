@@ -7,10 +7,10 @@ import { showToast } from '../App'
 import { AttendancePanel, hhmm, phaseOf, useNow } from '../checkin'
 import type { Phase } from '../checkin'
 import { durationLabel } from '../create'
-import { ActivityNews } from '../news'
 import { activityRules as r } from '../rules'
 import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, placeKindLabel, seatsLeft } from './cards'
 import { DateSheet, DurationSheet, TimeSheet } from './host'
+import { NewsEntry } from './news'
 import { statusWord } from './mine'
 import { ActionBar, dayWord, dDay, go, Loading, MIcon, PickField, Sheet, TopBar } from './ui'
 
@@ -165,15 +165,14 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     <div className="m-body">
       {head}
       {statusCard}
+      {['confirmed', 'today', 'checkedin', 'done'].includes(stage) && !cancelled && <NewsEntry activityId={id} organizer={false} />}
       {stage === 'today' ? <>
         <dl className="m-facts big"><div><dt><MIcon name="pin" size={20} /></dt><dd><strong>{activity.meetingPoint ?? activity.placeName}</strong><small>{activity.placeName}{activity.placeAddress ? ' · ' + activity.placeAddress : ''}</small></dd></div>
           <div><dt><MIcon name="clock" size={20} /></dt><dd><strong>{activity.startTime} 시작 · {durationLabel(activity.durationMinutes)}</strong><small>체크인 {hhmm(opens)} ~ {hhmm(closes)}</small></dd></div></dl>
         <Supplies activity={activity} />
-        <div className="m-legacy"><ActivityNews activityId={id} organizer={false} /></div>
       </> : <>
         <Facts activity={activity} />
         {member && <Supplies activity={activity} />}
-        {member && <div className="m-legacy"><ActivityNews activityId={id} organizer={false} /></div>}
         {!member && <><Supplies activity={activity} /><About text={activity.description} /></>}
         {member && <About text={activity.description} />}
         {stage === 'before' && <div className="m-note"><strong>참여 전 알아두세요</strong>Volink 활동은 공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않아요. 위험한 일은 하지 않고, 사고가 나면 먼저 119에 신고해요.</div>}
@@ -248,7 +247,7 @@ function ScanSheet({ onClose }: { onClose: () => void }) {
 
 // ---------------------------------------------------------------- organizer dashboard
 
-type ManageTab = 'people' | 'news' | 'attendance'
+type ManageTab = 'people' | 'attendance'
 const manualReasons = ['위치 권한을 허용하지 않음', 'GPS가 잡히지 않음', 'QR을 찍을 수 없는 휴대폰', '현장에서 얼굴로 확인함']
 
 export function ManageScreen({ id, user, onChange, initial }: { id: number; user: User; onChange: () => void; initial?: string }) {
@@ -256,7 +255,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const [activity, setActivity] = useState<LiveActivity | null>(null)
   const [people, setPeople] = useState<{ capacity: number; confirmed: number; waiting: number; pending: number; items: Applicant[] } | null>(null)
   const [unanswered, setUnanswered] = useState(0)
-  const [tab, setTab] = useState<ManageTab>(initial === 'news' || initial === 'attendance' ? initial : 'people')
+  const [tab, setTab] = useState<ManageTab>(initial === 'attendance' ? initial : 'people')
+  useEffect(() => { if (initial === 'news') window.location.replace('#/news/' + id) }, [initial, id])
   const [sheet, setSheet] = useState<'menu' | 'cancel' | 'move' | 'delete' | null>(null)
   const [manual, setManual] = useState<Applicant | null>(null)
   const [busy, setBusy] = useState(false)
@@ -296,14 +296,13 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
     }
   }
 
-  const tabs: [ManageTab, string, number][] = [['people', '신청자', count('APPLIED')], ['news', '소식', unanswered], ['attendance', '출석', 0]]
+  const tabs: [ManageTab, string, number][] = [['people', '신청자', count('APPLIED')], ['attendance', '출석', 0]]
   const main = (() => {
     if (activity.status === 'CANCELLED') return null
     if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />출석 QR 띄우기</button>
     if (phase === 'ended' && checked > 0) return <button className="m-btn" disabled={busy} onClick={() => run('/api/activities/' + id + '/complete', undefined, `${checked}명 완료를 확인했어요`)}>체크인한 {checked}명 모두 완료</button>
     if (phase === 'ended') return <a className="m-btn line" href={'#/create?from=' + id}><MIcon name="refresh" size={19} />같은 활동 다시 모집</a>
-    if (tab !== 'news') return <button className="m-btn line" onClick={() => setTab('news')}><MIcon name="megaphone" size={19} />공지 올리기</button>
-    return null
+    return <a className="m-btn line" href={'#/news/' + id}><MIcon name="megaphone" size={19} />공지 올리기</a>
   })()
 
   return <div className="m-screen m-manage">
@@ -322,6 +321,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
           <div className={unanswered ? 'hot' : ''}><b>{unanswered}</b><span>새 질문</span></div>
         </div>
       </section>
+      {activity.status !== 'DRAFT' && <NewsEntry activityId={id} organizer />}
       <div className="m-seg-tabs inset" role="tablist" aria-label="관리 화면">{tabs.map(([key, label, badge]) =>
         <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>{label}{badge > 0 && <i>{badge}</i>}</button>)}</div>
 
@@ -338,7 +338,6 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
               : <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.status === 'WAITLISTED' ? `대기 ${p.waitOrder}번` : statusWord[p.status]?.text ?? p.status}</span>}
           </span></li>)}</ul>)}
       {tab === 'people' && <p className="m-help">이름 일부만 보이고 연락처는 공개하지 않아요. 확정자가 취소하면 대기 1번에게 자동으로 자리를 제안해요.</p>}
-      {tab === 'news' && <div className="m-legacy"><ActivityNews activityId={id} organizer /></div>}
       {tab === 'attendance' && <>
         {(phase === 'later' || phase === 'soon') && <div className="m-empty"><span className="m-empty-ico"><MIcon name="qr" size={26} /></span><strong>체크인은 시작 30분 전부터 열려요</strong><p>그때 이 화면에서 QR을 띄워 참가자에게 보여 주세요. QR은 30초마다 바뀌어요.</p></div>}
         {phase !== 'later' && phase !== 'soon' && <div className="m-legacy"><AttendancePanel activity={activity} phase={phase as Phase} onChanged={load} /></div>}

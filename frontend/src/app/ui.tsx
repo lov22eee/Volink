@@ -59,11 +59,11 @@ export function MIcon({ name, size = 22 }: { name: MIconName; size?: number }) {
 export const go = (hash: string) => { window.location.hash = hash }
 
 /** Screen title row: back button (sub screens) or the brand, then at most two icons. */
-export function TopBar({ title, back, brand, actions }: { title?: string; back?: string | (() => void); brand?: boolean; actions?: ReactNode }) {
+export function TopBar({ title, sub, back, brand, actions }: { title?: string; sub?: string; back?: string | (() => void); brand?: boolean; actions?: ReactNode }) {
   const onBack = () => typeof back === 'function' ? back() : back === 'history' ? window.history.back() : go(back ?? '#/home')
   return <header className="m-top">
     {back && <button type="button" className="m-icon-btn" aria-label="뒤로" onClick={onBack}><MIcon name="back" /></button>}
-    {brand ? <span className="m-brand">volink<i>.</i></span> : <h1 className="m-title">{title}</h1>}
+    {brand ? <span className="m-brand">volink<i>.</i></span> : <h1 className="m-title">{title}{sub && <small className="m-title-sub">{sub}</small>}</h1>}
     <span className="m-top-actions">{actions}</span>
   </header>
 }
