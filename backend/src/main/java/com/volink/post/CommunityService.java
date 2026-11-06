@@ -44,6 +44,9 @@ public class CommunityService {
             DATE_FORMAT(a.starts_at, '%H:%i') AS activityTime, a.status AS activityStatus, a.capacity AS activityCapacity, a.starts_at AS activityStartsAt,
             (SELECT dp.name FROM demo_places dp WHERE dp.id = a.place_id) AS activityPlace,
             (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS activityConfirmed,
+            p.external_id AS externalId, (SELECT e.title FROM external_records e WHERE e.id = p.external_id) AS externalTitle,
+            (SELECT DATE_FORMAT(e.starts_at, '%Y-%m-%d') FROM external_records e WHERE e.id = p.external_id) AS externalDate,
+            (SELECT e.cert_at IS NOT NULL FROM external_records e WHERE e.id = p.external_id) AS externalCertified,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
@@ -105,7 +108,7 @@ public class CommunityService {
                 """, userId);
     }
 
-    public record PostRequest(String category, String title, String body, Long activityId) {}
+    public record PostRequest(String category, String title, String body, Long activityId, Long externalId) {}
 
     @Transactional
     public Map<String, Object> create(long userId, PostRequest request) {
@@ -117,8 +120,13 @@ public class CommunityService {
         if (title.length() < 2 || title.length() > TITLE_MAX) errors.put("title", "제목은 2~" + TITLE_MAX + "자로 적어 주세요.");
         if (body.length() < 5 || body.length() > BODY_MAX) errors.put("body", "내용은 5~" + BODY_MAX + "자로 적어 주세요.");
         if (contact(title) || contact(body)) errors.put(contact(title) ? "title" : "body", "전화번호·이메일·오픈채팅 같은 연락처는 올릴 수 없어요.");
-        Long activityId = null;
-        if ("REVIEW".equals(category)) {
+        Long activityId = null, externalId = null;
+        if ("REVIEW".equals(category) && request.externalId() != null && request.activityId() == null) {
+            // A 1365 activity the person said they went to (their own record).
+            externalId = request.externalId();
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM external_records WHERE id = ? AND user_id = ? AND status = 'ATTENDED'", Integer.class, externalId, userId) == 0)
+                errors.put("activityId", "다녀왔다고 남긴 1365 활동에만 후기를 쓸 수 있어요.");
+        } else if ("REVIEW".equals(category)) {
             activityId = request.activityId();
             if (activityId == null || reviewable(userId).stream().noneMatch(row -> ((Number) row.get("id")).longValue() == request.activityId()))
                 errors.put("activityId", "후기는 내가 참여를 마친 활동에만 쓸 수 있어요.");
@@ -137,7 +145,7 @@ public class CommunityService {
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         int today = jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE author_id = ? AND created_at > NOW() - INTERVAL 1 DAY", Integer.class, userId);
         if (today >= POSTS_PER_DAY) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_POSTS", "글은 하루에 " + POSTS_PER_DAY + "개까지 쓸 수 있어요.");
-        jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id) VALUES (?, ?, ?, ?, ?)", userId, category, title, body, activityId);
+        jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id, external_id) VALUES (?, ?, ?, ?, ?, ?)", userId, category, title, body, activityId, externalId);
         return detail(userId, jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
     }
 
@@ -222,6 +230,8 @@ public class CommunityService {
         if (row.get("edited") instanceof Number edited) row.put("edited", edited.intValue() == 1);
         // A deleted activity (organizer withdrew or deleted it) drops its title and link; the review stays verified.
         row.put("verified", ((Number) row.remove("reviewed")).intValue() == 1 && "REVIEW".equals(row.get("category")));
+        // 1365 review (V27): 본인 기록, or 실적확인서 있음 when the certificate values were added. Never "verified".
+        if (row.get("externalCertified") instanceof Number c) row.put("externalCertified", c.intValue() == 1);
         // 봉사 홍보: the live card (open = still taking applications: recruiting, not started, seats or a waiting list).
         if ("PROMO".equals(row.get("category")) && row.get("activityId") != null) {
             boolean upcoming = row.get("activityStartsAt") instanceof java.time.LocalDateTime at && at.isAfter(java.time.LocalDateTime.now(clock));

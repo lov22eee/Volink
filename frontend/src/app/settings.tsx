@@ -1,4 +1,5 @@
 // 설정 (마이 → 톱니바퀴): app settings, the linked login account and 회원 탈퇴. 마이 keeps only what is about me.
+import { labOn, setLabOn } from './lab'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
@@ -38,6 +39,7 @@ const buildLabel = `앱 ${import.meta.env.VITE_APP_VERSION ?? '0.6'}${import.met
 export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const [big, setBig] = useState(() => document.documentElement.classList.contains('m-big'))
   const [leaving, setLeaving] = useState(false)
+  const [lab, setLab] = useState(labOn)
   function toggleBig() {
     try { localStorage.setItem(BIG, big ? '0' : '1') } catch { /* storage blocked */ }
     setBig(applyTextSize())
@@ -47,6 +49,10 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
       <Group title="앱 설정" rows={[
         { icon: 'bell', label: '알림 설정', href: '#/my?view=notice-settings' },
         { icon: 'edit', label: '글자 크게 보기', toggle: big, onClick: toggleBig },
+      ]} />
+      <Group title="실험실" rows={[
+        { icon: 'flask', label: '1365 연결 (실험)', note: '내 1365 신청 내역 가져오기', toggle: lab, onClick: () => { setLabOn(!lab); setLab(!lab) } },
+        ...(lab ? [{ icon: 'outward' as MIconName, label: '1365 신청 내역 가져오기', href: '#/lab1365' }] : []),
       ]} />
       <Group title="계정" rows={[
         { icon: 'user', label: '연결된 로그인 계정', href: '#/settings?view=account', note: loginLabel(user) },

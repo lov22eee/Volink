@@ -24,7 +24,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26");
+                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27");
         // 7 active (V17) + the merged 생활 지원 row kept as inactive history.
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(8);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
@@ -114,7 +114,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
                 "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
-                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts", "notification_settings", "category_changes_v17", "risk_keywords_removed_v17", "activity_cancellations", "account_withdrawals", "push_tokens");
+                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts", "notification_settings", "category_changes_v17", "risk_keywords_removed_v17", "activity_cancellations", "account_withdrawals", "push_tokens", "external_records");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
                 .containsExactlyInAnyOrder(Map.entry("BLOCKED", 19), Map.entry("REVIEW", 17));
