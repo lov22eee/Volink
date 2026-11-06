@@ -10,6 +10,8 @@ import { CommunitySetup } from './community'
 import { loginLabel, shownEmail } from './settings'
 import { ActionBar, Empty, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
+import { hoursText, useConnect1365 } from './lab'
+import type { LabSummary } from './lab'
 
 export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [records, setRecords] = useState<MyRecord[] | null>(null)
@@ -18,7 +20,11 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const [saved, setSaved] = useState<number | null>(null)
   const [about, setAbout] = useState(false)
   const [nickname, setNickname] = useState<string | null>(null)
+  // A (2026-11-06): one total = Volink records + the 1365 total read from the person's own 1365 page (not checked by Volink).
+  const [ext, setExt] = useState<(LabSummary & { fetchedAt: string }) | null | undefined>(undefined)
+  const [connectSheet, connect] = useConnect1365()
   useEffect(() => {
+    api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setExt(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => setExt(null))
     api<{ nickname: string | null }>('/api/community/me').then(p => setNickname(p.nickname)).catch(() => {})
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
     api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
@@ -26,16 +32,26 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
     api<LiveActivity[]>('/api/me/saved').then(list => setSaved(list.length)).catch(() => setSaved(0))
   }, [])
   const valid = (records ?? []).filter(x => x.status === 'VALID')
-  const hours = Math.round(valid.reduce((sum, x) => sum + x.durationMinutes, 0) / 6) / 10
+  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0)
+  const extMinutes = ext?.totalMinutes ?? 0
+  const allMinutes = volinkMinutes + extMinutes
   const hostedDone = (hosted ?? []).filter(a => a.status === 'FINISHED').length
   const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED'].includes(p.status)).length
-  const menu: { icon: MIconName; label: string; href?: string; note?: string; onClick?: () => void }[] = [
-    { icon: 'record', label: '내 활동 기록', href: '#/mine?tab=done', note: valid.length ? valid.length + '개' : undefined },
+  type Item = { icon: MIconName; label: string; href?: string; note?: string; onClick?: () => void }
+  const mine: Item[] = [
+    { icon: 'record', label: '활동 기록', href: '#/mine?tab=done', note: valid.length || ext ? (valid.length + (ext?.count ?? 0)) + '건' : undefined },
+    { icon: 'calendar', label: '참여 예정', href: '#/mine', note: upcoming ? upcoming + '개' : undefined },
+    { icon: 'users', label: '내 모집', href: '#/mine?tab=host', note: hostedDone ? '완료 ' + hostedDone + '개' : undefined },
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') || '선택 안 함' },
+  ]
+  const more: Item[] = [
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
     { icon: 'flag', label: '활동 기록·보험 안내', onClick: () => setAbout(true) },
   ]
+  const list = (title: string, items: Item[]) => <section className="my-group" aria-label={title}><h2>{title}</h2><nav className="m-menu">{items.map(item => item.href
+    ? <a key={item.label} href={item.href}><MIcon name={item.icon} size={21} /><span>{item.label}</span>{item.note && <small>{item.note}</small>}<MIcon name="chevron" size={18} /></a>
+    : <button key={item.label} type="button" onClick={item.onClick}><MIcon name={item.icon} size={21} /><span>{item.label}</span><MIcon name="chevron" size={18} /></button>)}</nav></section>
   return <div className="m-screen">
     <TopBar title="마이페이지" actions={<>{actions}<a className="m-icon-btn" href="#/settings" aria-label="설정"><MIcon name="settings" /></a></>} />
     <div className="m-body">
@@ -44,17 +60,20 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
           <div><strong>{user.name}</strong><small>{shownEmail(user.email) ?? loginLabel(user)}</small>
             <span className="m-tags">{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}
               {user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span></div></div>
-        <div className="m-stats">
-          <div><b>{records ? valid.length : '–'}</b><span>완료 활동</span></div>
-          <div><b>{records ? hours + 'h' : '–'}</b><span>함께한 시간</span></div>
-          <div><b>{hosted ? hostedDone : '–'}</b><span>모집 완료</span></div>
-        </div>
-        {upcoming > 0 && <a className="m-profile-next" href="#/mine">참여 예정 {upcoming}개 <MIcon name="chevron" size={16} /></a>}
       </section>
-      <nav className="m-menu" aria-label="마이 메뉴">{menu.map(item => item.href
-        ? <a key={item.label} href={item.href}><MIcon name={item.icon} size={21} /><span>{item.label}</span>{item.note && <small>{item.note}</small>}<MIcon name="chevron" size={18} /></a>
-        : <button key={item.label} type="button" onClick={item.onClick}><MIcon name={item.icon} size={21} /><span>{item.label}</span><MIcon name="chevron" size={18} /></button>)}</nav>
+      <section className="my-total" aria-label="나의 봉사 시간">
+        <small>나의 봉사 시간{ext ? ' (Volink + 1365)' : ''}</small>
+        <b>{records && ext !== undefined ? <>{Math.floor(allMinutes / 60)}<em>시간</em>{allMinutes % 60 ? <> {allMinutes % 60}<em>분</em></> : null}</> : '–'}</b>
+        {ext && allMinutes > 0 && <i className="my-split"><span style={{ width: (volinkMinutes / allMinutes * 100) + '%' }} /><span className="ext" style={{ width: (extMinutes / allMinutes * 100) + '%' }} /></i>}
+        <span className="my-legend"><span><i />Volink {hoursText(volinkMinutes)} · {valid.length}건</span>
+          {ext && <span><i className="ext" />1365 {hoursText(extMinutes)}{ext.count != null ? ` · ${ext.count}건` : ''}</span>}</span>
+      </section>
+      {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져옴 · 공식 실적은 1365 기준</span><em>새로고침</em></button>
+        : ext === null && <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 봉사실적 연결하기</b> · 1365에서 한 봉사도 함께 모아요</span><em>연결</em></button>}
+      {list('내 봉사', mine)}
+      {list('커뮤니티 · 안내', more)}
     </div>
+    {connectSheet}
     {about && <Sheet title="활동 기록·보험 안내" onClose={() => setAbout(false)}>
       <ul className="m-bullets">
         <li>Volink 활동 기록은 우리 동네 자체 기록이에요. <b>공식 봉사실적이 아니에요.</b></li>

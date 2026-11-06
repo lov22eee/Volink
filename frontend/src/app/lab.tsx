@@ -3,13 +3,41 @@
 // the rows are read on the phone, and only the rows the person picks are saved (title, day, time, 1365 status).
 // The password never reaches Volink; the 1365 login is cleared when that screen closes. Without the app (web), the text can be pasted.
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
-import { ActionBar, MIcon, TextArea, TopBar } from './ui'
+import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(): Promise<{ text: string; host?: string }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string }): Promise<{ text: string; host?: string }> }>('VolinkLab')
 const KEY = 'volink.lab1365'
+
+const AGREED = 'volink.lab1365.agreed'
+/** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
+export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적(또는 신청 현황) → 위 ‘이 화면 가져오기’'
+const agreed = () => { try { return localStorage.getItem(AGREED) === '1' } catch { return false } }
+
+/**
+ * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정): the first time a consent sheet, then the lab turns on and its
+ * screen opens. Returns the sheet to render and the function to start.
+ */
+export function useConnect1365(): [ReactNode, () => void] {
+  const [open, setOpen] = useState(false)
+  const go = () => { setLabOn(true); window.location.hash = '#/lab1365' }
+  const start = () => agreed() ? go() : setOpen(true)
+  const sheet = open && <Sheet title="연결 전에 확인해 주세요" onClose={() => setOpen(false)}
+    footer={<><button type="button" className="m-btn blue" onClick={() => { try { localStorage.setItem(AGREED, '1') } catch { /* asked again next time */ } setOpen(false); go() }}>동의하고 계속하기</button>
+      <button type="button" className="m-btn line" onClick={() => setOpen(false)}>다음에 할게요</button></>}>
+    <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
+    <ul className="lab-consent">
+      <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
+      <li><MIcon name="record" size={18} /><span><b>내가 연 화면의 글자만 폰 안에서 읽어요</b><small>총 시간·건수·분야와 고른 신청 내역만 남기고, 이름은 남기지 않아요</small></span></li>
+      <li><MIcon name="checkCircle" size={18} /><span><b>공식 실적이 아니에요</b><small>Volink가 확인한 기록이 아니에요. 공식 실적은 1365 기준이에요</small></span></li>
+      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’나 실적확인서로 넣어 주세요</small></span></li>
+    </ul>
+  </Sheet>
+  return [sheet, start]
+}
 
 export function labOn() { try { return localStorage.getItem(KEY) === '1' } catch { return false } }
 export function setLabOn(on: boolean) { try { if (on) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY) } catch { /* private mode: stays off */ } }
@@ -86,7 +114,7 @@ export function LabScreen() {
   }
   async function open() {
     setError('')
-    try { read((await lab.open()).text ?? '') } catch { /* closed without taking the page */ }
+    try { read((await lab.open({ guide: LAB_GUIDE })).text ?? '') } catch { /* closed without taking the page */ }
   }
   async function save() {
     const items = (rows ?? []).filter((_, i) => picked[i])
@@ -106,13 +134,13 @@ export function LabScreen() {
     <div className="m-body lab">
       <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
       {!rows ? <>
-        <h1 className="m-h2">1365 신청 내역을 가져올까요?</h1>
-        <ul className="lab-points">
-          <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인해요. 화면을 닫으면 로그인도 지워요.</small></span></li>
-          <li><MIcon name="record" size={18} /><span><b>내 신청 목록 화면의 글자만 폰 안에서 읽어요</b><small>고른 활동의 이름·날짜·시간·상태만 남겨요</small></span></li>
-          <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’로 직접 넣어 주세요</small></span></li>
-        </ul>
-        <ol className="lab-steps"><li>아래 버튼으로 1365를 열고 로그인해요</li><li>나의 봉사 › 신청 현황이나 봉사참여 실적으로 가요</li><li>위쪽 ‘이 화면 가져오기’를 눌러요</li></ol>
+        <h1 className="m-h2">이렇게 가져와요</h1>
+        <p className="m-help">1365에서 세 번만 누르면 돼요. 1365 화면 위에도 같은 안내가 떠요.</p>
+        <ol className="lab-guide">
+          <li><b>1</b><span><strong>1365에 로그인</strong><small>아이디나 간편인증으로 직접 로그인해요</small></span></li>
+          <li><b>2</b><span><strong>☰ 메뉴 › 나의 봉사 › 봉사참여 실적</strong><small>신청한 활동은 ‘신청 현황’으로 가요</small></span></li>
+          <li><b>3</b><span><strong>위쪽 ‘이 화면 가져오기’</strong><small>그 화면의 총 시간·건수·분야(또는 신청 목록)만 읽어요</small></span></li>
+        </ol>
         {!native && <label className="m-field"><span className="m-label">앱이 아니면: 신청 현황 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
       </> : <>

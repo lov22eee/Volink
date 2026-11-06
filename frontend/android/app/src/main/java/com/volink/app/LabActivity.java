@@ -71,6 +71,14 @@ public class LabActivity extends AppCompatActivity {
         bar.addView(where, grow);
         bar.addView(take);
 
+        TextView guide = new TextView(this);
+        String guideText = getIntent().getStringExtra("guide");
+        guide.setText(guideText == null ? "" : guideText);
+        guide.setTextSize(13);
+        guide.setTextColor(Color.WHITE);
+        guide.setBackgroundColor(Color.parseColor("#2B5AA8"));
+        guide.setPadding(dp(14), dp(10), dp(14), dp(10));
+
         web = new WebView(this);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -92,6 +100,8 @@ public class LabActivity extends AppCompatActivity {
             }
         });
         root.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (guideText != null && !guideText.isEmpty())
+            root.addView(guide, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
         String start = getIntent().getStringExtra("url");

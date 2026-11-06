@@ -6,7 +6,7 @@ import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, dDay, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
 import { RecordRow, useRecords } from './record'
-import { hoursText, labOn } from './lab'
+import { hoursText, labOn, useConnect1365 } from './lab'
 import type { LabSummary } from './lab'
 
 type View = 'join' | 'host' | 'done'
@@ -31,6 +31,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
   const extPlanned = (external ?? []).filter(r => r.status === 'PLANNED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
   const extDone = (external ?? []).filter(r => r.status === 'ATTENDED')
   // Lab (V28): my 1365 total as read from my own 1365 page (not checked by Volink).
+  const [connectSheet, connect] = useConnect1365()
   const [summary, setSummary] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(s => setSummary(s.fetchedAt ? s as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   const now = Date.now()
@@ -85,8 +86,15 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
           <span className="m-row-main"><strong>{x.title}</strong><small>{x.date.slice(5).replace('-', '/')} {x.startTime} · {durationLabel(x.durationMinutes)} · {x.checkInMethod === 'QR' ? 'QR 출석' : '모집자 확인'}</small></span>
           <span className={'m-badge ' + (x.status === 'VALID' ? 'mint' : 'amber')}>{x.status === 'VALID' ? '완료' : x.status === 'HELD' ? '보류' : '무효'}</span></a>)}</div>
         <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요. 완료한 활동은 커뮤니티에 ‘참여 확인’ 후기로 남길 수 있어요.</p>
-      </> : !extDone.length && !summary && <Empty icon="record" title="아직 활동 기록이 없어요" text="현장에서 QR로 체크인하고, 활동이 끝나 모집자가 완료를 확인하면 여기에 남아요." />)}
+      </> : !extDone.length && (summary
+        ? <p className="m-help center">Volink 활동을 마치면 여기에 쌓여요 · <a href="#/find">봉사 찾기 ›</a></p>
+        : <div className="ext-empty"><span className="ext-empty-ico"><MIcon name="record" size={26} /></span><strong>아직 Volink 활동 기록이 없어요</strong>
+          <p>1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요.</p>
+          <button type="button" className="m-btn blue" onClick={connect}><MIcon name="outward" size={18} />1365 봉사실적 연결하기</button>
+          <a className="m-btn line" href="#/find"><MIcon name="search" size={18} />Volink 봉사 찾아보기</a>
+          <small>1365 연결은 실험 기능이에요. 공식 실적은 1365 기준이에요.</small></div>))}
     </div>
+    {connectSheet}
     {view !== 'done' && <RecruitFab />}
   </div>
 }
