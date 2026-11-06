@@ -1,5 +1,6 @@
 package com.volink.volunteer;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -38,6 +39,14 @@ final class RegionCodes {
             Map.entry("연천군", "4140000"), Map.entry("가평군", "4160000"), Map.entry("양평군", "4170000"));
 
     record Codes(String province, String city) {}
+
+    /** Every 시·도 once (17), with a short name for place lookups: the nationwide search (2026-11-06). */
+    static Map<String, String> provinces() {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (String name : List.of("서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종", "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주"))
+            out.put(PROVINCES.get(name), name);
+        return out;
+    }
 
     private RegionCodes() {}
 

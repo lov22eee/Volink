@@ -1350,3 +1350,4 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-empty.bare { background: none; border: 0; min-height: calc(100dvh - var(--m-top) - var(--m-safe-top) - 220px); justify-content: center; gap: 10px; }
 .m-empty.bare .m-empty-ico { width: 64px; height: 64px; border-radius: 20px; }
 .m-empty.bare .m-empty-two { margin-top: 6px; }
+.sr-scope { margin-left: 4px; padding: 2px 7px; border-radius: 8px; background: var(--m-mint); color: var(--m-green-ink); font-size: 11.5px; font-weight: 700; vertical-align: 3px; }

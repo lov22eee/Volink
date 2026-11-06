@@ -134,4 +134,28 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/admin/volunteer-programs/check").param("lat", "37.53").param("lng", "126.97").header("Authorization", "Bearer " + token(member("GENERAL"))))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void searchScreenFindsAKeywordNationwideWithSeventeenListCallsAtMost() throws Exception {
+        kakao.enabled = true;
+        volunteer.enabled = true;
+        String end = TODAY.plusDays(20).toString().replace("-", "");
+        volunteer.list = List.of(Map.of("progrmRegistNo", "N-1", "progrmSj", "유기견 보호소 산책 도우미", "progrmSttusSe", "2"),
+                Map.of("progrmRegistNo", "N-2", "progrmSj", "어르신 말벗 봉사", "progrmSttusSe", "2"));
+        volunteer.details = Map.of(
+                "N-1", Map.of("progrmRegistNo", "N-1", "progrmSj", "유기견 보호소 산책 도우미", "actPlace", "인천 보호소", "progrmEndde", end, "yngbgsPosblAt", "Y"),
+                "N-2", Map.of("progrmRegistNo", "N-2", "progrmSj", "어르신 말벗 봉사", "actPlace", "서울 복지관", "progrmEndde", end, "yngbgsPosblAt", "Y"));
+        int before = volunteer.calls.size();
+        mvc.perform(get("/api/volunteer-programs").param("nationwide", "true").param("q", "강아지"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.region").value("전국"))
+                .andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].title").value("유기견 보호소 산책 도우미"));
+        long areaCalls = volunteer.calls.subList(before, volunteer.calls.size()).stream().filter(c -> c.startsWith("area:")).count();
+        assertThat(areaCalls).isEqualTo(17);
+        assertThat(volunteer.calls.subList(before, volunteer.calls.size())).doesNotContain("detail:N-2");
+        // Another keyword: the province lists come from the cache (no new list calls).
+        int again = volunteer.calls.size();
+        mvc.perform(get("/api/volunteer-programs").param("nationwide", "true").param("q", "어르신")).andExpect(jsonPath("$.items[0].title").value("어르신 말벗 봉사"));
+        assertThat(volunteer.calls.subList(again, volunteer.calls.size()).stream().filter(c -> c.startsWith("area:")).count()).isZero();
+        mvc.perform(get("/api/volunteer-programs").param("nationwide", "true")).andExpect(status().isBadRequest());
+    }
 }

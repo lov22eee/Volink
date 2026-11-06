@@ -37,7 +37,9 @@ export function SearchScreen({ initial }: { initial?: string }) {
     let live = true
     setResults(null); setFailed(false)
     const q = encodeURIComponent(query)
-    const programs = remembered() ? currentPosition().then(at => at ? api<{ items: Program[] }>(`/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&q=${q}`).then(r => r.items).catch(() => null) : null) : Promise.resolve(null)
+    // 2026-11-06: a search looks across the whole country (Volink and 1365); the distance is added when the position is known.
+    const programs = (remembered() ? currentPosition().catch(() => null) : Promise.resolve(null))
+      .then(at => api<{ items: Program[] }>(`/api/volunteer-programs?nationwide=true&q=${q}` + (at ? `&lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}` : '')).then(r => r.items).catch(() => null))
     Promise.all([api<LiveActivity[]>('/api/activities?q=' + q), programs, api<PostSummary[]>('/api/community/posts?q=' + q)])
       .then(([activities, found, posts]) => { if (live) setResults({ activities, programs: found, posts }) })
       .catch(() => { if (live) setFailed(true) })
@@ -51,7 +53,7 @@ export function SearchScreen({ initial }: { initial?: string }) {
     {(results.programs ?? []).slice(0, limit === undefined ? undefined : Math.max(0, limit - results.activities.length)).map(p =>
       <a key={'p' + p.programNo} className="m-row" href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')}>
         <span className="m-row-ico p"><MIcon name="flag" size={21} /></span>
-        <span className="m-row-main"><strong>{p.title}</strong><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.organization].filter(Boolean).join(' · ')}</small></span>
+        <span className="m-row-main"><strong>{p.title}</strong><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.place?.split(' ').slice(0, 2).join(' '), p.organization].filter(Boolean).join(' · ')}</small></span>
         <span className="m-badge blue">1365</span></a>)}
   </div>
   const postList = (limit?: number) => results && <div className="c-list sr-list">{results.posts.slice(0, limit).map(p => <PostCard key={p.id} post={p} />)}</div>
@@ -76,7 +78,7 @@ export function SearchScreen({ initial }: { initial?: string }) {
         {failed ? <p className="sr-empty">지금은 검색하지 못했어요. 잠시 뒤 다시 해 주세요.</p>
           : !results ? <p className="sr-empty">찾는 중…</p>
           : tab === 'all' ? (activityCount + results.posts.length === 0 ? <p className="sr-empty">‘{query}’에 맞는 결과가 없어요.</p> : <>
-            {activityCount > 0 && <section><div className="sr-head"><h2>봉사활동 <b>{activityCount}</b></h2>{activityCount > 3 && <button type="button" className="m-text-btn" onClick={() => setTab('activity')}>더 보기</button>}</div>{activityList(3)}</section>}
+            {activityCount > 0 && <section><div className="sr-head"><h2>봉사활동 <b>{activityCount}</b> <small className="sr-scope">전국</small></h2>{activityCount > 3 && <button type="button" className="m-text-btn" onClick={() => setTab('activity')}>더 보기</button>}</div>{activityList(3)}</section>}
             {results.posts.length > 0 && <section><div className="sr-head"><h2>커뮤니티 <b>{results.posts.length}</b></h2>{results.posts.length > 3 && <button type="button" className="m-text-btn" onClick={() => setTab('community')}>더 보기</button>}</div>{postList(3)}</section>}
           </>)
           : tab === 'activity' ? (activityCount ? <><p className="sr-count">총 {activityCount}개{results.programs === null ? ' · 1365는 위치를 허용하면 함께 찾아요' : ''}</p>{activityList()}</> : <p className="sr-empty">‘{query}’에 맞는 봉사활동이 없어요.</p>)
