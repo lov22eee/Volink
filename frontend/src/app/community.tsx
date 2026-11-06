@@ -311,10 +311,12 @@ export function WriteScreen({ initial, activity, editId }: { initial?: string; a
   // 봉사 홍보: my activities still recruiting and not started (the server checks again: own, recruiting, once each).
   const [promotable, setPromotable] = useState<LiveActivity[] | null>(null)
   const [promoPick, setPromoPick] = useState<number | null>(initial === 'PROMO' ? activity ?? null : null)
+  const [promoAll, setPromoAll] = useState(false)
   useEffect(() => {
     if (editId || category !== 'PROMO' || promotable) return
     api<LiveActivity[]>('/api/me/activities').then(list => {
-      const open = list.filter(a => a.status === 'RECRUITING' && new Date(`${a.date}T${a.startTime}:00+09:00`).getTime() > Date.now())
+      // Newest recruitment first (2026-11-06): one card shown, the rest behind 전체보기.
+      const open = list.filter(a => a.status === 'RECRUITING' && new Date(`${a.date}T${a.startTime}:00+09:00`).getTime() > Date.now()).sort((a, b) => b.id - a.id)
       setPromotable(open)
       setPromoPick(current => current ?? open[0]?.id ?? null)
     }).catch(() => setPromotable([]))
@@ -371,10 +373,14 @@ export function WriteScreen({ initial, activity, editId }: { initial?: string; a
           <span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} 참여 완료</small></span></button>)}</div>
         {errors.activityId && <span className="m-err">{errors.activityId}</span>}</div>
         : <div className="m-note"><strong>아직 후기를 쓸 수 있는 활동이 없어요</strong>Volink 활동에 참여하고 완료 확인을 받으면 ‘참여 확인’ 후기를 남길 수 있어요.</div>)}
-      {!editId && category === 'PROMO' && (!promotable ? <Loading /> : promotable.length ? <div className="m-field"><span className="m-label">홍보할 내 모집글</span>
-        <div className="c-picks">{promotable.slice(0, 5).map(a => <button type="button" key={a.id} className={'c-pick' + (promoPick === a.id ? ' on' : '')} aria-pressed={promoPick === a.id} onClick={() => setPromoPick(a.id)}>
-          <span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</small></span></button>)}</div>
+      {!editId && category === 'PROMO' && (!promotable ? <Loading /> : promotable.length ? <div className="m-field"><div className="c-pick-head"><span className="m-label">홍보할 내 모집글</span>
+        {promotable.length > 1 && <button type="button" className="c-all" onClick={() => setPromoAll(true)}>전체보기 {promotable.length}<MIcon name="chevron" size={15} /></button>}</div>
+        {(() => { const a = promotable.find(x => x.id === promoPick) ?? promotable[0]
+          return <div className="c-picks"><div className="c-pick on"><span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</small></span></div></div> })()}
         <p className="m-help">글 아래에 이 모집글 카드와 [바로 신청하기]가 붙어요. 활동 하나에 한 번만 홍보할 수 있어요.</p>
+        {promoAll && <Sheet title="내 모집글" onClose={() => setPromoAll(false)}><div className="c-picks">{promotable.map(a =>
+          <button type="button" key={a.id} className={'c-pick' + (promoPick === a.id ? ' on' : '')} aria-pressed={promoPick === a.id} onClick={() => { setPromoPick(a.id); setPromoAll(false) }}>
+            <span className="c-dot" /><span><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</small></span></button>)}</div></Sheet>}
         {errors.activityId && <span className="m-err">{errors.activityId}</span>}</div>
         : <div className="m-note"><strong>홍보할 모집글이 없어요</strong>모집 중인 내 활동이 있어야 홍보할 수 있어요. <a className="c-inline-link" href="#/host">모집하러 가기 →</a></div>)}
       <label className="m-field"><span className="m-label">제목</span>

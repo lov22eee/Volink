@@ -364,7 +364,9 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const dday = dDay(activity.date)
 
   return <div className="m-screen m-manage">
-    <TopBar title="모집 관리" back="#/mine?tab=host" actions={<button type="button" className="m-icon-btn" aria-label="활동 메뉴" onClick={() => setSheet('menu')}><MIcon name="more" /></button>} />
+    <TopBar title="모집 관리" back="#/mine?tab=host" actions={<>
+      {activity.status === 'RECRUITING' && now < start && <a className="m-icon-btn" aria-label="커뮤니티에 홍보하기" href={'#/write?category=PROMO&activity=' + id}><MIcon name="megaphone" /></a>}
+      <button type="button" className="m-icon-btn" aria-label="활동 메뉴" onClick={() => setSheet('menu')}><MIcon name="more" /></button></>} />
     <div className="m-body mg">
       <section className="mg-head">
         <div className="mg-state"><span className={'m-badge ' + (activity.status === 'RECRUITING' ? 'mint' : activity.status === 'DRAFT' ? 'amber' : activity.status === 'CANCELLED' ? 'hot' : 'gray')}>{statusText}</span>
