@@ -3,6 +3,7 @@ package com.volink.external;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.volink.ApiTestSupport;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -84,6 +85,8 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
         // A planned one that ended over 2 hours ago gets "다녀왔어요?"; the one starting tomorrow gets the reminder (once each).
         long mine = jdbc.queryForObject("SELECT user_id FROM external_records WHERE id = ?", Long.class, list.get(0).path("id").asLong());
         jdbc.update("INSERT INTO external_records(user_id, title, starts_at, ends_at) VALUES (?, '지난 배식', ?, ?)", mine, LocalDateTime.now().minusHours(6), LocalDateTime.now().minusHours(4));
+        // "Tomorrow 10:00" is more than 24 hours away before 10:00 (CI failed at 08:50 KST): start it in 3 hours instead.
+        jdbc.update("UPDATE external_records SET starts_at = ?, ends_at = ? WHERE id = ?", LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusHours(3), LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusHours(5), list.get(0).path("id").asLong());
         records.remind();
         records.remind();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_CHECK'", Integer.class, mine)).isEqualTo(1);
