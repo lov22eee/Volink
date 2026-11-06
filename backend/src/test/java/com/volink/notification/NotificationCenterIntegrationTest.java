@@ -192,6 +192,19 @@ class NotificationCenterIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void twoQuickSettingChangesDoNotUndoEachOther() throws Exception {
+        long user = organizerId(token(member("GENERAL")));
+        for (int round = 0; round < 8; round++) {
+            String start = String.format("%02d:00", 13 + round);
+            boolean push = round % 2 == 0;
+            java.util.concurrent.CompletableFuture<?> a = java.util.concurrent.CompletableFuture.runAsync(() -> notifications.saveSettings(user, Map.of("quietStart", start)));
+            java.util.concurrent.CompletableFuture<?> b = java.util.concurrent.CompletableFuture.runAsync(() -> notifications.saveSettings(user, Map.of("push", push)));
+            java.util.concurrent.CompletableFuture.allOf(a, b).get();
+            assertThat(notifications.settings(user)).containsEntry("quietStart", start).containsEntry("push", push);
+        }
+    }
+
+    @Test
     void signupNoLongerNeedsInterests() throws Exception {
         Map<String, Object> body = signupBody(email(), "GENERAL", TODAY.minusYears(20));
         body.put("interests", List.of());
