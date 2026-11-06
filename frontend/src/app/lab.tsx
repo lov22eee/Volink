@@ -223,20 +223,18 @@ export function LabScreen() {
       {!rows ? <>
         {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. */}
         <h1 className="m-h2">무엇을 가져올까요?</h1>
-        <p className="m-help">고르면 그 1365 화면이 바로 열려요. 로그인만 하면 돼요.</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
           <button type="button" className="lab-choice main" onClick={() => native ? open('S') : setWebFor('S')}>
             <span className="lab-choice-ico"><MIcon name="timer" size={24} /></span>
-            <span><b>봉사참여 실적</b><small>총 봉사시간·건수를 가져와 함께한 시간에 더해요</small></span><MIcon name="chevron" size={18} /></button>
+            <span><b>봉사참여 실적</b><small>총 봉사시간·건수</small></span><MIcon name="chevron" size={18} /></button>
           <button type="button" className="lab-choice" onClick={() => native ? open('A') : setWebFor('A')}>
             <span className="lab-choice-ico g"><MIcon name="list" size={24} /></span>
-            <span><b>신청 현황</b><small>1365에 신청한 활동을 내 활동에 넣어요</small></span><MIcon name="chevron" size={18} /></button>
+            <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>
         <ul className="lab-safe">
           <li><MIcon name="lock" size={16} />비밀번호는 Volink로 오지 않아요</li>
           <li><MIcon name="user" size={16} />이름은 저장하지 않아요</li>
-          <li><MIcon name="logout" size={16} />화면을 닫으면 1365 로그인도 지워요</li>
         </ul>
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
@@ -244,8 +242,8 @@ export function LabScreen() {
         <h1 className="m-h2">{summary && !rows.length ? '1365 봉사 실적을 찾았어요' : rows.length ? `신청 내역 ${rows.length}개를 찾았어요` : '읽을 내용을 찾지 못했어요'}</h1>
         {summary && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
-            <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') : '분야별 시간은 ‘분야별 봉사시간 조회’ 화면에서 가져올 수 있어요'}</small></span></label>}
-        {rows.length > 0 && <p className="m-help">내 활동에 넣을 것만 골라 주세요. 기간만 있는 활동은 실제로 가는 날을 골라 주세요.</p>}
+            <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') + ' · ' : ''}1365 공식 실적 · 오늘 기준</small></span></label>}
+        {rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
         <div className="lab-rows">{rows.map((r, i) => <div key={r.title + r.periodStart} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
           <label className="m-check">
             <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
@@ -256,7 +254,6 @@ export function LabScreen() {
         </div>)}</div>
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <p className="m-help">가져온 실적은 내 1365 화면에 나온 공식 실적을 옮긴 거예요(가져온 날 기준). 최신 실적·확인서는 1365에서 확인해 주세요.</p>
     </div>
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
