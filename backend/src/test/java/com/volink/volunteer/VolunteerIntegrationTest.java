@@ -62,6 +62,10 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/volunteer-programs").param("lat", "37.82").param("lng", "127.09")).andExpect(jsonPath("$.items.length()").value(2));
         assertThat(volunteer.calls).hasSize(calls);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM volunteer_programs WHERE program_no IN ('T-1','T-2','T-3')", Integer.class)).isEqualTo(3);
+        // The 1365 gateway ignores the keyword: the words filter here (강아지 found nothing nearby; 도서관 only the library one).
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.82").param("lng", "127.09").param("q", "강아지")).andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.82").param("lng", "127.09").param("q", "도서관"))
+                .andExpect(jsonPath("$.items.length()").value(1)).andExpect(jsonPath("$.items[0].title").value("도서관 서가 정리"));
     }
 
     @Test

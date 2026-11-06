@@ -144,6 +144,7 @@ public class VolunteerService {
         if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
         items.removeIf(item -> item.get("distanceKm") != null && (Double) item.get("distanceKm") > radiusKm);
         keepCategories(items, query.categories());
+        keepWords(items, q);
         items.sort(Comparator.comparing(item -> item.get("distanceKm") == null ? Double.MAX_VALUE : (Double) item.get("distanceKm")));
         result.put("items", items);
         result.put("found", list.size());
@@ -191,10 +192,24 @@ public class VolunteerService {
             items.removeIf(item -> item.get("place") == null || !String.valueOf(item.get("place")).contains(stem));
         }
         keepCategories(items, query.categories());
+        keepWords(items, q);
         items.sort(Comparator.comparing(item -> item.get("periodStart") == null ? "9999" : (String) item.get("periodStart")));
         result.put("items", items);
         result.put("found", list.size());
         return result;
+    }
+
+    /**
+     * Keyword filter (2026-11-06): the 1365 gateway ignores the keyword and returns the whole area, so a search for "강아지"
+     * showed every nearby program. Kept: title / organization / place / field containing the word or its group, or the
+     * category the word points to.
+     */
+    private static void keepWords(List<Map<String, Object>> items, String q) {
+        if (q == null || q.isBlank()) return;
+        List<String> words = com.volink.common.SearchWords.expand(q);
+        Optional<String> pointed = com.volink.common.SearchWords.category(q);
+        items.removeIf(item -> !com.volink.common.SearchWords.matches(String.join(" ", String.valueOf(item.get("title")), String.valueOf(item.get("organization")),
+                String.valueOf(item.get("place")), String.valueOf(item.get("field"))), words) && !(pointed.isPresent() && pointed.get().equals(item.get("category"))));
     }
 
     /** Category filter. A program whose field is not known is kept under 기타, so a guess never hides it. */
