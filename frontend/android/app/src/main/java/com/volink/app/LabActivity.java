@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -28,6 +30,37 @@ public class LabActivity extends AppCompatActivity {
     private static final int MAX = 100_000;
     private WebView web;
     private TextView where;
+    private TextView guide;
+    private Button take;
+    private String stepScript;
+    private int lastStep = 0;
+    private final Handler timer = new Handler(Looper.getMainLooper());
+    /** Every 1.5s: run the app's step script on the page and show its line (① 로그인 … ④ 이 화면 가져오기). */
+    private final Runnable checkStep = new Runnable() {
+        @Override public void run() {
+            if (web != null && stepScript != null && !stepScript.isEmpty()) {
+                String js = "(function(){try{var t=document.body?document.body.innerText.slice(0,20000):'';"
+                        + "var pw=!!document.querySelector('input[type=password]');return (function(t,pw){" + stepScript + "})(t,pw);}catch(e){return '';}})()";
+                web.evaluateJavascript(js, value -> {
+                    String out;
+                    try { Object parsed = new JSONTokener(value).nextValue(); out = parsed == null ? "" : parsed.toString(); } catch (Exception e) { out = ""; }
+                    if (out.length() > 2 && out.charAt(1) == '|') showStep(out.charAt(0) - '0', out.substring(2));
+                });
+            }
+            timer.postDelayed(this, 1500);
+        }
+    };
+
+    private void showStep(int step, String line) {
+        guide.setText(line);
+        if (step == lastStep) return;
+        lastStep = step;
+        boolean ready = step == 4;
+        guide.setBackgroundColor(Color.parseColor(ready ? "#2E7D5B" : "#2B5AA8"));
+        take.setBackgroundColor(Color.parseColor(ready ? "#2E7D5B" : "#E4E8E5"));
+        take.setTextColor(ready ? Color.WHITE : Color.parseColor("#2A332E"));
+        if (ready) take.animate().scaleX(1.08f).scaleY(1.08f).setDuration(180).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(180).start()).start();
+    }
 
     private int dp(int value) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
@@ -54,7 +87,7 @@ public class LabActivity extends AppCompatActivity {
         where.setTextColor(Color.parseColor("#5D6B63"));
         where.setPadding(dp(8), 0, dp(8), 0);
         LinearLayout.LayoutParams grow = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        Button take = new Button(this);
+        take = new Button(this);
         take.setText("이 화면 가져오기");
         take.setOnClickListener(v -> web.evaluateJavascript("(function(){return document.body ? document.body.innerText : ''})()", value -> {
             String text;
@@ -71,8 +104,9 @@ public class LabActivity extends AppCompatActivity {
         bar.addView(where, grow);
         bar.addView(take);
 
-        TextView guide = new TextView(this);
+        guide = new TextView(this);
         String guideText = getIntent().getStringExtra("guide");
+        stepScript = getIntent().getStringExtra("step");
         guide.setText(guideText == null ? "" : guideText);
         guide.setTextSize(13);
         guide.setTextColor(Color.WHITE);
@@ -100,12 +134,13 @@ public class LabActivity extends AppCompatActivity {
             }
         });
         root.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        if (guideText != null && !guideText.isEmpty())
+        if ((guideText != null && !guideText.isEmpty()) || (stepScript != null && !stepScript.isEmpty()))
             root.addView(guide, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
         String start = getIntent().getStringExtra("url");
         web.loadUrl(start == null ? LabPlugin.HOME : start);
+        timer.postDelayed(checkStep, 1200);
     }
 
     @Override
@@ -124,6 +159,7 @@ public class LabActivity extends AppCompatActivity {
             if (!name.isEmpty()) cookies.setCookie(LabPlugin.HOME, name + "=; Max-Age=0; Path=/");
         }
         cookies.flush();
+        timer.removeCallbacks(checkStep);
         if (web != null) { web.stopLoading(); web.destroy(); }
         super.onDestroy();
     }

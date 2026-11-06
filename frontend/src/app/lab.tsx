@@ -9,12 +9,35 @@ import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(options: { guide: string }): Promise<{ text: string; host?: string }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string }): Promise<{ text: string; host?: string }> }>('VolinkLab')
 const KEY = 'volink.lab1365'
 
 const AGREED = 'volink.lab1365.agreed'
 /** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
 export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적(또는 신청 현황) → 위 ‘이 화면 가져오기’'
+/**
+ * Step-by-step guide on the 1365 page (2026-11-06, without the 1365 addresses): the in-app browser runs this every 1.5s on
+ * the page and shows what it returns above the page. It guesses the step from the visible words only (a password box,
+ * 로그아웃, 나의 봉사, 총 ○시간, 신청 현황 with dates); `t` is the page text, `pw` whether a password box is shown.
+ * Plain ES5 inside a string so the Android side can run it as it is (and tests can too).
+ */
+export const LAB_STEP_BODY = `
+  var s = String(t || '').replace(/\\s+/g, ' ');
+  var date = /20\\d{2}\\s*[.\\-\\/]\\s*\\d{1,2}\\s*[.\\-\\/]\\s*\\d{1,2}/;
+  if (pw) return '1|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
+  if (/봉사\\s*참여\\s*실적|시간인증형/.test(s) && /총\\s*\\d+\\s*시간/.test(s)) return '4|④ 다 왔어요! 위 ‘이 화면 가져오기’를 눌러 주세요';
+  if (/신청\\s*현황|신청\\s*내역/.test(s) && date.test(s) && /(승인|신청\\s*완료|대기|취소|활동\\s*완료)/.test(s)) return '4|④ 다 왔어요! 위 ‘이 화면 가져오기’를 눌러 주세요';
+  var inside = /로그아웃/.test(s);
+  if (inside && /나의\\s*봉사|마이\\s*페이지/.test(s) && /봉사\\s*참여\\s*실적|신청\\s*현황/.test(s)) return '3|③ ‘봉사참여 실적’(신청한 건 ‘신청 현황’)을 눌러 주세요';
+  if (inside) return '2|② 오른쪽 위 ☰ 메뉴 › ‘나의 봉사’로 가 주세요';
+  return '1|① 위쪽 ‘로그인’을 눌러 로그인해 주세요';
+`
+/** The same rule in the app (tests): '1'..'4' and the line shown. */
+export function labStep(text: string, password: boolean): { step: number; line: string } {
+  const out = String(new Function('t', 'pw', LAB_STEP_BODY)(text, password))
+  return { step: Number(out.slice(0, 1)), line: out.slice(2) }
+}
+
 const agreed = () => { try { return localStorage.getItem(AGREED) === '1' } catch { return false } }
 
 /**
@@ -137,7 +160,7 @@ export function LabScreen() {
   }
   async function open() {
     setError('')
-    try { read((await lab.open({ guide: LAB_GUIDE })).text ?? '') } catch { /* closed without taking the page */ }
+    try { read((await lab.open({ guide: LAB_GUIDE, step: LAB_STEP_BODY })).text ?? '') } catch { /* closed without taking the page */ }
   }
   async function save() {
     const items = (rows ?? []).filter((_, i) => picked[i])
@@ -161,7 +184,7 @@ export function LabScreen() {
       <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
       {!rows ? <>
         <h1 className="m-h2">이렇게 가져와요</h1>
-        <p className="m-help">1365에서 세 번만 누르면 돼요. 1365 화면 위에도 같은 안내가 떠요.</p>
+        <p className="m-help">1365에서 세 번만 누르면 돼요. 1365 화면 위에 지금 할 일이 단계별로 떠요.</p>
         <ol className="lab-guide">
           <li><b>1</b><span><strong>1365에 로그인</strong><small>아이디나 간편인증으로 직접 로그인해요</small></span></li>
           <li><b>2</b><span><strong>☰ 메뉴 › 나의 봉사 › 봉사참여 실적</strong><small>신청한 활동은 ‘신청 현황’으로 가요</small></span></li>

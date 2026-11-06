@@ -715,3 +715,16 @@ test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larg
   await page.goto('/#/settings')
   await expect(page.getByRole('button', { name: /1365 기록 방식.*가져오기/ })).toBeVisible()
 })
+
+test('1365 step guide: the words on the page tell which step the person is on (① 로그인 … ④ 이 화면 가져오기)', async ({ page }) => {
+  await page.goto('/#/login')
+  const steps = await page.evaluate(async () => {
+    const { labStep } = await import('/src/app/lab.tsx' as string)
+    return [
+      labStep('1365 로그인 아이디 비밀번호', true), labStep('봉사찾기 로그인 회원가입', false), labStep('홈 로그아웃 봉사찾기 공지사항', false),
+      labStep('로그아웃 나의 봉사 봉사참여 실적 신청 현황 실적확인서', false), labStep('로그아웃 봉사참여 실적 홍길동 님 총 57시간 30분 총 14건', false),
+      labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false),
+    ].map(x => x.step)
+  })
+  expect(steps).toEqual([1, 1, 2, 3, 4, 4])
+})
