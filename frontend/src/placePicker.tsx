@@ -35,11 +35,25 @@ function distance(meters: number | null) {
   return meters < 1000 ? meters + 'm' : (meters / 1000).toFixed(1) + 'km'
 }
 
-export function PlaceField({ value, meetingPoint, onChange, error }: {
+export function PlaceField({ value, meetingPoint, onChange, error, app }: {
   value: PlaceResult | null; meetingPoint: string; onChange: (place: PlaceResult, meetingPoint: string) => void; error?: string
+  /** The Android app: a place card on the form and a full-screen picker; 만나는 곳 stays on the form (2026-11-06). */
+  app?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const badge = value && classBadge[value.placeClass]
+  if (app) return <div className="ap-field">
+    <span className="m-label">장소</span>
+    <button type="button" name="place" className={'ap-placecard' + (error ? ' invalid' : '')} onClick={() => setOpen(true)} aria-haspopup="dialog"
+      aria-invalid={error ? true : undefined} aria-describedby={error ? 'place-error' : undefined}>
+      <span className="ap-placecard-ico"><Glyph name="pin" size={20} /></span>
+      <span className="ap-placecard-text">{value ? <><strong>{value.name}</strong><small>{[value.address, badge?.text].filter(Boolean).join(' · ')}</small></>
+        : <><strong className="placeholder">장소를 골라 주세요</strong><small>검색하거나 지도에서 골라요</small></>}</span>
+      <span className="ap-placecard-go">{value ? '바꾸기' : '고르기'}</span>
+    </button>
+    {error && <span id="place-error" className="m-err">{error}</span>}
+    {open && <PlaceDialog app initial={value} initialMeeting={meetingPoint} onClose={() => setOpen(false)} onPick={(place, meeting) => { onChange(place, meeting); setOpen(false) }} />}
+  </div>
   return <div className="field-block">
     <span className="field-label">장소 <span className="field-hint">돋보기를 누르면 검색 창이 열려요</span></span>
     <button type="button" name="place" className={'place-field' + (error ? ' invalid' : '')} onClick={() => setOpen(true)}
@@ -54,9 +68,19 @@ export function PlaceField({ value, meetingPoint, onChange, error }: {
   </div>
 }
 
-function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
-  initial: PlaceResult | null; initialMeeting: string; onClose: () => void; onPick: (place: PlaceResult, meetingPoint: string) => void
+/** 로 after a vowel or ㄹ, otherwise 으로 (옥정호수공원으로, 쌍문역 4호선으로, 공터로). */
+function toward(name: string) {
+  const last = name.trim().slice(-1)
+  const code = last.charCodeAt(0) - 0xac00
+  if (code < 0 || code > 11171) return name + '(으)로'
+  const tail = code % 28
+  return name + (tail === 0 || tail === 8 ? '로' : '으로')
+}
+
+function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
+  initial: PlaceResult | null; initialMeeting: string; onClose: () => void; onPick: (place: PlaceResult, meetingPoint: string) => void; app?: boolean
 }) {
+  const [showList, setShowList] = useState(true)
   const [query, setQuery] = useState(initial?.name ?? '')
   const [items, setItems] = useState<PlaceResult[]>(initial ? [initial] : [])
   const [mode, setMode] = useState<'KAKAO' | 'LOCAL' | null>(null)
@@ -102,6 +126,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
       const result = await request()
       setMode(result.mode)
       setItems(result.items)
+      setShowList(true)
       if (!result.items.length) setMessage(empty || '찾은 장소가 없습니다. 다른 이름으로 검색해 보세요.')
       const first = result.items.find(item => item.latitude != null)
       if (first && !chosen && !keepCentre) setCentre({ lat: Number(first.latitude), lng: Number(first.longitude) })
@@ -122,10 +147,51 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick }: {
   function choose(item: PlaceResult) {
     if (item.placeClass === 'BLOCKED') return
     setChosen(item)
+    if (item.latitude != null && kakaoEnabled && mode !== 'LOCAL') setShowList(false)
     if (item.latitude != null) setCentre({ lat: Number(item.latitude), lng: Number(item.longitude) })
   }
 
   const same = (a: PlaceResult | null, b: PlaceResult) => a != null && keyOf(a) === keyOf(b)
+  const hasMap = kakaoEnabled && mode !== 'LOCAL'
+  if (app) {
+    const results = <>
+      {message && <p className="ap-msg" role="status">{message}</p>}
+      <ul className="ap-results" aria-label="검색 결과">{items.map(item => {
+        const badge = classBadge[item.placeClass]
+        return <li key={item.kakaoId ?? 'p' + item.placeId}>
+          <button type="button" className={same(chosen, item) ? 'on' : ''} aria-pressed={same(chosen, item)} disabled={item.placeClass === 'BLOCKED'} onClick={() => choose(item)}>
+            <span><strong>{item.picked && <em>찍은 위치</em>}{item.name}</strong><small>{item.classLabel}{item.address && !item.picked ? ' · ' + item.address : ''}{item.distanceMeters != null ? ' · ' + distance(item.distanceMeters) : ''}</small></span>
+            <span className={'place-badge ' + badge.tone}>{badge.text}</span>
+          </button></li>
+      })}</ul></>
+    const badge = chosen && classBadge[chosen.placeClass]
+    return createPortal(<div className="ap-place" role="dialog" aria-modal="true" aria-labelledby="ap-place-title" ref={dialog}>
+      <div className="ap-place-top"><button type="button" className="ap-icon" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button><h2 id="ap-place-title">장소 고르기</h2></div>
+      <form className="ap-search" onSubmit={submit} role="search">
+        <Glyph name="search" size={19} /><TextInput aria-label="장소 이름이나 주소" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="장소 이름이나 주소 검색" enterKeyHint="search" />
+        {query && <button type="submit" className="ap-search-go" disabled={busy}>검색</button>}
+      </form>
+      {asking && <div className="ap-ask" role="group" aria-label="내 위치에서 시작"><span>내 위치 주변부터 볼까요? <small>위치는 저장하지 않아요</small></span>
+        <button type="button" className="ap-ask-yes" onClick={startHere}>내 위치로</button><button type="button" className="ap-ask-no" onClick={() => { decline(); setAsking(false) }}>괜찮아요</button></div>}
+      {locating && <p className="ap-msg" role="status">내 위치를 확인하는 중이에요…</p>}
+      <div className={'ap-place-body' + (hasMap ? '' : ' nomap')}>
+        {hasMap ? <>
+          <PinMap centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose} onNearby={point => run(() => pointAndAround(point), '')} />
+          {!items.length || !showList ? <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span> : null}
+          {(items.length > 0 || message) && (showList
+            ? <div className="ap-list">{items.length > 0 && <button type="button" className="ap-list-head" onClick={() => setShowList(false)}><i />{items.length}곳 · 눌러서 고르기<small>지도 보기</small></button>}{results}</div>
+            : <button type="button" className="ap-list-open" onClick={() => setShowList(true)}><Glyph name="search" size={14} />목록 {items.length}곳 보기</button>)}
+        </> : <div className="ap-list full">{!items.length && !message && <p className="ap-msg">장소 이름으로 검색해 주세요.</p>}{results}</div>}
+      </div>
+      <div className="ap-place-foot">
+        {chosen ? <div className="ap-chosen"><span><strong>{chosen.name}</strong><small>{[chosen.classLabel, chosen.picked ? '' : chosen.address, distance(chosen.distanceMeters)].filter(Boolean).join(' · ')}</small></span>
+          {badge && <span className={'place-badge ' + badge.tone}>{badge.text}</span>}</div>
+          : <p className="ap-none">검색하거나 지도를 눌러 장소를 골라 주세요</p>}
+        {chosen?.placeClass === 'REVIEW' && <p className="ap-msg">{chosen.classLabel}에서 하는 활동은 관리자가 확인한 뒤 공개돼요.</p>}
+        <button type="button" className="m-btn" disabled={!chosen} onClick={() => chosen && onPick(chosen, initialMeeting)}>{chosen ? toward(chosen.name) + ' 정하기' : '장소를 골라 주세요'}</button>
+      </div>
+    </div>, document.body)
+  }
   return createPortal(<div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
     <div className="place-dialog" role="dialog" aria-modal="true" aria-labelledby="place-dialog-title" ref={dialog}>
       <div className="dialog-head"><h2 id="place-dialog-title">장소 찾기</h2><button type="button" className="icon-button" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button></div>

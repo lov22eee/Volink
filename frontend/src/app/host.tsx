@@ -210,7 +210,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
 
       {step === 2 && <>
         <h2 className="m-h2">어디서, 언제 만나요?</h2>
-        {!locked && <div className="m-legacy"><PlaceField value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
+        {!locked && <div><PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
         <label className="m-field"><span className="m-label">만나는 곳 <small>선택</small></span>
           <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
