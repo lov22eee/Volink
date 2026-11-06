@@ -13,7 +13,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.WebStorage;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -23,6 +25,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.json.JSONObject;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -138,10 +142,15 @@ public class LabActivity extends AppCompatActivity {
         return view;
     }
 
+    /** 1365 origins opened in this visit, for clearing their web storage on close. */
+    private final Set<String> visited = new LinkedHashSet<>();
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // The 1365 login is typed here: no screenshots, screen recording or recent-apps preview of this screen.
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         LinearLayout root = new LinearLayout(this);
@@ -231,9 +240,21 @@ public class LabActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
-                if ("https".equals(url.getScheme())) return false;
-                try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
+                if (is1365(url)) return false;
+                // Only 1365 opens in this screen (where the person types the 1365 password); anything else goes to the phone's browser.
+                if (request.isForMainFrame()) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
+                    if ("https".equals(url.getScheme()) || "http".equals(url.getScheme())) Toast.makeText(LabActivity.this, "1365 밖의 주소는 브라우저로 열어요", Toast.LENGTH_SHORT).show();
+                }
                 return true;
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                // A redirect that slipped past the check above: stop before anything is shown or typed.
+                Uri page = Uri.parse(url);
+                if (!is1365(page)) { view.stopLoading(); if (view.canGoBack()) view.goBack(); else view.loadUrl(LabPlugin.HOME); return; }
+                visited.add(page.getScheme() + "://" + page.getHost());
             }
 
             @Override
@@ -345,18 +366,30 @@ public class LabActivity extends AppCompatActivity {
         else done();
     }
 
+    /** https://1365.go.kr or a subdomain of it. */
+    static boolean is1365(Uri url) {
+        String host = url.getHost();
+        return "https".equals(url.getScheme()) && host != null && (host.equals("1365.go.kr") || host.endsWith(".1365.go.kr"));
+    }
+
     @Override
     protected void onDestroy() {
-        // Log out of 1365 in the app: its cookies go with this screen.
+        // Log out of 1365 and leave nothing behind: every cookie (the Volink app itself keeps none: its token is not a cookie),
+        // the 1365 sites' web storage, this screen's cache, form data and history.
         CookieManager cookies = CookieManager.getInstance();
-        String cookie = cookies.getCookie(LabPlugin.HOME);
-        if (cookie != null) for (String part : cookie.split(";")) {
-            String name = part.split("=", 2)[0].trim();
-            if (!name.isEmpty()) cookies.setCookie(LabPlugin.HOME, name + "=; Max-Age=0; Path=/");
-        }
+        cookies.removeSessionCookies(null);
+        cookies.removeAllCookies(null);
         cookies.flush();
+        WebStorage storage = WebStorage.getInstance();
+        for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
-        if (web != null) { web.stopLoading(); web.destroy(); }
+        if (web != null) {
+            web.stopLoading();
+            web.clearCache(true);
+            web.clearFormData();
+            web.clearHistory();
+            web.destroy();
+        }
         super.onDestroy();
     }
 }
