@@ -665,8 +665,15 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   await expect(page.getByText('봉사 실적 총 57시간 30분 · 14건')).toBeVisible()
   await expect(page.getByText('기타 57시간 30분')).toBeVisible()
   await page.getByRole('button', { name: '실적 가져오기' }).click()
-  await expect(page.getByRole('region', { name: '1365 누적 실적' })).toContainText('57시간 30분 · 14건')
-  await expect(page.getByRole('region', { name: '1365 누적 실적' })).not.toContainText('홍길동')
+  // 완료 기록 (B): 함께한 시간 = 1365 + Volink, the 1365 refresh row, and chips over one list.
+  const total = page.getByRole('region', { name: '함께한 시간' })
+  await expect(total).toContainText('1365 57시간 30분 (공식 실적)')
+  await expect(total).not.toContainText('홍길동')
+  await expect(page.getByRole('button', { name: /1365 연결됨.*새로고침/ })).toBeVisible()
+  await page.getByRole('radio', { name: /^Volink/ }).click()
+  await expect(page.getByRole('link', { name: /하천 정화 활동/ })).toHaveCount(0)
+  await page.getByRole('radio', { name: /^1365/ }).click()
+  await expect(page.getByRole('link', { name: /도서관 정리 도우미/ })).toBeVisible()
 })
 
 test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, then the 3-step guide; 마이 shows Volink + 1365', async ({ page }) => {
