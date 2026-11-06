@@ -6,7 +6,7 @@ import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, dDay, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
 import { RecordRow, useRecords } from './record'
-import { hoursText, labOn, useConnect1365 } from './lab'
+import { hoursText, useConnect1365 } from './lab'
 import type { LabSummary } from './lab'
 
 type View = 'join' | 'host' | 'done'
@@ -83,9 +83,9 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
           <p>{dayWord(p.date)} · {p.startTime}{p.placeName ? ' · ' + p.placeName : ''}</p>
           {dDay(p.date) && <span className="m-dday">{dDay(p.date)}</span>}
           <span className="m-btn sm">{p.status === 'OFFERED' ? '자리 제안 확인' : '활동 상세 보기'}</span>
-        </a>)}</div> : !extPlanned.length && <Empty icon="calendar" title="참여 예정인 활동이 없어요" action={<a className="m-btn sm" href="#/find">봉사 찾아보기</a>} />}
-        {labOn() && <a className="m-row lab-entry" href="#/lab1365"><span className="m-row-ico ext"><b>1365</b></span><span className="m-row-main"><strong>1365 신청 내역 가져오기</strong><small>실험 기능 · 내 1365 화면에서 골라 넣기</small></span><MIcon name="chevron" size={18} /></a>}
-        {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><small>본인 표시</small></div>
+        </a>)}</div> : !extPlanned.length && <Empty icon="calendar" title="참여 예정인 활동이 없어요"
+          action={<div className="m-empty-two"><button type="button" className="m-btn sm line" onClick={connect}>1365 가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />}
+        {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><button type="button" className="m-more" onClick={connect}>1365 가져오기 ›</button></div>
           <div className="m-list">{extPlanned.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
         {ended.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 신청</h2></div><div className="m-list">{ended.map(p =>
           <a key={p.id} className="m-row dim" href={'#/activity/' + p.activityId}><span className="m-row-main"><strong>{p.title}</strong>

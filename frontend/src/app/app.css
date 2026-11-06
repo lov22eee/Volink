@@ -1344,3 +1344,5 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-day > .m-field { flex: 1; gap: 6px; }
 .lab-day .m-label { font-size: 13px; }
 .lab-item.need .lab-day .m-label { color: var(--amber-ink); }
+.m-empty-two { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.m-section-head button.m-more { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--m-green); padding: 8px 0; }
