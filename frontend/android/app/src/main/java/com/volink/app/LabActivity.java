@@ -13,7 +13,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.WebStorage;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -23,6 +25,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.json.JSONObject;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -90,7 +94,7 @@ public class LabActivity extends AppCompatActivity {
     };
 
     private static final int BLUE = Color.parseColor("#2B5AA8"), GREEN = Color.parseColor("#2E7D5B"), INK = Color.parseColor("#1F2A24");
-    private TextView badge, stepLabel, doneButton;
+    private TextView badge, stepLabel;
     private LinearLayout card;
     private final View[] bars = new View[4];
 
@@ -138,10 +142,15 @@ public class LabActivity extends AppCompatActivity {
         return view;
     }
 
+    /** 1365 origins opened in this visit, for clearing their web storage on close. */
+    private final Set<String> visited = new LinkedHashSet<>();
+
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // The 1365 login is typed here: no screenshots, screen recording or recent-apps preview of this screen.
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         LinearLayout root = new LinearLayout(this);
@@ -172,14 +181,8 @@ public class LabActivity extends AppCompatActivity {
         titles.addView(text("1365 연결", 16, INK, true));
         where = text("www.1365.go.kr", 11.5f, Color.parseColor("#7A867F"), false);
         titles.addView(where);
-        doneButton = text("완료", 13.5f, Color.WHITE, true);
-        doneButton.setBackground(round(GREEN, 18));
-        doneButton.setPadding(dp(16), dp(8), dp(16), dp(8));
-        doneButton.setVisibility(View.GONE);
-        doneButton.setOnClickListener(v -> done());
         header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        header.addView(doneButton);
 
         // Guide card: step badge, "2 / 4 단계", the line, four bars.
         card = new LinearLayout(this);
@@ -231,9 +234,21 @@ public class LabActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
-                if ("https".equals(url.getScheme())) return false;
-                try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
+                if (is1365(url)) return false;
+                // Only 1365 opens in this screen (where the person types the 1365 password); anything else goes to the phone's browser.
+                if (request.isForMainFrame()) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
+                    if ("https".equals(url.getScheme()) || "http".equals(url.getScheme())) Toast.makeText(LabActivity.this, "1365 밖의 주소는 브라우저로 열어요", Toast.LENGTH_SHORT).show();
+                }
                 return true;
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                // A redirect that slipped past the check above: stop before anything is shown or typed.
+                Uri page = Uri.parse(url);
+                if (!is1365(page)) { view.stopLoading(); if (view.canGoBack()) view.goBack(); else view.loadUrl(LabPlugin.HOME); return; }
+                visited.add(page.getScheme() + "://" + page.getHost());
             }
 
             @Override
@@ -248,7 +263,8 @@ public class LabActivity extends AppCompatActivity {
         bottom = new LinearLayout(this);
         bottom.setPadding(dp(14), dp(10), dp(14), dp(12));
         take = new Button(this);
-        take.setText("이 화면 가져오기");
+        // 2026-11-06 (A안): the button says what it takes; one page per visit, so no 완료 button.
+        take.setText(takeLabel());
         take.setTextSize(16);
         take.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         take.setAllCaps(false);
@@ -295,9 +311,21 @@ public class LabActivity extends AppCompatActivity {
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
-    /** "이 화면 가져오기": keeps this page's text (and which page it is) and stays on 1365 for the next one. */
+    private String takeLabel() {
+        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
+    }
+
+    /** The button shows "가져오는 중…" (lighter, not pressable) while the page is read, then the app takes over. */
+    private void setTaking(boolean on) {
+        take.setEnabled(!on);
+        take.setText(on ? "가져오는 중…" : takeLabel());
+        take.setBackground(round(on ? Color.parseColor("#7FB39B") : GREEN, 14));
+    }
+
+    /** Takes this page's text (and which page it is) back to the app. */
     private void takePage() {
         if (!onAllowedPage()) { updateTake(); return; }
+        setTaking(true);
         String kindCall = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
         String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kindCall + ";}catch(e){}"
                 + "return JSON.stringify({text:t,kind:String(k).charAt(1)});})()";
@@ -310,18 +338,16 @@ public class LabActivity extends AppCompatActivity {
                 kind = page.optString("kind", "-");
             } catch (Exception ignored) { }
             if (text.length() > MAX) text = text.substring(0, MAX);
-            if (text.trim().isEmpty()) { Toast.makeText(this, "읽을 글자가 없어요", Toast.LENGTH_SHORT).show(); return; }
+            if (text.trim().isEmpty()) { setTaking(false); Toast.makeText(this, "읽을 글자가 없어요", Toast.LENGTH_SHORT).show(); return; }
             int at = "S".equals(kind) ? summaryAt : "A".equals(kind) ? applicationsAt : -1;
             if (at >= 0) pages.set(at, text); else { pages.add(text); at = pages.size() - 1; }
             if ("S".equals(kind)) summaryAt = at;
             if ("A".equals(kind)) applicationsAt = at;
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
-            doneButton.setText("완료 (" + pages.size() + ")");
-            doneButton.setVisibility(View.VISIBLE);
-            Toast.makeText(this, "S".equals(kind) ? "실적을 가져왔어요" : "A".equals(kind) ? "신청 현황을 가져왔어요" : "이 화면을 가져왔어요", Toast.LENGTH_SHORT).show();
             lastStep = 0;
-            if (!target.isEmpty()) done(); // the page is the one asked for (checked by its address)
+            // One page per visit: back to the app (its result screen) right after "가져오는 중…" has been seen.
+            timer.postDelayed(this::done, 400);
         });
     }
 
@@ -345,18 +371,30 @@ public class LabActivity extends AppCompatActivity {
         else done();
     }
 
+    /** https://1365.go.kr or a subdomain of it. */
+    static boolean is1365(Uri url) {
+        String host = url.getHost();
+        return "https".equals(url.getScheme()) && host != null && (host.equals("1365.go.kr") || host.endsWith(".1365.go.kr"));
+    }
+
     @Override
     protected void onDestroy() {
-        // Log out of 1365 in the app: its cookies go with this screen.
+        // Log out of 1365 and leave nothing behind: every cookie (the Volink app itself keeps none: its token is not a cookie),
+        // the 1365 sites' web storage, this screen's cache, form data and history.
         CookieManager cookies = CookieManager.getInstance();
-        String cookie = cookies.getCookie(LabPlugin.HOME);
-        if (cookie != null) for (String part : cookie.split(";")) {
-            String name = part.split("=", 2)[0].trim();
-            if (!name.isEmpty()) cookies.setCookie(LabPlugin.HOME, name + "=; Max-Age=0; Path=/");
-        }
+        cookies.removeSessionCookies(null);
+        cookies.removeAllCookies(null);
         cookies.flush();
+        WebStorage storage = WebStorage.getInstance();
+        for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
-        if (web != null) { web.stopLoading(); web.destroy(); }
+        if (web != null) {
+            web.stopLoading();
+            web.clearCache(true);
+            web.clearFormData();
+            web.clearHistory();
+            web.destroy();
+        }
         super.onDestroy();
     }
 }

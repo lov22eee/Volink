@@ -624,7 +624,8 @@ textarea.n-input { min-height: 46px; max-height: 120px; padding: 12px 16px; bord
 .r-qr-info small { font-size: 12.5px; color: var(--ink-3); }
 .r-code { font-size: 34px; font-weight: 800; letter-spacing: .18em; color: var(--m-green-ink); line-height: 1.1; }
 .r-timer { display: block; height: 4px; width: 100%; max-width: 170px; border-radius: 4px; background: var(--line); overflow: hidden; }
-.r-timer i { display: block; height: 100%; background: var(--m-green); transition: width 1s linear; }
+.r-timer i { display: block; height: 100%; background: var(--m-green); transform-origin: left center; animation: r-timer linear forwards; }
+@keyframes r-timer { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
 .r-sec { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
 .r-sec h3 { font-size: 15.5px; font-weight: 750; display: flex; gap: 5px; align-items: center; }
 .r-sec h3 b { color: var(--m-green-ink); }
