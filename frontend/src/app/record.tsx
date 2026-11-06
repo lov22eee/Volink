@@ -20,7 +20,8 @@ export type ExternalRecord = {
 export const SITE_1365 = 'https://www.1365.go.kr'
 const message = (cause: unknown) => cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.'
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
-const fromCompact = (value: string | null) => value && /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
+/** 1365 period dates come as 2026-11-12 from the server (yyyyMMdd from older caches): both are read. */
+const fromCompact = (value: string | null) => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
 
 /** Trust word for a record: 실적확인서 있음 (values from the certificate), 1365 연결 (lab), or 본인 표시. */
 export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source'>) {
