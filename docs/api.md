@@ -133,3 +133,15 @@
 `POST /api/activities/check` · 로그인 필요 · 저장하지 않음
 
 요청 `{ title, description, supplies: [이름] }` → 응답 `{ title: [hit], description: [hit], supplies: [hit] }`, hit = `{ keyword, level: BLOCKED|REVIEW, reason }`. 저장 시 검사(`RiskClassifier`)와 같은 단어표·띄어쓰기 무시 비교이며, 화면이 칸 밑에 ‘검토 후 승인 예정 / 모집을 올릴 수 없어요’를 보여줄 때만 씁니다. 긴 입력은 2000자로 잘라 봅니다.
+
+## 1365 기록 (V27, 2026-11-06)
+
+| 메서드·경로 | 누가 | 내용 |
+|---|---|---|
+| `GET /api/me/external` · `GET /api/me/external/{id}` | 본인 | 내 1365 기록(남의 것은 404). `status` PLANNED/ATTENDED/MISSED, `source` SELF/LAB, `certified`, `started`, `reviewId` |
+| `POST /api/me/external` | 본인 | 본인 표시 `{programNo?, title, organization?, place?, date, startTime?, endTime?}`. 같은 날 같은 활동 두 번이면 409 `EXTERNAL_EXISTS`, 날짜는 ±1년 |
+| `POST /api/me/external/import` | 본인 | 실험실 `{items:[{title, date, startTime?, endTime?, labStatus?}]}` 1~20개, 이미 있는 줄은 건너뜀, 지난 줄은 ATTENDED |
+| `PUT /api/me/external/{id}/status` | 본인 | `{status}` ATTENDED/MISSED는 시작 뒤만(409 `NOT_STARTED`) |
+| `PUT /api/me/external/{id}/certificate` | 본인 | 실적확인서에서 읽은 값 `{title, organization?, date, minutes 1~1440}`(파일 없음) → ATTENDED |
+| `DELETE /api/me/external/{id}` | 본인 | 후기가 있으면 409 `HAS_REVIEW` |
+| `POST /api/community/posts` | 회원 | 봉사후기에 `externalId`(다녀온 내 1365 기록) 가능, `activityId`와 둘 중 하나 |

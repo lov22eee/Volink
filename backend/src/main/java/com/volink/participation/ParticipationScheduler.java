@@ -1,6 +1,7 @@
 package com.volink.participation;
 
 import com.volink.checkin.CheckInService;
+import com.volink.external.ExternalRecordService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,15 +18,18 @@ import org.springframework.stereotype.Component;
 public class ParticipationScheduler {
     private final ParticipationService participations;
     private final CheckInService checkIns;
+    private final ExternalRecordService external;
 
-    public ParticipationScheduler(ParticipationService participations, CheckInService checkIns) {
+    public ParticipationScheduler(ParticipationService participations, CheckInService checkIns, ExternalRecordService external) {
         this.participations = participations;
         this.checkIns = checkIns;
+        this.external = external;
     }
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     public void expire() {
         participations.expireDue();
         checkIns.advance();
+        external.remind();
     }
 }

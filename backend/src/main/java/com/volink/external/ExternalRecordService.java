@@ -1,0 +1,198 @@
+package com.volink.external;
+
+import com.volink.common.ApiException;
+import com.volink.notification.NotificationService;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 1365 activities in my own records (V27). Volink never sees 1365 itself: the person marks an application (SELF), or picks
+ * rows read from their own 1365 page in the app lab (LAB). Times are Korean time like the rest of the server.
+ * Trust shown to others: 본인 기록 (SELF/LAB), 실적확인서 있음 (certificate values entered) — never "verified by Volink".
+ */
+@Service
+public class ExternalRecordService {
+    static final int IMPORT_MAX = 20;
+    private final JdbcTemplate jdbc;
+    private final Clock clock;
+    private final NotificationService notifications;
+
+    public ExternalRecordService(JdbcTemplate jdbc, Clock clock, NotificationService notifications) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.notifications = notifications;
+    }
+
+    public record RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus) {}
+    public record ImportRequest(List<RecordRequest> items) {}
+    public record CertificateRequest(String title, String organization, String date, Integer minutes) {}
+
+    private LocalDateTime now() { return LocalDateTime.now(clock); }
+
+    private static String text(String value, int max) {
+        String v = value == null ? "" : value.strip().replaceAll("\\s+", " ");
+        return v.length() > max ? v.substring(0, max) : v;
+    }
+
+    private static LocalDate date(String value) {
+        try { return value == null ? null : LocalDate.parse(value.strip()); } catch (DateTimeParseException e) { return null; }
+    }
+
+    private static LocalTime time(String value) {
+        try { return value == null || value.isBlank() ? null : LocalTime.parse(value.strip()); } catch (DateTimeParseException e) { return null; }
+    }
+
+    /** "1365에서 신청했어요": one record. Same 1365 program on the same day twice is refused. */
+    @Transactional
+    public Map<String, Object> create(long userId, RecordRequest request) {
+        long id = insert(userId, request, "SELF", true);
+        return one(userId, id);
+    }
+
+    /** Lab: rows the person picked from their own 1365 page. Rows already in the list (same title and day) are skipped. */
+    @Transactional
+    public Map<String, Object> importRows(long userId, ImportRequest request) {
+        List<RecordRequest> items = request == null || request.items() == null ? List.of() : request.items();
+        if (items.isEmpty() || items.size() > IMPORT_MAX) throw ApiException.validation(Map.of("items", "가져올 활동을 1~" + IMPORT_MAX + "개 골라 주세요."));
+        int added = 0;
+        for (RecordRequest item : items) if (insert(userId, item, "LAB", false) > 0) added++;
+        return Map.of("added", added, "items", list(userId));
+    }
+
+    private long insert(long userId, RecordRequest r, String source, boolean strict) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String title = text(r.title(), 255);
+        if (title.length() < 2) errors.put("title", "활동 이름을 2자 이상 적어 주세요.");
+        LocalDate day = date(r.date());
+        LocalDate today = now().toLocalDate();
+        if (day == null || day.isBefore(today.minusYears(1)) || day.isAfter(today.plusYears(1))) errors.put("date", "날짜를 1년 안에서 골라 주세요.");
+        LocalTime start = time(r.startTime()), end = time(r.endTime());
+        if (start == null) start = LocalTime.of(9, 0);
+        if (end == null || !end.isAfter(start)) end = start.plusHours(2).isAfter(start) ? start.plusHours(2) : LocalTime.of(23, 59);
+        String program = text(r.programNo(), 20);
+        if (!program.isEmpty() && !program.matches("[0-9A-Za-z-]+")) errors.put("programNo", "1365 활동 번호를 확인해 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        LocalDateTime startsAt = day.atTime(start), endsAt = day.atTime(end);
+        boolean exists = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM external_records WHERE user_id = ? AND DATE(starts_at) = ? AND (title = ? OR (program_no IS NOT NULL AND program_no = ?))""",
+                Integer.class, userId, day, title, program) > 0;
+        if (exists) {
+            if (strict) throw new ApiException(HttpStatus.CONFLICT, "EXTERNAL_EXISTS", "이미 내 활동에 넣은 1365 활동이에요.");
+            return 0;
+        }
+        jdbc.update("""
+                INSERT INTO external_records(user_id, program_no, title, organization, place, starts_at, ends_at, status, source, lab_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", userId, program.isEmpty() ? null : program, title, emptyNull(text(r.organization(), 255)),
+                emptyNull(text(r.place(), 255)), startsAt, endsAt, endsAt.isBefore(now()) && "LAB".equals(source) ? "ATTENDED" : "PLANNED", source,
+                emptyNull(text(r.labStatus(), 40)));
+        return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+    }
+
+    private static String emptyNull(String value) { return value == null || value.isEmpty() ? null : value; }
+
+    private static final String COLUMNS = """
+            SELECT e.id, e.program_no AS programNo, e.title, e.organization, e.place, DATE_FORMAT(e.starts_at, '%Y-%m-%d') AS date,
+                   DATE_FORMAT(e.starts_at, '%H:%i') AS startTime, DATE_FORMAT(e.ends_at, '%H:%i') AS endTime, e.status, e.source, e.lab_status AS labStatus,
+                   e.cert_title AS certTitle, e.cert_org AS certOrganization, DATE_FORMAT(e.cert_date, '%Y-%m-%d') AS certDate, e.cert_minutes AS certMinutes,
+                   e.cert_at IS NOT NULL AS certified, e.starts_at <= ? AS started,
+                   (SELECT p.id FROM community_posts p WHERE p.external_id = e.id AND p.deleted_at IS NULL ORDER BY p.id DESC LIMIT 1) AS reviewId
+            FROM external_records e""";
+
+    public List<Map<String, Object>> list(long userId) {
+        List<Map<String, Object>> rows = jdbc.queryForList(COLUMNS + " WHERE e.user_id = ? ORDER BY e.starts_at DESC, e.id DESC LIMIT 200", now(), userId);
+        rows.forEach(ExternalRecordService::shape);
+        return rows;
+    }
+
+    public Map<String, Object> one(long userId, long id) {
+        Map<String, Object> row = jdbc.queryForList(COLUMNS + " WHERE e.user_id = ? AND e.id = ?", now(), userId, id).stream().findFirst().orElseThrow(ExternalRecordService::notFound);
+        shape(row);
+        return row;
+    }
+
+    private static void shape(Map<String, Object> row) {
+        row.put("certified", truthy(row.get("certified")));
+        row.put("started", truthy(row.get("started")));
+    }
+
+    private static boolean truthy(Object v) { return v instanceof Boolean b ? b : v instanceof Number n && n.intValue() != 0; }
+
+    private static ApiException notFound() { return new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "기록을 찾을 수 없습니다."); }
+
+    private Map<String, Object> own(long userId, long id) {
+        return jdbc.queryForList("SELECT id, starts_at, status FROM external_records WHERE id = ? AND user_id = ? FOR UPDATE", id, userId)
+                .stream().findFirst().orElseThrow(ExternalRecordService::notFound);
+    }
+
+    /** 다녀왔어요 / 못 갔어요 (after it started), or back to 예정. */
+    @Transactional
+    public Map<String, Object> status(long userId, long id, String status) {
+        Map<String, Object> row = own(userId, id);
+        if (!List.of("PLANNED", "ATTENDED", "MISSED").contains(status)) throw ApiException.validation(Map.of("status", "상태를 골라 주세요."));
+        if (!"PLANNED".equals(status) && ((LocalDateTime) row.get("starts_at")).isAfter(now()))
+            throw new ApiException(HttpStatus.CONFLICT, "NOT_STARTED", "활동 날짜가 지나면 표시할 수 있어요.");
+        jdbc.update("UPDATE external_records SET status = ? WHERE id = ?", status, id);
+        return one(userId, id);
+    }
+
+    /** Values read from the 1365 certificate (the file itself never reaches the server). Marks the record as attended. */
+    @Transactional
+    public Map<String, Object> certificate(long userId, long id, CertificateRequest request) {
+        own(userId, id);
+        Map<String, String> errors = new LinkedHashMap<>();
+        String title = text(request.title(), 255);
+        if (title.length() < 2) errors.put("title", "활동 이름을 확인해 주세요.");
+        LocalDate day = date(request.date());
+        if (day == null || day.isAfter(now().toLocalDate())) errors.put("date", "실적 날짜를 확인해 주세요.");
+        Integer minutes = request.minutes();
+        if (minutes == null || minutes < 1 || minutes > 1440) errors.put("minutes", "인정 시간을 확인해 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        jdbc.update("UPDATE external_records SET cert_title = ?, cert_org = ?, cert_date = ?, cert_minutes = ?, cert_at = ?, status = 'ATTENDED' WHERE id = ?",
+                title, emptyNull(text(request.organization(), 255)), day, minutes, now(), id);
+        return one(userId, id);
+    }
+
+    @Transactional
+    public void delete(long userId, long id) {
+        own(userId, id);
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE external_id = ?", Integer.class, id) > 0)
+            throw new ApiException(HttpStatus.CONFLICT, "HAS_REVIEW", "후기가 연결된 기록은 지울 수 없어요.");
+        jdbc.update("DELETE FROM external_records WHERE id = ?", id);
+    }
+
+    /**
+     * Every minute (with the activity scheduler): within 24 hours before the start "1365 봉사가 곧 있어요", and from 2 hours
+     * after the end (for a week) "다녀왔어요?". Each once per record (dedupe key).
+     */
+    public int remind() {
+        LocalDateTime now = now();
+        int sent = 0;
+        for (Map<String, Object> row : jdbc.queryForList("""
+                SELECT id, user_id, title, DATE_FORMAT(starts_at, '%H:%i') AS t FROM external_records
+                WHERE status = 'PLANNED' AND starts_at > ? AND starts_at <= ?""", now, now.plusHours(24))) {
+            long id = ((Number) row.get("id")).longValue();
+            notifications.send(((Number) row.get("user_id")).longValue(), "EXT_DAY_BEFORE", "1365 봉사가 곧 있어요", row.get("title") + " · " + row.get("t")
+                    + " 시작 · 신청 상태는 1365에서 확인해 주세요.", "#/record/" + id, null, "EXT_DAY_BEFORE:" + id);
+            sent++;
+        }
+        for (Map<String, Object> row : jdbc.queryForList("""
+                SELECT id, user_id, title FROM external_records WHERE status = 'PLANNED' AND ends_at <= ? AND ends_at > ?""", now.minusHours(2), now.minusDays(7))) {
+            long id = ((Number) row.get("id")).longValue();
+            notifications.send(((Number) row.get("user_id")).longValue(), "EXT_CHECK", "1365 봉사 다녀왔어요?", row.get("title")
+                    + " · 다녀왔다고 남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.", "#/record/" + id, null, "EXT_CHECK:" + id);
+            sent++;
+        }
+        return sent;
+    }
+
+}

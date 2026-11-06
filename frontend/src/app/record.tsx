@@ -1,0 +1,238 @@
+// 1365 activities in my records (V27, 2026-11-06). Volink cannot see 1365 itself, so:
+// - 본인 표시: after "1365에서 신청하기" the person says they applied (date and time), and it joins 내 활동;
+// - after the day: 다녀왔어요 / 못 갔어요 → 내 발자취 → a review in the community (photo invited);
+// - 실적확인서: a 1365 certificate (PDF or a picture) is read on the phone; only the values are sent, never the file;
+// - 실험실 (lab, off by default): rows read from the person's own 1365 page in the app (see lab.tsx).
+// Shown to others as 본인 기록 / 실적확인서 있음 — never as checked by Volink, never as official.
+import { useEffect, useRef, useState } from 'react'
+import { api, ApiError } from '../api'
+import { showToast } from '../App'
+import type { Program } from '../explore'
+import { ActionBar, dayWord, dDay, Loading, MIcon, Sheet, TextInput, TopBar } from './ui'
+
+export type ExternalRecord = {
+  id: number; programNo: string | null; title: string; organization: string | null; place: string | null
+  date: string; startTime: string; endTime: string; status: 'PLANNED' | 'ATTENDED' | 'MISSED'; source: 'SELF' | 'LAB'; labStatus: string | null
+  certTitle: string | null; certOrganization: string | null; certDate: string | null; certMinutes: number | null; certified: boolean; started: boolean
+  reviewId: number | null
+}
+
+export const SITE_1365 = 'https://www.1365.go.kr'
+const message = (cause: unknown) => cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.'
+const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
+const fromCompact = (value: string | null) => value && /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
+
+/** Trust word for a record: 실적확인서 있음 (values from the certificate), 1365 연결 (lab), or 본인 표시. */
+export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source'>) {
+  return r.certified ? { text: '실적확인서 있음', tone: 'blue' } : r.source === 'LAB' ? { text: '1365 연결', tone: 'blue' } : { text: '본인 표시', tone: 'gray' }
+}
+
+export function useRecords(refresh = 0) {
+  const [items, setItems] = useState<ExternalRecord[] | null>(null)
+  useEffect(() => { api<ExternalRecord[]>('/api/me/external').then(setItems).catch(() => setItems([])) }, [refresh])
+  return items
+}
+
+/** "1365에서 신청을 마쳤나요?": the day (inside the 1365 period) and time, then it joins 내 활동. */
+export function MarkSheet({ program, onClose, onSaved }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void }) {
+  const today = ymd(new Date())
+  const first = fromCompact(program.periodStart), last = fromCompact(program.periodEnd)
+  const [date, setDate] = useState(first && first > today ? first : today)
+  const [start, setStart] = useState(program.beginTime ?? '10:00')
+  const [end, setEnd] = useState(program.endTime ?? '12:00')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const outside = Boolean((first && date < first) || (last && date > last))
+  async function save() {
+    setBusy(true)
+    setError('')
+    try {
+      const record = await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo, title: program.title, organization: program.organization,
+        place: program.place, date, startTime: start, endTime: end })
+      showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
+      onSaved?.(record)
+      onClose()
+    } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+  }
+  return <Sheet title="1365에서 신청을 마쳤나요?" onClose={onClose}
+    footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>네, 신청했어요</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
+    <p className="m-help">표시해 두면 내 활동에 넣고 하루 전·다녀온 뒤에 알려 드려요. 신청·승인은 1365에서 확인해요.</p>
+    <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
+    <label className="m-field"><span className="m-label">참여하는 날</span>
+      <TextInput type="date" className="m-input" value={date} min={first ?? undefined} max={last ?? undefined} onChange={event => setDate(event.target.value)} /></label>
+    {outside && <span className="m-err">1365 모집 기간({first} ~ {last}) 밖의 날짜예요. 맞는지 확인해 주세요.</span>}
+    <div className="m-two"><label className="m-field"><span className="m-label">시작</span><TextInput type="time" className="m-input" value={start} onChange={event => setStart(event.target.value)} /></label>
+      <label className="m-field"><span className="m-label">끝</span><TextInput type="time" className="m-input" value={end} onChange={event => setEnd(event.target.value)} /></label></div>
+    {error && <p className="m-err" role="alert">{error}</p>}
+  </Sheet>
+}
+
+/** A row for 내 활동 (참여 예정 / 완료 기록). */
+export function RecordRow({ r }: { r: ExternalRecord }) {
+  const tag = recordTag(r)
+  const word = r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
+  return <a className="m-row" href={'#/record/' + r.id}>
+    <span className="m-row-ico ext"><b>1365</b></span>
+    <span className="m-row-main"><strong>{r.title}</strong><small>{r.date.slice(5).replace('-', '/')} {r.startTime} · {tag.text}{r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}</small></span>
+    <span className={'m-badge ' + (r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
+  </a>
+}
+
+/** One 1365 record: went or not, certificate, review, links to 1365. */
+export function RecordScreen({ id }: { id: number }) {
+  const [record, setRecord] = useState<ExternalRecord | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [sheet, setSheet] = useState<null | 'cert' | 'delete'>(null)
+  const load = () => api<ExternalRecord>('/api/me/external/' + id).then(setRecord).catch(() => setFailed(true))
+  useEffect(() => { void load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  async function mark(status: ExternalRecord['status']) {
+    setBusy(true)
+    try { setRecord(await api<ExternalRecord>('/api/me/external/' + id + '/status', 'PUT', { status })); showToast(status === 'ATTENDED' ? '내 발자취에 남겼어요' : '기록을 바꿨어요') }
+    catch (cause) { showToast(message(cause)) } finally { setBusy(false) }
+  }
+  async function remove() {
+    try { await api('/api/me/external/' + id, 'DELETE'); showToast('기록을 지웠어요'); window.location.hash = '#/mine' } catch (cause) { showToast(message(cause)) }
+  }
+  if (failed) return <div className="m-screen"><TopBar title="1365 활동" back="history" /><div className="m-body"><div className="m-note bad">기록을 찾을 수 없어요.</div></div></div>
+  if (!record) return <div className="m-screen"><TopBar title="1365 활동" back="history" /><Loading /></div>
+  const tag = recordTag(record)
+  const dday = dDay(record.date)
+  const action = record.status === 'PLANNED' && record.started
+    ? <><button className="m-btn line" disabled={busy} onClick={() => mark('MISSED')}>못 갔어요</button><button className="m-btn" disabled={busy} onClick={() => mark('ATTENDED')}>다녀왔어요</button></>
+    : record.status === 'ATTENDED' ? (record.reviewId ? <a className="m-btn line" href={'#/post/' + record.reviewId}>내 후기 보기</a>
+      : <a className="m-btn" href={'#/write?category=REVIEW&external=' + record.id}><MIcon name="camera" size={19} />사진과 함께 후기 쓰기</a>)
+    : record.status === 'MISSED' ? <button className="m-btn line" disabled={busy} onClick={() => mark('ATTENDED')}>사실 다녀왔어요</button> : null
+  return <div className="m-screen m-detail applied">
+    <TopBar title="" back="history" actions={!record.reviewId ? <button type="button" className="m-icon-btn" aria-label="기록 지우기" onClick={() => setSheet('delete')}><MIcon name="trash" /></button> : undefined} />
+    <div className="m-body">
+      <section className="mg-head">
+        <div className="mg-state"><span className="m-badge blue">1365</span><span className={'m-badge ' + tag.tone}>{tag.text}</span>
+          {dday && record.status === 'PLANNED' && <small>{dday === 'D-DAY' ? '오늘' : '활동까지 ' + dday.slice(2) + '일'}</small>}</div>
+        <h1>{record.title}</h1>
+        <p className="mg-fact"><MIcon name="calendar" size={17} />{dayWord(record.date)} {record.startTime} ~ {record.endTime}</p>
+        {(record.place || record.organization) && <p className="mg-fact"><MIcon name="pin" size={17} />{[record.organization, record.place].filter(Boolean).join(' · ')}</p>}
+      </section>
+      {record.status === 'PLANNED' && !record.started && <div className="m-state"><strong>1365에 신청한 활동이에요</strong><span>승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</span></div>}
+      {record.status === 'PLANNED' && record.started && <div className="m-state hot"><strong>다녀왔어요?</strong><span>남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.</span></div>}
+      {record.status === 'ATTENDED' && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요. 실적확인서를 올리면 ‘실적확인서 있음’으로 바뀌어요.'}</span></div>}
+      {record.status === 'MISSED' && <div className="m-state gray"><strong>못 갔다고 남겼어요</strong><span>1365 신청은 1365에서 취소해 주세요.</span></div>}
+      {record.status === 'ATTENDED' && !record.certified && <button type="button" className="m-promo-cta" onClick={() => setSheet('cert')}>
+        <MIcon name="record" size={22} /><span><strong>1365 실적확인서 올리기</strong><small>PDF나 캡처를 폰 안에서 읽어요 · 파일은 보내지 않아요</small></span><MIcon name="chevron" size={18} /></button>}
+      <nav className="mg-ops">
+        <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 신청 상태 보기<small>신청·승인·취소는 1365에서 해요</small></span><MIcon name="chevron" size={18} /></a>
+        {record.status === 'ATTENDED' && <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 실적확인서 받기<small>1365 로그인 → 나의 봉사 → 실적 확인</small></span><MIcon name="chevron" size={18} /></a>}
+      </nav>
+      <p className="m-help">Volink가 1365 신청이나 실적을 확인한 건 아니에요. 공식 봉사실적과 보험은 1365 기준이에요.</p>
+    </div>
+    {action && <ActionBar>{action}</ActionBar>}
+    {sheet === 'cert' && <CertificateSheet record={record} onClose={() => setSheet(null)} onSaved={next => { setRecord(next); setSheet(null) }} />}
+    {sheet === 'delete' && <Sheet title="이 기록을 지울까요?" onClose={() => setSheet(null)} footer={<button type="button" className="m-btn danger" onClick={remove}>지우기</button>}>
+      <p className="m-help">1365 신청은 그대로예요. 취소하려면 1365에서 해 주세요.</p></Sheet>}
+  </div>
+}
+
+// ---- 실적확인서: read on the phone (PDF text, or OCR for a picture), confirm, send only the values ----
+
+type Read = { title: string; organization: string; date: string; minutes: number }
+
+/** Pulls the activity name, place of service, date and recognised hours out of the certificate text. */
+export function parseCertificate(text: string, fallback: Pick<ExternalRecord, 'title' | 'organization' | 'date' | 'startTime' | 'endTime'>): Read {
+  const flat = text.replace(/\r/g, '').split('\n').map(line => line.trim()).filter(Boolean)
+  const after = (labels: RegExp) => {
+    for (let i = 0; i < flat.length; i++) {
+      const m = labels.exec(flat[i])
+      if (m) { const rest = flat[i].slice(m.index + m[0].length).replace(/^[\s:：|]+/, '').trim(); if (rest.length >= 2) return rest.slice(0, 120); if (flat[i + 1]) return flat[i + 1].slice(0, 120) }
+    }
+    return ''
+  }
+  const title = after(/(봉사활동명|활동명|봉사명|프로그램명|활동내용)/) || fallback.title
+  const organization = after(/(수요처|봉사처|활동기관|기관명|모집기관|인증기관)/) || fallback.organization || ''
+  const dates = [...text.matchAll(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/g)].map(m => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`)
+  const near = dates.find(d => d === fallback.date) ?? dates.find(d => Math.abs(new Date(d).getTime() - new Date(fallback.date).getTime()) < 3 * 86_400_000)
+  const date = near ?? dates[0] ?? fallback.date
+  const hours = /(\d{1,2})\s*시간\s*(?:(\d{1,2})\s*분)?/.exec(text)
+  const span = (new Date(`2000-01-01T${fallback.endTime}`).getTime() - new Date(`2000-01-01T${fallback.startTime}`).getTime()) / 60_000
+  const minutes = hours ? Number(hours[1]) * 60 + Number(hours[2] ?? 0) : Math.max(60, Math.min(span || 120, 1440))
+  return { title, organization, date, minutes }
+}
+
+async function pdfText(file: File) {
+  const pdfjs = await import('pdfjs-dist')
+  const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+  pdfjs.GlobalWorkerOptions.workerSrc = worker
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+  const pages: string[] = []
+  for (let n = 1; n <= Math.min(doc.numPages, 3); n++) {
+    const content = await (await doc.getPage(n)).getTextContent()
+    // Items on the same line are joined; a new line where the y position changes.
+    let lastY: number | null = null
+    let line = ''
+    for (const item of content.items as { str: string; transform: number[] }[]) {
+      const y = Math.round(item.transform[5])
+      if (lastY !== null && Math.abs(y - lastY) > 2) { pages.push(line); line = '' }
+      line += (line && !line.endsWith(' ') ? ' ' : '') + item.str
+      lastY = y
+    }
+    pages.push(line)
+  }
+  return pages.join('\n')
+}
+
+async function imageText(file: File, progress: (p: number) => void) {
+  // Korean OCR on the phone (tesseract.js; the language data is downloaded once). Slow on old phones; the person checks the result.
+  const { createWorker } = await import('tesseract.js')
+  const worker = await createWorker('kor', 1, { logger: m => { if (m.status === 'recognizing text') progress(Math.round(m.progress * 100)) } })
+  try { return (await worker.recognize(file)).data.text } finally { await worker.terminate() }
+}
+
+export function CertificateSheet({ record, onClose, onSaved }: { record: ExternalRecord; onClose: () => void; onSaved: (record: ExternalRecord) => void }) {
+  const [step, setStep] = useState<'pick' | 'reading' | 'check'>('pick')
+  const [progress, setProgress] = useState(0)
+  const [read, setRead] = useState<Read | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const pdf = useRef<HTMLInputElement>(null), image = useRef<HTMLInputElement>(null)
+  async function take(file: File | undefined, kind: 'pdf' | 'image') {
+    if (!file) return
+    setError('')
+    if (file.size > 15 * 1024 * 1024) { setError('15MB 이하 파일만 읽을 수 있어요.'); return }
+    setStep('reading')
+    try {
+      const text = kind === 'pdf' ? await pdfText(file) : await imageText(file, setProgress)
+      setRead(parseCertificate(text, record))
+      if (!text.trim()) setError('글자를 찾지 못했어요. 아래 칸을 직접 고쳐 주세요.')
+    } catch {
+      setRead(parseCertificate('', record))
+      setError('파일을 읽지 못했어요. 아래 칸을 직접 고쳐 주세요.')
+    }
+    setStep('check')
+  }
+  async function save() {
+    if (!read) return
+    setBusy(true)
+    try { onSaved(await api<ExternalRecord>('/api/me/external/' + record.id + '/certificate', 'PUT', read)); showToast('실적확인서 내용을 남겼어요', '파일은 저장하지 않았어요') }
+    catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+  }
+  if (step === 'pick') return <Sheet title="실적확인서를 골라 주세요" onClose={onClose}>
+    <div className="r-opts">
+      <button type="button" className="r-opt" onClick={() => pdf.current?.click()}><MIcon name="record" size={20} /><span><b>PDF 파일</b><small>1365에서 받은 파일 · 가장 정확해요</small></span></button>
+      <button type="button" className="r-opt" onClick={() => image.current?.click()}><MIcon name="camera" size={20} /><span><b>캡처·사진</b><small>글자를 폰 안에서 읽어요(OCR) · 조금 걸려요</small></span></button>
+    </div>
+    <input ref={pdf} type="file" accept="application/pdf" hidden onChange={event => take(event.target.files?.[0], 'pdf')} />
+    <input ref={image} type="file" accept="image/*" hidden onChange={event => take(event.target.files?.[0], 'image')} />
+    <div className="m-note"><MIcon name="lock" size={14} /> 파일은 폰 안에서만 읽고 보내지 않아요. 활동명·기관·날짜·시간만 남기고, 이름·생년월일은 남기지 않아요.</div>
+    {error && <p className="m-err" role="alert">{error}</p>}
+  </Sheet>
+  if (step === 'reading') return <Sheet title="읽는 중이에요" onClose={onClose}><Loading /><p className="m-help center">{progress ? `글자를 읽는 중 ${progress}%` : '파일을 여는 중…'}</p></Sheet>
+  return <Sheet title="이 내용이 맞나요?" onClose={onClose} footer={<button type="button" className="m-btn" disabled={busy || !read} onClick={save}>맞아요, 남길게요</button>}>
+    {error && <p className="m-err" role="alert">{error}</p>}
+    {read && <div className="r-read">
+      <label><span>활동명</span><TextInput className="m-input" value={read.title} maxLength={255} onChange={event => setRead({ ...read, title: event.target.value })} /></label>
+      <label><span>기관</span><TextInput className="m-input" value={read.organization} maxLength={255} onChange={event => setRead({ ...read, organization: event.target.value })} /></label>
+      <label><span>날짜</span><TextInput type="date" className="m-input" value={read.date} onChange={event => setRead({ ...read, date: event.target.value })} /></label>
+      <label><span>인정 시간(분)</span><TextInput type="number" inputMode="numeric" className="m-input" value={String(read.minutes)} onChange={event => setRead({ ...read, minutes: Number(event.target.value) || 0 })} /></label>
+    </div>}
+    <p className="m-help">‘{record.title}’ 기록에 붙어요. Volink가 확인서의 진위를 확인한 건 아니에요.</p>
+  </Sheet>
+}

@@ -590,3 +590,57 @@ test('my → gear: settings, linked account, withdrawal blocked while hosting wi
   const again = await page.request.post('/api/auth/login', { data: { email, password } })
   expect(again.status()).toBe(401)
 })
+
+test('1365: a marked activity → went → certificate PDF read on the phone → review; the lab reads a pasted 1365 list', async ({ page, browser }) => {
+  const member = await signupByApi(page, '1365 참가자')
+  const auth = await tokenFor(page, member)
+  const yesterday = inDays(-1)
+  const created = await page.request.post('/api/me/external', { headers: { Authorization: auth }, data: { programNo: 'P123456', title: '노인복지관 배식 지원', organization: '양주시자원봉사센터', place: '양주시 옥정동', date: yesterday, startTime: '11:00', endTime: '13:00' } })
+  expect(created.status()).toBe(201)
+  const id = (await created.json()).id
+  await login(page, member)
+
+  // 내 활동 → the 1365 row asks "다녀왔어요?"; the record screen marks it.
+  await page.goto('/#/mine')
+  await expect(page.getByRole('link', { name: /노인복지관 배식 지원.*다녀왔어요\?/ })).toBeVisible()
+  await page.goto('/#/record/' + id)
+  await page.getByRole('button', { name: '다녀왔어요', exact: true }).click()
+  await expect(page.getByText('다녀왔다고 남겼어요')).toBeVisible()
+
+  // A certificate PDF made here (Korean text) is read on the page; only the values are sent.
+  const maker = await browser.newPage()
+  await maker.setContent(`<html><body style="font-family:'WenQuanYi Zen Hei'"><h1>봉사활동 확인서</h1><p>봉사활동명: 노인복지관 배식 지원</p><p>수요처: 양주시자원봉사센터</p><p>활동일: ${yesterday.replaceAll('-', '.')}</p><p>봉사시간: 2시간 30분</p></body></html>`)
+  const pdf = await maker.pdf()
+  await maker.close()
+  await page.getByRole('button', { name: /1365 실적확인서 올리기/ }).click()
+  await page.locator('input[type=file][accept="application/pdf"]').setInputFiles({ name: 'certificate.pdf', mimeType: 'application/pdf', buffer: pdf })
+  const check = page.getByRole('dialog', { name: '이 내용이 맞나요?' })
+  await expect(check.getByLabel('활동명')).toHaveValue('노인복지관 배식 지원')
+  await expect(check.getByLabel('기관')).toHaveValue('양주시자원봉사센터')
+  await expect(check.getByLabel('날짜')).toHaveValue(yesterday)
+  await expect(check.getByLabel('인정 시간(분)')).toHaveValue('150')
+  await check.getByRole('button', { name: '맞아요, 남길게요' }).click()
+  await expect(page.getByText('실적확인서 있음').first()).toBeVisible()
+
+  // Review about it: the 1365 record is picked, the post says 본인 기록 / 실적확인서 있음 (never 참여 확인).
+  await page.request.put('/api/community/me', { headers: { Authorization: auth }, data: { nickname: '배식' + Math.floor(Math.random() * 9000 + 1000), agree: true } })
+  await page.getByRole('link', { name: /사진과 함께 후기 쓰기/ }).click()
+  await expect(page.getByRole('button', { name: /1365 노인복지관 배식 지원/ })).toHaveAttribute('aria-pressed', 'true')
+  await page.locator('input[name=title]').fill('배식 봉사 다녀왔어요')
+  await page.locator('textarea[name=body]').fill('어르신들이 반겨 주셔서 좋았어요.')
+  await page.getByRole('button', { name: '게시글 등록하기' }).click()
+  await expect(page.getByText('함께한 1365 봉사')).toBeVisible()
+  await expect(page.getByText('Volink가 확인한 기록은 아니에요')).toBeVisible()
+
+  // Lab (off by default): on in 설정 › 실험실; without the app the 1365 list text can be pasted.
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: /1365 연결/ }).click()
+  await page.getByRole('link', { name: /1365 신청 내역 가져오기/ }).click()
+  await page.getByPlaceholder(/1365 신청 현황/).fill(`나의 봉사 신청 현황\n하천 정화 활동\n${inDays(5).replaceAll('-', '.')} 09:00~11:00 승인완료\n도서관 정리 도우미 ${inDays(-3).replaceAll('-', '.')} 10:00~12:00 활동완료`)
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
+  await expect(page.getByText(/하천 정화 활동/)).toBeVisible()
+  await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
+  await expect(page).toHaveURL(/#\/mine/)
+  await expect(page.getByRole('link', { name: /하천 정화 활동/ })).toBeVisible()
+})

@@ -7,6 +7,7 @@ import type { LiveActivity } from '../api'
 import { categories, categoryTone } from '../categories'
 import { programKind, range, when1365 } from '../explore'
 import type { Program } from '../explore'
+import { MarkSheet } from './record'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { PlaceMap } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
@@ -99,6 +100,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const [programs, setPrograms] = useState<Program[] | null>(null)
   const [programsState, setProgramsState] = useState<'off' | 'error' | 'needPlace' | 'ok'>('ok')
   const [program, setProgram] = useState<Program | null>(null)
+  const [marking, setMarking] = useState<Program | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => { if (focus) input.current?.focus() }, [focus])
@@ -219,15 +221,18 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     </div>
     {view === 'list' && <RecruitFab />}
     {sheet && <FilterSheet value={filters} q={q} origin={origin} onClose={() => setSheet(false)} onApply={next => { setFilters(next); setSheet(false) }} />}
-    {program && <Sheet title="1365 활동" onClose={() => setProgram(null)} footer={<a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer">1365에서 신청하기 <MIcon name="outward" size={18} /></a>}>
+    {program && <Sheet title="1365 활동" onClose={() => setProgram(null)} footer={<>
+      <a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer" onClick={() => { const p = program; window.setTimeout(() => { setProgram(null); setMarking(p) }, 400) }}>1365에서 신청하기 <MIcon name="outward" size={18} /></a>
+      <button type="button" className="m-text-btn" onClick={() => { setMarking(program); setProgram(null) }}>이미 신청했어요 · 내 활동에 넣기</button></>}>
       <h3 className="m-h3">{program.title}</h3>
       <dl className="m-dl">
         {([['분야', programKind(program)?.label ?? program.field], ['모집 기관', program.organization], ['장소', program.place ? program.place + (program.distanceKm != null ? ` (${program.distanceKm}km)` : '') : null],
           ['일정', when1365(program) || null], ['모집', program.recruitStatus], ['청소년', program.youthOk ? '참여 가능' : null]] as [string, string | null][])
           .filter(([, value]) => value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
       </dl>
-      <p className="m-help">봉사시간 인정과 보험은 1365 기준이에요. Volink는 신청을 대신하지 않아요.</p>
+      <p className="m-help">봉사시간 인정과 보험은 1365 기준이에요. Volink는 신청을 대신하지 않아요. 신청한 뒤 표시하면 내 활동에서 챙겨 드려요.</p>
     </Sheet>}
+    {marking && <MarkSheet program={marking} onClose={() => setMarking(null)} />}
   </div>
 }
 

@@ -5,6 +5,8 @@ import { api } from '../api'
 import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, dDay, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
+import { RecordRow, useRecords } from './record'
+import { labOn } from './lab'
 
 type View = 'join' | 'host' | 'done'
 export const statusWord: Record<string, { text: string; tone: string }> = {
@@ -23,6 +25,10 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
     api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
   }, [])
+  // 1365 activities I marked (V27): still to come or waiting for "다녀왔어요?" under 참여 예정, the ones I went to under 완료 기록.
+  const external = useRecords()
+  const extPlanned = (external ?? []).filter(r => r.status === 'PLANNED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
+  const extDone = (external ?? []).filter(r => r.status === 'ATTENDED')
   const now = Date.now()
   const ends = (date: string, time: string, minutes = 90) => new Date(`${date}T${time}:00+09:00`).getTime() + minutes * 60_000
   const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN'].includes(p.status) && p.activityStatus !== 'CANCELLED' && ends(p.date, p.startTime, p.durationMinutes) > now)
@@ -40,7 +46,10 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
           <p>{dayWord(p.date)} · {p.startTime}{p.placeName ? ' · ' + p.placeName : ''}</p>
           {dDay(p.date) && <span className="m-dday">{dDay(p.date)}</span>}
           <span className="m-btn sm">{p.status === 'OFFERED' ? '자리 제안 확인' : '활동 상세 보기'}</span>
-        </a>)}</div> : <Empty icon="calendar" title="참여 예정인 활동이 없어요" action={<a className="m-btn sm" href="#/find">봉사 찾아보기</a>} />}
+        </a>)}</div> : !extPlanned.length && <Empty icon="calendar" title="참여 예정인 활동이 없어요" action={<a className="m-btn sm" href="#/find">봉사 찾아보기</a>} />}
+        {labOn() && <a className="m-row lab-entry" href="#/lab1365"><span className="m-row-ico ext"><b>1365</b></span><span className="m-row-main"><strong>1365 신청 내역 가져오기</strong><small>실험 기능 · 내 1365 화면에서 골라 넣기</small></span><MIcon name="chevron" size={18} /></a>}
+        {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><small>본인 표시</small></div>
+          <div className="m-list">{extPlanned.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
         {ended.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 신청</h2></div><div className="m-list">{ended.map(p =>
           <a key={p.id} className="m-row dim" href={'#/activity/' + p.activityId}><span className="m-row-main"><strong>{p.title}</strong>
             <small>{p.date.slice(5).replace('-', '/')} {p.startTime}{p.activityStatus === 'CANCELLED' ? ' · 모집자가 활동을 취소했어요' : ''}</small></span>
@@ -58,6 +67,8 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
           <span className={'m-btn sm' + (live ? '' : ' line')}>{live ? '모집 관리' : '결과 보기'}</span>
         </a>
       })}</div> : <Empty icon="plus" title="아직 모집한 활동이 없어요" text="위의 ‘새 활동 만들기’로 이웃과 함께할 활동을 열어 보세요." />)}
+      {view === 'done' && extDone.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><small>본인 기록 · 실적확인서</small></div>
+        <div className="m-list">{extDone.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
       {view === 'done' && (!records ? <Loading /> : records.length ? <>
         <div className="m-stats"><div><b>{records.filter(x => x.status === 'VALID').length}</b><span>완료 활동</span></div>
           <div><b>{Math.round(records.filter(x => x.status === 'VALID').reduce((sum, x) => sum + x.durationMinutes, 0) / 6) / 10}h</b><span>함께한 시간</span></div></div>
@@ -66,7 +77,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
           <span className="m-row-main"><strong>{x.title}</strong><small>{x.date.slice(5).replace('-', '/')} {x.startTime} · {durationLabel(x.durationMinutes)} · {x.checkInMethod === 'QR' ? 'QR 출석' : '모집자 확인'}</small></span>
           <span className={'m-badge ' + (x.status === 'VALID' ? 'mint' : 'amber')}>{x.status === 'VALID' ? '완료' : x.status === 'HELD' ? '보류' : '무효'}</span></a>)}</div>
         <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요. 완료한 활동은 커뮤니티에 ‘참여 확인’ 후기로 남길 수 있어요.</p>
-      </> : <Empty icon="record" title="아직 활동 기록이 없어요" text="현장에서 QR로 체크인하고, 활동이 끝나 모집자가 완료를 확인하면 여기에 남아요." />)}
+      </> : !extDone.length && <Empty icon="record" title="아직 활동 기록이 없어요" text="현장에서 QR로 체크인하고, 활동이 끝나 모집자가 완료를 확인하면 여기에 남아요." />)}
     </div>
     {view !== 'done' && <RecruitFab />}
   </div>
