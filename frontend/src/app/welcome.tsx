@@ -52,9 +52,9 @@ export function WelcomeScreen() {
       <span className="m-welcome-ico ext"><b>1365</b></span>
       <h1>1365 봉사실적도 함께 모을까요?</h1>
       <p>1365에서 한 봉사 시간을 가져와 Volink 활동과 합쳐 보여 드려요.</p>
-      <ul className="m-welcome-picks">
-        <li><b>연결하기</b><span>1365 화면에서 실적·신청 현황을 가져와요. 실험 기능이에요.</span></li>
-        <li><b>괜찮아요</b><span>다녀온 뒤 직접 남기고 실적확인서를 올려요.</span></li>
+      <ul className="m-welcome-facts">
+        <li><MIcon name="timer" size={20} /><span>5분 정도면 충분해요</span></li>
+        <li><MIcon name="checkCircle" size={20} /><span>상단 가이드와 함께 진행 가능해요</span></li>
       </ul>
     </div>
     <div className="m-welcome-actions">
