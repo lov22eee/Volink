@@ -687,7 +687,7 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
   await expect(page.getByRole('heading', { name: '이렇게 가져와요' })).toBeVisible()
-  await expect(page.getByText('☰ 메뉴 › 나의 봉사', { exact: true })).toBeVisible()
+  await expect(page.getByText('고른 화면이 바로 열려요')).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()
@@ -745,7 +745,7 @@ test('1365 step guide: the words on the page tell which step the person is on (�
       labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '2-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
 })
 
 test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {

@@ -50,6 +50,9 @@ public class LabActivity extends AppCompatActivity {
     private String host = "";
     /** S = 봉사참여 실적, A = 신청 현황: the one page this visit is for; taking it returns to the app at once. */
     private String target = "";
+    /** The 1365 page asked for; after logging in (or on the other page) the app goes there once by itself. */
+    private String targetUrl = "";
+    private boolean jumped = false;
 
     /** A login page (password box) was seen; once it is gone the person is taken as logged in. */
     private boolean sawLogin = false, loggedIn = false;
@@ -75,6 +78,8 @@ public class LabActivity extends AppCompatActivity {
                         // Only the password-box line mentions 간편인증. After it, the first page without the box = logged in.
                         if (out.contains("간편인증")) sawLogin = true;
                         else if (sawLogin && !loggedIn) { loggedIn = true; lastStep = 0; return; }
+                        if (step == 1) jumped = false; // on the login page: once logged in, go to the page again
+                        if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
                         showStep(step, out.substring(3));
                     }
                 });
@@ -261,6 +266,7 @@ public class LabActivity extends AppCompatActivity {
         root.addView(bottom, wide);
         setContentView(root);
         String start = getIntent().getStringExtra("url");
+        targetUrl = start != null && !start.equals(LabPlugin.HOME) ? start : "";
         web.loadUrl(start == null ? LabPlugin.HOME : start);
         timer.postDelayed(checkStep, 1200);
     }

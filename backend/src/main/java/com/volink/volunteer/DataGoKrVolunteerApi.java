@@ -90,6 +90,12 @@ public class DataGoKrVolunteerApi implements VolunteerApi {
         return counts;
     }
 
+    @Override
+    public synchronized boolean limited() {
+        LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")));
+        return today.equals(day) && used.entrySet().stream().anyMatch(e -> e.getValue().get() > DAILY_LIMIT);
+    }
+
     private synchronized boolean spend(String operation) {
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul")));
         if (!today.equals(day)) { used.clear(); day = today; }

@@ -111,6 +111,7 @@ public class VolunteerService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("enabled", api.enabled() && kakao.enabled());
         result.put("region", "전국");
+        result.put("limited", api.limited());
         if (!api.enabled() || !kakao.enabled()) { result.put("items", List.of()); return result; }
         Map<String, String> provinces = RegionCodes.provinces();
         List<String> codes = new ArrayList<>(provinces.keySet());
@@ -153,6 +154,7 @@ public class VolunteerService {
         keepWords(items, q);
         items.sort(Comparator.comparing(item -> item.get("periodStart") == null ? "9999" : (String) item.get("periodStart")));
         result.put("items", items.size() > NATIONWIDE_MAX ? items.subList(0, NATIONWIDE_MAX) : items);
+        result.put("limited", api.limited());
         result.put("found", found);
         return result;
     }
@@ -308,8 +310,10 @@ public class VolunteerService {
             cached = lists.get(cacheKey);
             if (cached != null && cached.at().plus(LIST_CACHE).isAfter(clock.instant())) return cached.items();
             List<Map<String, String>> items = api.areaList(codes.province(), codes.city(), q, LIST_ROWS);
-            // An empty answer (error or quota) is kept only briefly so the next search can try again.
-            lists.put(cacheKey, new Cached(items.isEmpty() ? clock.instant().minus(LIST_CACHE).plusSeconds(300) : clock.instant(), items));
+            // An empty answer (error or the daily limit) keeps the last good list (2026-11-06: a search found 9, then nothing),
+            // and is tried again after 5 minutes.
+            if (items.isEmpty() && cached != null && !cached.items().isEmpty()) items = cached.items();
+            lists.put(cacheKey, new Cached(items.isEmpty() || cached != null && items == cached.items() ? clock.instant().minus(LIST_CACHE).plusSeconds(300) : clock.instant(), items));
             return items;
         }
     }

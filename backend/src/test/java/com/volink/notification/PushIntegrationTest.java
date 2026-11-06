@@ -16,9 +16,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PushIntegrationTest extends ApiTestSupport {
     @Autowired FakeExternal.Push push;
 
+    /** A copy taken under the list's lock: pushes arrive from another thread while a test reads. */
+    private List<String> sent() {
+        synchronized (push.sent) { return new java.util.ArrayList<>(push.sent); }
+    }
+
     private List<String> sentTo(String token) throws InterruptedException {
         for (int i = 0; i < 40; i++) {
-            List<String> mine = push.sent.stream().filter(s -> s.startsWith(token + "|")).toList();
+            List<String> mine = sent().stream().filter(s -> s.startsWith(token + "|")).toList();
             if (!mine.isEmpty()) return mine;
             Thread.sleep(50);
         }
@@ -76,4 +81,22 @@ class PushIntegrationTest extends ApiTestSupport {
 
     @Autowired PushService pushService;
     private PushService push() { return pushService; }
+
+    @Autowired NotificationService notifications;
+
+    @Test
+    void aRepeatedDedupeKeyIsPushedOnce() throws Exception {
+        String email = member("GENERAL");
+        String me = token(email);
+        long id = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+        String phone = "fcm-once-" + System.nanoTime();
+        perform(put("/api/me/push-token"), Map.of("token", phone), me).andExpect(status().isNoContent());
+        perform(put("/api/me/notification-settings"), Map.of("push", true, "quiet", false), me).andExpect(status().isOk());
+        // The scheduler runs every minute: the same monthly reminder must reach the phone once, not every minute.
+        for (int i = 0; i < 3; i++) notifications.send(id, "EXT_REFRESH", "이번 달 1365 실적을 맞춰 볼까요?", "본문", "#/lab1365", null, "EXT_MONTH:" + id + ":2026-11");
+        assertThat(sentTo(phone)).hasSize(1);
+        Thread.sleep(600);
+        assertThat(sent().stream().filter(s -> s.startsWith(phone + "|"))).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_REFRESH'", Integer.class, id)).isEqualTo(1);
+    }
 }

@@ -68,12 +68,17 @@ public class NotificationService {
     /** {@code refId}: the participation (새 참가 신청) or question (새 질문) this is about, so it can show when it is handled. */
     public void send(long userId, String type, String title, String body, String link, Long activityId, String dedupeKey, Long refId) {
         String category = CATEGORY.getOrDefault(type, "OTHER");
-        int saved = jdbc.update("""
-                INSERT INTO notifications(user_id, type, category, title, body, link_path, activity_id, ref_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE id = id""",
-                userId, type, category, cut(title, 100), cut(body, 500), link, activityId, refId, dedupeKey);
-        // A repeated dedupe key changes nothing (0 rows) and is not pushed again.
-        if (saved == 1) push.queue(userId, category, cut(title, 100), cut(body, 500), link);
+        // A repeated dedupe key is neither stored nor pushed again (2026-11-06: the old "ON DUPLICATE KEY UPDATE id = id"
+        // reported 1 row with the MySQL driver's found-rows default, so a once-a-month reminder was pushed every minute).
+        if (dedupeKey != null && jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND dedupe_key = ?", Integer.class, userId, dedupeKey) > 0) return;
+        try {
+            jdbc.update("""
+                    INSERT INTO notifications(user_id, type, category, title, body, link_path, activity_id, ref_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    userId, type, category, cut(title, 100), cut(body, 500), link, activityId, refId, dedupeKey);
+        } catch (org.springframework.dao.DuplicateKeyException sameKeyAtTheSameTime) {
+            return;
+        }
+        push.queue(userId, category, cut(title, 100), cut(body, 500), link);
     }
 
     static Long activityOf(String link) {
