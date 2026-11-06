@@ -1177,3 +1177,14 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .ap-chosen strong { font-size: 16px; }
 .ap-chosen small { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ap-none { font-size: 14px; color: var(--ink-3); }
+/* 장소 자동완성: a short list right under the search box, over the top of the map only. */
+.ap-search-wrap { position: relative; flex: none; z-index: 8; }
+.ap-suggest { position: absolute; left: 14px; right: 14px; top: 52px; list-style: none; margin: 0; padding: 4px 0; background: #fff; border-radius: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / 16%); max-height: 46vh; overflow-y: auto; }
+.ap-suggest button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 0; background: none; text-align: left; font: inherit; color: var(--ink); }
+.ap-suggest button > svg { color: var(--ink-3); flex: none; }
+.ap-suggest button > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ap-suggest strong { font-size: 14.5px; }
+.ap-suggest small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-suggest button:disabled { opacity: .55; }
+.ap-suggest li + li { border-top: 1px solid #f0f2ef; }
+.ap-list { max-height: 40%; }

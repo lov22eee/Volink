@@ -171,7 +171,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'offer': return <><button className="m-btn line" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/decline-offer', undefined, '제안을 거절했어요')}>거절</button>
         <button className="m-btn" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/accept-offer', undefined, '참가가 확정됐어요!')}>수락하기</button></>
       case 'confirmed': return <><button className="m-btn line" onClick={() => setSheet('cancel')}>못 가요</button>
-        <button className="m-btn" onClick={() => { addToCalendar(activity); showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
+        <button className="m-btn" onClick={() => { void addToCalendar(activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
       case 'today': return <><button className="m-btn line" onClick={() => setSheet(phase === 'later' || phase === 'soon' ? 'late' : 'late')} disabled={phase === 'ended'}>늦어요</button>
         <button className="m-btn" disabled={!(phase === 'open' || phase === 'late')} onClick={() => setSheet('scan')}><MIcon name="qr" size={19} />{phase === 'open' || phase === 'late' ? 'QR 찍고 체크인' : hhmm(opens) + '부터 체크인'}</button></>
       case 'done': return <><a className="m-btn line" href="#/mine?tab=done">내 기록</a><a className="m-btn" href={'#/write?activity=' + id}><MIcon name="edit" size={19} />후기 쓰기</a></>
@@ -414,8 +414,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {open && <button type="button" disabled={!canMove} onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 변경<small>{(activity.rescheduleCount ?? 0) > 0 ? '이미 한 번 바꿨어요' : !canMove ? '시작 24시간 전까지만 바꿀 수 있어요' : '한 번만, 시작 24시간 전까지 · 신청자에게 알려요'}</small></span><MIcon name="chevron" size={18} /></button>}
         {activity.status === 'RECRUITING' && now < start && <a href={'#/write?category=PROMO&activity=' + id}><MIcon name="megaphone" size={20} /><span>커뮤니티에 홍보하기<small>이 모집글을 커뮤니티에 소개해요 · [바로 신청하기] 카드</small></span><MIcon name="chevron" size={18} /></a>}
         <a href={'#/create?from=' + id}><MIcon name="refresh" size={20} /><span>같은 내용으로 다시 모집<small>날짜만 새로 골라요</small></span><MIcon name="chevron" size={18} /></a>
-        {open && (activity.applicants ?? 0) === 0 && <button type="button" onClick={() => setSheet('delete')}><MIcon name="trash" size={20} /><span>활동 삭제<small>아직 신청한 사람이 없을 때만</small></span><MIcon name="chevron" size={18} /></button>}
-        {open && checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소하기<small>참가자 모두에게 사유와 함께 알려요</small></span><MIcon name="chevron" size={18} /></button>}
+        {open && (activity.applicants ?? 0) === 0 && <button type="button" onClick={() => setSheet('delete')}><MIcon name="trash" size={20} /><span>활동 삭제<small>아직 신청한 사람이 없어 바로 지울 수 있어요</small></span><MIcon name="chevron" size={18} /></button>}
+        {open && checked === 0 && (activity.applicants ?? 0) > 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소하기<small>참가자 모두에게 사유와 함께 알려요</small></span><MIcon name="chevron" size={18} /></button>}
       </nav></section>}
     </div>
     {main && <ActionBar>{main}</ActionBar>}
@@ -426,7 +426,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {open && <button type="button" disabled={!canMove} onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 바꾸기</span><small>{(activity.rescheduleCount ?? 0) > 0 ? '이미 한 번 바꿨어요' : !canMove ? '시작 24시간 전까지만' : '한 번만 가능'}</small><MIcon name="chevron" size={18} /></button>}
         <a href={'#/create?from=' + id}><MIcon name="refresh" size={20} /><span>같은 내용으로 다시 모집</span><MIcon name="chevron" size={18} /></a>
         {open && (activity.applicants ?? 0) === 0 && <button type="button" onClick={() => setSheet('delete')}><MIcon name="trash" size={20} /><span>활동 삭제</span><MIcon name="chevron" size={18} /></button>}
-        {open && checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소</span><small>참가자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
+        {open && checked === 0 && (activity.applicants ?? 0) > 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소</span><small>참가자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
       </nav>
     </Sheet>}
     {sheet === 'cancel' && <ActivityCancelSheet activity={activity} counts={{ confirmed: count('CONFIRMED'), waiting: count('WAITLISTED') + count('OFFERED'), applied: count('APPLIED') }} busy={busy}

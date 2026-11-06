@@ -179,7 +179,12 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   // Full-screen 장소 고르기: the choice and its button stay fixed at the bottom; 만나는 곳 stays on the form.
   const dialog = page.getByRole('dialog', { name: '장소 고르기' })
   await expect(dialog.getByRole('button', { name: '장소를 골라 주세요' })).toBeDisabled()
-  await dialog.getByRole('button', { name: /옥정중앙공원/ }).click()
+  // Typing shows suggestions with their badge right under the search box.
+  await dialog.getByLabel('장소 이름이나 주소').fill('옥정')
+  const suggest = dialog.getByRole('list', { name: '추천 장소' })
+  await expect(suggest.getByRole('button', { name: /옥정중앙공원.*바로 공개/ })).toBeVisible()
+  await suggest.getByRole('button', { name: /옥정중앙공원/ }).click()
+  await expect(suggest).toHaveCount(0)
   await dialog.getByRole('button', { name: '옥정중앙공원으로 정하기' }).click()
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('button', { name: /옥정중앙공원.*바꾸기/ })).toBeVisible()

@@ -81,6 +81,10 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
   initial: PlaceResult | null; initialMeeting: string; onClose: () => void; onPick: (place: PlaceResult, meetingPoint: string) => void; app?: boolean
 }) {
   const [showList, setShowList] = useState(true)
+  // App: suggestions while typing, under the search box (the map stays visible). 2+ characters, after 0.3 s, each word once.
+  const [suggest, setSuggest] = useState<PlaceResult[]>([])
+  const typed = useRef(false)
+  const cache = useRef(new Map<string, PlaceResult[]>())
   const [query, setQuery] = useState(initial?.name ?? '')
   const [items, setItems] = useState<PlaceResult[]>(initial ? [initial] : [])
   const [mode, setMode] = useState<'KAKAO' | 'LOCAL' | null>(null)
@@ -117,6 +121,32 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     return () => window.removeEventListener('keydown', close)
   }, [])
 
+  useEffect(() => {
+    const words = query.trim()
+    if (!app || !typed.current || preview || words.length < 2) { setSuggest([]); return }
+    const known = cache.current.get(words)
+    if (known) { setSuggest(known.slice(0, 5)); return }
+    let live = true
+    const timer = window.setTimeout(() => {
+      searchPlaces(words, centre).then(result => {
+        cache.current.set(words, result.items)
+        if (live && typed.current) setSuggest(result.items.slice(0, 5))
+      }).catch(() => {})
+    }, 300)
+    return () => { live = false; window.clearTimeout(timer) }
+  }, [query]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickSuggestion(item: PlaceResult) {
+    if (item.placeClass === 'BLOCKED') return
+    typed.current = false
+    setSuggest([])
+    setQuery(item.name)
+    setItems(current => [item, ...current.filter(x => keyOf(x) !== keyOf(item))])
+    choose(item)
+    setShowList(false)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+  }
+
   async function run(request: () => Promise<SearchResult>, empty: string, keepCentre?: { lat: number; lng: number }) {
     // The offline preview has no server: nothing is sent.
     if (preview) { setMessage('미리보기에서는 장소 검색을 쓸 수 없습니다.'); return }
@@ -141,6 +171,8 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     event.preventDefault()
     // The dialog sits inside the activity form in React's tree: keep this search from submitting that form.
     event.stopPropagation()
+    typed.current = false
+    setSuggest([])
     if (query.trim()) run(() => searchPlaces(query.trim(), centre), '')
   }
 
@@ -167,10 +199,19 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     const badge = chosen && classBadge[chosen.placeClass]
     return createPortal(<div className="ap-place" role="dialog" aria-modal="true" aria-labelledby="ap-place-title" ref={dialog}>
       <div className="ap-place-top"><button type="button" className="ap-icon" onClick={onClose} aria-label="닫기"><Glyph name="close" /></button><h2 id="ap-place-title">장소 고르기</h2></div>
+      <div className="ap-search-wrap">
       <form className="ap-search" onSubmit={submit} role="search">
-        <Glyph name="search" size={19} /><TextInput aria-label="장소 이름이나 주소" value={query} maxLength={50} onChange={event => setQuery(event.target.value)} placeholder="장소 이름이나 주소 검색" enterKeyHint="search" />
+        <Glyph name="search" size={19} /><TextInput aria-label="장소 이름이나 주소" value={query} maxLength={50} autoComplete="off"
+          onChange={event => { typed.current = true; setQuery(event.target.value) }} placeholder="장소 이름이나 주소 검색" enterKeyHint="search" />
         {query && <button type="submit" className="ap-search-go" disabled={busy}>검색</button>}
       </form>
+      {suggest.length > 0 && <ul className="ap-suggest" aria-label="추천 장소">{suggest.map(item => {
+        const badge = classBadge[item.placeClass]
+        return <li key={keyOf(item)}><button type="button" disabled={item.placeClass === 'BLOCKED'} onClick={() => pickSuggestion(item)}>
+          <Glyph name="pin" size={16} /><span><strong>{item.name}</strong><small>{[item.classLabel, item.address, distance(item.distanceMeters)].filter(Boolean).join(' · ')}</small></span>
+          <span className={'place-badge ' + badge.tone}>{badge.text}</span></button></li>
+      })}</ul>}
+      </div>
       {asking && <div className="ap-ask" role="group" aria-label="내 위치에서 시작"><span>내 위치 주변부터 볼까요? <small>위치는 저장하지 않아요</small></span>
         <button type="button" className="ap-ask-yes" onClick={startHere}>내 위치로</button><button type="button" className="ap-ask-no" onClick={() => { decline(); setAsking(false) }}>괜찮아요</button></div>}
       {locating && <p className="ap-msg" role="status">내 위치를 확인하는 중이에요…</p>}
