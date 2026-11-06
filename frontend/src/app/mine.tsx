@@ -16,6 +16,20 @@ export const statusWord: Record<string, { text: string; tone: string }> = {
   REJECTED: { text: '함께하지 못해요', tone: 'gray' }, CANCELLED: { text: '취소함', tone: 'gray' }, EXPIRED: { text: '마감', tone: 'gray' }, NO_SHOW: { text: '불참', tone: 'gray' },
 }
 
+const isLive = (a: LiveActivity) => ['RECRUITING', 'IN_PROGRESS', 'DRAFT'].includes(a.status)
+
+/** One of my recruitments (내 모집현황). */
+function HostCard({ a }: { a: LiveActivity }) {
+  const live = isLive(a)
+  const word = a.status === 'DRAFT' ? (a.reviewNote ? '반려' : '검토 중') : a.status === 'RECRUITING' ? '모집 중' : a.status === 'IN_PROGRESS' ? '진행 중' : a.status === 'FINISHED' ? '종료' : '취소'
+  return <a className={'m-card' + (live ? '' : ' dim')} href={'#/manage/' + a.id}>
+    <div className="m-card-top"><strong>{a.title}</strong><span className={'m-badge ' + (a.status === 'RECRUITING' ? 'mint' : a.status === 'DRAFT' ? 'amber' : 'gray')}>{word}</span></div>
+    <p>{dayWord(a.date)} · {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</p>
+    {((a.pending ?? 0) > 0 || (a.unanswered ?? 0) > 0) && <p className="m-card-alert"><MIcon name="bell" size={15} />{[a.pending ? `승인 대기 ${a.pending}건` : '', a.unanswered ? `답변할 질문 ${a.unanswered}개` : ''].filter(Boolean).join(' · ')}</p>}
+    <span className={'m-btn sm' + (live ? '' : ' line')}>{live ? '모집 관리' : '결과 보기'}</span>
+  </a>
+}
+
 /** One Volink record row (완료 기록). */
 function VolinkRow({ x }: { x: MyRecord }) {
   return <a className="m-row" href={'#/activity/' + x.activityId}>
@@ -61,6 +75,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
   const external = useRecords()
   const extPlanned = (external ?? []).filter(r => r.status === 'PLANNED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
   const extDone = (external ?? []).filter(r => r.status === 'ATTENDED').sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
+  const hostLive = (hosted ?? []).filter(isLive)
   const volinkDone = (records ?? []).slice().sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
   // Lab (V28): my 1365 total as read from my own 1365 page (not checked by Volink).
   const [connectSheet, connect] = useConnect1365()
@@ -92,18 +107,17 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
             <small>{p.date.slice(5).replace('-', '/')} {p.startTime}{p.activityStatus === 'CANCELLED' ? ' · 모집자가 활동을 취소했어요' : ''}</small></span>
             <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.activityStatus === 'CANCELLED' ? '활동 취소' : statusWord[p.status]?.text ?? p.status}</span></a>)}</div></section>}
       </>)}
-      {view === 'host' && <div className="m-newbtns"><a className="main" href="#/create"><MIcon name="plus" size={22} /><span>새 활동 만들기</span></a>
-        <a href="#/host"><MIcon name="refresh" size={22} /><span>다시 모집</span></a></div>}
-      {view === 'host' && (!hosted ? <Loading /> : hosted.length ? <div className="m-cards">{hosted.map(a => {
-        const live = ['RECRUITING', 'IN_PROGRESS', 'DRAFT'].includes(a.status)
-        const word = a.status === 'DRAFT' ? (a.reviewNote ? '반려' : '검토 중') : a.status === 'RECRUITING' ? '모집 중' : a.status === 'IN_PROGRESS' ? '진행 중' : a.status === 'FINISHED' ? '종료' : '취소'
-        return <a key={a.id} className={'m-card' + (live ? '' : ' dim')} href={'#/manage/' + a.id}>
-          <div className="m-card-top"><strong>{a.title}</strong><span className={'m-badge ' + (a.status === 'RECRUITING' ? 'mint' : a.status === 'DRAFT' ? 'amber' : 'gray')}>{word}</span></div>
-          <p>{dayWord(a.date)} · {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</p>
-          {((a.pending ?? 0) > 0 || (a.unanswered ?? 0) > 0) && <p className="m-card-alert"><MIcon name="bell" size={15} />{[a.pending ? `승인 대기 ${a.pending}건` : '', a.unanswered ? `답변할 질문 ${a.unanswered}개` : ''].filter(Boolean).join(' · ')}</p>}
-          <span className={'m-btn sm' + (live ? '' : ' line')}>{live ? '모집 관리' : '결과 보기'}</span>
-        </a>
-      })}</div> : <Empty icon="plus" title="아직 모집한 활동이 없어요" text="위의 ‘새 활동 만들기’로 이웃과 함께할 활동을 열어 보세요." />)}
+      {/* 2026-11-06: no live recruitment → no card, in the middle: [새 활동 만들기] (+ [다시 모집] when there is a past one to reuse). */}
+      {view === 'host' && (!hosted ? <Loading /> : hostLive.length ? <>
+        <div className="m-newbtns"><a className="main" href="#/create"><MIcon name="plus" size={22} /><span>새 활동 만들기</span></a>
+          <a href="#/host"><MIcon name="refresh" size={22} /><span>다시 모집</span></a></div>
+        <div className="m-cards">{hosted.map(a => <HostCard key={a.id} a={a} />)}</div></> : <>
+        <Empty bare icon="plus" title={hosted.length ? '진행 중인 모집이 없어요' : '아직 모집한 활동이 없어요'}
+          text={hosted.length ? '지난 모집을 다시 열거나 새 활동을 만들어 보세요.' : '이웃과 함께할 활동을 열어 보세요.'}
+          action={<div className="m-empty-two"><a className="m-btn sm" href="#/create"><MIcon name="plus" size={18} />새 활동 만들기</a>
+            {hosted.length > 0 && <a className="m-btn sm line" href="#/host"><MIcon name="refresh" size={18} />다시 모집</a>}</div>} />
+        {hosted.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 모집</h2></div><div className="m-cards">{hosted.map(a => <HostCard key={a.id} a={a} />)}</div></section>}
+      </>)}
       {view === 'done' && summary && <section className="ext-sum" aria-label="1365 누적 실적">
         <span className="m-row-ico ext"><b>1365</b></span>
         <span><small>1365 누적 봉사 실적</small><b>{hoursText(summary.totalMinutes)}{summary.count != null ? <em> · {summary.count}건</em> : null}</b>
