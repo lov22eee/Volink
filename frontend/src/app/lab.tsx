@@ -171,8 +171,6 @@ export function LabScreen() {
   const [paste, setPaste] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  // 예시로 해보기 (2026-11-06): someone without 1365 applications can see the flow; nothing is saved.
-  const [sample, setSample] = useState(false)
   /** One or more pages taken in one visit: the 실적 page gives the total, the 신청 현황 page the rows. */
   function read(input: string | string[]) {
     const pages = (Array.isArray(input) ? input : [input]).filter(Boolean)
@@ -191,20 +189,14 @@ export function LabScreen() {
   }
   /** One page per visit (2026-11-06: going on to the second page in the same visit confused the guide): 실적 or 신청 현황. */
   async function open(target: 'S' | 'A') {
-    setError(''); setSample(false)
+    setError('')
     const guide = target === 'S' ? '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 아래 ‘이 화면 가져오기’' : '로그인 → ☰ 메뉴 › 나의 봉사 › 신청 현황 → 아래 ‘이 화면 가져오기’'
     try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
-  }
-  function trySample() {
-    const d = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(Date.now() + n * 86_400_000)).replaceAll('-', '.')
-    setSample(true)
-    read(`나의 봉사 신청 현황\n어르신 말벗 봉사 (예시)\n봉사기간 ${d(3)} ~ ${d(20)}\n승인완료\n하천 정화 활동 (예시)\n봉사기간 ${d(6)} ~ ${d(6)} 10:00~12:00\n신청완료`)
   }
   async function save() {
     const items = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i])
     const total = summary && keepSummary ? summary : null
     if (!items.length && !total) return
-    if (sample) { showToast('예시라 저장하지 않았어요', '내 1365 화면에서 가져오면 내 활동에 들어가요'); setRows(null); setSample(false); return }
     setBusy(true)
     try {
       const result = items.length ? await api<{ added: number }>('/api/me/external/import', 'POST', { items }) : { added: 0 }
@@ -222,7 +214,7 @@ export function LabScreen() {
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
     <div className="m-body lab">
-      <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>{sample && <span className="lab-tag sample">예시 화면 · 저장되지 않아요</span>}
+      <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
       {!rows ? <>
         <h1 className="m-h2">이렇게 가져와요</h1>
         <p className="m-help">1365에서 세 번만 누르면 돼요. 1365 화면 위에 지금 할 일이 단계별로 떠요.</p>
@@ -253,9 +245,8 @@ export function LabScreen() {
     </div>
     <ActionBar>{!rows
       ? <div className="lab-actions">{native ? <><button className="m-btn blue" onClick={() => open('S')}>실적 가져오기</button><button className="m-btn line" onClick={() => open('A')}>신청 현황 가져오기</button></>
-          : <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button>}
-        <button type="button" className="m-text-btn" onClick={trySample}>신청 내역이 없다면 · 예시로 해보기</button></div>
-      : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : sample ? '예시 확인 끝 (저장 안 함)' : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
+          : <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button>}</div>
+      : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <button className="m-btn line" onClick={() => setRows(null)}>다시 하기</button>}</ActionBar>
   </div>
 }

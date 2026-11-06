@@ -1355,4 +1355,3 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-empty.bare:has(+ .m-section) { min-height: 44dvh; }
 .lab-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .lab-actions .m-text-btn { align-self: center; color: var(--ink-3); font-size: 13.5px; }
-.lab-tag.sample { margin-left: 6px; background: #eef3fb; color: #3b67ad; }
