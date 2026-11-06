@@ -63,7 +63,14 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         body.put("organizationAddress", "경기 양주시 부흥로 1533");
         body.put("vmsRegistered", true);
         body.put("vmsCode", "VMS-1234");
+        // 기관 담당자: no birth date is asked or kept (2026-11-06); a personal member still needs one.
+        body.remove("birthDate");
         perform(post("/api/auth/signup"), body, null).andExpect(status().isCreated());
+        assertThat(jdbc.queryForObject("SELECT birth_date IS NULL FROM users WHERE email = ?", Boolean.class, email)).isTrue();
+        Map<String, Object> personal = signupBody(email(), "GENERAL", TODAY.minusYears(30));
+        personal.remove("birthDate");
+        perform(post("/api/auth/signup"), personal, null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field == 'birthDate')]").exists());
         Map<String, Object> org = jdbc.queryForMap("SELECT o.id, o.org_type, o.address, o.vms_registered, o.vms_code FROM organizations o JOIN users u ON u.id = o.manager_user_id WHERE u.email = ?", email);
         assertThat(org.get("org_type")).isEqualTo("VOLUNTEER_CENTER");
         assertThat(org.get("address")).isEqualTo("경기 양주시 부흥로 1533");

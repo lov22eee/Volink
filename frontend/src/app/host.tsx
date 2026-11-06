@@ -170,6 +170,8 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       <h2>{saved.kind === 'published' ? (editId ? '활동을 고쳤어요' : '모집을 시작했어요!') : '관리자 확인 후 공개돼요'}</h2>
       <p>{saved.kind === 'published' ? '신청이 오면 알림으로 알려 드릴게요.' : '확인이 끝나면 알림으로 알려 드릴게요. 보통 하루 안에 확인해요.'}</p>
       <div className="m-summary"><strong>{saved.activity.title}</strong><span>{dayWord(saved.activity.date)} {saved.activity.startTime} · {durationLabel(saved.activity.durationMinutes)} · 나 빼고 {saved.activity.capacity}명</span></div>
+      {saved.kind === 'published' && !editId && <a className="m-promo-cta" href={'#/write?category=PROMO&activity=' + saved.activity.id}>
+        <MIcon name="megaphone" size={22} /><span><strong>커뮤니티에 홍보하기</strong><small>이웃들이 [바로 신청하기]로 신청할 수 있어요</small></span><MIcon name="chevron" size={18} /></a>}
       <ActionBar><a className="m-btn" href={'#/manage/' + saved.activity.id}>모집 관리로 가기</a></ActionBar>
     </div>
     {!editId && calendarAsk && <Sheet title="내 캘린더에도 넣어 둘까요?" onClose={() => setCalendarAsk(false)}

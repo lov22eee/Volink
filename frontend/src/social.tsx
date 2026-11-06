@@ -7,12 +7,20 @@ export type Provider = 'kakao' | 'google'
 export const providerName: Record<Provider, string> = { kakao: '카카오', google: '구글' }
 
 let cached: Promise<Record<Provider, boolean>> | null = null
+const off: Record<Provider, boolean> = { kakao: false, google: false }
+
+/**
+ * Which buttons have server keys. Only a real answer is kept: a failed call (server restarting, no network) is asked
+ * again next time instead of showing "준비 중" until the app restarts (2026-11-06, seen on the phone during an AWS update).
+ */
+export function loadProviders(fresh = false) {
+  if (fresh || !cached) cached = api<Record<Provider, boolean>>('/api/auth/oauth/providers').catch(() => { cached = null; return off })
+  return cached
+}
+
 export function useProviders() {
-  const [on, setOn] = useState<Record<Provider, boolean>>({ kakao: false, google: false })
-  useEffect(() => {
-    cached ??= api<Record<Provider, boolean>>('/api/auth/oauth/providers').catch(() => ({ kakao: false, google: false }))
-    cached.then(setOn)
-  }, [])
+  const [on, setOn] = useState<Record<Provider, boolean>>(off)
+  useEffect(() => { void loadProviders().then(setOn) }, [])
   return on
 }
 

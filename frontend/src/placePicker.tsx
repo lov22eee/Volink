@@ -147,7 +147,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     ;(document.activeElement as HTMLElement | null)?.blur()
   }
 
-  async function run(request: () => Promise<SearchResult>, empty: string, keepCentre?: { lat: number; lng: number }) {
+  async function run(request: () => Promise<SearchResult>, empty: string, keepCentre?: { lat: number; lng: number }, then?: (result: SearchResult) => void) {
     // The offline preview has no server: nothing is sent.
     if (preview) { setMessage('미리보기에서는 장소 검색을 쓸 수 없습니다.'); return }
     setBusy(true)
@@ -160,6 +160,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       if (!result.items.length) setMessage(empty || '찾은 장소가 없습니다. 다른 이름으로 검색해 보세요.')
       const first = result.items.find(item => item.latitude != null)
       if (first && !chosen && !keepCentre) setCentre({ lat: Number(first.latitude), lng: Number(first.longitude) })
+      then?.(result)
     } catch (cause) {
       setMessage(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '장소를 찾지 못했습니다.')
     } finally {
@@ -217,7 +218,8 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       {locating && <p className="ap-msg" role="status">내 위치를 확인하는 중이에요…</p>}
       <div className={'ap-place-body' + (hasMap ? '' : ' nomap')}>
         {hasMap ? <>
-          <PinMap centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose} onNearby={point => run(() => pointAndAround(point), '')} />
+          <PinMap noCentrePin centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose}
+            onNearby={point => run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) { choose(spot); setShowList(false) } })} />
           {!items.length || !showList ? <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span> : null}
           {(items.length > 0 || message) && (showList
             ? <div className="ap-list">{items.length > 0 && <button type="button" className="ap-list-head" onClick={() => setShowList(false)}><i />{items.length}곳 · 눌러서 고르기<small>지도 보기</small></button>}{results}</div>
@@ -286,7 +288,9 @@ const keyOf = (place: PlaceResult) => place.kakaoId ?? 'p' + place.placeId
  * One click on the map moves there and finds the places around it; clicking a pin picks that place.
  * Double-click stays Kakao's zoom.
  */
-function PinMap({ centre, chosen, items, hovered, onChoose, onNearby }: {
+function PinMap({ centre, chosen, items, hovered, onChoose, onNearby, noCentrePin }: {
+  /** App (2026-11-06): no fixed pin in the middle; a pin shows only where the person tapped or chose. */
+  noCentrePin?: boolean
   centre: { lat: number; lng: number } | null; chosen: PlaceResult | null; items: PlaceResult[]; hovered: string | null
   onChoose: (place: PlaceResult) => void; onNearby: (point: { lat: number; lng: number }) => void
 }) {
@@ -351,8 +355,8 @@ function PinMap({ centre, chosen, items, hovered, onChoose, onNearby }: {
   if (failed) return <div className="pin-map empty"><Glyph name="map" size={28} /><p>지도를 불러오지 못했습니다. 목록에서 골라 주세요.</p></div>
   return <div className="pin-map">
     <div ref={box} className="kakao-map" role="img" aria-label="장소 고르기 지도" />
-    <span className="centre-pin" aria-hidden="true"><Glyph name="pin" size={38} /></span>
-    {chosen && <span className="pin-tip"><strong>{chosen.name}</strong> · {chosen.classLabel}</span>}
+    {!noCentrePin && <span className="centre-pin" aria-hidden="true"><Glyph name="pin" size={38} /></span>}
+    {chosen && !noCentrePin && <span className="pin-tip"><strong>{chosen.name}</strong> · {chosen.classLabel}</span>}
     <button type="button" className="map-pill" onClick={() => { const c = map.current?.getCenter(); if (c) onNearby({ lat: c.getLat(), lng: c.getLng() }) }}><Glyph name="search" size={14} />이 근처 장소 찾기</button>
   </div>
 }
