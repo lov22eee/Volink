@@ -24,6 +24,16 @@ async function signupByApi(page: Page, name: string) {
   return email
 }
 
+/** Our own calendar sheet (2026-11-06): open the field, go to the month, tap the day. */
+async function pickDay(page: Page, field: string | RegExp, date: string) {
+  await page.getByRole('button', { name: field }).last().click()
+  const sheet = page.getByRole('dialog', { name: '날짜' })
+  const [y, m, d] = date.split('-').map(Number)
+  for (let i = 0; i < 14 && !(await sheet.getByText(`${y}년 ${m}월`).count()); i++) await sheet.getByRole('button', { name: '다음 달' }).click()
+  await sheet.locator('button.m-day').filter({ hasText: new RegExp(`^${d}$`) }).click()
+  await expect(sheet).toHaveCount(0)
+}
+
 async function login(page: Page, email: string) {
   await page.goto('/#/login')
   await page.getByLabel('이메일').fill(email)
@@ -520,13 +530,10 @@ test('find: detail filter with categories, status, source and dates; applied chi
   await sheet.getByRole('radio', { name: 'Volink' }).click()
   // Volink only: the server counts exactly.
   await expect(sheet.getByRole('button', { name: /개 활동 보기$/ })).toBeVisible()
-  // A wrong date range is refused before applying.
+  // Dates come from our calendar sheet; the end cannot be picked before the start.
   await sheet.getByRole('button', { name: '날짜 직접 선택' }).click()
-  await sheet.getByLabel('시작일').fill(inDays(5))
-  await sheet.getByLabel('종료일').fill(inDays(3))
-  await expect(sheet.getByText('시작일이 종료일보다 늦을 수 없어요.')).toBeVisible()
-  await sheet.getByLabel('종료일').fill(inDays(6))
-  await sheet.getByLabel('시작일').fill(inDays(1))
+  await pickDay(page, /^시작일/, inDays(1))
+  await pickDay(page, /^종료일/, inDays(6))
   await sheet.getByRole('button', { name: /활동 보기$/ }).click()
 
   await expect(page.getByText(`필터 환경 ${stamp}`)).toBeVisible()
@@ -623,7 +630,7 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   const check = page.getByRole('dialog', { name: '이 내용이 맞나요?' })
   await expect(check.getByLabel('활동명')).toHaveValue('노인복지관 배식 지원')
   await expect(check.getByLabel('기관')).toHaveValue('양주시자원봉사센터')
-  await expect(check.getByLabel('날짜')).toHaveValue(yesterday)
+  await expect(check.getByRole('button', { name: /^날짜/ })).toContainText(`${Number(yesterday.slice(5, 7))}월 ${Number(yesterday.slice(8))}일`)
   await expect(check.getByLabel('인정 시간(분)')).toHaveValue('150')
   await check.getByRole('button', { name: '맞아요, 남길게요' }).click()
   await expect(page.getByText('실적확인서 있음').first()).toBeVisible()
@@ -747,7 +754,7 @@ test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모�
   await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
   await expect(page.getByText('봉사기간', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '참여하는 날을 골라 주세요 (1개)' })).toBeDisabled()
-  await page.getByLabel('어르신 말벗 봉사 참여하는 날').fill(inDays(10))
+  await pickDay(page, /어르신 말벗 봉사 · 참여하는 날/, inDays(10))
   await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
   await expect(page).toHaveURL(/#\/mine/)
   await expect(page.getByRole('link', { name: /어르신 말벗 봉사.*시간 미정/ })).toBeVisible()
@@ -775,4 +782,34 @@ test('a bottom sheet closes when dragged down like ✕, and springs back on a sh
   await drag(0, 260)
   await expect(sheet).toHaveCount(0)
   await expect(page).toHaveURL(/#\/settings/)
+})
+
+test('글쓰기 •••: 임시 저장, 미리보기, 처음부터 다시 쓰기, 이용 규칙', async ({ page }) => {
+  const member = await signupByApi(page, '메뉴 확인')
+  const auth = await tokenFor(page, member)
+  await page.request.put('/api/community/me', { headers: { Authorization: auth }, data: { nickname: '메뉴' + Math.floor(Math.random() * 9000 + 1000), agree: true } })
+  await login(page, member)
+  await page.goto('/#/write')
+  await expect(page.getByRole('button', { name: '등록', exact: true })).toHaveCount(0)
+  await page.locator('input[name=title]').fill('같이 하실 분 구해요')
+  await page.locator('textarea[name=body]').fill('주말에 하천 정화 같이 해요.')
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('dialog', { name: '글쓰기 메뉴' }).getByRole('button', { name: /^임시 저장/ }).click()
+  await expect(page.getByText('임시 저장했어요')).toBeVisible()
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /미리보기/ }).click()
+  const preview = page.getByRole('dialog', { name: '미리보기' })
+  await expect(preview.getByRole('heading', { name: '같이 하실 분 구해요' })).toBeVisible()
+  await expect(preview.getByRole('button', { name: '이대로 올리기' })).toBeEnabled()
+  await preview.getByRole('button', { name: '닫기' }).click()
+  await page.reload()
+  await expect(page.locator('input[name=title]')).toHaveValue('같이 하실 분 구해요')
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /커뮤니티 이용 규칙/ }).click()
+  await expect(page.getByText('연락처는 올릴 수 없어요.')).toBeVisible()
+  await page.getByRole('dialog', { name: '커뮤니티 이용 규칙' }).getByRole('button', { name: '닫기' }).click()
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /처음부터 다시 쓰기/ }).click()
+  await page.getByRole('button', { name: '비우기' }).click()
+  await expect(page.locator('input[name=title]')).toHaveValue('')
 })

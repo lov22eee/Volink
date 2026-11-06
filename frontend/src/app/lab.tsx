@@ -7,7 +7,8 @@ import type { ReactNode } from 'react'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
-import { ActionBar, MIcon, Sheet, TextArea, TextInput, TopBar } from './ui'
+import { DateField } from './host'
+import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
 const KEY = 'volink.lab1365'
@@ -234,9 +235,8 @@ export function LabScreen() {
             <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
             <span className="lab-row"><b>{r.title}</b>
               <small>{r.date ? md(r.date) : `기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)}`}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>
-          {!r.date && picked[i] && <label className="lab-day"><span>참여하는 날</span>
-            <TextInput type="date" className="m-input" value={days[i] ?? ''} min={r.periodStart} max={r.periodEnd} aria-label={r.title + ' 참여하는 날'}
-              onChange={event => setDays(days.map((v, k) => k === i ? event.target.value : v))} /></label>}
+          {!r.date && picked[i] && <div className="lab-day"><DateField label={r.title + ' · 참여하는 날'} value={days[i] ?? ''} first={r.periodStart ?? ''} last={r.periodEnd ?? ''}
+            note={`1365 기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)} 안에서 골라 주세요`} onChange={date => setDays(days.map((v, k) => k === i ? date : v))} /></div>}
         </div>)}</div>
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}

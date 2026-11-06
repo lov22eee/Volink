@@ -9,6 +9,7 @@ import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import type { Program } from '../explore'
 import { addToCalendar } from './cards'
+import { DateField, TimeField } from './host'
 import { useConnect1365, useExtMode } from './lab'
 import type { ExtMode } from './lab'
 import { ActionBar, dayWord, dDay, Loading, MIcon, Sheet, TextInput, TopBar } from './ui'
@@ -23,6 +24,7 @@ export type ExternalRecord = {
 
 export const SITE_1365 = 'https://www.1365.go.kr'
 const message = (cause: unknown) => cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.'
+const addYear = (day: string, n = 1) => `${Number(day.slice(0, 4)) + n}${day.slice(4)}`
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
 /** 1365 period dates come as 2026-11-12 from the server (yyyyMMdd from older caches): both are read. */
 const fromCompact = (value: string | null) => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
@@ -79,11 +81,10 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
     <p className="m-help">표시해 두면 내 활동에 넣고 하루 전·다녀온 뒤에 알려 드려요. 신청·승인은 1365에서 확인해요.</p>
     <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
     {span && <p className="m-help">1365 모집 기간은 {first?.slice(5).replace('-', '/')} ~ {last?.slice(5).replace('-', '/')}이에요. 1365에서 신청한 그 날을 골라 주세요.</p>}
-    <label className="m-field"><span className="m-label">참여하는 날</span>
-      <TextInput type="date" className="m-input" value={date} min={first ?? undefined} max={last ?? undefined} onChange={event => setDate(event.target.value)} /></label>
+    <DateField label="참여하는 날" value={date} first={first ?? today} last={last ?? addYear(today)} onChange={setDate}
+      note={first && last ? `1365 모집 기간 ${first.slice(5).replace('-', '/')} ~ ${last.slice(5).replace('-', '/')} 안에서 골라요` : '1년 안에서 골라요'} />
     {outside && <span className="m-err">1365 모집 기간({first} ~ {last}) 밖의 날짜예요. 맞는지 확인해 주세요.</span>}
-    <div className="m-two"><label className="m-field"><span className="m-label">시작</span><TextInput type="time" className="m-input" value={start} onChange={event => setStart(event.target.value)} /></label>
-      <label className="m-field"><span className="m-label">끝</span><TextInput type="time" className="m-input" value={end} onChange={event => setEnd(event.target.value)} /></label></div>
+    <div className="m-two"><TimeField label="시작" value={start} onChange={setStart} /><TimeField label="끝" value={end} onChange={setEnd} /></div>
     <label className="m-check"><input type="checkbox" checked={calendar} onChange={event => setCalendar(event.target.checked)} /><span className="m-box" /><span>내 캘린더에도 추가하기</span></label>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
@@ -281,7 +282,7 @@ export function CertificateSheet({ record, onClose, onSaved }: { record: Externa
     {read && <div className="r-read">
       <label><span>활동명</span><TextInput className="m-input" value={read.title} maxLength={255} onChange={event => setRead({ ...read, title: event.target.value })} /></label>
       <label><span>기관</span><TextInput className="m-input" value={read.organization} maxLength={255} onChange={event => setRead({ ...read, organization: event.target.value })} /></label>
-      <label><span>날짜</span><TextInput type="date" className="m-input" value={read.date} onChange={event => setRead({ ...read, date: event.target.value })} /></label>
+      <DateField label="날짜" value={read.date} first={addYear(ymd(new Date()), -1)} last={ymd(new Date())} note="실적확인서에 적힌 날짜를 골라 주세요" onChange={date => setRead({ ...read, date })} />
       <label><span>인정 시간(분)</span><TextInput type="number" inputMode="numeric" className="m-input" value={String(read.minutes)} onChange={event => setRead({ ...read, minutes: Number(event.target.value) || 0 })} /></label>
     </div>}
     <p className="m-help">‘{record.title}’ 기록에 붙어요. Volink가 확인서의 진위를 확인한 건 아니에요.</p>

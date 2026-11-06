@@ -1328,3 +1328,19 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-tags.one-line { flex-wrap: nowrap; overflow: hidden; }
 .m-tags.one-line .m-badge { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-profile-name .m-badge.mint { background: #fff; }
+/* 글쓰기 ••• 메뉴 (2026-11-06) */
+.c-menu { display: flex; flex-direction: column; }
+.c-menu button { display: flex; align-items: center; gap: 12px; padding: 14px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font: inherit; color: var(--ink); }
+.c-menu button:last-child { border-bottom: 0; }
+.c-menu button:disabled { opacity: .45; }
+.c-menu svg { flex: none; color: var(--m-green-ink); }
+.c-menu span { display: flex; flex-direction: column; gap: 2px; font-size: 15px; font-weight: 650; }
+.c-menu small { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+.c-preview { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: #fff; }
+.c-preview .m-badge { align-self: flex-start; }
+.c-preview h3 { margin: 0; font-size: 17px; font-weight: 750; }
+.c-preview p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; word-break: keep-all; }
+.c-preview-card { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--m-mint); color: var(--m-green-ink); font-size: 13.5px; font-weight: 600; }
+.lab-day > .m-field { flex: 1; gap: 6px; }
+.lab-day .m-label { font-size: 13px; }
+.lab-item.need .lab-day .m-label { color: var(--amber-ink); }
