@@ -11,6 +11,7 @@ import { loginLabel, shownEmail } from './settings'
 import { ActionBar, Empty, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
 import { hoursText, useConnect1365 } from './lab'
+import { useRecords } from './record'
 import type { LabSummary } from './lab'
 
 export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) {
@@ -33,7 +34,12 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   }, [])
   const valid = (records ?? []).filter(x => x.status === 'VALID')
   const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0)
-  const extMinutes = ext?.totalMinutes ?? 0
+  // 1365 part: the imported official total; without one (직접 남기기), the hours on the certificates entered.
+  const extRecords = useRecords()
+  const certs = (extRecords ?? []).filter(r => r.certified)
+  const extMinutes = ext ? ext.totalMinutes : certs.reduce((sum, r) => sum + (r.certMinutes ?? 0), 0)
+  const extCount = ext ? ext.count : certs.length
+  const extNote = ext ? ext.fetchedAt.slice(5, 10).replace('-', '/') + ' 가져옴' : certs.length ? '실적확인서 기준' : '연결 전'
   const allMinutes = volinkMinutes + extMinutes
   const hostedDone = (hosted ?? []).filter(a => a.status === 'FINISHED').length
   const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED'].includes(p.status)).length
@@ -61,12 +67,15 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
             <span className="m-tags">{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}
               {user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span></div></div>
       </section>
-      <section className="my-total" aria-label="나의 봉사 시간">
-        <small>나의 봉사 시간{ext ? ' (Volink + 1365)' : ''}</small>
+      <section className="my-total" aria-label="함께한 시간">
+        <small>함께한 시간</small>
         <b>{records && ext !== undefined ? <>{Math.floor(allMinutes / 60)}<em>시간</em>{allMinutes % 60 ? <> {allMinutes % 60}<em>분</em></> : null}</> : '–'}</b>
-        {ext && allMinutes > 0 && <i className="my-split"><span style={{ width: (volinkMinutes / allMinutes * 100) + '%' }} /><span className="ext" style={{ width: (extMinutes / allMinutes * 100) + '%' }} /></i>}
-        <span className="my-legend"><span><i />Volink {hoursText(volinkMinutes)} · {valid.length}건</span>
-          {ext && <span><i className="ext" />1365 {hoursText(extMinutes)}{ext.count != null ? ` · ${ext.count}건` : ''}</span>}</span>
+        {records && ext !== undefined && <span className="my-sum">1365 {hoursText(extMinutes)} + Volink {hoursText(volinkMinutes)}</span>}
+        {allMinutes > 0 && <i className="my-split"><span className="ext" style={{ width: (extMinutes / allMinutes * 100) + '%' }} /><span style={{ width: (volinkMinutes / allMinutes * 100) + '%' }} /></i>}
+        <div className="my-parts">
+          <div className="ext"><small>{ext ? '1365 공식 실적' : '1365 실적확인서'}</small><b>{hoursText(extMinutes)}</b><em>{extCount != null ? extCount + '건 · ' : ''}{extNote}</em></div>
+          <div><small>Volink 활동</small><b>{hoursText(volinkMinutes)}</b><em>{valid.length}건 · 자체 기록</em></div>
+        </div>
       </section>
       {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>새로고침</em></button>
         : ext === null && <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 봉사실적 연결하기</b> · 1365에서 한 봉사도 함께 모아요</span><em>연결</em></button>}

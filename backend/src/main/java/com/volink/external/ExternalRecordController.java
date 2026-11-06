@@ -26,6 +26,15 @@ public class ExternalRecordController {
     @GetMapping("/api/me/external")
     public List<Map<String, Object>> list(@AuthenticationPrincipal Jwt jwt) { return records.list(user(jwt)); }
 
+    public record ModeRequest(String mode) {}
+
+    /** V29: 가져오기(IMPORT) or 직접 남기기(MANUAL), chosen right after signup. */
+    @GetMapping("/api/me/external/mode")
+    public Map<String, Object> mode(@AuthenticationPrincipal Jwt jwt) { return records.mode(user(jwt)); }
+
+    @PutMapping("/api/me/external/mode")
+    public Map<String, Object> setMode(@AuthenticationPrincipal Jwt jwt, @RequestBody ModeRequest request) { return records.setMode(user(jwt), request.mode()); }
+
     /** Lab (V28): my 1365 total read from my own 실적 page. */
     @GetMapping("/api/me/external/summary")
     public Map<String, Object> summary(@AuthenticationPrincipal Jwt jwt) { return records.summary(user(jwt)); }

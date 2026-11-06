@@ -1,5 +1,5 @@
 // 설정 (마이 → 톱니바퀴): app settings, the linked login account and 회원 탈퇴. 마이 keeps only what is about me.
-import { labOn, setLabOn } from './lab'
+import { labOn, saveExtMode, setLabOn, useExtMode } from './lab'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
@@ -40,6 +40,11 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
   const [big, setBig] = useState(() => document.documentElement.classList.contains('m-big'))
   const [leaving, setLeaving] = useState(false)
   const [lab, setLab] = useState(labOn)
+  const extMode = useExtMode()
+  async function switchMode() {
+    const next = extMode === 'IMPORT' ? 'MANUAL' : 'IMPORT'
+    try { await saveExtMode(next); if (next === 'IMPORT') setLab(true); showToast(next === 'IMPORT' ? '1365 기록을 가져오기로 바꿨어요' : '1365 기록을 직접 남기기로 바꿨어요') } catch { showToast('바꾸지 못했어요') }
+  }
   function toggleBig() {
     try { localStorage.setItem(BIG, big ? '0' : '1') } catch { /* storage blocked */ }
     setBig(applyTextSize())
@@ -51,6 +56,7 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
         { icon: 'edit', label: '글자 크게 보기', toggle: big, onClick: toggleBig },
       ]} />
       <Group title="실험실" rows={[
+        ...(user.memberType === 'INSTITUTION' ? [] : [{ icon: 'record' as MIconName, label: '1365 기록 방식', note: extMode === 'IMPORT' ? '가져오기' : extMode === 'MANUAL' ? '직접 남기기' : '고르지 않음', onClick: switchMode }]),
         { icon: 'flask', label: '1365 연결 (실험)', note: '내 1365 신청 내역 가져오기', toggle: lab, onClick: () => { setLabOn(!lab); setLab(!lab) } },
         ...(lab ? [{ icon: 'outward' as MIconName, label: '1365 신청 내역 가져오기', href: '#/lab1365' }] : []),
       ]} />

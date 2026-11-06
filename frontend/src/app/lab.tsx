@@ -2,7 +2,7 @@
 // (native VolinkLab plugin), opens their own application list and taps "이 화면 가져오기": the page's visible text comes back,
 // the rows are read on the phone, and only the rows the person picks are saved (title, day, time, 1365 status).
 // The password never reaches Volink; the 1365 login is cleared when that screen closes. Without the app (web), the text can be pasted.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
@@ -21,13 +21,13 @@ const agreed = () => { try { return localStorage.getItem(AGREED) === '1' } catch
  * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정): the first time a consent sheet, then the lab turns on and its
  * screen opens. Returns the sheet to render and the function to start.
  */
-export function useConnect1365(): [ReactNode, () => void] {
+export function useConnect1365(onCancel?: () => void): [ReactNode, () => void] {
   const [open, setOpen] = useState(false)
   const go = () => { setLabOn(true); window.location.hash = '#/lab1365' }
   const start = () => agreed() ? go() : setOpen(true)
   const sheet = open && <Sheet title="연결 전에 확인해 주세요" onClose={() => setOpen(false)}
     footer={<><button type="button" className="m-btn blue" onClick={() => { try { localStorage.setItem(AGREED, '1') } catch { /* asked again next time */ } setOpen(false); go() }}>동의하고 계속하기</button>
-      <button type="button" className="m-btn line" onClick={() => setOpen(false)}>다음에 할게요</button></>}>
+      <button type="button" className="m-btn line" onClick={() => { setOpen(false); onCancel?.() }}>다음에 할게요</button></>}>
     <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
     <ul className="lab-consent">
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
@@ -37,6 +37,29 @@ export function useConnect1365(): [ReactNode, () => void] {
     </ul>
   </Sheet>
   return [sheet, start]
+}
+
+/**
+ * V29 (2026-11-06): how the person keeps 1365 activities, chosen once right after signup (설정 › 실험실 to change).
+ * IMPORT = 가져오기 (1365 화면에서 신청 현황·실적), MANUAL = 직접 남기기 (참여했나요? → 실적확인서), null = not chosen.
+ */
+export type ExtMode = 'IMPORT' | 'MANUAL' | null
+let modeCache: ExtMode | undefined
+const modeListeners = new Set<(mode: ExtMode) => void>()
+export async function saveExtMode(mode: 'IMPORT' | 'MANUAL') {
+  await api('/api/me/external/mode', 'PUT', { mode })
+  modeCache = mode
+  if (mode === 'IMPORT') setLabOn(true)
+  modeListeners.forEach(listen => listen(mode))
+}
+export function useExtMode(): ExtMode | undefined {
+  const [mode, setMode] = useState<ExtMode | undefined>(modeCache)
+  useEffect(() => {
+    modeListeners.add(setMode)
+    if (modeCache === undefined) api<{ mode: ExtMode }>('/api/me/external/mode').then(x => { modeCache = x.mode ?? null; modeListeners.forEach(listen => listen(modeCache as ExtMode)) }).catch(() => setMode(null))
+    return () => { modeListeners.delete(setMode) }
+  }, [])
+  return mode
 }
 
 export function labOn() { try { return localStorage.getItem(KEY) === '1' } catch { return false } }
@@ -122,9 +145,12 @@ export function LabScreen() {
     if (!items.length && !total) return
     setBusy(true)
     try {
-      if (total) await api('/api/me/external/summary', 'PUT', total)
       const result = items.length ? await api<{ added: number }>('/api/me/external/import', 'POST', { items }) : { added: 0 }
-      showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', '내 활동 › 완료 기록에서 볼 수 있어요')
+      // A larger count than last time: that many waiting 1365 activities become 실적 반영됨(추정) on the server.
+      const saved = total ? await api<{ count?: number; before?: number | null; reflected?: number }>('/api/me/external/summary', 'PUT', total) : null
+      if (saved?.reflected) showToast(`실적이 늘었어요 ${saved.before}→${saved.count}건`, `활동 ${saved.reflected}개를 ‘실적 반영됨(추정)’으로 바꿨어요`)
+      else if (saved && saved.before != null && saved.before === saved.count) showToast('새로 늘어난 실적은 아직 없어요', '1365에 반영되기까지 며칠 걸릴 수 있어요')
+      else showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', '내 활동에서 볼 수 있어요')
       window.location.hash = total ? '#/mine?tab=done' : '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }

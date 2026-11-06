@@ -145,4 +145,5 @@
 | `PUT /api/me/external/{id}/certificate` | 본인 | 실적확인서에서 읽은 값 `{title, organization?, date, minutes 1~1440}`(파일 없음) → ATTENDED |
 | `DELETE /api/me/external/{id}` | 본인 | 후기가 있으면 409 `HAS_REVIEW` |
 | `POST /api/community/posts` | 회원 | 봉사후기에 `externalId`(다녀온 내 1365 기록) 가능, `activityId`와 둘 중 하나 |
-| `GET`·`PUT`·`DELETE /api/me/external/summary` | 본인 | 실험실(V28): 내 1365 누적 실적 `{totalMinutes, count?, fields:[{name, minutes}]}`(최대 20분야), 가져올 때마다 바꿈. 없으면 `{}` |
+| `GET`·`PUT`·`DELETE /api/me/external/summary` | 본인 | 실험실(V28): 내 1365 누적 실적 `{totalMinutes, count?, fields:[{name, minutes}]}`(최대 20분야), 가져올 때마다 바꿈. 없으면 `{}`. V29: PUT 응답에 `before`(지난 건수)·`reflected`(이번에 ‘실적 반영됨(추정)’으로 바뀐 대기 기록 수) |
+| `GET`·`PUT /api/me/external/mode` | 본인 | V29: 1365 기록 방식 `{mode: IMPORT|MANUAL|null}`. 기록 응답에 `reflected` 추가 |

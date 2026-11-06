@@ -7,7 +7,8 @@ import type { LiveActivity } from '../api'
 import { categories, categoryTone } from '../categories'
 import { programKind, range, when1365 } from '../explore'
 import type { Program } from '../explore'
-import { MarkSheet } from './record'
+import { AskSheet, MarkSheet } from './record'
+import { useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { PlaceMap } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
@@ -101,6 +102,10 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const [programsState, setProgramsState] = useState<'off' | 'error' | 'needPlace' | 'ok'>('ok')
   const [program, setProgram] = useState<Program | null>(null)
   const [marking, setMarking] = useState<Program | null>(null)
+  // 가져오기 (V29): "1365에서 신청했나요?" first (bring the list in / day by hand / not yet); 직접 남기기: the day sheet.
+  const [asking, setAsking] = useState<Program | null>(null)
+  const extMode = useExtMode()
+  const afterApply = (p: Program) => extMode === 'IMPORT' ? setAsking(p) : setMarking(p)
   const [selected, setSelected] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => { if (focus) input.current?.focus() }, [focus])
@@ -222,8 +227,8 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     {view === 'list' && <RecruitFab />}
     {sheet && <FilterSheet value={filters} q={q} origin={origin} onClose={() => setSheet(false)} onApply={next => { setFilters(next); setSheet(false) }} />}
     {program && <Sheet title="1365 활동" onClose={() => setProgram(null)} footer={<>
-      <a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer" onClick={() => { const p = program; window.setTimeout(() => { setProgram(null); setMarking(p) }, 400) }}>1365에서 신청하기 <MIcon name="outward" size={18} /></a>
-      <button type="button" className="m-text-btn" onClick={() => { setMarking(program); setProgram(null) }}>이미 신청했어요 · 내 활동에 넣기</button></>}>
+      <a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer" onClick={() => { const p = program; window.setTimeout(() => { setProgram(null); afterApply(p) }, 400) }}>1365에서 신청하기 <MIcon name="outward" size={18} /></a>
+      <button type="button" className="m-text-btn" onClick={() => { afterApply(program); setProgram(null) }}>이미 신청했어요 · 내 활동에 넣기</button></>}>
       <h3 className="m-h3">{program.title}</h3>
       <dl className="m-dl">
         {([['분야', programKind(program)?.label ?? program.field], ['모집 기관', program.organization], ['장소', program.place ? program.place + (program.distanceKm != null ? ` (${program.distanceKm}km)` : '') : null],
@@ -232,6 +237,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
       </dl>
       <p className="m-help">봉사시간 인정과 보험은 1365 기준이에요. Volink는 신청을 대신하지 않아요. 신청한 뒤 표시하면 내 활동에서 챙겨 드려요.</p>
     </Sheet>}
+    {asking && <AskSheet program={asking} onClose={() => setAsking(null)} onManual={() => { setMarking(asking); setAsking(null) }} />}
     {marking && <MarkSheet program={marking} onClose={() => setMarking(null)} />}
   </div>
 }

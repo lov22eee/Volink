@@ -119,6 +119,7 @@ public class AccountService {
         // 1365 records (V27): gone, except those a remaining review points to (the review keeps its title, the record has no person).
         jdbc.update("DELETE FROM external_records WHERE user_id = ? AND id NOT IN (SELECT external_id FROM community_posts WHERE external_id IS NOT NULL)", userId);
         jdbc.update("DELETE FROM external_summaries WHERE user_id = ?", userId);
+        jdbc.update("UPDATE users SET ext_mode = NULL WHERE id = ?", userId);
         jdbc.update("UPDATE external_records SET organization = NULL, place = NULL, lab_status = NULL, cert_org = NULL WHERE user_id = ?", userId);
         jdbc.update("""
                 UPDATE users SET email = ?, display_name = ?, password_hash = ?, birth_date = '1900-01-01', community_nickname = NULL,

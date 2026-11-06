@@ -32,7 +32,7 @@ public class NotificationService {
             Map.entry("RESCHEDULED", "ACTIVITY"), Map.entry("ACTIVITY_CANCELLED", "ACTIVITY"), Map.entry("DAY_BEFORE", "ACTIVITY"), Map.entry("DAY_OF", "ACTIVITY"),
             Map.entry("CHECKIN_OPEN", "ACTIVITY"), Map.entry("QR_TIME", "ACTIVITY"), Map.entry("FINISHED", "ACTIVITY"), Map.entry("CHECKED_IN", "ACTIVITY"),
             Map.entry("RECORD_CONFIRMED", "ACTIVITY"), Map.entry("REVIEW_INVITE", "ACTIVITY"), Map.entry("LATE", "ACTIVITY"), Map.entry("ACTIVITY_REMINDER", "ACTIVITY"),
-            Map.entry("ACTIVITY_CHANGED", "ACTIVITY"), Map.entry("EXT_DAY_BEFORE", "ACTIVITY"), Map.entry("EXT_CHECK", "ACTIVITY"),
+            Map.entry("ACTIVITY_CHANGED", "ACTIVITY"), Map.entry("EXT_DAY_BEFORE", "ACTIVITY"), Map.entry("EXT_CHECK", "ACTIVITY"), Map.entry("EXT_REFRESH", "ACTIVITY"),
             Map.entry("NOTICE", "TALK"), Map.entry("QUESTION", "TALK"), Map.entry("ANSWER", "TALK"), Map.entry("COMMUNITY_COMMENT", "TALK"));
     static final Set<String> CATEGORIES = Set.of("APPLY", "ACTIVITY", "TALK", "OTHER");
     /** Repeated new applications for one activity within this time show as one row ("새 참가 신청 3건"). */

@@ -8,12 +8,15 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import type { Program } from '../explore'
+import { useConnect1365, useExtMode } from './lab'
+import type { ExtMode } from './lab'
 import { ActionBar, dayWord, dDay, Loading, MIcon, Sheet, TextInput, TopBar } from './ui'
 
 export type ExternalRecord = {
   id: number; programNo: string | null; title: string; organization: string | null; place: string | null
   date: string; startTime: string; endTime: string; status: 'PLANNED' | 'ATTENDED' | 'MISSED'; source: 'SELF' | 'LAB'; labStatus: string | null
   certTitle: string | null; certOrganization: string | null; certDate: string | null; certMinutes: number | null; certified: boolean; started: boolean
+  reflected: boolean
   reviewId: number | null
 }
 
@@ -24,8 +27,8 @@ const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seou
 const fromCompact = (value: string | null) => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
 
 /** Trust word for a record: 실적확인서 있음 (values from the certificate), 1365 연결 (lab), or 본인 표시. */
-export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source'>) {
-  return r.certified ? { text: '실적확인서 있음', tone: 'blue' } : r.source === 'LAB' ? { text: '1365 연결', tone: 'blue' } : { text: '본인 표시', tone: 'gray' }
+export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source' | 'reflected'>) {
+  return r.reflected ? { text: '실적 반영됨(추정)', tone: 'blue' } : r.certified ? { text: '실적확인서 있음', tone: 'blue' } : r.source === 'LAB' ? { text: '1365 연결', tone: 'blue' } : { text: '본인 표시', tone: 'gray' }
 }
 
 export function useRecords(refresh = 0) {
@@ -68,14 +71,34 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
   </Sheet>
 }
 
+/** 가져오기 (IMPORT): the day has passed and 1365 has not been checked yet → 실적 확인 대기 (refresh to match). */
+export const waiting = (r: ExternalRecord, mode: ExtMode | undefined) => mode === 'IMPORT' && r.status === 'PLANNED' && r.started && !r.certified && !r.reflected
+
+/**
+ * 가져오기 (IMPORT) after "1365에서 신청하기": "1365에서 신청했나요?" — bring the 1365 application list in, put the day in by
+ * hand, or not yet. 직접 남기기 keeps the MarkSheet only.
+ */
+export function AskSheet({ program, onClose, onManual }: { program: Program; onClose: () => void; onManual: () => void }) {
+  const [connectSheet, connect] = useConnect1365(onClose)
+  return <>{!connectSheet && <Sheet title="1365에서 신청했나요?" onClose={onClose} footer={<button type="button" className="m-btn line" onClick={onClose}>아직이요</button>}>
+    <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
+    <div className="r-opts">
+      <button type="button" className="r-opt" onClick={connect}><MIcon name="refresh" size={20} /><span><b>신청 현황 가져오기</b><small>1365 신청 현황 화면에서 그대로 넣어요</small></span></button>
+      <button type="button" className="r-opt" onClick={onManual}><MIcon name="calendar" size={20} /><span><b>날짜 직접 넣기</b><small>참여하는 날과 시간만 적어요</small></span></button>
+    </div>
+    <p className="m-help">넣어 두면 하루 전에 알려 드리고, 다녀온 며칠 뒤 1365 실적을 새로고침하라고 알려 드려요.</p>
+  </Sheet>}{connectSheet}</>
+}
+
 /** A row for 내 활동 (참여 예정 / 완료 기록). */
 export function RecordRow({ r }: { r: ExternalRecord }) {
   const tag = recordTag(r)
-  const word = r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
+  const wait = waiting(r, useExtMode())
+  const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
   return <a className="m-row" href={'#/record/' + r.id}>
     <span className="m-row-ico ext"><b>1365</b></span>
     <span className="m-row-main"><strong>{r.title}</strong><small>{r.date.slice(5).replace('-', '/')} {r.startTime} · {tag.text}{r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}</small></span>
-    <span className={'m-badge ' + (r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
+    <span className={'m-badge ' + (wait ? 'amber' : r.reflected ? 'blue' : r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
   </a>
 }
 
@@ -85,6 +108,8 @@ export function RecordScreen({ id }: { id: number }) {
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [sheet, setSheet] = useState<null | 'cert' | 'delete'>(null)
+  const mode = useExtMode()
+  const [connectSheet, connect] = useConnect1365()
   const load = () => api<ExternalRecord>('/api/me/external/' + id).then(setRecord).catch(() => setFailed(true))
   useEffect(() => { void load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
   async function mark(status: ExternalRecord['status']) {
@@ -99,7 +124,10 @@ export function RecordScreen({ id }: { id: number }) {
   if (!record) return <div className="m-screen"><TopBar title="1365 활동" back="history" /><Loading /></div>
   const tag = recordTag(record)
   const dday = dDay(record.date)
-  const action = record.status === 'PLANNED' && record.started
+  const wait = waiting(record, mode)
+  const action = wait
+    ? <><button className="m-btn line" disabled={busy} onClick={() => mark('MISSED')}>못 갔어요</button><button className="m-btn blue" onClick={connect}><MIcon name="refresh" size={19} />실적 새로고침</button></>
+    : record.status === 'PLANNED' && record.started
     ? <><button className="m-btn line" disabled={busy} onClick={() => mark('MISSED')}>못 갔어요</button><button className="m-btn" disabled={busy} onClick={() => mark('ATTENDED')}>다녀왔어요</button></>
     : record.status === 'ATTENDED' ? (record.reviewId ? <a className="m-btn line" href={'#/post/' + record.reviewId}>내 후기 보기</a>
       : <a className="m-btn" href={'#/write?category=REVIEW&external=' + record.id}><MIcon name="camera" size={19} />사진과 함께 후기 쓰기</a>)
@@ -115,10 +143,12 @@ export function RecordScreen({ id }: { id: number }) {
         {(record.place || record.organization) && <p className="mg-fact"><MIcon name="pin" size={17} />{[record.organization, record.place].filter(Boolean).join(' · ')}</p>}
       </section>
       {record.status === 'PLANNED' && !record.started && <div className="m-state"><strong>1365에 신청한 활동이에요</strong><span>승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</span></div>}
-      {record.status === 'PLANNED' && record.started && <div className="m-state hot"><strong>다녀왔어요?</strong><span>남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.</span></div>}
-      {record.status === 'ATTENDED' && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요. 실적확인서를 올리면 ‘실적확인서 있음’으로 바뀌어요.'}</span></div>}
+      {wait && <div className="m-state amber"><strong>실적 확인 대기</strong><span>1365에 실적이 올라오기까지 며칠 걸려요. 새로고침하면 늘어난 건수만큼 맞춰 봐요.</span></div>}
+      {record.reflected && <div className="m-state blue"><strong>실적 반영됨(추정)</strong><span>1365 실적 건수가 늘어서 이 활동이 반영된 걸로 봤어요. 정확한 내역은 1365에서 확인해 주세요.</span></div>}
+      {!wait && record.status === 'PLANNED' && record.started && <div className="m-state hot"><strong>다녀왔어요?</strong><span>남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.</span></div>}
+      {record.status === 'ATTENDED' && !record.reflected && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요. 실적확인서를 올리면 ‘실적확인서 있음’으로 바뀌어요.'}</span></div>}
       {record.status === 'MISSED' && <div className="m-state gray"><strong>못 갔다고 남겼어요</strong><span>1365 신청은 1365에서 취소해 주세요.</span></div>}
-      {record.status === 'ATTENDED' && !record.certified && <button type="button" className="m-promo-cta" onClick={() => setSheet('cert')}>
+      {record.status === 'ATTENDED' && !record.certified && !record.reflected && <button type="button" className="m-promo-cta" onClick={() => setSheet('cert')}>
         <MIcon name="record" size={22} /><span><strong>1365 실적확인서 올리기</strong><small>PDF나 캡처를 폰 안에서 읽어요 · 파일은 보내지 않아요</small></span><MIcon name="chevron" size={18} /></button>}
       <nav className="mg-ops">
         <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 신청 상태 보기<small>신청·승인·취소는 1365에서 해요</small></span><MIcon name="chevron" size={18} /></a>
@@ -127,6 +157,7 @@ export function RecordScreen({ id }: { id: number }) {
       <p className="m-help">Volink가 1365 신청이나 실적을 확인한 건 아니에요. 공식 봉사실적과 보험은 1365 기준이에요.</p>
     </div>
     {action && <ActionBar>{action}</ActionBar>}
+    {connectSheet}
     {sheet === 'cert' && <CertificateSheet record={record} onClose={() => setSheet(null)} onSaved={next => { setRecord(next); setSheet(null) }} />}
     {sheet === 'delete' && <Sheet title="이 기록을 지울까요?" onClose={() => setSheet(null)} footer={<button type="button" className="m-btn danger" onClick={remove}>지우기</button>}>
       <p className="m-help">1365 신청은 그대로예요. 취소하려면 1365에서 해 주세요.</p></Sheet>}
