@@ -188,6 +188,9 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.locator('input[name=safety]').check({ force: true })
   await page.getByRole('button', { name: '모집 시작하기' }).click()
   await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
+  // Once after a new recruitment: put it in the phone calendar? (a file download, skipped here)
+  await expect(page.getByRole('dialog', { name: '내 캘린더에도 넣어 둘까요?' })).toBeVisible()
+  await page.getByRole('button', { name: '괜찮아요' }).click()
   await page.getByRole('link', { name: '모집 관리로 가기' }).click()
   const id = page.url().match(/manage\/(\d+)/)![1]
 

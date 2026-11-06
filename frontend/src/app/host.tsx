@@ -11,7 +11,7 @@ import { PlaceField } from '../placePicker'
 import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
-import { difficultyLabel, fieldIcon, placeKindLabel } from './cards'
+import { addToCalendar, difficultyLabel, fieldIcon, placeKindLabel } from './cards'
 import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels, TextInput, TextArea } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
@@ -83,6 +83,8 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<Saved | null>(null)
+  // After a new recruitment: once, ask whether to put it in the phone calendar (2026-11-06).
+  const [calendarAsk, setCalendarAsk] = useState(true)
   const [sheet, setSheet] = useState<'date' | 'time' | 'duration' | null>(null)
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(Boolean(from || editId))
@@ -169,7 +171,14 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       <p>{saved.kind === 'published' ? '신청이 오면 알림으로 알려 드릴게요.' : '확인이 끝나면 알림으로 알려 드릴게요. 보통 하루 안에 확인해요.'}</p>
       <div className="m-summary"><strong>{saved.activity.title}</strong><span>{dayWord(saved.activity.date)} {saved.activity.startTime} · {durationLabel(saved.activity.durationMinutes)} · 나 빼고 {saved.activity.capacity}명</span></div>
       <ActionBar><a className="m-btn" href={'#/manage/' + saved.activity.id}>모집 관리로 가기</a></ActionBar>
-    </div></div>
+    </div>
+    {!editId && calendarAsk && <Sheet title="내 캘린더에도 넣어 둘까요?" onClose={() => setCalendarAsk(false)}
+      footer={<><button type="button" className="m-btn" onClick={() => { addToCalendar(saved.activity); setCalendarAsk(false); showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }}><MIcon name="calendar" size={19} />캘린더에 추가</button>
+        <button type="button" className="m-btn line" onClick={() => setCalendarAsk(false)}>괜찮아요</button></>}>
+      <div className="m-summary"><strong>{saved.activity.title}</strong><span>{dayWord(saved.activity.date)} {saved.activity.startTime} · {[saved.activity.placeName, saved.activity.meetingPoint].filter(Boolean).join(' · ')}</span></div>
+      <p className="m-help">모집자가 일정을 잊지 않게 1시간 전 알림도 같이 들어가요. 일정을 바꾸면 캘린더는 직접 고쳐 주세요.</p>
+    </Sheet>}
+  </div>
 
   const stepTitle = ['기본 정보', '참여 안내', '운영 설정'][step - 1]
   const err = (key: string) => errors[key] && <span className="m-err" role="alert">{errors[key]}</span>
