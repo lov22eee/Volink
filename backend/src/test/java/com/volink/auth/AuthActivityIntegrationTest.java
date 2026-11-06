@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Week 3 rules through the real HTTP API and a real MySQL (docs/test-cases.md A-01..A-05, R-01..R-03). */
@@ -89,6 +90,14 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         bad.put("vmsCode", "수요처 번호");
         perform(post("/api/auth/signup"), bad, null).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors[?(@.field == 'organizationType')]").exists()).andExpect(jsonPath("$.fieldErrors[?(@.field == 'vmsCode')]").exists());
+    }
+
+    @Test
+    void anAddressTheServerDoesNotHaveIsNotFoundNotForbidden() throws Exception {
+        String member = token(member("GENERAL"));
+        perform(put("/api/activities/1/no-such-feature"), Map.of(), member).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        perform(put("/api/activities/1/no-such-feature"), Map.of(), null).andExpect(status().isUnauthorized());
     }
 
     @Test
