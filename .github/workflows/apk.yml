@@ -82,6 +82,27 @@ jobs:
           keytool -list -v -keystore ~/volink-keys/debug.keystore -storepass android -alias androiddebugkey | grep -E 'SHA1|SHA256' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Name the file
         run: cp frontend/android/app/build/outputs/apk/debug/app-debug.apk "volink-0.6-${{ github.run_number }}-${GITHUB_SHA:0:7}.apk"
+      # 한글 입력 비교용 (2026-11-06, 확인이 끝나면 지움): the same app with the old Capacitor setting android.captureInput on,
+      # so the 진단 화면 (#/ime-lab) can be compared on the same phone. Not for use: install it only for that test.
+      - name: Comparison APK with the old captureInput setting
+        working-directory: frontend
+        env:
+          VITE_API_BASE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
+          VITE_KAKAO_JS_KEY: ${{ vars.VOLINK_KAKAO_JS_KEY || secrets.VOLINK_KAKAO_JS_KEY }}
+          VITE_APP_VERSION: '0.6'
+          VITE_BUILD_NUMBER: ${{ github.run_number }}
+          VITE_COMMIT: ${{ github.sha }}
+          VITE_CAPTURE_INPUT: '1'
+          VOLINK_VERSION_CODE: ${{ github.run_number }}
+          VOLINK_COMMIT: ${{ github.sha }}
+        run: |
+          export VITE_COMMIT="${VITE_COMMIT:0:7}" VOLINK_COMMIT="${VOLINK_COMMIT:0:7}"
+          if [ -s android/app/google-services.json ]; then export VITE_PUSH=1; fi
+          node -e "const f='capacitor.config.json';const c=require('./'+f);c.android.captureInput=true;require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
+          npm run build:app
+          npx cap sync android
+          (cd android && VOLINK_DEBUG_KEYSTORE="$HOME/volink-keys/debug.keystore" ./gradlew assembleDebug --no-daemon)
+          cp android/app/build/outputs/apk/debug/app-debug.apk "../volink-0.6-${{ github.run_number }}-${VOLINK_COMMIT}-capture-compare.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: volink-apk

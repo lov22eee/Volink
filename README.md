@@ -627,3 +627,9 @@ Volink/
 - **완료:** 로그인 화면 ‘개인회원 / 기관회원’ 탭, 기관회원 이메일 가입(담당자·기관명·연락처, 기존 서버 가입 API), 로그인 탭과 계정 유형을 서버가 비밀번호 확인 뒤 비교(`MEMBER_TYPE_MISMATCH`, 토큰 없음), 기관 확인 전·반려·중지면 심사 현황 화면만. DB 변경 없음.
 - **테스트(2026-11-06, 로컬):** `./scripts/backend.sh test` 135/135(새 로그인 탭 테스트), 앱 Playwright 11/11(새 기관 흐름: 탭 → 가입 → 대기 → 관리자 승인 → 홈, 잘못된 탭 안내), Pixel 7 캡처, 키보드가 열린 높이(470px)에서도 로그인 버튼이 보임, 기관명 한글 IME 입력 정상, 탭을 바꿔도 로고 위치 같음.
 - **미완료:** 이메일 인증 코드, 1365 수요처 인증·증빙 제출, 반려 뒤 다시 신청(관리자 문의). 실제 기기 확인은 APK로.
+
+### 한글 입력: SlimLog와 비교 · 2026-11-06
+- **비교(읽기 전용):** SlimLog(같은 삼성 폰·키보드에서 정상)는 React 기본 `<textarea value onChange>`, 보정 없음, Capacitor 설정에 `captureInput` 없음. Volink만 `frontend/capacitor.config.json`의 `android.captureInput: true`(첫 APK `f72b8f6`부터). Capacitor `CapacitorWebView.onCreateInputConnection`은 이 값이 켜지면 WebView 기본 입력 연결 대신 `BaseInputConnection(this, false)`(공식 설명: ‘제한이 있는 단순한 키보드’)를 돌려줌 → 한글 조합 글자가 웹 입력칸에 조합으로 전달되지 않는다는 가설(조합 중 input 없음·카운터 0·영어는 정상과 맞음).
+- **수정:** `captureInput` 제거. JS 보정(80ms 확인 등)은 기기 결과를 본 뒤 줄일지 정함.
+- **검증 방법:** APK 빌드가 같은 커밋으로 두 개(일반 / `-capture-compare`, captureInput만 다름). 둘 다 진단 화면 `#/ime-lab`(A 순수 HTML · B SlimLog 방식 · C Volink TextArea · D 보정 끈 TextArea, 칸별 input·조합 이벤트 수와 글자 수). **실제 삼성 기기 결과는 아직 없음**(브라우저 확인은 화면이 동작하는 것만).
+- **테스트(2026-11-06, 로컬):** 앱 Playwright 11/11, `tsc` 통과.

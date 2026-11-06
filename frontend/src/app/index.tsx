@@ -8,6 +8,7 @@ import { ToastHost, showToast } from '../App'
 import { CheckInPage } from '../checkin'
 import './app.css'
 import { Login, OrgReview, Signup, SocialDone, SocialSignup } from './auth'
+import { ImeLab } from './imeLab'
 import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
@@ -71,6 +72,8 @@ export default function MobileApp() {
   useEffect(() => { if (user) void startPush() }, [user?.id])
   const onSession = (signed: User) => { setUser(signed); if (['login', 'signup', ''].includes(parse(window.location.hash).page)) window.location.hash = '#/home' }
 
+  // 한글 입력 진단: open with or without signing in.
+  if (route.page === 'ime-lab') return <ImeLab />
   if (!ready) return <div className="m-boot"><span className="m-logo"><MIcon name="leaf" size={44} /></span></div>
   // A QR scanned with the phone camera opens the check-in link; after signing in it continues there.
   if (!user) {

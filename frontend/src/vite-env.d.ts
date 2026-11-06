@@ -9,4 +9,6 @@ interface ImportMetaEnv {
   readonly VITE_APP_VERSION?: string
   readonly VITE_BUILD_NUMBER?: string
   readonly VITE_COMMIT?: string
+  /** '1' in the comparison APK built with Capacitor android.captureInput on (한글 입력 진단). */
+  readonly VITE_CAPTURE_INPUT?: string
 }

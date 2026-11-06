@@ -249,8 +249,9 @@ export function useKeyboardAware() {
     // event until a space, so React's copy of the text lags behind the screen: a counter shows 2 / 100, a button stays
     // off, and the next render can break the word. While a text field has focus its value is checked every 80 ms and,
     // when it changed, an input event hands it to React (React ignores the event when its copy is already the same).
+    // data-no-sync: the 한글 입력 진단 boxes that must run without this help.
     const textField = (field: EventTarget | null): field is HTMLInputElement | HTMLTextAreaElement =>
-      (field instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes(field.type)) || field instanceof HTMLTextAreaElement
+      ((field instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'file', 'range'].includes(field.type)) || field instanceof HTMLTextAreaElement) && !field.dataset.noSync
     const seen = new WeakMap<HTMLElement, string>()
     const push = (field: HTMLInputElement | HTMLTextAreaElement) => {
       if (seen.get(field) === field.value) return

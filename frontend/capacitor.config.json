@@ -3,8 +3,7 @@
   "appName": "Volink",
   "webDir": "dist-app",
   "android": {
-    "allowMixedContent": false,
-    "captureInput": true
+    "allowMixedContent": false
   },
   "plugins": {
     "SystemBars": {
