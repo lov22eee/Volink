@@ -27,6 +27,7 @@ public class LabPlugin extends Plugin {
         intent.putExtra("guide", call.getString("guide", ""));
         // Step guide (2026-11-06): a small script from the app that guesses the step from the page's words.
         intent.putExtra("step", call.getString("step", ""));
+        intent.putExtra("target", call.getString("target", ""));
         startActivityForResult(call, intent, "labResult");
     }
 

@@ -48,13 +48,17 @@ public class LabActivity extends AppCompatActivity {
     private final ArrayList<String> pages = new ArrayList<>();
     private int summaryAt = -1, applicationsAt = -1;
     private String host = "";
+    /** S = 봉사참여 실적, A = 신청 현황: the one page this visit is for; taking it returns to the app at once. */
+    private String target = "";
 
     /** A login page (password box) was seen; once it is gone the person is taken as logged in. */
     private boolean sawLogin = false, loggedIn = false;
 
     private String stepCall(String text) {
-        return "(function(t,pw,ds,da,full,was){" + stepScript + "})(" + text + ",!!document.querySelector('input[type=password]')," + (summaryAt >= 0) + "," + (applicationsAt >= 0)
-                + ",(document.body?String(document.body.textContent||'').slice(0,60000):'')," + loggedIn + ")";
+        // Only a password box the person can see counts (1365 pages keep a hidden login form, 2026-11-06).
+        return "(function(t,pw,ds,da,full,was,tg){" + stepScript + "})(" + text + ",Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;}),"
+                + (summaryAt >= 0) + "," + (applicationsAt >= 0)
+                + ",(document.body?String(document.body.textContent||'').slice(0,60000):'')," + loggedIn + ",'" + target + "')";
     }
     private final Handler timer = new Handler(Looper.getMainLooper());
     /** Every 1.5s: run the app's step script on the page and show its line (① 로그인 … ④ 이 화면 가져오기). */
@@ -192,6 +196,8 @@ public class LabActivity extends AppCompatActivity {
         guide.setLineSpacing(dp(2), 1f);
         String guideText = getIntent().getStringExtra("guide");
         stepScript = getIntent().getStringExtra("step");
+        String wanted = getIntent().getStringExtra("target");
+        target = "S".equals(wanted) || "A".equals(wanted) ? wanted : "";
         guide.setText(guideText == null ? "" : guideText);
         words.addView(stepLabel);
         words.addView(guide);
@@ -284,6 +290,7 @@ public class LabActivity extends AppCompatActivity {
             doneButton.setVisibility(View.VISIBLE);
             Toast.makeText(this, "S".equals(kind) ? "실적을 가져왔어요" : "A".equals(kind) ? "신청 현황을 가져왔어요" : "이 화면을 가져왔어요", Toast.LENGTH_SHORT).show();
             lastStep = 0;
+            if (!target.isEmpty() && target.equals(kind)) done();
         });
     }
 

@@ -680,7 +680,7 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
   await expect(page.getByRole('heading', { name: '이렇게 가져와요' })).toBeVisible()
-  await expect(page.getByText('☰ 메뉴 › 나의 봉사 › 봉사참여 실적')).toBeVisible()
+  await expect(page.getByText('☰ 메뉴 › 나의 봉사', { exact: true })).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()
@@ -728,18 +728,17 @@ test('1365 step guide: the words on the page tell which step the person is on (�
   await page.goto('/#/login')
   const steps = await page.evaluate(async () => {
     const { labStep } = await import('/src/app/lab.tsx' as string)
+    const sum = '로그아웃 봉사참여 실적 홍길동 님 총 57시간 30분 총 14건', app = '로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료'
     return [
       labStep('1365 로그인 아이디 비밀번호', true), labStep('봉사찾기 로그인 회원가입', false), labStep('홈 로그아웃 봉사찾기 공지사항', false),
-      labStep('로그아웃 나의 봉사 봉사참여 실적 신청 현황 실적확인서', false), labStep('로그아웃 봉사참여 실적 홍길동 님 총 57시간 30분 총 14건', false),
-      labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false),
-      // Several pages in one visit: after the 실적 page, the guide points to 신청 현황 (and 완료).
-      labStep('로그아웃 봉사참여 실적 총 57시간 30분 총 14건', false, true), labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true),
-      labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true, true),
-      // On the phone '로그아웃' is only in the closed ☰ menu (textContent), or the login page was just left.
+      labStep('로그아웃 나의 봉사 봉사참여 실적 신청 현황 실적확인서', false), labStep(sum, false), labStep(app, false),
+      // 2026-11-06 device: the 실적 page wins over a (hidden) login form; one page per visit, the other page points back.
+      labStep(sum, true, false, false, '', false, 'S'), labStep(sum, false, false, false, '', false, 'A'), labStep(app, false, false, false, '', false, 'S'),
+      // '로그아웃' only in the closed ☰ menu (textContent), or the login page was just left.
       labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-', '2-', '2-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
 })
 
 test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {
@@ -812,4 +811,28 @@ test('글쓰기 •••: 임시 저장, 미리보기, 처음부터 다시 쓰�
   await page.getByRole('button', { name: /처음부터 다시 쓰기/ }).click()
   await page.getByRole('button', { name: '비우기' }).click()
   await expect(page.locator('input[name=title]')).toHaveValue('')
+})
+
+test('search: a 1365 result opens that program, not the 찾기 list; the lab offers an example that is never saved', async ({ page }) => {
+  const member = await signupByApi(page, '검색 상세')
+  await login(page, member)
+  await page.route('**/api/volunteer-programs**', route => route.fulfill({ json: { enabled: true, items: [{ programNo: 'S-1', title: '유기견 보호소 산책 도우미', organization: '인천 보호소', place: '인천광역시 연수구', field: '동물', periodStart: inDays(2), periodEnd: inDays(20), beginTime: '10:00', endTime: '12:00', weekdays: null, recruitStatus: '모집중', recruitEnd: null, capacity: 5, youthOk: true, latitude: null, longitude: null, distanceKm: null, link: 'https://www.1365.go.kr', category: '동물', categoryBasis: 'OFFICIAL' }] } }))
+  await page.goto('/#/search?q=' + encodeURIComponent('유기견'))
+  await page.getByRole('tab', { name: '봉사활동' }).click()
+  await page.getByRole('button', { name: /유기견 보호소 산책 도우미/ }).click()
+  const sheet = page.getByRole('dialog', { name: '1365 활동' })
+  await expect(sheet.getByRole('heading', { name: '유기견 보호소 산책 도우미' })).toBeVisible()
+  await expect(sheet.getByRole('link', { name: /1365에서 신청하기/ })).toBeVisible()
+  await expect(page).toHaveURL(/#\/search/)
+  await page.unroute('**/api/volunteer-programs**')
+
+  await page.goto('/#/lab1365')
+  await page.getByRole('button', { name: /예시로 해보기/ }).click()
+  await expect(page.getByText('예시 화면 · 저장되지 않아요')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
+  await pickDay(page, /어르신 말벗 봉사 \(예시\) · 참여하는 날/, inDays(10))
+  await page.getByRole('button', { name: '예시 확인 끝 (저장 안 함)' }).click()
+  await expect(page.getByText('예시라 저장하지 않았어요')).toBeVisible()
+  const auth = await tokenFor(page, member)
+  expect((await (await page.request.get('/api/me/external', { headers: { Authorization: auth } })).json()).length).toBe(0)
 })
