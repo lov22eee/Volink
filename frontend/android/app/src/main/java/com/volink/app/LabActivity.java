@@ -94,7 +94,7 @@ public class LabActivity extends AppCompatActivity {
     };
 
     private static final int BLUE = Color.parseColor("#2B5AA8"), GREEN = Color.parseColor("#2E7D5B"), INK = Color.parseColor("#1F2A24");
-    private TextView badge, stepLabel, doneButton;
+    private TextView badge, stepLabel;
     private LinearLayout card;
     private final View[] bars = new View[4];
 
@@ -181,14 +181,8 @@ public class LabActivity extends AppCompatActivity {
         titles.addView(text("1365 연결", 16, INK, true));
         where = text("www.1365.go.kr", 11.5f, Color.parseColor("#7A867F"), false);
         titles.addView(where);
-        doneButton = text("완료", 13.5f, Color.WHITE, true);
-        doneButton.setBackground(round(GREEN, 18));
-        doneButton.setPadding(dp(16), dp(8), dp(16), dp(8));
-        doneButton.setVisibility(View.GONE);
-        doneButton.setOnClickListener(v -> done());
         header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         header.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        header.addView(doneButton);
 
         // Guide card: step badge, "2 / 4 단계", the line, four bars.
         card = new LinearLayout(this);
@@ -269,7 +263,8 @@ public class LabActivity extends AppCompatActivity {
         bottom = new LinearLayout(this);
         bottom.setPadding(dp(14), dp(10), dp(14), dp(12));
         take = new Button(this);
-        take.setText("이 화면 가져오기");
+        // 2026-11-06 (A안): the button says what it takes; one page per visit, so no 완료 button.
+        take.setText(takeLabel());
         take.setTextSize(16);
         take.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         take.setAllCaps(false);
@@ -316,9 +311,21 @@ public class LabActivity extends AppCompatActivity {
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
-    /** "이 화면 가져오기": keeps this page's text (and which page it is) and stays on 1365 for the next one. */
+    private String takeLabel() {
+        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
+    }
+
+    /** The button shows "가져오는 중…" (lighter, not pressable) while the page is read, then the app takes over. */
+    private void setTaking(boolean on) {
+        take.setEnabled(!on);
+        take.setText(on ? "가져오는 중…" : takeLabel());
+        take.setBackground(round(on ? Color.parseColor("#7FB39B") : GREEN, 14));
+    }
+
+    /** Takes this page's text (and which page it is) back to the app. */
     private void takePage() {
         if (!onAllowedPage()) { updateTake(); return; }
+        setTaking(true);
         String kindCall = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
         String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kindCall + ";}catch(e){}"
                 + "return JSON.stringify({text:t,kind:String(k).charAt(1)});})()";
@@ -331,18 +338,16 @@ public class LabActivity extends AppCompatActivity {
                 kind = page.optString("kind", "-");
             } catch (Exception ignored) { }
             if (text.length() > MAX) text = text.substring(0, MAX);
-            if (text.trim().isEmpty()) { Toast.makeText(this, "읽을 글자가 없어요", Toast.LENGTH_SHORT).show(); return; }
+            if (text.trim().isEmpty()) { setTaking(false); Toast.makeText(this, "읽을 글자가 없어요", Toast.LENGTH_SHORT).show(); return; }
             int at = "S".equals(kind) ? summaryAt : "A".equals(kind) ? applicationsAt : -1;
             if (at >= 0) pages.set(at, text); else { pages.add(text); at = pages.size() - 1; }
             if ("S".equals(kind)) summaryAt = at;
             if ("A".equals(kind)) applicationsAt = at;
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
-            doneButton.setText("완료 (" + pages.size() + ")");
-            doneButton.setVisibility(View.VISIBLE);
-            Toast.makeText(this, "S".equals(kind) ? "실적을 가져왔어요" : "A".equals(kind) ? "신청 현황을 가져왔어요" : "이 화면을 가져왔어요", Toast.LENGTH_SHORT).show();
             lastStep = 0;
-            if (!target.isEmpty()) done(); // the page is the one asked for (checked by its address)
+            // One page per visit: back to the app (its result screen) right after "가져오는 중…" has been seen.
+            timer.postDelayed(this::done, 400);
         });
     }
 
