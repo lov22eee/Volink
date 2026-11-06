@@ -1128,3 +1128,5 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-detail.applied .m-state.hot { border-left-color: var(--m-hot); }
 .m-detail.applied .m-state.gray { border-left-color: #b9c0bb; }
 .m-detail.applied .m-state-dday { display: none; }
+.n-embed { display: flex; flex-direction: column; }
+.n-embed-body { display: flex; flex-direction: column; }

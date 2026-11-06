@@ -12,7 +12,7 @@ import { durationLabel } from '../create'
 import { activityRules as r } from '../rules'
 import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, placeKindLabel, seatsLeft } from './cards'
 import { DateSheet, DurationSheet, TimeSheet } from './host'
-import { NewsEntry } from './news'
+import { NewsEntry, NewsScreen } from './news'
 import type { Thread } from './news'
 import { RollCall } from './rollcall'
 import { statusWord } from './mine'
@@ -355,7 +355,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const shown = items.filter(p => filter === 'ALL' || (filter === 'APPLIED' ? p.status === 'APPLIED' : filter === 'WAITING' ? ['WAITLISTED', 'OFFERED'].includes(p.status) : ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(p.status)))
   // The bottom button only for what the moment needs: check-in time (QR), after the end (complete all), re-recruit.
   const main = (() => {
-    if (activity.status === 'CANCELLED') return null
+    if (activity.status === 'CANCELLED' || tab === 'news') return null
     if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />{phase === 'open' ? '출석부 · QR 띄우기' : '출석부 열기'}</button>
     if (phase === 'ended' && checked > 0) return <button className="m-btn" disabled={busy} onClick={() => run('/api/activities/' + id + '/complete', undefined, `${checked}명 완료를 확인했어요`)}>체크인한 {checked}명 모두 완료</button>
     if (phase === 'ended') return <a className="m-btn line" href={'#/create?from=' + id}><MIcon name="refresh" size={19} />같은 활동 다시 모집</a>
@@ -406,19 +406,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
 
       {tab === 'attendance' && <section className="mg-panel" aria-label="출석">{people ? <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} /> : <Loading />}</section>}
 
-      {tab === 'news' && <section className="mg-panel" aria-label="활동 소식">
-        {activity.status === 'DRAFT' ? <p className="mg-none">관리자 확인 뒤 공개되면 소식을 올릴 수 있어요.</p> : !thread ? <Loading /> : <>
-          <div className="mg-sub"><h2>공지</h2><a href={'#/news/' + id}><MIcon name="plus" size={16} />공지 쓰기</a></div>
-          {thread.notices.length ? <ul className="mg-news">{thread.notices.slice(-2).reverse().map(n => <li key={n.id}><a href={'#/news/' + id}><b>{n.body}</b>
-            <small>{n.readCount != null ? `확정 ${thread.audience}명 중 ${n.readCount}명 읽음 · ` : ''}{n.createdAt.slice(5, 16).replace('T', ' ')}</small></a></li>)}</ul>
-            : <p className="mg-none">아직 올린 공지가 없어요. 준비물·집결 장소를 알려 주세요.</p>}
-          <div className="mg-sub"><h2>참가자 질문</h2>{unanswered > 0 && <small className="hot">답변할 질문 {unanswered}</small>}</div>
-          {thread.questions.length ? <ul className="mg-news">{thread.questions.slice(-3).reverse().map(q => <li key={q.id}><a href={'#/news/' + id}><b>{q.private && <MIcon name="lock" size={13} />}{q.body}</b>
-            <small>{q.author} · {q.answer ? '답변 완료' : <em>답변하기 ›</em>}</small></a></li>)}</ul>
-            : <p className="mg-none">아직 받은 질문이 없어요.</p>}
-          <a className="m-btn line mg-open" href={'#/news/' + id}>활동 소식 전체 보기</a>
-        </>}
-      </section>}
+      {tab === 'news' && (activity.status === 'DRAFT' ? <p className="mg-none mg-panel">관리자 확인 뒤 공개되면 소식을 올릴 수 있어요.</p>
+        : <div className="mg-panel"><NewsScreen id={id} user={user} embedded onChanged={() => api<Thread>('/api/activities/' + id + '/posts').then(setThread).catch(() => {})} /></div>)}
 
       {tab === 'ops' && <section className="mg-panel" aria-label="운영"><nav className="mg-ops">
         {open && <a href={'#/edit/' + id}><MIcon name="edit" size={20} /><span>활동 정보 수정<small>{(activity.applicants ?? 0) > 0 ? '신청자가 있어 소개·만나는 곳만 바꿀 수 있어요' : '모든 정보를 바꿀 수 있어요'}</small></span><MIcon name="chevron" size={18} /></a>}

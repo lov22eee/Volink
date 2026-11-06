@@ -343,8 +343,8 @@ test('activity news: the organizer posts a notice from a template, a member asks
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
+  // 소식 tab = the same chat room as 활동 소식, inside 모집 관리.
   await page.getByRole('tab', { name: /소식/ }).click()
-  await page.getByRole('region', { name: '활동 소식' }).getByRole('link', { name: '공지 쓰기' }).click()
   await page.getByRole('button', { name: '집결 장소' }).click()
   await expect(page.getByLabel('공지 내용')).toHaveValue(/정문 안내판 앞에서 10:00에 만나요/)
   await page.getByRole('button', { name: '보내기' }).click()
@@ -362,6 +362,7 @@ test('activity news: the organizer posts a notice from a template, a member asks
   await expect(memberPage.getByText('답변을 기다리고 있어요')).toBeVisible()
 
   await page.reload()
+  await page.getByRole('tab', { name: /소식/ }).click()
   // With an unanswered question the organizer lands on the 질문 tab; the read count is under 공지.
   await expect(page.getByRole('tab', { name: /질문/ })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: '공지' }).click()
