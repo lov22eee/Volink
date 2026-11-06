@@ -250,8 +250,8 @@ public class LabActivity extends AppCompatActivity {
 
     /** "이 화면 가져오기": keeps this page's text (and which page it is) and stays on 1365 for the next one. */
     private void takePage() {
-        String kind = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
-        String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kind + ";}catch(e){}"
+        String kindCall = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
+        String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kindCall + ";}catch(e){}"
                 + "return JSON.stringify({text:t,kind:String(k).charAt(1)});})()";
         web.evaluateJavascript(js, value -> {
             String text = "", kind = "-";
