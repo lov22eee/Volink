@@ -993,3 +993,4 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-addr button.on, .m-addr button.on b { color: var(--m-green-ink); }
 .m-flow-alt { align-self: flex-start; padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; }
 .m-org-ask { display: flex; flex-direction: column; gap: 10px; }
+.m-lab-link { display: block; text-align: center; text-decoration: underline; padding: 8px; }
