@@ -1346,3 +1346,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-item.need .lab-day .m-label { color: var(--amber-ink); }
 .m-empty-two { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .m-section-head button.m-more { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--m-green); padding: 8px 0; }
+/* No card, in the middle of the empty screen (2026-11-06, 내 활동 참여 예정). */
+.m-empty.bare { background: none; border: 0; min-height: calc(100dvh - var(--m-top) - var(--m-safe-top) - 220px); justify-content: center; gap: 10px; }
+.m-empty.bare .m-empty-ico { width: 64px; height: 64px; border-radius: 20px; }
+.m-empty.bare .m-empty-two { margin-top: 6px; }

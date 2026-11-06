@@ -253,8 +253,8 @@ export function PickField({ label, value, placeholder, hint, error, icon, onOpen
   </div>
 }
 
-export function Empty({ icon, title, text, action }: { icon: MIconName; title: string; text?: string; action?: ReactNode }) {
-  return <div className="m-empty"><span className="m-empty-ico"><MIcon name={icon} size={26} /></span><strong>{title}</strong>{text && <p>{text}</p>}{action}</div>
+export function Empty({ icon, title, text, action, bare }: { icon: MIconName; title: string; text?: string; action?: ReactNode; bare?: boolean }) {
+  return <div className={'m-empty' + (bare ? ' bare' : '')}><span className="m-empty-ico"><MIcon name={icon} size={26} /></span><strong>{title}</strong>{text && <p>{text}</p>}{action}</div>
 }
 
 export function Loading() {

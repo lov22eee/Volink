@@ -83,7 +83,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
           <p>{dayWord(p.date)} · {p.startTime}{p.placeName ? ' · ' + p.placeName : ''}</p>
           {dDay(p.date) && <span className="m-dday">{dDay(p.date)}</span>}
           <span className="m-btn sm">{p.status === 'OFFERED' ? '자리 제안 확인' : '활동 상세 보기'}</span>
-        </a>)}</div> : !extPlanned.length && <Empty icon="calendar" title="참여 예정인 활동이 없어요"
+        </a>)}</div> : !extPlanned.length && <Empty bare icon="calendar" title="참여 예정인 활동이 없어요"
           action={<div className="m-empty-two"><button type="button" className="m-btn sm line" onClick={connect}>1365 가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />}
         {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><button type="button" className="m-more" onClick={connect}>1365 가져오기 ›</button></div>
           <div className="m-list">{extPlanned.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
