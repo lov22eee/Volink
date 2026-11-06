@@ -288,7 +288,8 @@ test('community: a question, a like and a comment, and a review only after compl
   await expect(start).toBeDisabled()
   await rules.getByText('이용 규칙을 읽었고 지킬게요').click()
   await start.click()
-  await expect(page.getByText('나는 ' + nickname)).toBeVisible()
+  await expect(page.getByText('함께하는 봉사 이야기')).toBeVisible()
+  await expect(page.getByText('나는 ' + nickname)).toHaveCount(0)
   await page.getByRole('radio', { name: '인기순' }).click()
   await expect(page.getByRole('radio', { name: '인기순' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('link', { name: '글쓰기' }).first().click()
@@ -727,7 +728,51 @@ test('1365 step guide: the words on the page tell which step the person is on (�
       // Several pages in one visit: after the 실적 page, the guide points to 신청 현황 (and 완료).
       labStep('로그아웃 봉사참여 실적 총 57시간 30분 총 14건', false, true), labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true),
       labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true, true),
+      // On the phone '로그아웃' is only in the closed ☰ menu (textContent), or the login page was just left.
+      labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-', '2-', '2-'])
+})
+
+test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {
+  const member = await signupByApi(page, '기간 확인')
+  await login(page, member)
+  const dot = (n: number) => inDays(n).replaceAll('-', '.')
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: /1365 연결/ }).click()
+  await page.goto('/#/lab1365')
+  await page.getByPlaceholder(/1365 신청 현황/).fill(`나의 봉사 신청 현황\n어르신 말벗 봉사\n봉사기간 ${dot(3)} ~ ${dot(20)}\n모집기간 ${dot(-5)} ~ ${dot(2)}\n승인완료\n하천 정화 활동\n봉사기간 ${dot(6)} ~ ${dot(6)}\n신청완료`)
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
+  await expect(page.getByText('봉사기간', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '참여하는 날을 골라 주세요 (1개)' })).toBeDisabled()
+  await page.getByLabel('어르신 말벗 봉사 참여하는 날').fill(inDays(10))
+  await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
+  await expect(page).toHaveURL(/#\/mine/)
+  await expect(page.getByRole('link', { name: /어르신 말벗 봉사.*시간 미정/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: new RegExp('어르신 말벗 봉사.*' + inDays(10).slice(5).replace('-', '/')) })).toBeVisible()
+})
+
+test('a bottom sheet closes when dragged down like ✕, and springs back on a short drag', async ({ page }) => {
+  const member = await signupByApi(page, '쓸어내리기')
+  await login(page, member)
+  await page.goto('/#/settings')
+  const cdp = await page.context().newCDPSession(page)
+  const drag = async (from: number, to: number) => {
+    const box = (await page.locator('.m-sheet-head').boundingBox())!
+    const x = box.x + box.width / 2, y = box.y + box.height / 2
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y + from }] })
+    for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + from + (to - from) * i / 8 }] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  }
+  await page.getByRole('button', { name: '로그아웃' }).click()
+  const sheet = page.getByRole('dialog', { name: '로그아웃할까요?' })
+  await expect(sheet).toBeVisible()
+  await drag(0, 40)
+  await page.waitForTimeout(400)
+  await expect(sheet).toBeVisible()
+  await drag(0, 260)
+  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/settings/)
 })

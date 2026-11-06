@@ -1295,3 +1295,36 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-welcome-facts { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .m-welcome-facts li { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--ink-2); }
 .m-welcome-facts svg { color: #3b67ad; flex: none; }
+/* 2026-11-06: 활동 취소 시트 — even gaps, cards with a title, the participant's view as a notification + quote. */
+.m-cancel-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 16px; background: #fff; border: 1px solid var(--line); margin-top: 4px; }
+.m-cancel-card h3 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.m-cancel-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.m-cancel-steps li { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.m-cancel-steps svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.m-cancel-card.preview { background: #f6f7f4; border-color: transparent; }
+.m-cancel-push { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(20, 40, 30, .08); }
+.m-cancel-push-ico { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #fdeee9; color: #b4532f; }
+.m-cancel-push > span:last-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.m-cancel-push strong { font-size: 14px; }
+.m-cancel-push small { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.m-cancel-quote { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+.m-cancel-quote small { font-size: 12px; color: var(--ink-3); }
+.m-cancel-quote p { margin: 0; padding-left: 10px; border-left: 3px solid var(--line-2); font-size: 13.5px; line-height: 1.55; color: var(--ink-2); white-space: pre-wrap; word-break: keep-all; }
+.m-check.box.m-cancel-agree { align-items: center; min-height: 0; padding: 14px 16px; margin: 4px 0 6px; border-bottom: 1px solid var(--line-2); }
+.m-check.box.m-cancel-agree > span:last-child { flex: 1; line-height: 1.5; word-break: keep-all; }
+/* Lab rows (2026-11-06): a row with only a 1365 period asks for the day the person goes. */
+.lab-item { display: flex; flex-direction: column; }
+.lab-item.need .lab-day span { color: var(--amber-ink); }
+.lab-day { display: flex; align-items: center; gap: 10px; padding: 0 0 12px 36px; font-size: 13px; color: var(--ink-2); }
+.lab-day .m-input { flex: 1; min-height: 42px; }
+/* 내 활동 (2026-11-06): the same underline tabs as 모집 관리; 완료 기록 sections with a green 전체보기. */
+.mg-tabs.m-mine-tabs { margin: 0; padding: 0 var(--m-x); }
+.m-section-head .m-more { color: var(--m-green); font-size: 14px; font-weight: 700; padding: 8px 0; white-space: nowrap; }
+.m-section-head .m-count { font-size: 14px; font-weight: 600; color: var(--ink-3); margin-left: 2px; }
+/* 마이 프로필 (2026-11-06): 회원 유형 next to the name; interests (max 3) on one line, shrinking rather than wrapping. */
+.m-profile-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.m-profile-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-profile-name .m-badge { flex: none; height: 22px; font-size: 11.5px; padding: 0 8px; }
+.m-tags.one-line { flex-wrap: nowrap; overflow: hidden; }
+.m-tags.one-line .m-badge { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-profile-name .m-badge.mint { background: #fff; }

@@ -79,6 +79,7 @@ public class ExternalRecordService {
         LocalDate today = now().toLocalDate();
         if (day == null || day.isBefore(today.minusYears(1)) || day.isAfter(today.plusYears(1))) errors.put("date", "날짜를 1년 안에서 골라 주세요.");
         LocalTime start = time(r.startTime()), end = time(r.endTime());
+        boolean timeKnown = start != null;
         if (start == null) start = LocalTime.of(9, 0);
         if (end == null || !end.isAfter(start)) end = start.plusHours(2).isAfter(start) ? start.plusHours(2) : LocalTime.of(23, 59);
         String program = text(r.programNo(), 20);
@@ -93,9 +94,9 @@ public class ExternalRecordService {
             return 0;
         }
         jdbc.update("""
-                INSERT INTO external_records(user_id, program_no, title, organization, place, starts_at, ends_at, status, source, lab_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", userId, program.isEmpty() ? null : program, title, emptyNull(text(r.organization(), 255)),
-                emptyNull(text(r.place(), 255)), startsAt, endsAt, endsAt.isBefore(now()) && "LAB".equals(source) ? "ATTENDED" : "PLANNED", source,
+                INSERT INTO external_records(user_id, program_no, title, organization, place, starts_at, ends_at, time_known, status, source, lab_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", userId, program.isEmpty() ? null : program, title, emptyNull(text(r.organization(), 255)),
+                emptyNull(text(r.place(), 255)), startsAt, endsAt, timeKnown, endsAt.isBefore(now()) && "LAB".equals(source) ? "ATTENDED" : "PLANNED", source,
                 emptyNull(text(r.labStatus(), 40)));
         return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
@@ -106,7 +107,7 @@ public class ExternalRecordService {
             SELECT e.id, e.program_no AS programNo, e.title, e.organization, e.place, DATE_FORMAT(e.starts_at, '%Y-%m-%d') AS date,
                    DATE_FORMAT(e.starts_at, '%H:%i') AS startTime, DATE_FORMAT(e.ends_at, '%H:%i') AS endTime, e.status, e.source, e.lab_status AS labStatus,
                    e.cert_title AS certTitle, e.cert_org AS certOrganization, DATE_FORMAT(e.cert_date, '%Y-%m-%d') AS certDate, e.cert_minutes AS certMinutes,
-                   e.cert_at IS NOT NULL AS certified, e.reflected_at IS NOT NULL AS reflected, e.starts_at <= ? AS started,
+                   e.cert_at IS NOT NULL AS certified, e.reflected_at IS NOT NULL AS reflected, e.time_known AS timeKnown, e.starts_at <= ? AS started,
                    (SELECT p.id FROM community_posts p WHERE p.external_id = e.id AND p.deleted_at IS NULL ORDER BY p.id DESC LIMIT 1) AS reviewId
             FROM external_records e""";
 
@@ -126,6 +127,7 @@ public class ExternalRecordService {
         row.put("certified", truthy(row.get("certified")));
         row.put("started", truthy(row.get("started")));
         row.put("reflected", truthy(row.get("reflected")));
+        row.put("timeKnown", truthy(row.get("timeKnown")));
     }
 
     private static boolean truthy(Object v) { return v instanceof Boolean b ? b : v instanceof Number n && n.intValue() != 0; }

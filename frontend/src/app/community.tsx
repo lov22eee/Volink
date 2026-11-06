@@ -156,10 +156,10 @@ export function CommunityScreen({ actions }: { actions: ReactNode }) {
   useEffect(() => { api<Profile>('/api/community/me').then(setProfile).catch(() => setProfile(null)) }, [])
   if (profile === undefined) return <div className="m-screen"><TopBar title="커뮤니티" actions={actions} /><Loading /></div>
   if (!profile?.ready) return <CommunityOnboarding profile={profile ?? null} onDone={setProfile} />
-  return <CommunityBoard actions={actions} nickname={profile.nickname ?? ''} />
+  return <CommunityBoard actions={actions} />
 }
 
-function CommunityBoard({ actions, nickname }: { actions: ReactNode; nickname: string }) {
+function CommunityBoard({ actions }: { actions: ReactNode }) {
   const [category, setCategory] = useState<Category | ''>('')
   const [sort, setSort] = useState<'latest' | 'popular'>('latest')
   const [items, setItems] = useState<PostSummary[] | null>(null)
@@ -174,7 +174,7 @@ function CommunityBoard({ actions, nickname }: { actions: ReactNode; nickname: s
   return <div className="m-screen">
     <TopBar title="커뮤니티" actions={actions} />
     <div className="m-body c-list">
-      <section className="c-banner"><strong><MIcon name="sprout" size={20} />함께하는 봉사 이야기</strong><span>궁금한 건 묻고, 따뜻한 경험은 나눠요. 나는 <b>{nickname}</b></span></section>
+      <section className="c-banner"><strong><MIcon name="sprout" size={20} />함께하는 봉사 이야기</strong><span>궁금한 건 묻고, 따뜻한 경험은 나눠요.</span></section>
       <div className="m-chips" role="group" aria-label="글 종류">
         <button type="button" className={'m-chip' + (category === '' ? ' on' : '')} aria-pressed={category === ''} onClick={() => setCategory('')}>전체</button>
         {order.map(c => <button key={c} type="button" className={'m-chip' + (category === c ? ' on' : '')} aria-pressed={category === c} onClick={() => setCategory(c)}>{categoryLabel[c]}</button>)}

@@ -1,6 +1,6 @@
 // Shared pieces of the Android app screens: icons, top bar, bottom tabs, bottom sheets, wheels and the keyboard helper.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { InputHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode, Ref, RefObject, TextareaHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
@@ -137,6 +137,56 @@ export function ActionBar({ children }: { children: ReactNode }) {
 }
 
 /** A panel that slides up from the bottom. Closes on the dim area, the close button or Escape. */
+/**
+ * Drag a sheet down to close it, like the ✕ (2026-11-06). From the grab bar / title anywhere, from the body only when it is
+ * scrolled to the top; never from text boxes, wheel pickers or maps. Far enough (or a quick flick) closes, otherwise it springs back.
+ */
+function useSwipeDown(sheet: RefObject<HTMLElement | null>, dim: RefObject<HTMLElement | null>, onClose: () => void) {
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const el = sheet.current
+    if (!el) return
+    let startY = 0, startT = 0, dy = 0, active = false, armed = false
+    const blocked = (target: EventTarget | null) => {
+      for (let node = target as HTMLElement | null; node && node !== el; node = node.parentElement) {
+        if (node.matches('input, textarea, select, [contenteditable="true"], .m-wheel-col, [data-no-drag]') || /map/i.test(node.className?.toString?.() ?? '')) return true
+        const style = getComputedStyle(node)
+        if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1 && node.scrollTop > 0) return true
+      }
+      return false
+    }
+    const set = (y: number, animate: boolean) => {
+      el.style.transition = animate ? 'transform .22s ease' : 'none'
+      el.style.transform = y ? `translateY(${y}px)` : ''
+      if (dim.current) { dim.current.style.transition = animate ? 'opacity .22s ease' : 'none'; dim.current.style.opacity = String(Math.max(0, 1 - y / (el.offsetHeight || 1))) }
+    }
+    const start = (y: number, target: EventTarget | null) => { armed = !blocked(target); active = false; startY = y; startT = Date.now(); dy = 0 }
+    const move = (y: number, event: Event) => {
+      if (!armed) return
+      dy = y - startY
+      if (!active && dy > 8) active = true
+      if (!active) { if (dy < -4) armed = false; return }
+      if (event.cancelable) event.preventDefault()
+      set(Math.max(0, dy - 8), false)
+    }
+    const end = () => {
+      if (!active) { armed = false; return }
+      const fast = dy / Math.max(1, Date.now() - startT) > 0.6
+      if (dy > 110 || (fast && dy > 30)) { set(el.offsetHeight + 40, true); window.setTimeout(() => close.current(), 200) }
+      else set(0, true)
+      active = armed = false
+    }
+    const touchStart = (e: TouchEvent) => start(e.touches[0].clientY, e.target)
+    const touchMove = (e: TouchEvent) => move(e.touches[0].clientY, e)
+    el.addEventListener('touchstart', touchStart, { passive: true })
+    el.addEventListener('touchmove', touchMove, { passive: false })
+    el.addEventListener('touchend', end)
+    el.addEventListener('touchcancel', end)
+    return () => { el.removeEventListener('touchstart', touchStart); el.removeEventListener('touchmove', touchMove); el.removeEventListener('touchend', end); el.removeEventListener('touchcancel', end) }
+  }, [sheet, dim])
+}
+
 export function Sheet({ title, onClose, children, footer, headAction, className }: { title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; headAction?: ReactNode; className?: string }) {
   useEffect(() => {
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
@@ -144,9 +194,11 @@ export function Sheet({ title, onClose, children, footer, headAction, className 
     document.documentElement.classList.add('m-locked')
     return () => { window.removeEventListener('keydown', key); document.documentElement.classList.remove('m-locked') }
   }, [onClose])
+  const sheet = useRef<HTMLElement>(null), dim = useRef<HTMLDivElement>(null)
+  useSwipeDown(sheet, dim, onClose)
   return createPortal(<div className="m-sheet-wrap">
-    <div className="m-dim" onClick={onClose} />
-    <section className={'m-sheet' + (className ? ' ' + className : '')} role="dialog" aria-modal="true" aria-label={title}>
+    <div className="m-dim" ref={dim} onClick={onClose} />
+    <section ref={sheet} className={'m-sheet' + (className ? ' ' + className : '')} role="dialog" aria-modal="true" aria-label={title}>
       <span className="m-grab" aria-hidden="true" />
       <div className="m-sheet-head"><h2>{title}</h2>{headAction}<button type="button" className="m-icon-btn" aria-label="닫기" onClick={onClose}><MIcon name="close" /></button></div>
       <div className="m-sheet-body">{children}</div>

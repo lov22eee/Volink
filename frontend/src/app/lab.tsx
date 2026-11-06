@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
-import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
+import { ActionBar, MIcon, Sheet, TextArea, TextInput, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
 const KEY = 'volink.lab1365'
@@ -19,7 +19,9 @@ export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사�
  * Step-by-step guide on the 1365 page (2026-11-06, without the 1365 addresses): the in-app browser runs this every 1.5s on
  * the page and shows what it returns above the page. It guesses the step from the visible words only (a password box,
  * 로그아웃, 나의 봉사, 총 ○시간, 신청 현황 with dates). `t` page text, `pw` a password box is shown, `ds`/`da` the 실적 /
- * 신청 현황 page was already taken (several pages can be taken in one visit). Returns "<step><kind>|<line>": step 1-5,
+ * 신청 현황 page was already taken (several pages can be taken in one visit), `full` all words on the page including the
+ * closed ☰ menu (on the phone '로그아웃' lives only there), `was` a login page was seen and left (2026-11-06: the guide stayed on
+ * ① after logging in because '로그아웃' is hidden in the menu). Returns "<step><kind>|<line>": step 1-5,
  * kind S (실적 page), A (신청 현황 page) or -. Plain ES5 inside a string so the Android side runs it as it is.
  */
 export const LAB_STEP_BODY = `
@@ -27,20 +29,20 @@ export const LAB_STEP_BODY = `
   var date = /20\\d{2}\\s*[.\\-\\/]\\s*\\d{1,2}\\s*[.\\-\\/]\\s*\\d{1,2}/;
   var sum = /봉사\\s*참여\\s*실적|시간인증형/.test(s) && /총\\s*\\d+\\s*시간/.test(s);
   var app = /신청\\s*현황|신청\\s*내역/.test(s) && date.test(s) && /(승인|신청\\s*완료|대기|취소|활동\\s*완료)/.test(s);
-  if (pw) return '1-|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
+  if (pw || /간편\\s*인증\\s*로그인|아이디\\s*찾기|비밀번호\\s*찾기/.test(s)) return '1-|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
   if (sum && !ds) return '4S|④ 실적 화면이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
   if (app && !da) return '4A|④ 신청 현황이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
   if (ds && da) return '5-|다 가져왔어요. 오른쪽 위 ‘완료’를 눌러 주세요';
   if (ds) return '5-|실적을 가져왔어요. 이어서 ‘신청 현황’도 가져오거나 ‘완료’를 눌러 주세요';
   if (da) return '5-|신청 현황을 가져왔어요. 이어서 ‘봉사참여 실적’도 가져오거나 ‘완료’를 눌러 주세요';
-  var inside = /로그아웃/.test(s);
+  var inside = /로그아웃/.test(s) || /로그아웃/.test(String(full || '')) || !!was;
   if (inside && /나의\\s*봉사|마이\\s*페이지/.test(s) && /봉사\\s*참여\\s*실적|신청\\s*현황/.test(s)) return '3-|③ ‘봉사참여 실적’을 눌러 주세요';
   if (inside) return '2-|② 오른쪽 위 ☰ 메뉴 › ‘나의 봉사’로 가 주세요';
-  return '1-|① 위쪽 ‘로그인’을 눌러 로그인해 주세요';
+  return '1-|① ☰ 메뉴에서 ‘로그인’을 눌러 주세요';
 `
 /** The same rule in the app (tests). */
-export function labStep(text: string, password: boolean, tookSummary = false, tookApplications = false): { step: number; kind: string; line: string } {
-  const out = String(new Function('t', 'pw', 'ds', 'da', LAB_STEP_BODY)(text, password, tookSummary, tookApplications))
+export function labStep(text: string, password: boolean, tookSummary = false, tookApplications = false, full = '', wasLogin = false): { step: number; kind: string; line: string } {
+  const out = String(new Function('t', 'pw', 'ds', 'da', 'full', 'was', LAB_STEP_BODY)(text, password, tookSummary, tookApplications, full, wasLogin))
   return { step: Number(out.slice(0, 1)), kind: out.slice(1, 2), line: out.slice(3) }
 }
 
@@ -94,7 +96,8 @@ export function useExtMode(): ExtMode | undefined {
 export function labOn() { try { return localStorage.getItem(KEY) === '1' } catch { return false } }
 export function setLabOn(on: boolean) { try { if (on) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY) } catch { /* private mode: stays off */ } }
 
-export type LabRow = { title: string; date: string; startTime?: string; endTime?: string; labStatus?: string }
+/** A row from the 1365 application list. `date` is '' when 1365 only shows a period (11/12 ~ 11/30): the person picks the day. */
+export type LabRow = { title: string; date: string; periodStart?: string; periodEnd?: string; startTime?: string; endTime?: string; labStatus?: string }
 export type LabSummary = { totalMinutes: number; count?: number; fields: { name: string; minutes: number }[] }
 
 /**
@@ -118,31 +121,41 @@ export function parseLabSummary(text: string): LabSummary | null {
 export const hoursText = (minutes: number) => `${Math.floor(minutes / 60)}시간${minutes % 60 ? ' ' + (minutes % 60) + '분' : ''}`
 
 const STATUS = /(승인\s*완료|승인\s*대기|신청\s*완료|활동\s*완료|모집\s*중|모집\s*완료|봉사\s*완료|취소|반려|대기)/
-const DATE = /(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/
+const DATE = /(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/g
 const TIME = /([01]?\d|2[0-3]):([0-5]\d)\s*[~\-–]\s*([01]?\d|2[0-3]):([0-5]\d)/
+/** Labels on the 1365 list, never a title. 모집·접수·신청 periods are not the day of the activity, so they are skipped. */
+const LABEL = /^(봉사|활동|모집|접수|신청|인정)\s*(기간|일시|일자|일|시간)|^(기간|일시|상태|장소|봉사장소|모집기관|등록기관|수요처|봉사분야|분야|구분|번호)\b/
+const NOT_DAY = /^(모집|접수|신청)\s*(기간|일시|일자|일)/
+const ymdOf = (m: RegExpExecArray) => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
 
 /**
- * Reads application rows from the text of a 1365 list page: each line (or line pair) with a date becomes a row; the title is
- * the longest remaining Korean text on that line or the line above, the status a known 1365 word. The person checks every row.
+ * Reads application rows from the text of a 1365 list page (2026-11-06, after a real page gave rows named '봉사기간'):
+ * a title line, then its 봉사기간/활동일 line. A period of several days leaves `date` empty so the person picks the day they
+ * go; 모집기간 lines are skipped; a time is kept only when the page shows one. The person checks every row.
  */
 export function parseLabText(text: string): LabRow[] {
   const lines = text.replace(/\r/g, '').split('\n').map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
   const rows: LabRow[] = []
   const seen = new Set<string>()
+  let lastTitle = ''
+  const clean = (s: string) => s.replace(new RegExp(DATE.source, 'g'), ' ').replace(TIME, ' ').replace(STATUS, ' ').replace(LABEL, ' ').replace(/[~|·:：\[\]()]/g, ' ').replace(/\s+/g, ' ').trim()
+  const isTitle = (s: string) => s.length >= 4 && s.length <= 80 && /[가-힣]{2,}/.test(s) && !LABEL.test(s) && !STATUS.test(s.replace(/\s/g, '').slice(0, 6))
+    && !/(로그인|로그아웃|메뉴|검색|나의\s*봉사|신청\s*현황|봉사참여\s*실적|이전|다음|목록|페이지|전체|조회)/.test(s)
   lines.forEach((line, i) => {
-    const d = DATE.exec(line)
-    if (!d) return
-    const date = `${d[1]}-${d[2].padStart(2, '0')}-${d[3].padStart(2, '0')}`
+    const dates = [...line.matchAll(new RegExp(DATE.source, 'g'))].map(ymdOf)
+    if (!dates.length) { if (isTitle(line)) lastTitle = line; return }
+    if (NOT_DAY.test(line)) return
+    const own = clean(line)
+    const title = isTitle(own) ? own : lastTitle
+    if (!title) return
+    const start = dates[0], end = dates[1] && dates[1] >= start ? dates[1] : start
     const time = TIME.exec(line) ?? TIME.exec(lines[i + 1] ?? '')
-    const status = STATUS.exec(line)?.[1] ?? STATUS.exec(lines[i + 1] ?? '')?.[1]
-    const clean = (s: string) => s.replace(DATE, ' ').replace(TIME, ' ').replace(STATUS, ' ').replace(/[~|·:\[\]()]/g, ' ').replace(/\s+/g, ' ').trim()
-    const candidates = [clean(line), clean(lines[i - 1] ?? '')].filter(s => /[가-힣]{2,}/.test(s) && !/^(신청일|활동일|봉사일|기간|일시|상태)\b/.test(s))
-    const title = candidates.sort((a, b) => b.length - a.length)[0]
-    if (!title || title.length < 2) return
-    const key = title + date
+    const status = STATUS.exec(line)?.[1] ?? STATUS.exec(lines[i + 1] ?? '')?.[1] ?? STATUS.exec(lines[i + 2] ?? '')?.[1]
+    const key = title + start
     if (seen.has(key)) return
     seen.add(key)
-    rows.push({ title: title.slice(0, 120), date, startTime: time ? `${time[1].padStart(2, '0')}:${time[2]}` : undefined, endTime: time ? `${time[3].padStart(2, '0')}:${time[4]}` : undefined, labStatus: status?.replace(/\s+/g, '') })
+    rows.push({ title: title.slice(0, 120), date: start === end ? start : '', periodStart: start, periodEnd: end,
+      startTime: time ? `${time[1].padStart(2, '0')}:${time[2]}` : undefined, endTime: time ? `${time[3].padStart(2, '0')}:${time[4]}` : undefined, labStatus: status?.replace(/\s+/g, '') })
   })
   return rows.slice(0, 20)
 }
@@ -153,6 +166,8 @@ export function LabScreen() {
   const [summary, setSummary] = useState<LabSummary | null>(null)
   const [keepSummary, setKeepSummary] = useState(true)
   const [picked, setPicked] = useState<boolean[]>([])
+  // The day the person goes, for rows where 1365 shows only a period (11/12 ~ 11/30).
+  const [days, setDays] = useState<string[]>([])
   const [paste, setPaste] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -169,6 +184,7 @@ export function LabScreen() {
     setRows(found)
     setSummary(total)
     setPicked(found.map(() => true))
+    setDays(found.map(r => r.date))
     setError(found.length || total ? '' : '읽을 내용을 찾지 못했어요. 1365 ‘나의 봉사’의 신청 현황이나 봉사참여 실적 화면에서 가져와 주세요.')
   }
   async function open() {
@@ -176,7 +192,7 @@ export function LabScreen() {
     try { const got = await lab.open({ guide: LAB_GUIDE, step: LAB_STEP_BODY }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
   }
   async function save() {
-    const items = (rows ?? []).filter((_, i) => picked[i])
+    const items = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i])
     const total = summary && keepSummary ? summary : null
     if (!items.length && !total) return
     setBusy(true)
@@ -191,6 +207,8 @@ export function LabScreen() {
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   const count = picked.filter(Boolean).length
+  const undated = (rows ?? []).filter((_, i) => picked[i] && !days[i]).length
+  const md = (d?: string) => d ? d.slice(5).replace('-', '/') : ''
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
     <div className="m-body lab">
@@ -210,17 +228,23 @@ export function LabScreen() {
         {summary && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
             <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') : '분야별 시간은 ‘분야별 봉사시간 조회’ 화면에서 가져올 수 있어요'}</small></span></label>}
-        {rows.length > 0 && <p className="m-help">내 활동에 넣을 것만 골라 주세요. 지난 활동은 ‘다녀옴’으로 들어가요.</p>}
-        <div className="lab-rows">{rows.map((r, i) => <label key={r.title + r.date} className="m-check">
-          <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
-          <span className="lab-row"><b>{r.title}</b><small>{r.date.slice(5).replace('-', '/')}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>)}</div>
+        {rows.length > 0 && <p className="m-help">내 활동에 넣을 것만 골라 주세요. 기간만 있는 활동은 실제로 가는 날을 골라 주세요.</p>}
+        <div className="lab-rows">{rows.map((r, i) => <div key={r.title + r.periodStart} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
+          <label className="m-check">
+            <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
+            <span className="lab-row"><b>{r.title}</b>
+              <small>{r.date ? md(r.date) : `기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)}`}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>
+          {!r.date && picked[i] && <label className="lab-day"><span>참여하는 날</span>
+            <TextInput type="date" className="m-input" value={days[i] ?? ''} min={r.periodStart} max={r.periodEnd} aria-label={r.title + ' 참여하는 날'}
+              onChange={event => setDays(days.map((v, k) => k === i ? event.target.value : v))} /></label>}
+        </div>)}</div>
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
       <p className="m-help">가져온 실적은 내 1365 화면에 나온 공식 실적을 옮긴 거예요(가져온 날 기준). 최신 실적·확인서는 1365에서 확인해 주세요.</p>
     </div>
     <ActionBar>{!rows
       ? (native ? <button className="m-btn blue" onClick={open}>1365 열기</button> : <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button>)
-      : rows.length || summary ? <button className="m-btn" disabled={busy || (!count && !(summary && keepSummary))} onClick={save}>{rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
+      : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <button className="m-btn line" onClick={() => setRows(null)}>다시 하기</button>}</ActionBar>
   </div>
 }

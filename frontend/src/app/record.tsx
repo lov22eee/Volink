@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import type { Program } from '../explore'
+import { addToCalendar } from './cards'
 import { useConnect1365, useExtMode } from './lab'
 import type { ExtMode } from './lab'
 import { ActionBar, dayWord, dDay, Loading, MIcon, Sheet, TextInput, TopBar } from './ui'
@@ -16,7 +17,7 @@ export type ExternalRecord = {
   id: number; programNo: string | null; title: string; organization: string | null; place: string | null
   date: string; startTime: string; endTime: string; status: 'PLANNED' | 'ATTENDED' | 'MISSED'; source: 'SELF' | 'LAB'; labStatus: string | null
   certTitle: string | null; certOrganization: string | null; certDate: string | null; certMinutes: number | null; certified: boolean; started: boolean
-  reflected: boolean
+  reflected: boolean; timeKnown: boolean
   reviewId: number | null
 }
 
@@ -25,6 +26,17 @@ const message = (cause: unknown) => cause instanceof ApiError ? Object.values(ca
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
 /** 1365 period dates come as 2026-11-12 from the server (yyyyMMdd from older caches): both are read. */
 const fromCompact = (value: string | null) => !value ? null : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : /^\d{8}$/.test(value) ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : null
+
+/** "11/18 10:00" or, when 1365 showed no time, "11/18 · 시간 미정". */
+export const recordWhen = (r: Pick<ExternalRecord, 'date' | 'startTime' | 'timeKnown'>) => r.date.slice(5).replace('-', '/') + (r.timeKnown === false ? ' · 시간 미정' : ' ' + r.startTime)
+
+/** Puts a 1365 record into the phone calendar (Galaxy: the calendar's own new-event screen). */
+export async function recordToCalendar(r: Pick<ExternalRecord, 'id' | 'title' | 'date' | 'startTime' | 'endTime' | 'place' | 'organization'>) {
+  const minutes = Math.max(30, (new Date(`2000-01-01T${r.endTime}`).getTime() - new Date(`2000-01-01T${r.startTime}`).getTime()) / 60_000 || 120)
+  const how = await addToCalendar({ id: -r.id, title: '[1365] ' + r.title, date: r.date, startTime: r.startTime, durationMinutes: minutes, placeName: r.place ?? r.organization ?? null, meetingPoint: null } as never,
+    '1365 봉사 · 신청·승인·취소는 1365에서 확인해 주세요.')
+  showToast(how === 'app' ? '캘린더 화면을 열었어요' : '캘린더 파일을 받았어요', how === 'app' ? '저장을 누르면 추가돼요' : '파일을 열면 캘린더에 추가돼요')
+}
 
 /** Trust word for a record: 실적확인서 있음 (values from the certificate), 1365 연결 (lab), or 본인 표시. */
 export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source' | 'reflected'>) {
@@ -41,7 +53,10 @@ export function useRecords(refresh = 0) {
 export function MarkSheet({ program, onClose, onSaved }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void }) {
   const today = ymd(new Date())
   const first = fromCompact(program.periodStart), last = fromCompact(program.periodEnd)
-  const [date, setDate] = useState(first && first > today ? first : today)
+  // A period of several days (11/12 ~ 11/30): no day is assumed; the person picks the day they go.
+  const span = Boolean(first && last && first !== last)
+  const [date, setDate] = useState(span ? '' : first && first > today ? first : today)
+  const [calendar, setCalendar] = useState(true)
   const [start, setStart] = useState(program.beginTime ?? '10:00')
   const [end, setEnd] = useState(program.endTime ?? '12:00')
   const [busy, setBusy] = useState(false)
@@ -53,20 +68,23 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
     try {
       const record = await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo, title: program.title, organization: program.organization,
         place: program.place, date, startTime: start, endTime: end })
-      showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
       onSaved?.(record)
       onClose()
+      if (calendar) await recordToCalendar(record).catch(() => showToast('내 활동에 넣었어요'))
+      else showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
   return <Sheet title="1365에서 신청을 마쳤나요?" onClose={onClose}
-    footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>네, 신청했어요</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
+    footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>{date ? '네, 신청했어요' : '참여하는 날을 골라 주세요'}</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
     <p className="m-help">표시해 두면 내 활동에 넣고 하루 전·다녀온 뒤에 알려 드려요. 신청·승인은 1365에서 확인해요.</p>
     <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
+    {span && <p className="m-help">1365 모집 기간은 {first?.slice(5).replace('-', '/')} ~ {last?.slice(5).replace('-', '/')}이에요. 1365에서 신청한 그 날을 골라 주세요.</p>}
     <label className="m-field"><span className="m-label">참여하는 날</span>
       <TextInput type="date" className="m-input" value={date} min={first ?? undefined} max={last ?? undefined} onChange={event => setDate(event.target.value)} /></label>
     {outside && <span className="m-err">1365 모집 기간({first} ~ {last}) 밖의 날짜예요. 맞는지 확인해 주세요.</span>}
     <div className="m-two"><label className="m-field"><span className="m-label">시작</span><TextInput type="time" className="m-input" value={start} onChange={event => setStart(event.target.value)} /></label>
       <label className="m-field"><span className="m-label">끝</span><TextInput type="time" className="m-input" value={end} onChange={event => setEnd(event.target.value)} /></label></div>
+    <label className="m-check"><input type="checkbox" checked={calendar} onChange={event => setCalendar(event.target.checked)} /><span className="m-box" /><span>내 캘린더에도 추가하기</span></label>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
 }
@@ -97,7 +115,7 @@ export function RecordRow({ r }: { r: ExternalRecord }) {
   const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
   return <a className="m-row" href={'#/record/' + r.id}>
     <span className="m-row-ico ext"><b>1365</b></span>
-    <span className="m-row-main"><strong>{r.title}</strong><small>{r.date.slice(5).replace('-', '/')} {r.startTime} · {tag.text}{r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}</small></span>
+    <span className="m-row-main"><strong>{r.title}</strong><small>{recordWhen(r)} · {tag.text}{r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}</small></span>
     <span className={'m-badge ' + (wait ? 'amber' : r.reflected ? 'blue' : r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
   </a>
 }
@@ -139,7 +157,7 @@ export function RecordScreen({ id }: { id: number }) {
         <div className="mg-state"><span className="m-badge blue">1365</span><span className={'m-badge ' + tag.tone}>{tag.text}</span>
           {dday && record.status === 'PLANNED' && <small>{dday === 'D-DAY' ? '오늘' : '활동까지 ' + dday.slice(2) + '일'}</small>}</div>
         <h1>{record.title}</h1>
-        <p className="mg-fact"><MIcon name="calendar" size={17} />{dayWord(record.date)} {record.startTime} ~ {record.endTime}</p>
+        <p className="mg-fact"><MIcon name="calendar" size={17} />{dayWord(record.date)} {record.timeKnown ? `${record.startTime} ~ ${record.endTime}` : '· 시간은 1365에서 확인'}</p>
         {(record.place || record.organization) && <p className="mg-fact"><MIcon name="pin" size={17} />{[record.organization, record.place].filter(Boolean).join(' · ')}</p>}
       </section>
       {record.status === 'PLANNED' && !record.started && <div className="m-state"><strong>1365에 신청한 활동이에요</strong><span>승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</span></div>}
@@ -151,6 +169,7 @@ export function RecordScreen({ id }: { id: number }) {
       {record.status === 'ATTENDED' && !record.certified && !record.reflected && <button type="button" className="m-promo-cta" onClick={() => setSheet('cert')}>
         <MIcon name="record" size={22} /><span><strong>1365 실적확인서 올리기</strong><small>PDF나 캡처를 폰 안에서 읽어요 · 파일은 보내지 않아요</small></span><MIcon name="chevron" size={18} /></button>}
       <nav className="mg-ops">
+        {record.status === 'PLANNED' && !record.started && <button type="button" onClick={() => void recordToCalendar(record)}><MIcon name="calendar" size={20} /><span>내 캘린더에 추가<small>{record.timeKnown ? '갤럭시 기본 캘린더에 바로 넣어요' : '시간이 없어 9시로 넣어요 · 캘린더에서 고쳐 주세요'}</small></span><MIcon name="chevron" size={18} /></button>}
         <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 신청 상태 보기<small>신청·승인·취소는 1365에서 해요</small></span><MIcon name="chevron" size={18} /></a>
         {record.status === 'ATTENDED' && <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 실적확인서 받기<small>1365 로그인 → 나의 봉사 → 실적 확인</small></span><MIcon name="chevron" size={18} /></a>}
       </nav>

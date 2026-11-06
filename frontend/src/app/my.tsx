@@ -63,9 +63,10 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
     <div className="m-body">
       <section className="m-profile">
         <div className="m-profile-top"><span className="m-avatar"><MIcon name="user" size={26} /></span>
-          <div><strong>{user.name}</strong><small>{shownEmail(user.email) ?? loginLabel(user)}</small>
-            <span className="m-tags">{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}
-              {user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span></div></div>
+          {/* 2026-11-06: the member type sits next to the name; the (up to 3) interests stay on one line. */}
+          <div><span className="m-profile-name"><strong>{user.name}</strong>{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}</span>
+            <small>{shownEmail(user.email) ?? loginLabel(user)}</small>
+            {user.interests.length > 0 && <span className="m-tags one-line">{user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span>}</div></div>
       </section>
       <section className="my-total" aria-label="함께한 시간">
         <small>함께한 시간</small>

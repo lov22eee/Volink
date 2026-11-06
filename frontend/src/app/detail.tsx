@@ -515,12 +515,17 @@ function ActivityCancelSheet({ activity, counts, busy, onClose, onSend }: { acti
       <TextArea className="m-input" rows={4} maxLength={300} value={text} placeholder="참가자에게 취소 사유를 안내해 주세요." onChange={event => setText(event.target.value)} onBlur={() => setTouched(true)} />
       <span className="m-help">개인정보나 자세한 개인 사정은 적지 않아도 돼요. 연락처는 적을 수 없어요.</span>
       {touched && message.length < 5 && <span className="m-err">안내를 5자 이상 적어 주세요.</span>}</label>
-    <div className="m-note"><strong>취소하면 이렇게 처리돼요</strong>
-      <ul className="m-dots"><li>확정·대기·승인 대기 중인 참가자에게 취소 알림이 가요.</li><li>새로운 참가 신청과 대기자 자리 제안이 멈춰요.</li><li>모집글과 신청·취소 기록은 지우지 않고 남겨요.</li></ul></div>
-    {code && message.length >= 5 && <div className="m-cancel-preview" aria-label="취소 안내 미리보기"><small>참가자가 받는 알림</small>
-      <strong>봉사활동이 취소되었어요</strong><span>{activity.title} 활동이 {label}(으)로 취소되었습니다. 자세한 내용을 확인해 주세요.</span>
-      <small>활동 화면 안내</small><span>“{message}”</span></div>}
-    <label className="m-check box"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" /><span>취소로 인해 참가자에게 영향이 생긴다는 점을 확인했어요.</span></label>
+    <section className="m-cancel-card" aria-label="취소하면 이렇게 처리돼요"><h3>취소하면 이렇게 처리돼요</h3>
+      <ul className="m-cancel-steps">
+        <li><MIcon name="bell" size={17} /><span>확정·대기·승인 대기 중인 참가자에게 취소 알림이 가요</span></li>
+        <li><MIcon name="userX" size={17} /><span>새 참가 신청과 대기자 자리 제안이 멈춰요</span></li>
+        <li><MIcon name="record" size={17} /><span>모집글과 신청·취소 기록은 지우지 않고 남겨요</span></li>
+      </ul></section>
+    {code && message.length >= 5 && <section className="m-cancel-card preview" aria-label="취소 안내 미리보기"><h3>참가자에게 이렇게 보여요</h3>
+      <div className="m-cancel-push"><span className="m-cancel-push-ico"><MIcon name="bell" size={16} /></span>
+        <span><strong>봉사활동이 취소되었어요</strong><small>{activity.title} 활동이 {label}(으)로 취소되었습니다.</small></span></div>
+      <div className="m-cancel-quote"><small>활동 화면 안내</small><p>{message}</p></div></section>}
+    <label className="m-check box m-cancel-agree"><input type="checkbox" checked={agree} onChange={event => setAgree(event.target.checked)} /><span className="m-box" /><span>취소로 인해 참가자에게 영향이 생긴다는 점을 확인했어요.</span></label>
   </Sheet>
 }
 

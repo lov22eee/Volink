@@ -16,7 +16,38 @@ export const statusWord: Record<string, { text: string; tone: string }> = {
   REJECTED: { text: '함께하지 못해요', tone: 'gray' }, CANCELLED: { text: '취소함', tone: 'gray' }, EXPIRED: { text: '마감', tone: 'gray' }, NO_SHOW: { text: '불참', tone: 'gray' },
 }
 
-export function MineScreen({ actions, initial }: { actions: ReactNode; initial?: string }) {
+/** One Volink record row (완료 기록). */
+function VolinkRow({ x }: { x: MyRecord }) {
+  return <a className="m-row" href={'#/activity/' + x.activityId}>
+    <span className="m-row-ico"><MIcon name="record" size={21} /></span>
+    <span className="m-row-main"><strong>{x.title}</strong><small>{x.date.slice(5).replace('-', '/')} {x.startTime} · {durationLabel(x.durationMinutes)} · {x.checkInMethod === 'QR' ? 'QR 출석' : '모집자 확인'}</small></span>
+    <span className={'m-badge ' + (x.status === 'VALID' ? 'mint' : 'amber')}>{x.status === 'VALID' ? '완료' : x.status === 'HELD' ? '보류' : '무효'}</span></a>
+}
+
+/** 전체보기: every finished 1365 record or every Volink record, newest first. */
+function DoneAll({ kind }: { kind: '1365' | 'volink' }) {
+  const external = useRecords()
+  const [records, setRecords] = useState<MyRecord[] | null>(null)
+  useEffect(() => { if (kind === 'volink') api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([])) }, [kind])
+  const ext = (external ?? []).filter(r => r.status === 'ATTENDED').sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
+  const volink = (records ?? []).slice().sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
+  const valid = volink.filter(x => x.status === 'VALID')
+  return <div className="m-screen"><TopBar title={kind === '1365' ? '1365 활동' : 'Volink 활동'} back="#/mine?tab=done" />
+    <div className="m-body">{kind === '1365'
+      ? (!external ? <Loading /> : <><p className="m-help">{ext.length}건 · 본인 기록·실적확인서 기준이에요. 공식 실적은 1365에서 확인해 주세요.</p><div className="m-list">{ext.map(r => <RecordRow key={r.id} r={r} />)}</div></>)
+      : (!records ? <Loading /> : <><div className="m-stats"><div><b>{valid.length}</b><span>완료 활동</span></div>
+          <div><b>{Math.round(valid.reduce((sum, x) => sum + x.durationMinutes, 0) / 6) / 10}h</b><span>함께한 시간</span></div></div>
+        <div className="m-list">{volink.map(x => <VolinkRow key={x.id} x={x} />)}</div>
+        <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요. 완료한 활동은 커뮤니티에 ‘참여 확인’ 후기로 남길 수 있어요.</p></>)}</div>
+  </div>
+}
+
+export function MineScreen({ actions, initial, all }: { actions: ReactNode; initial?: string; all?: string }) {
+  if (all === '1365' || all === 'volink') return <DoneAll kind={all} />
+  return <MineTabs actions={actions} initial={initial} />
+}
+
+function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }) {
   const [view, setView] = useState<View>(initial === 'host' || initial === 'done' ? initial : 'join')
   const [joined, setJoined] = useState<MyParticipation[] | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
@@ -29,7 +60,8 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
   // 1365 activities I marked (V27): still to come or waiting for "다녀왔어요?" under 참여 예정, the ones I went to under 완료 기록.
   const external = useRecords()
   const extPlanned = (external ?? []).filter(r => r.status === 'PLANNED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
-  const extDone = (external ?? []).filter(r => r.status === 'ATTENDED')
+  const extDone = (external ?? []).filter(r => r.status === 'ATTENDED').sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
+  const volinkDone = (records ?? []).slice().sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
   // Lab (V28): my 1365 total as read from my own 1365 page (not checked by Volink).
   const [connectSheet, connect] = useConnect1365()
   const [summary, setSummary] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
@@ -42,7 +74,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
   const tabs: [View, string][] = [['join', '참여 예정'], ['host', '내 모집현황'], ['done', '완료 기록']]
   return <div className="m-screen">
     <TopBar title="내 활동" actions={actions} />
-    <div className="m-seg-tabs" role="tablist" aria-label="내 활동 보기">{tabs.map(([id, label]) =>
+    <div className="mg-tabs m-mine-tabs" role="tablist" aria-label="내 활동 보기">{tabs.map(([id, label]) =>
       <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>)}</div>
     <div className="m-body">
       {view === 'join' && (!joined ? <Loading /> : <>
@@ -76,17 +108,15 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
         <span className="m-row-ico ext"><b>1365</b></span>
         <span><small>1365 누적 봉사 실적</small><b>{hoursText(summary.totalMinutes)}{summary.count != null ? <em> · {summary.count}건</em> : null}</b>
           <small>{summary.fetchedAt.slice(5, 10).replace('-', '/')} 기준 · 내 1365 화면의 공식 실적을 옮겨 왔어요</small></span></section>}
-      {view === 'done' && extDone.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><small>본인 기록 · 실적확인서</small></div>
-        <div className="m-list">{extDone.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
-      {view === 'done' && (!records ? <Loading /> : records.length ? <>
-        <div className="m-stats"><div><b>{records.filter(x => x.status === 'VALID').length}</b><span>완료 활동</span></div>
-          <div><b>{Math.round(records.filter(x => x.status === 'VALID').reduce((sum, x) => sum + x.durationMinutes, 0) / 6) / 10}h</b><span>함께한 시간</span></div></div>
-        <div className="m-list">{records.map(x => <a key={x.id} className="m-row" href={'#/activity/' + x.activityId}>
-          <span className="m-row-ico"><MIcon name="record" size={21} /></span>
-          <span className="m-row-main"><strong>{x.title}</strong><small>{x.date.slice(5).replace('-', '/')} {x.startTime} · {durationLabel(x.durationMinutes)} · {x.checkInMethod === 'QR' ? 'QR 출석' : '모집자 확인'}</small></span>
-          <span className={'m-badge ' + (x.status === 'VALID' ? 'mint' : 'amber')}>{x.status === 'VALID' ? '완료' : x.status === 'HELD' ? '보류' : '무효'}</span></a>)}</div>
-        <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요. 완료한 활동은 커뮤니티에 ‘참여 확인’ 후기로 남길 수 있어요.</p>
-      </> : !extDone.length && (summary
+      {/* 2026-11-06: 1365 and Volink apart, the newest 3 of each; 전체보기 opens the whole list of that kind. */}
+      {view === 'done' && extDone.length > 0 && <section className="m-section" aria-label="1365 활동"><div className="m-section-head"><h2>1365 활동 <small className="m-count">{extDone.length}</small></h2>
+        <a className="m-more" href="#/mine?tab=done&all=1365">전체보기 ›</a></div>
+        <div className="m-list">{extDone.slice(0, 3).map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
+      {view === 'done' && (!records ? <Loading /> : records.length ? <section className="m-section" aria-label="Volink 활동">
+        <div className="m-section-head"><h2>Volink 활동 <small className="m-count">{records.length}</small></h2><a className="m-more" href="#/mine?tab=done&all=volink">전체보기 ›</a></div>
+        <div className="m-list">{volinkDone.slice(0, 3).map(x => <VolinkRow key={x.id} x={x} />)}</div>
+        <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요.</p></section>
+      : !extDone.length && (summary
         ? <p className="m-help center">Volink 활동을 마치면 여기에 쌓여요 · <a href="#/find">봉사 찾기 ›</a></p>
         : <div className="ext-empty"><span className="ext-empty-ico"><MIcon name="record" size={26} /></span><strong>아직 Volink 활동 기록이 없어요</strong>
           <p>1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요.</p>

@@ -43,26 +43,27 @@ type CalendarActivity = Pick<LiveActivity, 'id' | 'title' | 'date' | 'startTime'
  * only taps save. Elsewhere, or when no calendar app answers: an .ics file. Nothing is sent anywhere.
  * Returns 'app' when the calendar screen opened, 'file' when a file was downloaded.
  */
-export async function addToCalendar(a: CalendarActivity): Promise<'app' | 'file'> {
+/** `note`: the event description (default: the Volink line; a 1365 record says where to check or cancel). */
+export async function addToCalendar(a: CalendarActivity, note = 'Volink 활동 · 못 가게 되면 앱에서 미리 알려 주세요.'): Promise<'app' | 'file'> {
   const start = new Date(`${a.date}T${a.startTime}:00+09:00`)
   const end = new Date(start.getTime() + a.durationMinutes * 60_000)
   if (Capacitor.isNativePlatform()) {
     try {
       await nativeCalendar.add({ title: a.title, begin: start.getTime(), end: end.getTime(),
-        location: [a.placeName, a.meetingPoint].filter(Boolean).join(' · '), description: 'Volink 활동 · 못 가게 되면 앱에서 미리 알려 주세요.' })
+        location: [a.placeName, a.meetingPoint].filter(Boolean).join(' · '), description: note })
       return 'app'
     } catch { /* no calendar app or an older APK without the plugin: fall back to the file */ }
   }
-  calendarFile(a, start, end)
+  calendarFile(a, start, end, note)
   return 'file'
 }
 
-function calendarFile(a: CalendarActivity, start: Date, end: Date) {
+function calendarFile(a: CalendarActivity, start: Date, end: Date, note: string) {
   const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
   const text = (value: string) => value.replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n')
   const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Volink//KO', 'BEGIN:VEVENT', `UID:volink-${a.id}@volink`, `DTSTAMP:${stamp(new Date())}`,
     `DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`, `SUMMARY:${text(a.title)}`, `LOCATION:${text([a.placeName, a.meetingPoint].filter(Boolean).join(' · '))}`,
-    'DESCRIPTION:Volink 활동 · 못 가게 되면 앱에서 미리 알려 주세요.', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Volink 활동 1시간 전', 'END:VALARM',
+    `DESCRIPTION:${text(note)}`, 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:봉사 1시간 전', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
   const link = document.createElement('a')
   link.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar;charset=utf-8' }))
