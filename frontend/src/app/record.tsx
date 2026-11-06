@@ -189,7 +189,6 @@ async function imageText(file: File, progress: (p: number) => void) {
 
 export function CertificateSheet({ record, onClose, onSaved }: { record: ExternalRecord; onClose: () => void; onSaved: (record: ExternalRecord) => void }) {
   const [step, setStep] = useState<'pick' | 'reading' | 'check'>('pick')
-  const [progress, setProgress] = useState(0)
   const [read, setRead] = useState<Read | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -200,7 +199,7 @@ export function CertificateSheet({ record, onClose, onSaved }: { record: Externa
     if (file.size > 15 * 1024 * 1024) { setError('15MB 이하 파일만 읽을 수 있어요.'); return }
     setStep('reading')
     try {
-      const text = kind === 'pdf' ? await pdfText(file) : await imageText(file, setProgress)
+      const text = kind === 'pdf' ? await pdfText(file) : await imageText(file, () => {})
       setRead(parseCertificate(text, record))
       if (!text.trim()) setError('글자를 찾지 못했어요. 아래 칸을 직접 고쳐 주세요.')
     } catch {
@@ -225,7 +224,8 @@ export function CertificateSheet({ record, onClose, onSaved }: { record: Externa
     <div className="m-note"><MIcon name="lock" size={14} /> 파일은 폰 안에서만 읽고 보내지 않아요. 활동명·기관·날짜·시간만 남기고, 이름·생년월일은 남기지 않아요.</div>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
-  if (step === 'reading') return <Sheet title="읽는 중이에요" onClose={onClose}><Loading /><p className="m-help center">{progress ? `글자를 읽는 중 ${progress}%` : '파일을 여는 중…'}</p></Sheet>
+  // While reading: only a spinner and one line (no percentages or file messages).
+  if (step === 'reading') return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />확인 중이에요</div></Sheet>
   return <Sheet title="이 내용이 맞나요?" onClose={onClose} footer={<button type="button" className="m-btn" disabled={busy || !read} onClick={save}>맞아요, 남길게요</button>}>
     {error && <p className="m-err" role="alert">{error}</p>}
     {read && <div className="r-read">
