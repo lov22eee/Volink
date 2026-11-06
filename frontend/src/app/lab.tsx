@@ -14,7 +14,7 @@ const KEY = 'volink.lab1365'
 
 const AGREED = 'volink.lab1365.agreed'
 /** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
-export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 위 ‘이 화면 가져오기’ (신청 현황도 이어서)'
+export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 아래 ‘이 화면 가져오기’ (신청 현황도 이어서)'
 /**
  * Step-by-step guide on the 1365 page (2026-11-06, without the 1365 addresses): the in-app browser runs this every 1.5s on
  * the page and shows what it returns above the page. It guesses the step from the visible words only (a password box,
@@ -28,13 +28,13 @@ export const LAB_STEP_BODY = `
   var sum = /봉사\\s*참여\\s*실적|시간인증형/.test(s) && /총\\s*\\d+\\s*시간/.test(s);
   var app = /신청\\s*현황|신청\\s*내역/.test(s) && date.test(s) && /(승인|신청\\s*완료|대기|취소|활동\\s*완료)/.test(s);
   if (pw) return '1-|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
-  if (sum && !ds) return '4S|④ 실적 화면이에요. 위 ‘이 화면 가져오기’를 눌러 주세요';
-  if (app && !da) return '4A|④ 신청 현황이에요. 위 ‘이 화면 가져오기’를 눌러 주세요';
-  if (ds && da) return '5-|다 가져왔어요. 위 ‘완료’를 눌러 주세요';
-  if (ds) return '5-|실적을 가져왔어요. ☰ › 나의 봉사 › ‘신청 현황’도 가져오거나 ‘완료’를 눌러 주세요';
-  if (da) return '5-|신청 현황을 가져왔어요. ☰ › 나의 봉사 › ‘봉사참여 실적’도 가져오거나 ‘완료’를 눌러 주세요';
+  if (sum && !ds) return '4S|④ 실적 화면이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
+  if (app && !da) return '4A|④ 신청 현황이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
+  if (ds && da) return '5-|다 가져왔어요. 오른쪽 위 ‘완료’를 눌러 주세요';
+  if (ds) return '5-|실적을 가져왔어요. 이어서 ‘신청 현황’도 가져오거나 ‘완료’를 눌러 주세요';
+  if (da) return '5-|신청 현황을 가져왔어요. 이어서 ‘봉사참여 실적’도 가져오거나 ‘완료’를 눌러 주세요';
   var inside = /로그아웃/.test(s);
-  if (inside && /나의\\s*봉사|마이\\s*페이지/.test(s) && /봉사\\s*참여\\s*실적|신청\\s*현황/.test(s)) return '3-|③ ‘봉사참여 실적’을 눌러 주세요 (신청 현황도 이어서 가져올 수 있어요)';
+  if (inside && /나의\\s*봉사|마이\\s*페이지/.test(s) && /봉사\\s*참여\\s*실적|신청\\s*현황/.test(s)) return '3-|③ ‘봉사참여 실적’을 눌러 주세요';
   if (inside) return '2-|② 오른쪽 위 ☰ 메뉴 › ‘나의 봉사’로 가 주세요';
   return '1-|① 위쪽 ‘로그인’을 눌러 로그인해 주세요';
 `
@@ -201,7 +201,7 @@ export function LabScreen() {
         <ol className="lab-guide">
           <li><b>1</b><span><strong>1365에 로그인</strong><small>아이디나 간편인증으로 직접 로그인해요</small></span></li>
           <li><b>2</b><span><strong>☰ 메뉴 › 나의 봉사 › 봉사참여 실적</strong><small>이어서 ‘신청 현황’도 가져올 수 있어요</small></span></li>
-          <li><b>3</b><span><strong>위쪽 ‘이 화면 가져오기’</strong><small>화면마다 누르고, 다 가져오면 ‘완료’를 눌러요</small></span></li>
+          <li><b>3</b><span><strong>아래 ‘이 화면 가져오기’</strong><small>화면마다 누르고, 다 가져오면 ‘완료’를 눌러요</small></span></li>
         </ol>
         {!native && <label className="m-field"><span className="m-label">앱이 아니면: 신청 현황 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
