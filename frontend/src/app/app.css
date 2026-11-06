@@ -1089,7 +1089,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .mg-tabs button.on::after { content: ''; position: absolute; left: 14%; right: 14%; bottom: -1px; height: 3px; border-radius: 3px; background: var(--m-green); }
 .mg-tabs i { display: inline-block; margin-left: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--m-hot); color: #fff; font-style: normal; font-size: 11px; line-height: 18px; vertical-align: 1px; }
 .mg-panel { padding-top: 14px; display: flex; flex-direction: column; gap: 12px; }
-.mg-plain { padding: 2px 0 12px; border-bottom: 1px solid var(--line); background: none; border-radius: 0; }
+.mg-plain { padding: 4px 0 14px; border: 0; border-bottom: 1px solid var(--line); background: none; border-radius: 0; min-height: 0; }
 .mg-filter { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .mg-filter button { flex: none; min-height: 34px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font-size: 13.5px; font-weight: 600; color: #5d6b63; }
 .mg-filter button.on { background: var(--m-green); border-color: var(--m-green); color: #fff; }

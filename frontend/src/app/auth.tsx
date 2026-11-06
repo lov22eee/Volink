@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError, completeSocial, finishSocial, login } from '../api'
-import { GoogleMark, KakaoMark, providerName, socialError, startSocial, useProviders } from '../social'
+import { GoogleMark, KakaoMark, loadProviders, providerName, socialError, startSocial, useProviders } from '../social'
 import type { Provider } from '../social'
 import { showToast } from '../App'
 import type { User } from '../api'
@@ -22,7 +22,11 @@ const kindFromHash = (): Kind => new URLSearchParams(window.location.hash.split(
 export function Login({ onSession }: { onSession: (user: User) => void }) {
   const providers = useProviders()
   const [kind, setKind] = useState<Kind>(kindFromHash)
-  const social = (provider: Provider) => providers[provider] ? startSocial(provider) : showToast(providerName[provider] + ' 로그인은 준비 중이에요', '지금은 이메일로 로그인해 주세요')
+  // Not known to be on: ask the server once more before saying "준비 중" (it may have been restarting when the screen opened).
+  const social = async (provider: Provider) => {
+    if (providers[provider] || (await loadProviders(true))[provider]) startSocial(provider)
+    else showToast(providerName[provider] + ' 로그인은 준비 중이에요', '서버에 연결되지 않았거나 아직 준비 중이에요. 이메일로 로그인해 주세요')
+  }
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
@@ -69,8 +73,8 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
       {kind === 'GENERAL' ? <div className="m-social" role="group" aria-label="간편 로그인">
         <span className="m-social-line">간편 로그인 · 개인 회원</span>
         <div className="m-social-row">
-          <button type="button" className="m-social-btn kakao" aria-label="카카오로 로그인" onClick={() => social('kakao')}><KakaoMark size={26} /></button>
-          <button type="button" className="m-social-btn google" aria-label="구글로 로그인" onClick={() => social('google')}><GoogleMark size={24} /></button>
+          <button type="button" className="m-social-btn kakao" aria-label="카카오로 로그인" onClick={() => void social('kakao')}><KakaoMark size={26} /></button>
+          <button type="button" className="m-social-btn google" aria-label="구글로 로그인" onClick={() => void social('google')}><GoogleMark size={24} /></button>
         </div>
       </div> : <p className="m-social-line m-org-only">기관회원은 이메일로만 로그인할 수 있어요</p>}
       <p className="m-fine">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요.</p>
