@@ -38,6 +38,12 @@ public class LabPlugin extends Plugin {
             JSObject out = new JSObject();
             out.put("text", data.getStringExtra("text"));
             out.put("host", data.getStringExtra("host"));
+            java.util.ArrayList<String> texts = data.getStringArrayListExtra("texts");
+            if (texts != null) {
+                com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
+                for (String text : texts) list.put(text);
+                out.put("texts", list);
+            }
             call.resolve(out);
         } else {
             call.reject("closed", "CANCELLED");

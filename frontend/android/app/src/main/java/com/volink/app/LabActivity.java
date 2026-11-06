@@ -18,6 +18,9 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+import java.util.ArrayList;
+import org.json.JSONObject;
 import androidx.appcompat.app.AppCompatActivity;
 import org.json.JSONTokener;
 
@@ -34,17 +37,25 @@ public class LabActivity extends AppCompatActivity {
     private Button take;
     private String stepScript;
     private int lastStep = 0;
+    private Button close;
+    /** Pages taken in this visit (one 실적 page, one 신청 현황 page, others added); the window stays open until 완료. */
+    private final ArrayList<String> pages = new ArrayList<>();
+    private int summaryAt = -1, applicationsAt = -1;
+    private String host = "";
+
+    private String stepCall(String text) {
+        return "(function(t,pw,ds,da){" + stepScript + "})(" + text + ",!!document.querySelector('input[type=password]')," + (summaryAt >= 0) + "," + (applicationsAt >= 0) + ")";
+    }
     private final Handler timer = new Handler(Looper.getMainLooper());
     /** Every 1.5s: run the app's step script on the page and show its line (① 로그인 … ④ 이 화면 가져오기). */
     private final Runnable checkStep = new Runnable() {
         @Override public void run() {
             if (web != null && stepScript != null && !stepScript.isEmpty()) {
-                String js = "(function(){try{var t=document.body?document.body.innerText.slice(0,20000):'';"
-                        + "var pw=!!document.querySelector('input[type=password]');return (function(t,pw){" + stepScript + "})(t,pw);}catch(e){return '';}})()";
+                String js = "(function(){try{return " + stepCall("document.body?document.body.innerText.slice(0,20000):''") + ";}catch(e){return '';}})()";
                 web.evaluateJavascript(js, value -> {
                     String out;
                     try { Object parsed = new JSONTokener(value).nextValue(); out = parsed == null ? "" : parsed.toString(); } catch (Exception e) { out = ""; }
-                    if (out.length() > 2 && out.charAt(1) == '|') showStep(out.charAt(0) - '0', out.substring(2));
+                    if (out.length() > 3 && out.charAt(2) == '|') showStep(out.charAt(0) - '0', out.substring(3));
                 });
             }
             timer.postDelayed(this, 1500);
@@ -56,7 +67,7 @@ public class LabActivity extends AppCompatActivity {
         if (step == lastStep) return;
         lastStep = step;
         boolean ready = step == 4;
-        guide.setBackgroundColor(Color.parseColor(ready ? "#2E7D5B" : "#2B5AA8"));
+        guide.setBackgroundColor(Color.parseColor(ready || step == 5 ? "#2E7D5B" : "#2B5AA8"));
         take.setBackgroundColor(Color.parseColor(ready ? "#2E7D5B" : "#E4E8E5"));
         take.setTextColor(ready ? Color.WHITE : Color.parseColor("#2A332E"));
         if (ready) take.animate().scaleX(1.08f).scaleY(1.08f).setDuration(180).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(180).start()).start();
@@ -79,9 +90,9 @@ public class LabActivity extends AppCompatActivity {
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(12), dp(8), dp(12), dp(8));
         bar.setBackgroundColor(Color.parseColor("#F3F5F2"));
-        Button close = new Button(this);
+        close = new Button(this);
         close.setText("닫기");
-        close.setOnClickListener(v -> { setResult(RESULT_CANCELED); finish(); });
+        close.setOnClickListener(v -> done());
         where = new TextView(this);
         where.setTextSize(12);
         where.setTextColor(Color.parseColor("#5D6B63"));
@@ -89,17 +100,7 @@ public class LabActivity extends AppCompatActivity {
         LinearLayout.LayoutParams grow = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         take = new Button(this);
         take.setText("이 화면 가져오기");
-        take.setOnClickListener(v -> web.evaluateJavascript("(function(){return document.body ? document.body.innerText : ''})()", value -> {
-            String text;
-            try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception e) { text = ""; }
-            if (text.length() > MAX) text = text.substring(0, MAX);
-            Intent data = new Intent();
-            data.putExtra("text", text);
-            Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
-            data.putExtra("host", page.getHost());
-            setResult(RESULT_OK, data);
-            finish();
-        }));
+        take.setOnClickListener(v -> takePage());
         bar.addView(close);
         bar.addView(where, grow);
         bar.addView(take);
@@ -143,10 +144,51 @@ public class LabActivity extends AppCompatActivity {
         timer.postDelayed(checkStep, 1200);
     }
 
+    /** "이 화면 가져오기": keeps this page's text (and which page it is) and stays on 1365 for the next one. */
+    private void takePage() {
+        String kind = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
+        String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kind + ";}catch(e){}"
+                + "return JSON.stringify({text:t,kind:String(k).charAt(1)});})()";
+        web.evaluateJavascript(js, value -> {
+            String text = "", kind = "-";
+            try {
+                Object parsed = new JSONTokener(value).nextValue();
+                JSONObject page = new JSONObject(parsed == null ? "{}" : parsed.toString());
+                text = page.optString("text", "");
+                kind = page.optString("kind", "-");
+            } catch (Exception ignored) { }
+            if (text.length() > MAX) text = text.substring(0, MAX);
+            if (text.trim().isEmpty()) { Toast.makeText(this, "읽을 글자가 없어요", Toast.LENGTH_SHORT).show(); return; }
+            int at = "S".equals(kind) ? summaryAt : "A".equals(kind) ? applicationsAt : -1;
+            if (at >= 0) pages.set(at, text); else { pages.add(text); at = pages.size() - 1; }
+            if ("S".equals(kind)) summaryAt = at;
+            if ("A".equals(kind)) applicationsAt = at;
+            Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
+            host = page.getHost() == null ? "" : page.getHost();
+            close.setText("완료 (" + pages.size() + ")");
+            Toast.makeText(this, "S".equals(kind) ? "실적을 가져왔어요" : "A".equals(kind) ? "신청 현황을 가져왔어요" : "이 화면을 가져왔어요", Toast.LENGTH_SHORT).show();
+            lastStep = 0;
+        });
+    }
+
+    /** 닫기 / 완료: the pages taken so far go back to the app; none taken = cancelled. */
+    private void done() {
+        if (pages.isEmpty()) { setResult(RESULT_CANCELED); finish(); return; }
+        int total = 0;
+        ArrayList<String> out = new ArrayList<>();
+        for (String text : pages) { if (total + text.length() > MAX) break; out.add(text); total += text.length(); }
+        Intent data = new Intent();
+        data.putExtra("text", String.join("\n\n", out));
+        data.putStringArrayListExtra("texts", out);
+        data.putExtra("host", host);
+        setResult(RESULT_OK, data);
+        finish();
+    }
+
     @Override
     public void onBackPressed() {
         if (web != null && web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        else done();
     }
 
     @Override
