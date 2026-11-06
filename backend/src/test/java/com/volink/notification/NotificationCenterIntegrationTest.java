@@ -99,6 +99,45 @@ class NotificationCenterIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void handledApplicationsAndQuestionsShowWhatBecameOfThemAndCountAsRead() throws Exception {
+        String organizer = token(member("GENERAL"));
+        long activity = createActivity(activity("처리 표시 활동", "처리하면 알림이 바뀌어요 — 장갑과 집게를 준비해 두었어요."), organizer);
+        String a = token(member("GENERAL")), b = token(member("GENERAL"));
+        long pa = json.readTree(perform(post("/api/activities/" + activity + "/participations"), Map.of(), a).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).path("participation").path("id").asLong();
+        long pb = json.readTree(perform(post("/api/activities/" + activity + "/participations"), Map.of(), b).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).path("participation").path("id").asLong();
+        // Old-style row (before V25, no reference): settled once nothing waits on the activity.
+        notifications.send(organizerId(organizer), "PENDING_REMINDER", "승인을 기다리는 신청이 2건 있어요", "처리 표시 활동", "#/manage/" + activity);
+        JsonNode group = center(organizer, "APPLY").path("items");
+        assertThat(group.get(0).path("done").isNull()).isTrue();
+
+        perform(post("/api/participations/" + pa + "/approve"), Map.of(), organizer).andExpect(status().isNoContent());
+        JsonNode rows = center(organizer, "APPLY");
+        // One of two handled: the grouped row still waits; the reminder too.
+        assertThat(rows.path("items").get(1).path("done").isNull()).isTrue();
+        assertThat(rows.path("items").get(0).path("done").isNull()).isTrue();
+        assertThat(rows.path("unread").path("APPLY").asInt()).isEqualTo(2);
+
+        perform(post("/api/participations/" + pb + "/reject"), Map.of("reason", "정원 조정"), organizer).andExpect(status().isNoContent());
+        rows = center(organizer, "APPLY");
+        assertThat(rows.path("items").get(0).path("done").asText()).isEqualTo("처리 완료");
+        assertThat(rows.path("items").get(1).path("done").asText()).isEqualTo("처리 완료"); // 승인 완료 + 거절함
+        assertThat(rows.path("items").get(1).path("read").asBoolean()).isTrue();
+        assertThat(rows.path("unread").path("APPLY").asInt()).isZero();
+        assertThat(jdbc.queryForList("SELECT done_label FROM notifications WHERE ref_id IN (?, ?) AND type = 'APPLIED' ORDER BY ref_id", String.class, pa, pb))
+                .containsExactly("승인 완료", "거절함");
+
+        long question = json.readTree(perform(post("/api/activities/" + activity + "/questions"), Map.of("body", "물은 있나요?"), a)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        assertThat(center(organizer, "TALK").path("items").get(0).path("done").isNull()).isTrue();
+        perform(post("/api/activity-posts/" + question + "/answer"), Map.of("body", "네 준비해 둘게요"), organizer).andExpect(status().isCreated());
+        JsonNode talk = center(organizer, "TALK");
+        assertThat(talk.path("items").get(0).path("done").asText()).isEqualTo("답변 완료");
+        assertThat(talk.path("unread").path("TALK").asInt()).isZero();
+    }
+
+    @Test
     void aDeletedActivityIsMarkedAndOldStyleSendsGetTheirActivityFromTheLink() throws Exception {
         String organizer = token(member("GENERAL"));
         long activity = createActivity(activity("지워질 활동", "곧 지워요 — 장갑과 집게를 준비해 두었어요."), organizer);

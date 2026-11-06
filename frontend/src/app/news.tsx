@@ -30,7 +30,8 @@ export function NewsEntry({ activityId, organizer }: { activityId: number; organ
   </a>
 }
 
-export function NewsScreen({ id, user }: { id: number; user: User }) {
+/** embedded: inside 모집 관리's 소식 tab — the same chat room without its own top bar (2026-11-06). */
+export function NewsScreen({ id, user, embedded, onChanged }: { id: number; user: User; embedded?: boolean; onChanged?: () => void }) {
   const [activity, setActivity] = useState<LiveActivity | null>(null)
   const [thread, setThread] = useState<Thread | null>(null)
   const [failed, setFailed] = useState('')
@@ -44,7 +45,7 @@ export function NewsScreen({ id, user }: { id: number; user: User }) {
   const [removing, setRemoving] = useState<Post | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const end = useRef<HTMLDivElement>(null)
-  const load = useCallback(() => api<Thread>('/api/activities/' + id + '/posts').then(t => { setThread(t); return t }), [id])
+  const load = useCallback(() => api<Thread>('/api/activities/' + id + '/posts').then(t => { setThread(t); onChanged?.(); return t }), [id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api<LiveActivity>('/api/activities/' + id).then(setActivity).catch(() => {})
     // Load first (so "new" marks show), then record that this person has seen everything up to now.
@@ -86,8 +87,8 @@ export function NewsScreen({ id, user }: { id: number; user: User }) {
 
   const subtitle = activity ? `${activity.title} · ${dayWord(activity.date)} ${activity.startTime}` : ''
   const head = <TopBar title="활동 소식" back="history" />
-  if (failed) return <div className="m-screen">{head}<div className="m-body"><div className="m-note bad">{failed}</div></div></div>
-  if (!thread || !activity) return <div className="m-screen">{head}<Loading /></div>
+  if (failed) return embedded ? <div className="m-note bad">{failed}</div> : <div className="m-screen">{head}<div className="m-body"><div className="m-note bad">{failed}</div></div></div>
+  if (!thread || !activity) return embedded ? <Loading /> : <div className="m-screen">{head}<Loading /></div>
 
   const meeting = activity.meetingPoint || activity.placeName || '만나는 곳'
   const own = (activity.supplies ?? []).filter(s => !s.provided).map(s => s.name), given = (activity.supplies ?? []).filter(s => s.provided).map(s => s.name)
@@ -107,9 +108,9 @@ export function NewsScreen({ id, user }: { id: number; user: User }) {
     <div className="n-notice-foot">{read(post)}{post.mine && <button type="button" className="m-text-btn" onClick={() => setRemoving(post)}>지우기</button>}</div>
   </section>
 
-  return <div className="m-screen n-screen">
-    <TopBar title="활동 소식" sub={subtitle} back="history" />
-    <div className="m-body n-body">
+  // Built once and wrapped below (a wrapper component made here would remount the input on every keystroke).
+  const content = <>
+    <div className={embedded ? 'n-body n-embed-body' : 'm-body n-body'}>
       {organizer && <div className="m-seg-tabs inset" role="tablist" aria-label="소식 종류">
         <button role="tab" aria-selected={tab === 'notice'} className={tab === 'notice' ? 'on' : ''} onClick={() => { setTab('notice'); setAnswering(null) }}>공지</button>
         <button role="tab" aria-selected={tab === 'question'} className={tab === 'question' ? 'on' : ''} onClick={() => setTab('question')}>질문{thread.unanswered > 0 && <i>{thread.unanswered}</i>}</button></div>}
@@ -160,5 +161,7 @@ export function NewsScreen({ id, user }: { id: number; user: User }) {
     {removing && <Sheet title={removing.kind === 'NOTICE' ? '이 공지를 지울까요?' : '이 질문을 지울까요?'} onClose={() => setRemoving(null)}
       footer={<button type="button" className="m-btn danger" onClick={() => remove(removing)}>지우기</button>}>
       <p className="m-help">{removing.kind === 'QUESTION' ? '달린 답변도 함께 지워져요.' : '참가자 화면에서도 사라져요.'}</p></Sheet>}
-  </div>
+  </>
+  return embedded ? <section className="n-embed" aria-label="활동 소식">{content}</section>
+    : <div className="m-screen n-screen"><TopBar title="활동 소식" sub={subtitle} back="history" />{content}</div>
 }

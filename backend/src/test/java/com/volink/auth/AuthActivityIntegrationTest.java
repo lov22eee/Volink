@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Week 3 rules through the real HTTP API and a real MySQL (docs/test-cases.md A-01..A-05, R-01..R-03). */
@@ -52,6 +53,78 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         perform(post("/api/auth/signup"), signupBody(email, "GENERAL", TODAY.minusYears(20)), null).andExpect(status().isCreated());
         perform(post("/api/auth/signup"), signupBody(email.toUpperCase(), "GENERAL", TODAY.minusYears(20)), null)
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMAIL_TAKEN"));
+    }
+
+    @Test
+    void appInstitutionSignupKeepsTheProfileAndTheManagerIsToldTheReviewResult() throws Exception {
+        String email = email();
+        Map<String, Object> body = signupBody(email, "INSTITUTION", TODAY.minusYears(30));
+        body.put("organizationType", "VOLUNTEER_CENTER");
+        body.put("organizationAddress", "경기 양주시 부흥로 1533");
+        body.put("vmsRegistered", true);
+        body.put("vmsCode", "VMS-1234");
+        perform(post("/api/auth/signup"), body, null).andExpect(status().isCreated());
+        Map<String, Object> org = jdbc.queryForMap("SELECT o.id, o.org_type, o.address, o.vms_registered, o.vms_code FROM organizations o JOIN users u ON u.id = o.manager_user_id WHERE u.email = ?", email);
+        assertThat(org.get("org_type")).isEqualTo("VOLUNTEER_CENTER");
+        assertThat(org.get("address")).isEqualTo("경기 양주시 부흥로 1533");
+        assertThat(org.get("vms_code")).isEqualTo("VMS-1234");
+        long manager = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+
+        String admin = token(admin());
+        perform(get("/api/admin/organizations"), null, admin).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + org.get("id") + ")].orgType").value("VOLUNTEER_CENTER"))
+                .andExpect(jsonPath("$[?(@.id == " + org.get("id") + ")].vmsCode").value("VMS-1234"));
+        perform(post("/api/admin/organizations/" + org.get("id") + "/approve"), Map.of(), admin).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForList("SELECT title FROM notifications WHERE user_id = ? AND type = 'ORGANIZATION_REVIEW'", String.class, manager))
+                .containsExactly("기관 확인이 끝났어요");
+
+        // A refusal says why; an unknown type or a bad 수요처 number is refused at signup.
+        String other = email();
+        perform(post("/api/auth/signup"), signupBody(other, "INSTITUTION", TODAY.minusYears(30)), null).andExpect(status().isCreated());
+        long otherOrg = jdbc.queryForObject("SELECT o.id FROM organizations o JOIN users u ON u.id = o.manager_user_id WHERE u.email = ?", Long.class, other);
+        perform(post("/api/admin/organizations/" + otherOrg + "/reject"), Map.of("reason", "기관 연락처로 확인되지 않음"), admin).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForList("SELECT body FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = ? AND n.type = 'ORGANIZATION_REVIEW'", String.class, other))
+                .containsExactly("반려 사유: 기관 연락처로 확인되지 않음");
+        Map<String, Object> bad = signupBody(email(), "INSTITUTION", TODAY.minusYears(30));
+        bad.put("organizationType", "COMPANY");
+        bad.put("vmsCode", "수요처 번호");
+        perform(post("/api/auth/signup"), bad, null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field == 'organizationType')]").exists()).andExpect(jsonPath("$.fieldErrors[?(@.field == 'vmsCode')]").exists());
+    }
+
+    @Test
+    void anAddressTheServerDoesNotHaveIsNotFoundNotForbidden() throws Exception {
+        String member = token(member("GENERAL"));
+        perform(put("/api/activities/1/no-such-feature"), Map.of(), member).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        perform(put("/api/activities/1/no-such-feature"), Map.of(), null).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void appLoginTabMustMatchTheAccountAndAWrongPasswordNeverRevealsTheType() throws Exception {
+        String general = member("GENERAL");
+        String institution = member("INSTITUTION");
+        // Right tab: a session. Wrong tab with the right password: no token, a pointer to the other tab.
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "GENERAL"), null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").isNotEmpty());
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "INSTITUTION"), null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MEMBER_TYPE_MISMATCH"))
+                .andExpect(jsonPath("$.message").value("개인 회원 계정이에요. 개인회원 탭에서 로그인해 주세요."))
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD, "memberType", "GENERAL"), null)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("기관 회원 계정이에요. 기관회원 탭에서 로그인해 주세요."));
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD, "memberType", "INSTITUTION"), null)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.user.memberType").value("INSTITUTION"))
+                .andExpect(jsonPath("$.user.organization.status").value("PENDING"));
+        // A wrong password answers the same on either tab: the type is never told before the password matches.
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", "wrongPass1", "memberType", "GENERAL"), null)
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        perform(post("/api/auth/login"), Map.of("email", "nobody-" + general, "password", "wrongPass1", "memberType", "INSTITUTION"), null)
+                .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        perform(post("/api/auth/login"), Map.of("email", general, "password", PASSWORD, "memberType", "ADMIN"), null)
+                .andExpect(status().isBadRequest());
+        // The web sends no tab: unchanged.
+        perform(post("/api/auth/login"), Map.of("email", institution, "password", PASSWORD), null).andExpect(status().isOk());
     }
 
     @Test

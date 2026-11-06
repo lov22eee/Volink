@@ -62,11 +62,16 @@ public class NotificationService {
      * repeat it). {@code activityId}: for links that do not name the activity (the records page, the search page).
      */
     public void send(long userId, String type, String title, String body, String link, Long activityId, String dedupeKey) {
+        send(userId, type, title, body, link, activityId, dedupeKey, null);
+    }
+
+    /** {@code refId}: the participation (새 참가 신청) or question (새 질문) this is about, so it can show when it is handled. */
+    public void send(long userId, String type, String title, String body, String link, Long activityId, String dedupeKey, Long refId) {
         String category = CATEGORY.getOrDefault(type, "OTHER");
         int saved = jdbc.update("""
-                INSERT INTO notifications(user_id, type, category, title, body, link_path, activity_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO notifications(user_id, type, category, title, body, link_path, activity_id, ref_id, dedupe_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE id = id""",
-                userId, type, category, cut(title, 100), cut(body, 500), link, activityId, dedupeKey);
+                userId, type, category, cut(title, 100), cut(body, 500), link, activityId, refId, dedupeKey);
         // A repeated dedupe key changes nothing (0 rows) and is not pushed again.
         if (saved == 1) push.queue(userId, category, cut(title, 100), cut(body, 500), link);
     }
@@ -77,8 +82,39 @@ public class NotificationService {
         return m.find() ? Long.valueOf(m.group(1)) : null;
     }
 
+    /**
+     * Handled action notifications (V25), worked out when the list is read so every path counts (승인·거절·자동 승인·
+     * 본인 취소·시작 마감·답변·질문 삭제): the row gets a label (승인 완료, 답변 완료 …) and counts as read.
+     * Rows from before V25 (no ref_id) are settled per activity once nothing is waiting there any more.
+     */
+    void settle(long userId) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        jdbc.update("""
+                UPDATE notifications n JOIN participations p ON p.id = n.ref_id
+                SET n.done_label = CASE WHEN p.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW') THEN '승인 완료'
+                                        WHEN p.status = 'REJECTED' THEN '거절함' WHEN p.status = 'CANCELLED' THEN '신청 취소됨' ELSE '신청 마감' END,
+                    n.done_at = ?, n.read_at = COALESCE(n.read_at, ?)
+                WHERE n.user_id = ? AND n.type = 'APPLIED' AND n.done_label IS NULL AND p.status <> 'APPLIED'""", now, now, userId);
+        jdbc.update("""
+                UPDATE notifications n JOIN activity_posts q ON q.id = n.ref_id
+                SET n.done_label = CASE WHEN q.deleted_at IS NULL THEN '답변 완료' ELSE '삭제된 질문' END, n.done_at = ?, n.read_at = COALESCE(n.read_at, ?)
+                WHERE n.user_id = ? AND n.type = 'QUESTION' AND n.done_label IS NULL
+                  AND (q.deleted_at IS NOT NULL OR EXISTS (SELECT 1 FROM activity_posts x WHERE x.parent_id = q.id AND x.deleted_at IS NULL))""", now, now, userId);
+        jdbc.update("""
+                UPDATE notifications n SET n.done_label = '처리 완료', n.done_at = ?, n.read_at = COALESCE(n.read_at, ?)
+                WHERE n.user_id = ? AND n.done_label IS NULL AND n.ref_id IS NULL AND n.activity_id IS NOT NULL
+                  AND (n.type = 'PENDING_REMINDER' OR (n.type = 'APPLIED' AND n.title LIKE '새 참가 신청%'))
+                  AND NOT EXISTS (SELECT 1 FROM participations p WHERE p.activity_id = n.activity_id AND p.status = 'APPLIED')""", now, now, userId);
+        jdbc.update("""
+                UPDATE notifications n SET n.done_label = '답변 완료', n.done_at = ?, n.read_at = COALESCE(n.read_at, ?)
+                WHERE n.user_id = ? AND n.done_label IS NULL AND n.ref_id IS NULL AND n.activity_id IS NOT NULL AND n.type = 'QUESTION'
+                  AND NOT EXISTS (SELECT 1 FROM activity_posts q WHERE q.activity_id = n.activity_id AND q.kind = 'QUESTION' AND q.deleted_at IS NULL
+                                  AND NOT EXISTS (SELECT 1 FROM activity_posts x WHERE x.parent_id = q.id AND x.deleted_at IS NULL))""", now, now, userId);
+    }
+
     /** The web list (latest 50, as before). */
     public List<Map<String, Object>> mine(long userId, boolean unreadOnly) {
+        settle(userId);
         return jdbc.queryForList(Sql.kst("""
                 SELECT id, type, title, body, link_path AS link, read_at IS NOT NULL AS `read`,
                        DATE_FORMAT(KST(created_at), '%Y-%m-%d %H:%i') AS createdAt
@@ -100,8 +136,9 @@ public class NotificationService {
         if (category != null) { where += " AND n.category = ?"; args.add(category); }
         if (before != null) { where += " AND n.id < ?"; args.add(before); }
         args.add(size + 1);
+        settle(userId);
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
-                SELECT n.id, n.type, n.category, n.title, n.body, n.link_path AS link, n.read_at IS NOT NULL AS `read`, n.activity_id AS activityId,
+                SELECT n.id, n.type, n.category, n.title, n.body, n.link_path AS link, n.read_at IS NOT NULL AS `read`, n.done_label AS done, n.activity_id AS activityId,
                        a.title AS activityTitle, (n.activity_id IS NOT NULL AND (a.id IS NULL OR a.status = 'DELETED')) AS activityGone,
                        DATE_FORMAT(KST(n.created_at), '%Y-%m-%d %H:%i:%s') AS at
                 FROM notifications n LEFT JOIN activities a ON a.id = n.activity_id""") + where + " ORDER BY n.id DESC LIMIT ?", args.toArray());
@@ -118,6 +155,9 @@ public class NotificationService {
                 ids.add(((Number) row.get("id")).longValue());
                 group.put("count", ids.size());
                 group.put("read", truthy(group.get("read")) && truthy(row.get("read")));
+                // A grouped row is done only when every application in it is; mixed outcomes read 처리 완료.
+                Object done = row.get("done"), was = group.get("done");
+                group.put("done", done == null || was == null ? null : done.equals(was) ? was : "처리 완료");
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>(row);
@@ -139,6 +179,7 @@ public class NotificationService {
 
     /** Unread counts for the chips: total and per category. */
     public Map<String, Object> unreadCounts(long userId) {
+        settle(userId);
         Map<String, Object> counts = new LinkedHashMap<>(Map.of("ALL", 0, "APPLY", 0, "ACTIVITY", 0, "TALK", 0, "OTHER", 0));
         int total = 0;
         for (Map<String, Object> row : jdbc.queryForList("SELECT category, COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL GROUP BY category", userId)) {
@@ -151,6 +192,7 @@ public class NotificationService {
     }
 
     public int unread(long userId) {
+        settle(userId);
         return jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL", Integer.class, userId);
     }
 

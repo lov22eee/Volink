@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class CommunityService {
-    static final List<String> CATEGORIES = List.of("FREE", "QUESTION", "REVIEW");
+    static final List<String> CATEGORIES = List.of("FREE", "QUESTION", "REVIEW", "PROMO");
     static final int TITLE_MAX = 60, BODY_MAX = 2000, COMMENT_MAX = 500, POSTS_PER_DAY = 10, COMMENTS_PER_HOUR = 30;
 
     private final JdbcTemplate jdbc;
@@ -41,6 +41,9 @@ public class CommunityService {
             p.id, p.category, p.title, p.body, p.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, a.id AS activityId, (p.activity_id IS NOT NULL) AS reviewed,
             a.title AS activityTitle, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS activityDate,
             (SELECT ac.name FROM categories ac WHERE ac.id = a.category_id) AS activityCategory, p.edited_at IS NOT NULL AS edited,
+            DATE_FORMAT(a.starts_at, '%H:%i') AS activityTime, a.status AS activityStatus, a.capacity AS activityCapacity, a.starts_at AS activityStartsAt,
+            (SELECT dp.name FROM demo_places dp WHERE dp.id = a.place_id) AS activityPlace,
+            (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS activityConfirmed,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
@@ -48,12 +51,20 @@ public class CommunityService {
             FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id AND a.status <> 'DELETED'
             """;
 
-    /** sort = latest (default) or popular (likes, then comments, then newest). Up to 50. */
-    public List<Map<String, Object>> list(long viewerId, String category, String sort) {
+    public List<Map<String, Object>> list(long viewerId, String category, String sort) { return list(viewerId, category, sort, null); }
+
+    /** sort = latest (default) or popular (likes, then comments, then newest). q = words in the title or text (통합검색). Up to 50. */
+    public List<Map<String, Object>> list(long viewerId, String category, String sort, String q) {
         boolean filter = category != null && CATEGORIES.contains(category);
+        String words = q == null ? "" : q.trim();
+        if (words.length() > 40) words = words.substring(0, 40);
+        String like = "%" + words.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
         String order = "popular".equals(sort) ? "likes DESC, comments DESC, p.created_at DESC, p.id DESC" : "p.created_at DESC, p.id DESC";
-        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL" + (filter ? " AND p.category = ?" : "") + " ORDER BY " + order + " LIMIT 50"),
-                filter ? new Object[]{viewerId, category} : new Object[]{viewerId});
+        List<Object> args = new java.util.ArrayList<>(List.of(viewerId));
+        if (filter) args.add(category);
+        if (!words.isEmpty()) { args.add(like); args.add(like); }
+        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL" + (filter ? " AND p.category = ?" : "")
+                + (words.isEmpty() ? "" : " AND (p.title LIKE ? OR p.body LIKE ?)") + " ORDER BY " + order + " LIMIT 50"), args.toArray());
         rows.forEach(row -> {
             String body = (String) row.remove("body");
             row.put("preview", body.length() > 80 ? body.substring(0, 80) + "…" : body);
@@ -111,6 +122,17 @@ public class CommunityService {
             activityId = request.activityId();
             if (activityId == null || reviewable(userId).stream().noneMatch(row -> ((Number) row.get("id")).longValue() == request.activityId()))
                 errors.put("activityId", "후기는 내가 참여를 마친 활동에만 쓸 수 있어요.");
+        }
+        if ("PROMO".equals(category)) {
+            // Only the organizer, only an activity still recruiting and not started, and one introduction per activity.
+            activityId = request.activityId();
+            Map<String, Object> own = activityId == null ? null : jdbc.queryForList(
+                    "SELECT status, starts_at > ? AS upcoming FROM activities WHERE id = ? AND organizer_id = ?", java.time.LocalDateTime.now(clock), activityId, userId)
+                    .stream().findFirst().orElse(null);
+            if (own == null || !"RECRUITING".equals(own.get("status")) || ((Number) own.get("upcoming")).intValue() != 1)
+                errors.put("activityId", "내가 모집 중인 활동만 홍보할 수 있어요.");
+            else if (jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE category = 'PROMO' AND activity_id = ? AND deleted_at IS NULL", Integer.class, activityId) > 0)
+                throw new ApiException(HttpStatus.CONFLICT, "PROMO_EXISTS", "이 활동은 이미 커뮤니티에 소개했어요.");
         }
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         int today = jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE author_id = ? AND created_at > NOW() - INTERVAL 1 DAY", Integer.class, userId);
@@ -199,7 +221,13 @@ public class CommunityService {
         row.put("liked", ((Number) row.get("liked")).intValue() == 1);
         if (row.get("edited") instanceof Number edited) row.put("edited", edited.intValue() == 1);
         // A deleted activity (organizer withdrew or deleted it) drops its title and link; the review stays verified.
-        row.put("verified", ((Number) row.remove("reviewed")).intValue() == 1);
+        row.put("verified", ((Number) row.remove("reviewed")).intValue() == 1 && "REVIEW".equals(row.get("category")));
+        // 봉사 홍보: the live card (open = still taking applications: recruiting, not started, seats or a waiting list).
+        if ("PROMO".equals(row.get("category")) && row.get("activityId") != null) {
+            boolean upcoming = row.get("activityStartsAt") instanceof java.time.LocalDateTime at && at.isAfter(java.time.LocalDateTime.now(clock));
+            row.put("activityOpen", "RECRUITING".equals(row.get("activityStatus")) && upcoming);
+        }
+        row.remove("activityStartsAt");
         if (!row.containsKey("body")) row.remove("authorIdRaw");
     }
 

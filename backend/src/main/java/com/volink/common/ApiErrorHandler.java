@@ -20,6 +20,15 @@ public class ApiErrorHandler {
         return ResponseEntity.badRequest().body(body("VALIDATION_FAILED", "요청 형식을 확인해 주세요.", Map.of()));
     }
 
+    /**
+     * An address the server does not have (for example an app newer than the server): 404 with a clear message instead
+     * of the 403 '권한이 없습니다' it used to fall through to (2026-11-06, 자동 승인 on an older AWS server).
+     */
+    @ExceptionHandler({org.springframework.web.servlet.resource.NoResourceFoundException.class, org.springframework.web.HttpRequestMethodNotSupportedException.class})
+    ResponseEntity<Map<String, Object>> missing(Exception error) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body("NOT_FOUND", "서버에 없는 기능이에요. 앱이나 서버를 최신으로 업데이트해 주세요.", Map.of()));
+    }
+
     public static Map<String, Object> body(String code, String message, Map<String, String> fieldErrors) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("code", code);

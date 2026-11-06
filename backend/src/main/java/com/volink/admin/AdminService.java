@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.volink.notification.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,16 +21,19 @@ public class AdminService {
     private final JdbcTemplate jdbc;
     private final ActivityService activities;
     private final Clock clock;
+    private final NotificationService notifications;
 
-    public AdminService(JdbcTemplate jdbc, ActivityService activities, Clock clock) {
+    public AdminService(JdbcTemplate jdbc, ActivityService activities, Clock clock, NotificationService notifications) {
         this.jdbc = jdbc;
         this.activities = activities;
         this.clock = clock;
+        this.notifications = notifications;
     }
 
     public List<Map<String, Object>> organizations(String status) {
         return jdbc.queryForList(Sql.kst("""
-                SELECT o.id, o.name, o.contact, o.status, o.reject_reason AS rejectReason,
+                SELECT o.id, o.name, o.org_type AS orgType, o.contact, o.address, o.vms_registered AS vmsRegistered, o.vms_code AS vmsCode,
+                       o.status, o.reject_reason AS rejectReason,
                        u.display_name AS managerName, u.email AS managerEmail, DATE_FORMAT(KST(o.created_at), '%Y-%m-%d %H:%i') AS requestedAt
                 FROM organizations o JOIN users u ON u.id = o.manager_user_id
                 WHERE o.status = ? ORDER BY o.created_at, o.id
@@ -46,6 +50,10 @@ public class AdminService {
         jdbc.update("UPDATE organizations SET status = ?, reviewed_by = ?, reviewed_at = ?, reject_reason = ? WHERE id = ?",
                 to, adminId, now(), approve ? null : reason, id);
         record(adminId, "ORGANIZATION", id, approve ? "APPROVE" : "REJECT", from, to, reason);
+        // The manager hears the result in the app (and as a phone push when they allowed it; sent after commit).
+        long manager = jdbc.queryForObject("SELECT manager_user_id FROM organizations WHERE id = ?", Long.class, id);
+        if (approve) notifications.send(manager, "ORGANIZATION_REVIEW", "기관 확인이 끝났어요", "이제 기관 주관 활동을 열 수 있어요.", "#/home");
+        else notifications.send(manager, "ORGANIZATION_REVIEW", "기관 확인이 반려됐어요", "반려 사유: " + reason, "#/home");
     }
 
     public List<Map<String, Object>> reviewActivities() {

@@ -40,8 +40,9 @@ public class CommunityController {
     }
 
     @GetMapping("/api/community/posts")
-    public List<Map<String, Object>> list(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String category, @RequestParam(required = false) String sort) {
-        return community.list(user(jwt), category, sort);
+    public List<Map<String, Object>> list(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String category, @RequestParam(required = false) String sort,
+                                          @RequestParam(required = false) String q) {
+        return community.list(user(jwt), category, sort, q);
     }
 
     @GetMapping("/api/community/posts/{id}")

@@ -757,7 +757,11 @@ function RecordList({ records }: { records: MyRecord[] | null }) {
   </>
 }
 
-type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string; status?: string; rejectReason?: string | null }
+type PendingOrganization = { id: number; name: string; contact: string; managerName: string; managerEmail: string; requestedAt: string; status?: string; rejectReason?: string | null
+  orgType?: string | null; address?: string | null; vmsRegistered?: boolean | null; vmsCode?: string | null }
+const orgTypeLabel: Record<string, string> = { VOLUNTEER_CENTER: '자원봉사센터', WELFARE: '복지관·복지시설', SCHOOL: '학교·교육기관', NONPROFIT: '비영리단체', PUBLIC: '공공기관', OTHER: '기타' }
+/** 앱 기관회원 가입(V23)의 유형·주소·1365 수요처: 있을 때만. */
+const orgProfile = (o: PendingOrganization) => [o.orgType ? orgTypeLabel[o.orgType] ?? o.orgType : null, o.address, o.vmsRegistered ? '1365 수요처' + (o.vmsCode ? ' ' + o.vmsCode : '') : o.vmsRegistered === false ? '1365 수요처 아님' : null].filter(Boolean).join(' · ')
 type OrgStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 /** Whole days since a "yyyy-MM-dd HH:mm" KST time (server format), for "N일째 기다리는 중". */
@@ -821,7 +825,7 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
     <section className="admin-card" aria-label={orgTab === 'PENDING' ? '기관 확인 대기' : orgTab === 'APPROVED' ? '승인된 기관' : '반려된 기관'}>
       {organizations[orgTab] === null ? <div className="loading-state" role="status">기관 목록을 불러오는 중입니다.</div>
         : organizations[orgTab]!.length === 0 ? <p className="empty-line">{orgTab === 'PENDING' ? '확인을 기다리는 기관이 없습니다.' : '해당하는 기관이 없습니다.'}</p>
-        : orgTab === 'PENDING' ? <ul className="review-list">{organizations.PENDING!.map(item => <ReviewItem key={item.id} title={item.name} detail={`담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt} (${daysSince(item.requestedAt)}일째)`}
+        : orgTab === 'PENDING' ? <ul className="review-list">{organizations.PENDING!.map(item => <ReviewItem key={item.id} title={item.name} detail={`${orgProfile(item) ? orgProfile(item) + ' · ' : ''}담당 ${item.managerName} · ${item.managerEmail} · ${item.contact} · 신청 ${item.requestedAt} (${daysSince(item.requestedAt)}일째)`}
           onDecide={(approve, reason) => decide('/api/admin/organizations/' + item.id, approve, reason)} />)}</ul>
         : <ul className="review-list">{organizations[orgTab]!.map(item => <li key={item.id}><div><strong>{item.name}</strong><span>담당 {item.managerName} · {item.managerEmail} · 신청 {item.requestedAt}</span>{item.rejectReason && <small>반려 사유: {item.rejectReason}</small>}</div></li>)}</ul>}
     </section>

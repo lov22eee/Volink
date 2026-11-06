@@ -101,3 +101,14 @@ export function FieldStrip({ categories }: { categories: string[] }) {
     {categories.slice(0, 3).map((category, i) => <Badge key={category} category={category} x={[80, 200, 320][i]} y={[92, 80, 92][i]} size={[68, 76, 68][i]} />)}
   </svg>
 }
+
+/**
+ * 분야 대표 사진 (2026-11-06): free photos (public domain / CC0, no faces, docs/cover-photos.md) in place of the drawn
+ * cover where one exists. They stand for the field, never for a member's own photo (photo upload comes in week 7).
+ */
+const coverPhotos: Record<string, string> = { 환경: 'environment', 교육: 'education', 복지: 'welfare', '문화·예술': 'culture', 동물: 'animal', 지역사회: 'community' }
+export function CategoryPhoto({ category, seed, className }: { category: string; seed: number; className?: string }) {
+  const name = coverPhotos[category]
+  if (!name) return <CategoryCover category={category} seed={seed} className={className} />
+  return <img className={'cover photo' + (className ? ' ' + className : '')} src={`${import.meta.env.BASE_URL}covers/${name}.jpg`} alt="" loading="lazy" decoding="async" />
+}

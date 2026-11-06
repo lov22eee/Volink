@@ -32,19 +32,104 @@ async function login(page: Page, email: string) {
   await expect(page).toHaveURL(/#\/home$/)
 }
 
+test('login tabs: 기관회원 signs up with e-mail only, waits for 기관 확인, and a wrong tab is pointed to the right one', async ({ page }) => {
+  // Personal tab shows Kakao / Google; the institution tab hides them and says e-mail only.
+  await page.goto('/#/login')
+  await expect(page.getByRole('button', { name: '카카오로 로그인' })).toBeVisible()
+  await page.getByRole('tab', { name: '기관회원' }).click()
+  await expect(page.getByRole('button', { name: '카카오로 로그인' })).toHaveCount(0)
+  await expect(page.getByText('기관회원은 이메일로만 로그인할 수 있어요')).toBeVisible()
+  // A personal account on the institution tab: the right password, no session, a pointer to the other tab.
+  const personal = await signupByApi(page, '개인 탭 확인')
+  await page.getByLabel('이메일').fill(personal)
+  await page.getByLabel('비밀번호', { exact: true }).fill(password)
+  await page.getByRole('button', { name: '로그인', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText('개인 회원 계정이에요. 개인회원 탭에서 로그인해 주세요.')
+  await expect(page).toHaveURL(/#\/login/)
+
+  // 기관회원 가입: agreements first, the manager (e-mail, password, name, birth), then the organization.
+  await page.getByRole('link', { name: '기관회원 가입' }).click()
+  await expect(page.getByRole('heading', { name: '기관회원으로 시작하기 전에 확인해 주세요' })).toBeVisible()
+  const next = page.getByRole('button', { name: '다음' })
+  await expect(next).toBeDisabled()
+  await page.getByText('모두 동의').click()
+  await next.click()
+  await expect(page.getByRole('heading', { name: '담당자 이메일을 알려 주세요' })).toBeVisible()
+  const email = unique('org')
+  await page.getByPlaceholder('example@email.com').fill(email)
+  await next.click()
+  await page.getByLabel('비밀번호', { exact: true }).fill(password)
+  await page.getByLabel('비밀번호 확인').fill(password)
+  await next.click()
+  await page.getByPlaceholder('이름').fill('기관 담당자')
+  await next.click()
+  // The birth wheel is on the page (no sheet).
+  await page.getByRole('option', { name: '1995년' }).click()
+  await next.click()
+  await expect(page.getByRole('heading', { name: '어떤 기관인가요?' })).toBeVisible()
+  await page.getByRole('button', { name: '자원봉사센터' }).click()
+  await next.click()
+  const orgName = '앱 시험 기관 ' + Date.now()
+  await page.getByLabel('기관명').fill(orgName)
+  await next.click()
+  await expect(page.getByRole('heading', { name: '기관 주소를 알려 주세요' })).toBeVisible()
+  await page.getByRole('button', { name: /직접 입력/ }).click()
+  await page.getByLabel('기관 주소').fill('경기 양주시 부흥로 1533')
+  await next.click()
+  await page.getByLabel('기관 연락처').fill('031-000-0000')
+  await next.click()
+  await expect(page.getByRole('heading', { name: '1365에 등록된 수요처인가요?' })).toBeVisible()
+  await page.getByRole('button', { name: '네, 등록돼 있어요' }).click()
+  await page.getByLabel('1365 수요처 번호').fill('VMS-77')
+  await page.getByRole('button', { name: '제출하기' }).click()
+  // Right after: may we tell you when it is done? (the phone prompt is not available in the browser test)
+  const ask = page.getByRole('dialog', { name: '기관 확인이 끝나면 알려 드릴까요?' })
+  await expect(ask).toBeVisible()
+  await ask.getByRole('button', { name: '허용하지 않기' }).click()
+  // Before 기관 확인: only the review status (no tabs).
+  await expect(page.getByRole('heading', { name: '기관 확인을 기다리고 있어요' })).toBeVisible()
+  await expect(page.getByText(orgName)).toBeVisible()
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0)
+  await page.getByRole('button', { name: '다시 확인하기' }).click()
+  await expect(page.getByText('아직 확인 중이에요')).toBeVisible()
+
+  // The admin confirms it (with a reason) → 다시 확인하기 opens the app.
+  const adminLogin = await page.request.post('/api/auth/login', { data: { email: 'admin-01@demo.volink.kr', password: env.DEMO_ACCOUNT_PASSWORD } })
+  const admin = 'Bearer ' + (await adminLogin.json()).accessToken
+  const pending = await (await page.request.get('/api/admin/organizations?status=PENDING', { headers: { Authorization: admin } })).json() as { id: number; name: string }[]
+  const org = pending.find(o => o.name === orgName)!
+  expect((await page.request.post(`/api/admin/organizations/${org.id}/approve`, { headers: { Authorization: admin }, data: { reason: '앱 시험 기관 확인' } })).ok()).toBeTruthy()
+  await page.getByRole('button', { name: '다시 확인하기' }).click()
+  await expect(page).toHaveURL(/#\/home$/)
+  await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toBeVisible()
+
+  // The institution account on the personal tab is pointed back.
+  const other = await browserLogin(page, email, 'GENERAL')
+  expect(other.code).toBe('MEMBER_TYPE_MISMATCH')
+})
+
+async function browserLogin(page: Page, email: string, memberType: string) {
+  return (await page.request.post('/api/auth/login', { data: { email, password, memberType } })).json() as Promise<{ code?: string }>
+}
+
 async function tokenFor(page: Page, email: string) {
   const response = await page.request.post('/api/auth/login', { data: { email, password } })
   return 'Bearer ' + (await response.json()).accessToken
 }
 
-test('nothing is shown before signing in, and signup has three steps without an institution choice', async ({ page }) => {
+test('nothing is shown before signing in, and the personal tab signs up a personal member one question at a time', async ({ page }) => {
   await page.goto('/#/find')
   await expect(page.getByRole('button', { name: '로그인', exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: '개인회원' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('link', { name: '회원가입' }).click()
-  await expect(page.getByText('기관 가입은 PC에서 진행해 주세요.')).toBeVisible()
-  // One question at a time; earlier answers stay below and can be changed.
+  // Agreements first; one question per screen; no answers piled up below.
+  await expect(page.getByRole('heading', { name: 'Volink를 시작하기 전에 확인해 주세요' })).toBeVisible()
   const next = page.getByRole('button', { name: '다음' })
+  await expect(next).toBeDisabled()
+  await page.getByText('모두 동의').click()
+  await next.click()
+  await expect(page.getByRole('heading', { name: '이메일을 알려 주세요' })).toBeVisible()
   await expect(next).toBeDisabled()
   await page.getByPlaceholder('example@email.com').fill(unique('signup'))
   await next.click()
@@ -54,22 +139,20 @@ test('nothing is shown before signing in, and signup has three steps without an 
   await page.getByLabel('비밀번호', { exact: true }).fill('abcd1234')
   await page.getByLabel('비밀번호 확인').fill('abcd1234')
   await next.click()
-  await expect(page.getByRole('button', { name: '이메일 고치기' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '이메일 고치기' })).toHaveCount(0)
   await page.getByPlaceholder('이름').fill('앱 회원')
   await next.click()
-  // The birth wheel opens by itself.
+  // The birth wheel is on the page; under 14 cannot go on.
+  await page.getByRole('option', { name: `${new Date().getFullYear() - 10}년` }).click()
+  await expect(next).toBeDisabled()
   await page.getByRole('option', { name: '2003년' }).click()
-  await page.getByRole('button', { name: '완료' }).click()
   await next.click()
   // Interests are optional: pick up to 3 or leave them for later.
-  await expect(page.getByRole('heading', { name: '관심 있는 봉사를 골라 주세요' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '나중에 할게요' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '어떤 봉사에 관심 있나요?' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '나중에 고르고 가입하기' })).toBeVisible()
   await page.getByRole('button', { name: '환경' }).click()
-  await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText('기관 회원', { exact: true })).toHaveCount(0)
-  const terms = page.getByRole('dialog', { name: '마지막으로 확인해 주세요' })
-  await terms.getByText('모두 동의').click()
-  await terms.getByRole('button', { name: '가입하고 시작하기' }).click()
+  await page.getByRole('button', { name: '가입하고 시작하기' }).click()
   // Right after signup: why location, then why notifications; both can wait.
   await expect(page).toHaveURL(/#\/welcome$/)
   await expect(page.getByRole('heading', { name: /위치를 허용해 주세요/ })).toBeVisible()
@@ -77,7 +160,7 @@ test('nothing is shown before signing in, and signup has three steps without an 
   await expect(page.getByRole('heading', { name: /알려 드릴까요/ })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
-  await expect(page.getByText('앱 회원님, 반가워요')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /앱 회원님/ })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
 })
 
@@ -93,10 +176,18 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.getByRole('button', { name: '보통' }).click()
   await page.getByRole('button', { name: '다음' }).click()
   await page.getByRole('button', { name: /장소를 골라/ }).click()
-  const dialog = page.getByRole('dialog', { name: '장소 찾기' })
-  await dialog.getByRole('button', { name: /옥정중앙공원/ }).click()
-  await dialog.getByRole('button', { name: '이 장소로 정하기' }).click()
+  // Full-screen 장소 고르기: the choice and its button stay fixed at the bottom; 만나는 곳 stays on the form.
+  const dialog = page.getByRole('dialog', { name: '장소 고르기' })
+  await expect(dialog.getByRole('button', { name: '장소를 골라 주세요' })).toBeDisabled()
+  // Typing shows suggestions with their badge right under the search box.
+  await dialog.getByLabel('장소 이름이나 주소').fill('옥정')
+  const suggest = dialog.getByRole('list', { name: '추천 장소' })
+  await expect(suggest.getByRole('button', { name: /옥정중앙공원.*바로 공개/ })).toBeVisible()
+  await suggest.getByRole('button', { name: /옥정중앙공원/ }).click()
+  await expect(suggest).toHaveCount(0)
+  await dialog.getByRole('button', { name: '옥정중앙공원으로 정하기' }).click()
   await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /옥정중앙공원.*바꾸기/ })).toBeVisible()
   await page.locator('textarea[name=description]').fill('공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.')
   await page.getByRole('button', { name: '다음' }).click()
   await page.getByRole('button', { name: '한 명 줄이기' }).click()
@@ -105,6 +196,9 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.locator('input[name=safety]').check({ force: true })
   await page.getByRole('button', { name: '모집 시작하기' }).click()
   await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
+  // Once after a new recruitment: put it in the phone calendar? (a file download, skipped here)
+  await expect(page.getByRole('dialog', { name: '내 캘린더에도 넣어 둘까요?' })).toBeVisible()
+  await page.getByRole('button', { name: '괜찮아요' }).click()
   await page.getByRole('link', { name: '모집 관리로 가기' }).click()
   const id = page.url().match(/manage\/(\d+)/)![1]
 
@@ -117,7 +211,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await expect(memberPage.getByText('모집자 확인을 기다리고 있어요')).toBeVisible()
 
   await page.reload()
-  await page.getByRole('button', { name: '승인' }).click()
+  await page.getByRole('button', { name: '승인', exact: true }).click()
   await expect(page.getByText('참가 확정').first()).toBeVisible()
   await page.getByRole('button', { name: '활동 메뉴' }).click()
   await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
@@ -153,8 +247,9 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  // 활동 운영 관리 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
-  await page.getByRole('region', { name: '활동 운영 관리' }).getByRole('button', { name: /활동 취소하기/ }).click()
+  // 운영 탭 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
+  await page.getByRole('tab', { name: '운영' }).click()
+  await page.getByRole('region', { name: '운영' }).getByRole('button', { name: /활동 취소하기/ }).click()
   const sheet = page.getByRole('dialog', { name: '활동을 취소하시겠어요?' })
   await expect(sheet).toContainText('확정 0명 · 대기 0명 · 승인 대기 1명')
   await expect(sheet.getByRole('button', { name: '취소 사유를 골라 주세요' })).toBeDisabled()
@@ -169,7 +264,7 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
   await confirm.getByRole('button', { name: '활동 취소 확정' }).click()
   await expect(page.getByText('활동 취소 안내')).toBeVisible()
   await expect(page.getByText('취소 당시 확정 0명 · 대기 0명 · 승인 대기 1명')).toBeVisible()
-  await expect(page.getByRole('region', { name: '활동 운영 관리' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /활동 취소하기/ })).toHaveCount(0)
 
   await login(memberPage, member)
   await memberPage.goto('/#/notifications')
@@ -259,7 +354,8 @@ test('activity news: the organizer posts a notice from a template, a member asks
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  await page.getByRole('link', { name: '공지 올리기' }).click()
+  // 소식 tab = the same chat room as 활동 소식, inside 모집 관리.
+  await page.getByRole('tab', { name: /소식/ }).click()
   await page.getByRole('button', { name: '집결 장소' }).click()
   await expect(page.getByLabel('공지 내용')).toHaveValue(/정문 안내판 앞에서 10:00에 만나요/)
   await page.getByRole('button', { name: '보내기' }).click()
@@ -277,6 +373,7 @@ test('activity news: the organizer posts a notice from a template, a member asks
   await expect(memberPage.getByText('답변을 기다리고 있어요')).toBeVisible()
 
   await page.reload()
+  await page.getByRole('tab', { name: /소식/ }).click()
   // With an unanswered question the organizer lands on the 질문 tab; the read count is under 공지.
   await expect(page.getByRole('tab', { name: /질문/ })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: '공지' }).click()

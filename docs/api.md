@@ -72,7 +72,7 @@
 | 5 | `POST /api/participations/{id}/accept-offer` · `.../decline-offer` | 본인 | **구현.** 수락 시 마감 지났으면 410 `OFFER_EXPIRED`. 거절은 EXPIRED 후 다음 순번 제안. 응답 시간: 시작까지 24시간 이상 6시간, 미만 1시간, 대기 마감 시각을 넘지 않음 |
 | 5 | `GET /api/me/participations?status=` | 본인 | **구현.** 활동 제목·일시·장소·상태·순번·제안 마감 |
 | 5 | `GET /api/me/notifications?unread=true` · `POST /api/notifications/{id}/read` · `POST /api/notifications/read-all` | 본인 | **구현.** `{items(최근 50), unread}`. 남의 알림 404. 화면은 30초마다 조회(푸시 없음) |
-| 6 | `GET /api/me/notification-center?category=APPLY\|ACTIVITY\|TALK&before={id}&size=20` | 본인 | **구현(V16, 2026-11-05 알림센터 A안).** 최신순 페이지(`next`=다음 `before`), 칩별 안 읽은 수 `unread{ALL,APPLY,ACTIVITY,TALK,OTHER}`. 항목: `type`·`category`·`activityId`·`activityTitle`·`activityGone`(지워진 활동)·`ids`·`count`. 같은 활동의 새 참가 신청(`APPLIED`)이 30분 안에 이어지면 한 줄(‘새 참가 신청 3건’, `ids`에 전부). 원본은 묶거나 지우지 않음. 알 수 없는 category·size 1~50 밖은 400 |
+| 6 | `GET /api/me/notification-center?category=APPLY\|ACTIVITY\|TALK&before={id}&size=20` | 본인 | **구현(V16, 2026-11-05 알림센터 A안).** 최신순 페이지(`next`=다음 `before`), 칩별 안 읽은 수 `unread{ALL,APPLY,ACTIVITY,TALK,OTHER}`. 항목: `type`·`category`·`activityId`·`activityTitle`·`activityGone`(지워진 활동)·`ids`·`count`. 같은 활동의 새 참가 신청(`APPLIED`)이 30분 안에 이어지면 한 줄(‘새 참가 신청 3건’, `ids`에 전부). 원본은 묶거나 지우지 않음. `done`(V25): 모집자가 처리한 새 참가 신청·새 질문·승인 대기 안내는 ‘승인 완료·거절함·신청 취소됨·신청 마감·답변 완료·삭제된 질문·처리 완료’(그 외 null), 처리되면 읽음. 알 수 없는 category·size 1~50 밖은 400 |
 | 6 | `POST /api/notifications/read` `{ids}` | 본인 | **구현(V16).** 묶인 줄을 한 번에 읽음(1~200개, 남의 id는 건드리지 않고 건너뜀, 반복해도 같음). `{read: 바뀐 수}` |
 | 6 | `GET·PUT /api/me/notification-settings` `{push, apply, activity, talk, quiet, quietStart, quietEnd}` | 본인 | **구현(V16).** 휴대폰 알림(푸시) 전체·종류별 켜기·끄기, 방해 금지 시간(HH:mm, 기본 22:00~08:00, 자정 넘김 가능, 시작=끝 400). 서버 `pushAllowed(user, category, 지금)`이 푸시 보낼지 판단. 앱 안 알림 목록에는 영향 없음. 푸시는 Firebase 연결 전이라 아직 쓰이지 않음 |
 | 6 | `GET /api/activities/{id}/qr` | 모집자 | **구현.** `{open, token(열려 있을 때만), opensAt, closesAt, validSeconds:60, rotateSeconds:30, expected, checkedIn, toComplete, status}`. 값 = `활동번호.발급초.HMAC`. 화면은 30초마다 새 값을 받아 QR을 바꿈(받은 값은 60초 유효). 남의 활동 404 |
@@ -115,7 +115,8 @@
 | 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |
 | 내 활동 · 개설 | 신청자 목록·승인·QR | 확정/제안/대기 수, 남은 응답 시간, 상태 기록 | 정원 초과 409 |
 | 내 활동 · 기록 | `GET /api/me/records`, 이의제기 | confirmedAt, appealDeadline, status | 7일 지나면 버튼 숨김 |
-| 로그인 | `POST /api/auth/login` | 토큰, 회원 유형 | 이메일·비밀번호 오류는 하나의 문구로 |
+| 기관 가입 항목(V23) | `POST /api/auth/signup` | `organizationType`(VOLUNTEER_CENTER/WELFARE/SCHOOL/NONPROFIT/PUBLIC/OTHER)·`organizationAddress`(200자)·`vmsRegistered`·`vmsCode`(영문·숫자·-, 30자) | 모두 선택(웹·예전 앱은 안 보냄). 관리자 `GET /api/admin/organizations`에 `orgType`·`address`·`vmsRegistered`·`vmsCode`. 승인·반려하면 담당자에게 `ORGANIZATION_REVIEW` 알림 |
+| 로그인 | `POST /api/auth/login` | 토큰, 회원 유형 | 이메일·비밀번호 오류는 하나의 문구로. 앱은 `memberType`(GENERAL/INSTITUTION, 로그인 탭)을 함께 보내고, 비밀번호가 맞은 뒤에만 계정 유형과 비교해 다르면 409 `MEMBER_TYPE_MISMATCH`(토큰 없음). 웹은 보내지 않음(그대로) |
 | 회원가입 | `POST /api/auth/signup` | 생성된 회원, 기관 상태 PENDING | `UNDER_AGE`, `EMAIL_TAKEN`, 칸별 오류 |
 
 화면 입력 규칙과 서버 검증 문구는 [rules.md](rules.md)로 맞춥니다.

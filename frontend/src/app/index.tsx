@@ -4,13 +4,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, logout, mayHaveSession, refresh } from '../api'
 import { AccountScreen, SettingsScreen, applyTextSize } from './settings'
 import type { User } from '../api'
-import { ToastHost } from '../App'
+import { ToastHost, showToast } from '../App'
 import { CheckInPage } from '../checkin'
 import './app.css'
-import { Login, Signup, SocialDone, SocialSignup } from './auth'
+import { Login, OrgReview, Signup, SocialDone, SocialSignup } from './auth'
 import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
+import { SearchScreen } from './search'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
@@ -77,21 +78,25 @@ export default function MobileApp() {
     if (route.page === 'checkin' && route.id) try { sessionStorage.setItem('volink.next', window.location.hash) } catch { /* private mode */ }
     if (route.page === 'oauth') return <SocialDone onSession={signed => { onSession(signed); window.location.hash = '#/home' }} />
     if (route.page === 'social-signup') return <><SocialSignup onSession={onSession} /><ToastHost /></>
-    return route.page === 'signup' ? <><Signup onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
+    return route.page === 'signup' ? <><Signup key={route.query.get('type') ?? ''} institution={route.query.get('type') === 'institution'} onSession={onSession} /><ToastHost /></> : <><ToastHost /><Login onSession={user => {
       onSession(user)
       let next: string | null = null
       try { next = sessionStorage.getItem('volink.next'); sessionStorage.removeItem('volink.next') } catch { /* private mode */ }
       window.location.hash = next ?? '#/home'
     }} /></>
   }
+  // 기관회원 not (yet) confirmed: the review status only, read again on 다시 확인.
+  if (user.memberType === 'INSTITUTION' && user.organization?.status !== 'APPROVED') return <><ToastHost /><OrgReview user={user} onSignOut={signOut}
+    onRefresh={async quiet => { try { const fresh = await api<User>('/api/me'); setUser(fresh); if (fresh.organization?.status === 'APPROVED') { showToast('기관 확인이 끝났어요'); window.location.hash = '#/home' } else if (!quiet) showToast('아직 확인 중이에요') } catch { if (!quiet) showToast('지금은 확인하지 못했어요') } }} /></>
   if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
 
   const bell = <BellLink unread={unread} />
-  const search = <a href="#/find?focus=1" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
+  const search = <a href="#/search" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
   const tab: Tab | null = (['home', 'find', 'community', 'mine', 'my'] as Tab[]).includes(route.page as Tab) ? route.page as Tab : null
   let screen
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
+    case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
     case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break

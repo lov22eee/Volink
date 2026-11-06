@@ -98,7 +98,8 @@ public class ParticipationService {
             notifications.send(activity.organizerId(), "APPLIED", "새 참가자 확정", activity.title() + " · 자동 승인으로 한 명이 참가 확정되었습니다.", activity.link());
             notifications.send(userId, "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
         } else
-            notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link());
+            notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link(),
+                    activity.id(), null, full ? null : id);
         if (full) notifications.send(userId, "WAITLISTED", "대기 " + order + "번으로 신청했습니다",
                 activity.title() + " · 빈자리가 생기면 순서대로 자리를 제안합니다.", activity.link());
         return viewer(activityId, userId);
