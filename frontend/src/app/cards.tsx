@@ -1,4 +1,5 @@
 // Small activity rows used on several app screens (home, find, host, saved).
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { categoryTone } from '../categories'
 import type { LiveActivity } from '../api'
 import { durationLabel } from '../create'
@@ -33,10 +34,30 @@ export function ActivityRow({ activity, note, href }: { activity: LiveActivity; 
   </a>
 }
 
-/** Downloads an .ics file so the phone calendar can add the activity (nothing is sent anywhere). */
-export function addToCalendar(a: Pick<LiveActivity, 'id' | 'title' | 'date' | 'startTime' | 'durationMinutes' | 'placeName' | 'meetingPoint'>) {
+const nativeCalendar = registerPlugin<{ add(event: { title: string; begin: number; end: number; location: string; description: string }): Promise<{ opened: boolean }> }>('VolinkCalendar')
+
+type CalendarActivity = Pick<LiveActivity, 'id' | 'title' | 'date' | 'startTime' | 'durationMinutes' | 'placeName' | 'meetingPoint'>
+
+/**
+ * In the app: opens the phone calendar's own "new event" screen already filled in (Galaxy: Samsung Calendar) — the person
+ * only taps save. Elsewhere, or when no calendar app answers: an .ics file. Nothing is sent anywhere.
+ * Returns 'app' when the calendar screen opened, 'file' when a file was downloaded.
+ */
+export async function addToCalendar(a: CalendarActivity): Promise<'app' | 'file'> {
   const start = new Date(`${a.date}T${a.startTime}:00+09:00`)
   const end = new Date(start.getTime() + a.durationMinutes * 60_000)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await nativeCalendar.add({ title: a.title, begin: start.getTime(), end: end.getTime(),
+        location: [a.placeName, a.meetingPoint].filter(Boolean).join(' · '), description: 'Volink 활동 · 못 가게 되면 앱에서 미리 알려 주세요.' })
+      return 'app'
+    } catch { /* no calendar app or an older APK without the plugin: fall back to the file */ }
+  }
+  calendarFile(a, start, end)
+  return 'file'
+}
+
+function calendarFile(a: CalendarActivity, start: Date, end: Date) {
   const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
   const text = (value: string) => value.replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n')
   const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Volink//KO', 'BEGIN:VEVENT', `UID:volink-${a.id}@volink`, `DTSTAMP:${stamp(new Date())}`,

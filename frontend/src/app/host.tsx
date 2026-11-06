@@ -173,10 +173,10 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
       <ActionBar><a className="m-btn" href={'#/manage/' + saved.activity.id}>모집 관리로 가기</a></ActionBar>
     </div>
     {!editId && calendarAsk && <Sheet title="내 캘린더에도 넣어 둘까요?" onClose={() => setCalendarAsk(false)}
-      footer={<><button type="button" className="m-btn" onClick={() => { addToCalendar(saved.activity); setCalendarAsk(false); showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }}><MIcon name="calendar" size={19} />캘린더에 추가</button>
+      footer={<><button type="button" className="m-btn" onClick={() => { setCalendarAsk(false); void addToCalendar(saved.activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button>
         <button type="button" className="m-btn line" onClick={() => setCalendarAsk(false)}>괜찮아요</button></>}>
       <div className="m-summary"><strong>{saved.activity.title}</strong><span>{dayWord(saved.activity.date)} {saved.activity.startTime} · {[saved.activity.placeName, saved.activity.meetingPoint].filter(Boolean).join(' · ')}</span></div>
-      <p className="m-help">모집자가 일정을 잊지 않게 1시간 전 알림도 같이 들어가요. 일정을 바꾸면 캘린더는 직접 고쳐 주세요.</p>
+      <p className="m-help">휴대폰 캘린더의 일정 추가 화면이 바로 열려요. 저장만 누르면 돼요. 일정을 바꾸면 캘린더는 직접 고쳐 주세요.</p>
     </Sheet>}
   </div>
 
@@ -210,7 +210,7 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
 
       {step === 2 && <>
         <h2 className="m-h2">어디서, 언제 만나요?</h2>
-        {!locked && <div className="m-legacy"><PlaceField value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
+        {!locked && <div><PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
         <label className="m-field"><span className="m-label">만나는 곳 <small>선택</small></span>
           <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>

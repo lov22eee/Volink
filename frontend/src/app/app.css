@@ -1130,3 +1130,61 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-detail.applied .m-state-dday { display: none; }
 .n-embed { display: flex; flex-direction: column; }
 .n-embed-body { display: flex; flex-direction: column; }
+/* 장소 고르기 (app, 2026-11-06): a place card on the form; a full-screen picker with the map filling it and the choice fixed below. */
+.ap-field { display: flex; flex-direction: column; gap: 8px; }
+.ap-placecard { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: #fff; text-align: left; color: var(--ink); font: inherit; }
+.ap-placecard.invalid { border-color: var(--m-hot); }
+.ap-placecard-ico { width: 42px; height: 42px; border-radius: 13px; background: var(--m-mint); color: var(--m-green-ink); display: grid; place-items: center; flex: none; }
+.ap-placecard-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-placecard-text strong { font-size: 15.5px; }
+.ap-placecard-text strong.placeholder { color: var(--ink-3); font-weight: 600; }
+.ap-placecard-text small { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-placecard-go { font-size: 14px; font-weight: 700; color: var(--m-green-ink); flex: none; }
+.ap-place { position: fixed; inset: 0; z-index: 60; background: #f6f7f4; display: flex; flex-direction: column; padding-top: var(--m-safe-top); }
+.ap-place-top { height: 54px; display: flex; align-items: center; gap: 6px; padding: 0 8px; flex: none; }
+.ap-place-top h2 { font-size: 17px; font-weight: 700; }
+.ap-icon { width: 44px; height: 44px; border: 0; background: none; display: grid; place-items: center; color: var(--ink); }
+.ap-search { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; height: 48px; padding: 0 6px 0 12px; border-radius: 14px; background: #fff; border: 1.5px solid var(--m-green); color: var(--ink-3); }
+.ap-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 16px; color: var(--ink); }
+.ap-search-go { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--m-green); color: #fff; font-weight: 700; font-size: 14px; }
+.ap-ask { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 14px 10px; padding: 10px 12px; border-radius: 14px; background: #fff; font-size: 13.5px; }
+.ap-ask span { flex: 1; }
+.ap-ask small { display: block; color: var(--ink-3); font-size: 12px; }
+.ap-ask-yes { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: var(--m-green); color: #fff; font-weight: 700; }
+.ap-ask-no { height: 36px; border: 0; background: none; color: var(--ink-3); }
+.ap-place-body { position: relative; flex: 1; min-height: 0; }
+.ap-place-body .pin-map { position: absolute; inset: 0; border-radius: 0; min-height: 0; }
+.ap-place-body .pin-map .kakao-map { height: 100%; min-height: 0; }
+.ap-hint { position: absolute; left: 12px; bottom: 12px; z-index: 3; display: inline-flex; align-items: center; gap: 4px; padding: 7px 11px; border-radius: 99px; background: #fff; font-size: 12.5px; font-weight: 700; color: var(--m-green-ink); box-shadow: 0 2px 8px rgb(0 0 0 / 15%); }
+.ap-list { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; max-height: 52%; overflow-y: auto; background: #fff; border-radius: 20px 20px 0 0; box-shadow: 0 -4px 16px rgb(0 0 0 / 8%); padding: 0 16px 8px; overscroll-behavior: contain; }
+.ap-list.full { position: static; max-height: none; height: 100%; border-radius: 0; box-shadow: none; padding-top: 6px; }
+.ap-list-head { position: sticky; top: 0; z-index: 1; width: 100%; display: flex; align-items: center; gap: 8px; padding: 14px 0 8px; border: 0; background: #fff; font-size: 13px; color: var(--ink-3); text-align: left; }
+.ap-list-head i { position: absolute; left: 50%; top: 6px; width: 38px; height: 4px; margin-left: -19px; border-radius: 4px; background: #d8ddd9; }
+.ap-list-head small { margin-left: auto; color: var(--m-green-ink); font-weight: 700; font-size: 13px; }
+.ap-list-open { position: absolute; left: 50%; bottom: 12px; z-index: 4; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px; height: 40px; padding: 0 16px; border: 0; border-radius: 99px; background: #fff; font-size: 13.5px; font-weight: 700; color: var(--m-green-ink); box-shadow: 0 3px 10px rgb(0 0 0 / 18%); }
+.ap-results { list-style: none; margin: 0; padding: 0; }
+.ap-results button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 13px 4px; border: 0; border-bottom: 1px solid #eef0ec; background: none; text-align: left; color: var(--ink); font: inherit; }
+.ap-results button.on { background: #f1f7f3; border-radius: 12px; }
+.ap-results button:disabled { opacity: .5; }
+.ap-results button > span:first-child { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-results strong { font-size: 15px; }
+.ap-results strong em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--amber-ink); background: var(--amber-soft); padding: 1px 6px; border-radius: 6px; margin-right: 5px; }
+.ap-results small { font-size: 12.5px; color: var(--ink-3); }
+.ap-msg { font-size: 13px; color: var(--ink-3); padding: 8px 2px; }
+.ap-place-foot { flex: none; background: #fff; border-top: 1px solid var(--line); padding: 12px 16px calc(12px + var(--m-safe)); display: flex; flex-direction: column; gap: 10px; }
+.ap-chosen { display: flex; align-items: center; gap: 10px; }
+.ap-chosen > span:first-child { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-chosen strong { font-size: 16px; }
+.ap-chosen small { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-none { font-size: 14px; color: var(--ink-3); }
+/* 장소 자동완성: a short list right under the search box, over the top of the map only. */
+.ap-search-wrap { position: relative; flex: none; z-index: 8; }
+.ap-suggest { position: absolute; left: 14px; right: 14px; top: 52px; list-style: none; margin: 0; padding: 4px 0; background: #fff; border-radius: 14px; box-shadow: 0 8px 24px rgb(0 0 0 / 16%); max-height: 46vh; overflow-y: auto; }
+.ap-suggest button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 0; background: none; text-align: left; font: inherit; color: var(--ink); }
+.ap-suggest button > svg { color: var(--ink-3); flex: none; }
+.ap-suggest button > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ap-suggest strong { font-size: 14.5px; }
+.ap-suggest small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-suggest button:disabled { opacity: .55; }
+.ap-suggest li + li { border-top: 1px solid #f0f2ef; }
+.ap-list { max-height: 40%; }
