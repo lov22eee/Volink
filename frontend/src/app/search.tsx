@@ -7,6 +7,7 @@ import type { Program } from '../explore'
 import { currentPosition, remembered } from '../location'
 import { ActivityRow } from './cards'
 import { PostCard } from './community'
+import { ProgramSheet } from './find'
 import type { PostSummary } from './community'
 import { goBack, MIcon, TextInput } from './ui'
 
@@ -20,6 +21,8 @@ export function SearchScreen({ initial }: { initial?: string }) {
   const [text, setText] = useState(initial ?? '')
   const [query, setQuery] = useState(initial ?? '')
   const [recent, setRecent] = useState<string[]>(readRecent)
+  // 2026-11-06: a 1365 result opens that program (not the 찾기 list around the map).
+  const [program, setProgram] = useState<Program | null>(null)
   const [tab, setTab] = useState<Tab>('all')
   const [results, setResults] = useState<Results | null>(null)
   const [failed, setFailed] = useState(false)
@@ -51,10 +54,10 @@ export function SearchScreen({ initial }: { initial?: string }) {
   const activityList = (limit?: number) => results && <div className="m-list sr-list">
     {results.activities.slice(0, limit).map(a => <ActivityRow key={'a' + a.id} activity={a} />)}
     {(results.programs ?? []).slice(0, limit === undefined ? undefined : Math.max(0, limit - results.activities.length)).map(p =>
-      <a key={'p' + p.programNo} className="m-row" href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')}>
+      <button type="button" key={'p' + p.programNo} className="m-row" onClick={() => setProgram(p)}>
         <span className="m-row-ico p"><MIcon name="flag" size={21} /></span>
         <span className="m-row-main"><strong>{p.title}</strong><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.place?.split(' ').slice(0, 2).join(' '), p.organization].filter(Boolean).join(' · ')}</small></span>
-        <span className="m-badge blue">1365</span></a>)}
+        <span className="m-badge blue">1365</span></button>)}
   </div>
   const postList = (limit?: number) => results && <div className="c-list sr-list">{results.posts.slice(0, limit).map(p => <PostCard key={p.id} post={p} />)}</div>
 
@@ -85,5 +88,6 @@ export function SearchScreen({ initial }: { initial?: string }) {
           : results.posts.length ? <><p className="sr-count">총 {results.posts.length}개</p>{postList()}</> : <p className="sr-empty">‘{query}’에 맞는 커뮤니티 글이 없어요.</p>}
       </div>
     </>}
+    {program && <ProgramSheet program={program} onClose={() => setProgram(null)} />}
   </div>
 }

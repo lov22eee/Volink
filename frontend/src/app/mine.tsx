@@ -81,6 +81,17 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
   const [connectSheet, connect] = useConnect1365()
   const [summary, setSummary] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(s => setSummary(s.fetchedAt ? s as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
+  // 완료 기록 (B): one list, newest first, filtered by the chip.
+  const [doneKind, setDoneKind] = useState<'all' | '1365' | 'volink'>('all')
+  const volinkValid = (records ?? []).filter(x => x.status === 'VALID')
+  const volinkMinutes = volinkValid.reduce((sum, x) => sum + x.durationMinutes, 0)
+  const extMinutes = summary ? summary.totalMinutes : (external ?? []).filter(r => r.certified).reduce((sum, r) => sum + (r.certMinutes ?? 0), 0)
+  const allMinutes = volinkMinutes + extMinutes
+  type DoneItem = { kind: '1365'; key: string; r: NonNullable<typeof external>[number] } | { kind: 'volink'; key: string; x: MyRecord }
+  const doneList: DoneItem[] = [
+    ...(doneKind !== 'volink' ? extDone.map(r => ({ kind: '1365' as const, key: r.date + r.startTime, r })) : []),
+    ...(doneKind !== '1365' ? volinkDone.map(x => ({ kind: 'volink' as const, key: x.date + x.startTime, x })) : []),
+  ].sort((a, b) => b.key.localeCompare(a.key))
   const now = Date.now()
   const ends = (date: string, time: string, minutes = 90) => new Date(`${date}T${time}:00+09:00`).getTime() + minutes * 60_000
   const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN'].includes(p.status) && p.activityStatus !== 'CANCELLED' && ends(p.date, p.startTime, p.durationMinutes) > now)
@@ -118,22 +129,25 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
             {hosted.length > 0 && <a className="m-btn sm line" href="#/host"><MIcon name="refresh" size={18} />다시 모집</a>}</div>} />
         {hosted.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 모집</h2></div><div className="m-cards">{hosted.map(a => <HostCard key={a.id} a={a} />)}</div></section>}
       </>)}
-      {view === 'done' && summary && <section className="ext-sum" aria-label="1365 누적 실적">
-        <span className="m-row-ico ext"><b>1365</b></span>
-        <span><small>1365 누적 봉사 실적</small><b>{hoursText(summary.totalMinutes)}{summary.count != null ? <em> · {summary.count}건</em> : null}</b>
-          <small>{summary.fetchedAt.slice(5, 10).replace('-', '/')} 기준 · 내 1365 화면의 공식 실적을 옮겨 왔어요</small></span></section>}
-      {/* 2026-11-06: 1365 and Volink apart, the newest 3 of each; 전체보기 opens the whole list of that kind. */}
-      {view === 'done' && extDone.length > 0 && <section className="m-section" aria-label="1365 활동"><div className="m-section-head"><h2>1365 활동 <small className="m-count">{extDone.length}</small></h2>
-        <a className="m-more" href="#/mine?tab=done&all=1365">전체보기 ›</a></div>
-        <div className="m-list">{extDone.slice(0, 3).map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
-      {view === 'done' && (!records ? <Loading /> : records.length ? <section className="m-section" aria-label="Volink 활동">
-        <div className="m-section-head"><h2>Volink 활동 <small className="m-count">{records.length}</small></h2><a className="m-more" href="#/mine?tab=done&all=volink">전체보기 ›</a></div>
-        <div className="m-list">{volinkDone.slice(0, 3).map(x => <VolinkRow key={x.id} x={x} />)}</div>
-        <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요.</p></section>
-      : !extDone.length && (summary
-        ? <p className="m-help center">Volink 활동을 마치면 여기에 쌓여요 · <a href="#/find">봉사 찾기 ›</a></p>
-        : <Empty bare icon="record" title="아직 완료 기록이 없어요" text="1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요."
-          action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={connect}>1365 실적 연결</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />))}
+      {/* 2026-11-06 (B): 함께한 시간 (1365 + Volink) · 1365 연결/새로고침 · chips [전체 · 1365 · Volink] · one list, newest first. */}
+      {view === 'done' && (!records || !external ? <Loading /> : !records.length && !extDone.length && !summary
+        ? <Empty bare icon="record" title="아직 완료 기록이 없어요" text="1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요."
+            action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={connect}>1365 실적 연결</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />
+        : <>
+          <section className="my-total" aria-label="함께한 시간">
+            <small>함께한 시간</small>
+            <b>{Math.floor(allMinutes / 60)}<em>시간</em>{allMinutes % 60 ? <> {allMinutes % 60}<em>분</em></> : null}</b>
+            {allMinutes > 0 && <i className="my-split"><span className="ext" style={{ width: (extMinutes / allMinutes * 100) + '%' }} /><span style={{ width: (volinkMinutes / allMinutes * 100) + '%' }} /></i>}
+            <span className="my-sum">1365 {hoursText(extMinutes)}{summary ? ' (공식 실적)' : ''} + Volink {hoursText(volinkMinutes)}</span>
+          </section>
+          {summary ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {summary.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>새로고침</em></button>
+            : <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 봉사실적 연결하기</b> · 1365에서 한 봉사도 함께 모아요</span><em>연결</em></button>}
+          <div className="m-chips done-chips" role="radiogroup" aria-label="완료 기록 보기">{([['all', '전체', extDone.length + volinkDone.length], ['1365', '1365', extDone.length], ['volink', 'Volink', volinkDone.length]] as const).map(([key, label, n]) =>
+            <button key={key} type="button" role="radio" aria-checked={doneKind === key} className={'m-chip' + (doneKind === key ? ' on' : '')} onClick={() => setDoneKind(key)}>{label} {n}</button>)}</div>
+          {doneList.length ? <div className="m-list">{doneList.map(item => item.kind === '1365' ? <RecordRow key={'e' + item.r.id} r={item.r} /> : <VolinkRow key={'v' + item.x.id} x={item.x} />)}</div>
+            : <p className="m-help center">{doneKind === '1365' ? '1365 활동 기록이 아직 없어요. 신청 현황을 가져오거나 ‘이미 신청했어요’로 남길 수 있어요.' : 'Volink 활동을 마치면 여기에 쌓여요.'} {doneKind !== '1365' && <a href="#/find">봉사 찾기 ›</a>}</p>}
+          <p className="m-help">Volink 기록은 자체 기록이에요. 공식 봉사실적·보험은 1365 기준이에요.</p>
+        </>)}
     </div>
     {connectSheet}
     {view !== 'done' && <RecruitFab />}
