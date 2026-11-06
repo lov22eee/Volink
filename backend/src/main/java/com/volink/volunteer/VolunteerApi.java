@@ -13,4 +13,7 @@ public interface VolunteerApi {
 
     /** getVltrPartcptnItem: one program's detail. */
     Optional<Map<String, String>> detail(String programNo);
+
+    /** True when today's list calls are used up (data.go.kr daily limit): searches then only have cached programs. */
+    default boolean limited() { return false; }
 }

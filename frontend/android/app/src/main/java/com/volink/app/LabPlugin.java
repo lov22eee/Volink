@@ -22,7 +22,9 @@ public class LabPlugin extends Plugin {
     @PluginMethod
     public void open(PluginCall call) {
         Intent intent = new Intent(getContext(), LabActivity.class);
-        intent.putExtra("url", HOME);
+        // 2026-11-06: the app passes the 1365 page to open (실적 or 신청 현황); only 1365 addresses are accepted.
+        String url = call.getString("url", HOME);
+        intent.putExtra("url", url != null && url.startsWith(HOME + "/") ? url : HOME);
         // Plan 1 (2026-11-06): one line above the 1365 page saying where to go after logging in.
         intent.putExtra("guide", call.getString("guide", ""));
         // Step guide (2026-11-06): a small script from the app that guesses the step from the page's words.

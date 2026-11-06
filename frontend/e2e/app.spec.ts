@@ -669,7 +669,7 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   const total = page.getByRole('region', { name: '함께한 시간' })
   await expect(total).toContainText('1365 57시간 30분 (공식 실적)')
   await expect(total).not.toContainText('홍길동')
-  await expect(page.getByRole('button', { name: /1365 연결됨.*새로고침/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /1365 연결됨.*갱신하기/ })).toBeVisible()
   await page.getByRole('radio', { name: /^Volink/ }).click()
   await expect(page.getByRole('link', { name: /하천 정화 활동/ })).toHaveCount(0)
   await page.getByRole('radio', { name: /^1365/ }).click()
@@ -687,7 +687,7 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
   await expect(page.getByRole('heading', { name: '이렇게 가져와요' })).toBeVisible()
-  await expect(page.getByText('☰ 메뉴 › 나의 봉사', { exact: true })).toBeVisible()
+  await expect(page.getByText('고른 화면이 바로 열려요')).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()
@@ -745,7 +745,7 @@ test('1365 step guide: the words on the page tell which step the person is on (�
       labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '2-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
 })
 
 test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {
@@ -820,7 +820,7 @@ test('글쓰기 •••: 임시 저장, 미리보기, 처음부터 다시 쓰�
   await expect(page.locator('input[name=title]')).toHaveValue('')
 })
 
-test('search: a 1365 result opens that program, not the 찾기 list; the lab offers an example that is never saved', async ({ page }) => {
+test('search: a 1365 result opens that program, not the 찾기 list', async ({ page }) => {
   const member = await signupByApi(page, '검색 상세')
   await login(page, member)
   await page.route('**/api/volunteer-programs**', route => route.fulfill({ json: { enabled: true, items: [{ programNo: 'S-1', title: '유기견 보호소 산책 도우미', organization: '인천 보호소', place: '인천광역시 연수구', field: '동물', periodStart: inDays(2), periodEnd: inDays(20), beginTime: '10:00', endTime: '12:00', weekdays: null, recruitStatus: '모집중', recruitEnd: null, capacity: 5, youthOk: true, latitude: null, longitude: null, distanceKm: null, link: 'https://www.1365.go.kr', category: '동물', categoryBasis: 'OFFICIAL' }] } }))
@@ -832,14 +832,4 @@ test('search: a 1365 result opens that program, not the 찾기 list; the lab off
   await expect(sheet.getByRole('link', { name: /1365에서 신청하기/ })).toBeVisible()
   await expect(page).toHaveURL(/#\/search/)
   await page.unroute('**/api/volunteer-programs**')
-
-  await page.goto('/#/lab1365')
-  await page.getByRole('button', { name: /예시로 해보기/ }).click()
-  await expect(page.getByText('예시 화면 · 저장되지 않아요')).toBeVisible()
-  await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
-  await pickDay(page, /어르신 말벗 봉사 \(예시\) · 참여하는 날/, inDays(10))
-  await page.getByRole('button', { name: '예시 확인 끝 (저장 안 함)' }).click()
-  await expect(page.getByText('예시라 저장하지 않았어요')).toBeVisible()
-  const auth = await tokenFor(page, member)
-  expect((await (await page.request.get('/api/me/external', { headers: { Authorization: auth } })).json()).length).toBe(0)
 })

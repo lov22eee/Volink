@@ -23,6 +23,8 @@ export function SearchScreen({ initial }: { initial?: string }) {
   const [recent, setRecent] = useState<string[]>(readRecent)
   // 2026-11-06: a 1365 result opens that program (not the 찾기 list around the map).
   const [program, setProgram] = useState<Program | null>(null)
+  // Why 1365 found nothing (2026-11-06: "결과가 없어요" when 1365 could not be reached at all).
+  const [programsNote, setProgramsNote] = useState<'' | 'limited' | 'off' | 'error'>('')
   const [tab, setTab] = useState<Tab>('all')
   const [results, setResults] = useState<Results | null>(null)
   const [failed, setFailed] = useState(false)
@@ -38,11 +40,12 @@ export function SearchScreen({ initial }: { initial?: string }) {
   useEffect(() => {
     if (!query) { setResults(null); return }
     let live = true
-    setResults(null); setFailed(false)
+    setResults(null); setFailed(false); setProgramsNote('')
     const q = encodeURIComponent(query)
     // 2026-11-06: a search looks across the whole country (Volink and 1365); the distance is added when the position is known.
     const programs = (remembered() ? currentPosition().catch(() => null) : Promise.resolve(null))
-      .then(at => api<{ items: Program[] }>(`/api/volunteer-programs?nationwide=true&q=${q}` + (at ? `&lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}` : '')).then(r => r.items).catch(() => null))
+      .then(at => api<{ items: Program[]; enabled?: boolean; limited?: boolean }>(`/api/volunteer-programs?nationwide=true&q=${q}` + (at ? `&lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}` : ''))
+        .then(r => { setProgramsNote(r.limited ? 'limited' : r.enabled === false ? 'off' : ''); return r.items }).catch(() => { setProgramsNote('error'); return null }))
     Promise.all([api<LiveActivity[]>('/api/activities?q=' + q), programs, api<PostSummary[]>('/api/community/posts?q=' + q)])
       .then(([activities, found, posts]) => { if (live) setResults({ activities, programs: found, posts }) })
       .catch(() => { if (live) setFailed(true) })
@@ -80,7 +83,7 @@ export function SearchScreen({ initial }: { initial?: string }) {
       <div className="m-body sr-body">
         {failed ? <p className="sr-empty">지금은 검색하지 못했어요. 잠시 뒤 다시 해 주세요.</p>
           : !results ? <p className="sr-empty">찾는 중…</p>
-          : tab === 'all' ? (activityCount + results.posts.length === 0 ? <p className="sr-empty">‘{query}’에 맞는 결과가 없어요.</p> : <>
+          : tab === 'all' ? (activityCount + results.posts.length === 0 ? <p className="sr-empty">‘{query}’에 맞는 결과가 없어요.{programsNote && <><br /><small>{programsNote === 'limited' ? '오늘은 1365 조회가 많아 1365 활동을 다 찾지 못했어요. 내일 다시 찾아 주세요.' : programsNote === 'off' ? '지금은 1365 활동을 함께 찾을 수 없어요.' : '1365 활동을 불러오지 못했어요. 잠시 뒤 다시 찾아 주세요.'}</small></>}</p> : <>
             {activityCount > 0 && <section><div className="sr-head"><h2>봉사활동 <b>{activityCount}</b> <small className="sr-scope">전국</small></h2>{activityCount > 3 && <button type="button" className="m-text-btn" onClick={() => setTab('activity')}>더 보기</button>}</div>{activityList(3)}</section>}
             {results.posts.length > 0 && <section><div className="sr-head"><h2>커뮤니티 <b>{results.posts.length}</b></h2>{results.posts.length > 3 && <button type="button" className="m-text-btn" onClick={() => setTab('community')}>더 보기</button>}</div>{postList(3)}</section>}
           </>)

@@ -277,12 +277,12 @@ public class ExternalRecordService {
                     + " · 1365에 실적이 올라왔는지 가져와서 맞춰 봐요.", "#/lab1365", null, "EXT_REFRESH:" + id);
             sent++;
         }
-        // IMPORT: once a month (daytime) when the last import is over 30 days old or there is none, for activities done outside Volink.
+        // IMPORT: once a month (daytime) when the last import is over 30 days old (not before the first import), for activities done outside Volink.
         if (now.getHour() >= 10 && now.getHour() < 20) {
             String month = now.toLocalDate().toString().substring(0, 7);
             for (Map<String, Object> row : jdbc.queryForList("""
-                    SELECT u.id FROM users u LEFT JOIN external_summaries s ON s.user_id = u.id
-                    WHERE u.ext_mode = 'IMPORT' AND (s.fetched_at IS NULL OR s.fetched_at <= ?)""", now.minusDays(30))) {
+                    SELECT u.id FROM users u JOIN external_summaries s ON s.user_id = u.id
+                    WHERE u.ext_mode = 'IMPORT' AND s.fetched_at <= ?""", now.minusDays(30))) {
                 long user = ((Number) row.get("id")).longValue();
                 notifications.send(user, "EXT_REFRESH", "이번 달 1365 실적을 맞춰 볼까요?", "1365에서 한 봉사가 있다면 가져와서 함께한 시간에 더해요.",
                         "#/lab1365", null, "EXT_MONTH:" + user + ":" + month);
