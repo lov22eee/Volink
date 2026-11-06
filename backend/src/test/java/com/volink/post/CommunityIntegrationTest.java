@@ -30,8 +30,10 @@ class CommunityIntegrationTest extends ApiTestSupport {
         nickname(other, "읽는이" + seq());
     }
 
-    static int counter = 0;
-    static String seq() { return String.valueOf(System.nanoTime() % 10000 + (counter++)); }
+    // Unique within a run (a counter from a random start): nanoTime % 10000 + a counter could repeat a nickname
+    // between tests and the server then answers NICKNAME_TAKEN (seen once in CI on 2026-11-06).
+    static final java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(new java.util.Random().nextInt(50_000));
+    static String seq() { return String.valueOf(counter.getAndIncrement() % 100_000); }
 
     private void nickname(String token, String nick) throws Exception {
         perform(put("/api/community/me"), Map.of("nickname", nick, "agree", true), token).andExpect(status().isOk()).andExpect(jsonPath("$.ready").value(true));
