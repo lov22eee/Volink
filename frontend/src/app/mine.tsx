@@ -140,13 +140,12 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
             {allMinutes > 0 && <i className="my-split"><span className="ext" style={{ width: (extMinutes / allMinutes * 100) + '%' }} /><span style={{ width: (volinkMinutes / allMinutes * 100) + '%' }} /></i>}
             <span className="my-sum">1365 {hoursText(extMinutes)}{summary ? ' (공식 실적)' : ''} + Volink {hoursText(volinkMinutes)}</span>
           </section>
-          {summary ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {summary.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>새로고침</em></button>
+          {summary ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {summary.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>갱신하기</em></button>
             : <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 봉사실적 연결하기</b> · 1365에서 한 봉사도 함께 모아요</span><em>연결</em></button>}
           <div className="m-chips done-chips" role="radiogroup" aria-label="완료 기록 보기">{([['all', '전체', extDone.length + volinkDone.length], ['1365', '1365', extDone.length], ['volink', 'Volink', volinkDone.length]] as const).map(([key, label, n]) =>
             <button key={key} type="button" role="radio" aria-checked={doneKind === key} className={'m-chip' + (doneKind === key ? ' on' : '')} onClick={() => setDoneKind(key)}>{label} {n}</button>)}</div>
           {doneList.length ? <div className="m-list">{doneList.map(item => item.kind === '1365' ? <RecordRow key={'e' + item.r.id} r={item.r} /> : <VolinkRow key={'v' + item.x.id} x={item.x} />)}</div>
-            : <p className="m-help center">{doneKind === '1365' ? '1365 활동 기록이 아직 없어요. 신청 현황을 가져오거나 ‘이미 신청했어요’로 남길 수 있어요.' : 'Volink 활동을 마치면 여기에 쌓여요.'} {doneKind !== '1365' && <a href="#/find">봉사 찾기 ›</a>}</p>}
-          <p className="m-help">Volink 기록은 자체 기록이에요. 공식 봉사실적·보험은 1365 기준이에요.</p>
+            : null}
         </>)}
     </div>
     {connectSheet}
