@@ -259,7 +259,8 @@ public class LabActivity extends AppCompatActivity {
         bottom.addView(take, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
         root.addView(header, wide);
-        if ((guideText != null && !guideText.isEmpty()) || (stepScript != null && !stepScript.isEmpty())) root.addView(card, cardAt);
+        // 2026-11-06: the step card is gone (it guessed wrong too often); the page check still turns the button green
+        // and moves to the asked page after logging in.
         root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
         root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
