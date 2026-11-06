@@ -74,8 +74,6 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
         </div>
       </div> : <p className="m-social-line m-org-only">기관회원은 이메일로만 로그인할 수 있어요</p>}
       <p className="m-fine">공식 봉사실적·자원봉사 종합보험은 1365 활동에만 해당돼요.</p>
-      {/* 임시 (한글 입력 확인이 끝나면 지움): 한글 입력 진단 화면 */}
-      <a className="m-fine m-lab-link" href="#/ime-lab">입력 진단</a>
     </form>
   </main>
 }

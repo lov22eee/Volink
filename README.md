@@ -639,3 +639,7 @@ Volink/
 - **테스트(2026-11-06, 로컬):** `./scripts/backend.sh test` 136/136(새: 기관 항목 저장·관리자 조회·승인/반려 알림·잘못된 값), 앱 Playwright 11/11(가입 두 흐름 갱신), `tsc` 통과, Pixel 7 흐름 캡처.
 - **미완료:** 휴대폰 인증(Firebase), 동네 선택(뺌), 약관 ‘보기’ 문서, 증빙 서류(7주차). 푸시는 Firebase가 들어간 APK·서버 키가 있을 때만.
 - **DB:** V23 추가 → AWS는 `server-setup.sh`로 적용.
+
+### 한글 입력 원인 확인 · 2026-11-06
+- **결과:** 사용자가 삼성 폰·삼성 키보드에서 `captureInput`을 끈 APK(`volink-0.6-48-6b84dc3.apk`)로 확인 → 한글 입력 지연 없음. 원인은 `frontend/capacitor.config.json`의 `android.captureInput: true`(Capacitor가 WebView 기본 입력 연결 대신 `BaseInputConnection`을 써서 한글 조합이 웹으로 전달되지 않음)로 판단. 비교용(captureInput 켬) APK 결과는 따로 받지 않음.
+- **정리:** 임시 진단 화면(`#/ime-lab`)·로그인 화면 링크·비교용 APK 빌드 단계 제거. `TextInput`/`TextArea`와 80ms 보정은 남겨 둠(지금 정상이므로 줄일 때는 기기에서 다시 확인).

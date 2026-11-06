@@ -963,15 +963,6 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-org-facts dd { margin: 0; font-weight: 650; text-align: right; }
 .m-org-actions { display: flex; flex-direction: column; gap: 10px; }
 
-/* 한글 입력 진단 (#/ime-lab) */
-.lab h1 { font-size: 22px; }
-.lab-env { font-size: 14px; color: var(--ink-2); } .lab-env b { color: var(--m-hot); }
-.lab-sentence { font-size: 14px; line-height: 1.6; padding: 12px; border-radius: 12px; background: var(--m-mint); }
-.lab-box { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
-.lab-box h2 { font-size: 16px; } .lab-note { font-size: 12.5px; color: var(--ink-3); }
-.lab-box textarea { width: 100%; min-height: 84px; font-size: 16px; }
-.lab-nums { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-
 /* 가입 흐름 (2026-11-06): one question per screen, a two-line question, agreements first, the birth wheel on the page */
 .m-flow .m-flow-h { margin: 14px 0 4px; font-size: 25px; font-weight: 750; line-height: 1.38; letter-spacing: -0.035em; white-space: pre-line; }
 .m-flow .m-q { gap: 12px; }
@@ -993,4 +984,3 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-addr button.on, .m-addr button.on b { color: var(--m-green-ink); }
 .m-flow-alt { align-self: flex-start; padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; }
 .m-org-ask { display: flex; flex-direction: column; gap: 10px; }
-.m-lab-link { display: block; text-align: center; text-decoration: underline; padding: 8px; }
