@@ -649,6 +649,7 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   await page.goto('/#/settings')
   await page.getByRole('switch', { name: /1365 연결/ }).click()
   await page.getByRole('link', { name: /1365 신청 내역 가져오기/ }).click()
+  await page.getByRole('button', { name: /^신청 현황/ }).click()
   await page.getByPlaceholder(/1365 신청 현황/).fill(`나의 봉사 신청 현황\n하천 정화 활동\n${inDays(5).replaceAll('-', '.')} 09:00~11:00 승인완료\n도서관 정리 도우미 ${inDays(-3).replaceAll('-', '.')} 10:00~12:00 활동완료`)
   await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
   await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
@@ -659,6 +660,7 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
 
   // The 1365 봉사참여 실적 page: total time, count and time per field (the name on that page is not kept).
   await page.goto('/#/lab1365')
+  await page.getByRole('button', { name: /^신청 현황/ }).click()
   await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n실적확인서 발행 내역\n시간인증형\n활동인증형\n홍길동 님의 시간인증형 봉사시간\n총 57시간 30분\n시간인증형 자원봉사 참여\n총 14건\n분야별 봉사시간 조회\n봉사분야\t봉사시간\n기타\t57시간 30분')
   await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
   await expect(page.getByRole('heading', { name: '1365 봉사 실적을 찾았어요' })).toBeVisible()
@@ -686,8 +688,8 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
-  await expect(page.getByRole('heading', { name: '이렇게 가져와요' })).toBeVisible()
-  await expect(page.getByText('고른 화면이 바로 열려요')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '무엇을 가져올까요?' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^봉사참여 실적/ })).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()
@@ -719,6 +721,7 @@ test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larg
   await expect(page.getByText('실적 확인 대기').first()).toBeVisible()
   await page.getByRole('button', { name: '실적 새로고침' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
+  await page.getByRole('button', { name: /^신청 현황/ }).click()
   await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n시간인증형\n총 59시간 30분\n총 15건')
   await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
   await page.getByRole('button', { name: '실적 가져오기' }).click()
@@ -755,6 +758,7 @@ test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모�
   await page.goto('/#/settings')
   await page.getByRole('switch', { name: /1365 연결/ }).click()
   await page.goto('/#/lab1365')
+  await page.getByRole('button', { name: /^신청 현황/ }).click()
   await page.getByPlaceholder(/1365 신청 현황/).fill(`나의 봉사 신청 현황\n어르신 말벗 봉사\n봉사기간 ${dot(3)} ~ ${dot(20)}\n모집기간 ${dot(-5)} ~ ${dot(2)}\n승인완료\n하천 정화 활동\n봉사기간 ${dot(6)} ~ ${dot(6)}\n신청완료`)
   await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
   await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()

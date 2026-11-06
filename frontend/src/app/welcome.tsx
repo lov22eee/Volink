@@ -54,7 +54,7 @@ export function WelcomeScreen() {
       <p>1365 봉사시간과 Volink 활동을 한눈에 볼 수 있어요.</p>
       <ul className="m-welcome-facts">
         <li><MIcon name="timer" size={20} /><span>5분 정도면 충분해요</span></li>
-        <li><MIcon name="checkCircle" size={20} /><span>상단 가이드와 함께 진행 가능해요</span></li>
+        <li><MIcon name="checkCircle" size={20} /><span>로그인하면 고른 화면이 바로 열려요</span></li>
       </ul>
     </div>
     <div className="m-welcome-actions">

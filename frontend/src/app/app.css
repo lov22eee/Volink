@@ -1355,3 +1355,17 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-empty.bare:has(+ .m-section) { min-height: 44dvh; }
 .lab-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .lab-actions .m-text-btn { align-self: center; color: var(--ink-3); font-size: 13.5px; }
+/* 1365 연결 A안 (2026-11-06): two choice cards with the app's line icons, safety notes. */
+.lab-choices { display: flex; flex-direction: column; gap: 10px; }
+.lab-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); text-align: left; font: inherit; color: var(--ink); }
+.lab-choice.main { border: 2px solid #3b67ad; background: #f5f8fd; }
+.lab-choice > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lab-choice b { font-size: 16px; }
+.lab-choice small { font-size: 13px; color: var(--ink-3); line-height: 1.45; }
+.lab-choice > svg:last-child { color: var(--ink-3); flex: none; }
+.lab-choice-ico { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex: none; background: #eaf0fa; color: #3b67ad; }
+.lab-choice-ico.g { background: var(--m-mint); color: var(--m-green-ink); }
+.lab-safe { list-style: none; margin: 4px 0 0; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.lab-safe li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.lab-safe svg { color: var(--ink-3); flex: none; }
+.lab-last { display: flex; align-items: center; gap: 6px; margin: 0; padding: 10px 12px; border-radius: 12px; background: #eef3fb; color: #3b67ad; font-size: 13px; }

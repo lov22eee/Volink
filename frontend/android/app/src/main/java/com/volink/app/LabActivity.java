@@ -81,6 +81,7 @@ public class LabActivity extends AppCompatActivity {
                         if (step == 1) jumped = false; // on the login page: once logged in, go to the page again
                         if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
                         showStep(step, out.substring(3));
+                        updateTake();
                     }
                 });
             }
@@ -115,9 +116,7 @@ public class LabActivity extends AppCompatActivity {
         stepLabel.setText(finished ? "가져오기 완료" : Math.max(1, step) + " / 4 단계");
         stepLabel.setTextColor(tone);
         for (int i = 0; i < bars.length; i++) bars[i].setBackground(round(i < Math.min(step, 4) ? tone : Color.parseColor(ready || finished ? "#CFE6DA" : "#D5DEEC"), 2));
-        take.setBackground(round(ready ? GREEN : Color.parseColor("#EEF1EE"), 14));
-        take.setTextColor(ready ? Color.WHITE : Color.parseColor("#2A332E"));
-        if (ready) take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
+
     }
 
     private int dp(int value) {
@@ -241,11 +240,12 @@ public class LabActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 Uri page = Uri.parse(url);
                 where.setText(page.getHost() == null ? "" : page.getHost());
+                updateTake();
             }
         });
 
-        // Bottom: one wide button, green and pulsing once the page is the one to take.
-        LinearLayout bottom = new LinearLayout(this);
+        // Bottom: the button exists only on the 실적 / 신청 현황 page itself (updateTake), green.
+        bottom = new LinearLayout(this);
         bottom.setPadding(dp(14), dp(10), dp(14), dp(12));
         take = new Button(this);
         take.setText("이 화면 가져오기");
@@ -253,16 +253,17 @@ public class LabActivity extends AppCompatActivity {
         take.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         take.setAllCaps(false);
         take.setStateListAnimator(null);
-        take.setBackground(round(Color.parseColor("#EEF1EE"), 14));
-        take.setTextColor(Color.parseColor("#2A332E"));
+        take.setBackground(round(GREEN, 14));
+        take.setTextColor(Color.WHITE);
         take.setOnClickListener(v -> takePage());
+        bottom.setVisibility(View.GONE);
         bottom.addView(take, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
         root.addView(header, wide);
-        if ((guideText != null && !guideText.isEmpty()) || (stepScript != null && !stepScript.isEmpty())) root.addView(card, cardAt);
+        // 2026-11-06: the step card is gone (it guessed wrong too often); the page check still turns the button green
+        // and moves to the asked page after logging in.
         root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
         root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
         root.addView(bottom, wide);
         setContentView(root);
         String start = getIntent().getStringExtra("url");
@@ -271,8 +272,32 @@ public class LabActivity extends AppCompatActivity {
         timer.postDelayed(checkStep, 1200);
     }
 
+    private LinearLayout bottom;
+    /** The two 1365 pages that may be taken (2026-11-06: never a login page, whose text could hold account details). */
+    private static final String SUMMARY_PAGE = "/mypage/partcptnAcmslt.do", APPLICATIONS_PAGE = "/mypage/reqstDtls.do";
+
+    /** True only on the page asked for (or either of the two when none was asked). */
+    private boolean onAllowedPage() {
+        String url = web == null ? null : web.getUrl();
+        if (url == null || !url.startsWith(LabPlugin.HOME + "/")) return false;
+        String path = Uri.parse(url).getPath();
+        if (path == null) return false;
+        if ("S".equals(target)) return path.endsWith(SUMMARY_PAGE);
+        if ("A".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
+        return path.endsWith(SUMMARY_PAGE) || path.endsWith(APPLICATIONS_PAGE);
+    }
+
+    private void updateTake() {
+        if (bottom == null) return;
+        boolean show = onAllowedPage();
+        if (show && bottom.getVisibility() != View.VISIBLE)
+            take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
+        bottom.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
     /** "이 화면 가져오기": keeps this page's text (and which page it is) and stays on 1365 for the next one. */
     private void takePage() {
+        if (!onAllowedPage()) { updateTake(); return; }
         String kindCall = stepScript == null || stepScript.isEmpty() ? "''" : stepCall("t");
         String js = "(function(){var t=document.body?document.body.innerText:'';var k='';try{k=" + kindCall + ";}catch(e){}"
                 + "return JSON.stringify({text:t,kind:String(k).charAt(1)});})()";
@@ -296,7 +321,7 @@ public class LabActivity extends AppCompatActivity {
             doneButton.setVisibility(View.VISIBLE);
             Toast.makeText(this, "S".equals(kind) ? "실적을 가져왔어요" : "A".equals(kind) ? "신청 현황을 가져왔어요" : "이 화면을 가져왔어요", Toast.LENGTH_SHORT).show();
             lastStep = 0;
-            if (!target.isEmpty() && target.equals(kind)) done();
+            if (!target.isEmpty()) done(); // the page is the one asked for (checked by its address)
         });
     }
 
