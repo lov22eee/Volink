@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     static final int MINIMUM_AGE = 14;
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    static final java.util.Set<String> ORG_TYPES = java.util.Set.of("VOLUNTEER_CENTER", "WELFARE", "SCHOOL", "NONPROFIT", "PUBLIC", "OTHER");
     private static final Pattern CONTACT = Pattern.compile("^[0-9-]{9,20}$");
     static final RowMapper<AuthUser> USER = (rs, i) -> new AuthUser(rs.getLong("id"), rs.getString("email"),
             rs.getString("display_name"), rs.getString("role"), rs.getString("member_type"), rs.getString("status"));
@@ -62,6 +63,11 @@ public class AuthService {
             String organization = trim(request.organizationName());
             if (organization.length() < 2 || organization.length() > 100) errors.put("organization", "기관명을 2~100자로 입력해 주세요.");
             if (!CONTACT.matcher(trim(request.organizationContact())).matches()) errors.put("organizationContact", "연락처는 숫자와 - 로 9~20자 입력해 주세요.");
+            String type = request.organizationType();
+            if (type != null && !ORG_TYPES.contains(type)) errors.put("organizationType", "기관 유형을 골라 주세요.");
+            if (trim(request.organizationAddress()).length() > 200) errors.put("organizationAddress", "주소는 200자 이내로 적어 주세요.");
+            String vms = trim(request.vmsCode());
+            if (vms.length() > 30 || (!vms.isEmpty() && !vms.matches("[0-9A-Za-z-]+"))) errors.put("vmsCode", "수요처 번호는 영문·숫자·- 로 30자 이내로 적어 주세요.");
         }
         String email = trim(request.email()).toLowerCase(Locale.ROOT);
         if (!EMAIL.matcher(email).matches() || email.length() > 254) errors.put("email", "이메일 형식을 확인해 주세요.");
@@ -83,9 +89,14 @@ public class AuthService {
         long id = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
         for (String interest : interests)
             jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT ?, id FROM categories WHERE name = ?", id, interest);
-        if (institution)
-            jdbc.update("INSERT INTO organizations(manager_user_id, name, contact) VALUES (?, ?, ?)",
-                    id, trim(request.organizationName()), trim(request.organizationContact()));
+        if (institution) {
+            String address = trim(request.organizationAddress());
+            String vms = trim(request.vmsCode());
+            jdbc.update("INSERT INTO organizations(manager_user_id, name, org_type, contact, address, vms_registered, vms_code) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    id, trim(request.organizationName()), request.organizationType(), trim(request.organizationContact()),
+                    address.isEmpty() ? null : address, request.vmsRegistered(),
+                    Boolean.TRUE.equals(request.vmsRegistered()) && !vms.isEmpty() ? vms : null);
+        }
         return id;
     }
 

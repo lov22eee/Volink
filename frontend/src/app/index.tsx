@@ -89,7 +89,7 @@ export default function MobileApp() {
   }
   // 기관회원 not (yet) confirmed: the review status only, read again on 다시 확인.
   if (user.memberType === 'INSTITUTION' && user.organization?.status !== 'APPROVED') return <><ToastHost /><OrgReview user={user} onSignOut={signOut}
-    onRefresh={async () => { try { const fresh = await api<User>('/api/me'); setUser(fresh); if (fresh.organization?.status === 'APPROVED') { showToast('기관 확인이 끝났어요'); window.location.hash = '#/home' } else showToast('아직 확인 중이에요') } catch { showToast('지금은 확인하지 못했어요') } }} /></>
+    onRefresh={async quiet => { try { const fresh = await api<User>('/api/me'); setUser(fresh); if (fresh.organization?.status === 'APPROVED') { showToast('기관 확인이 끝났어요'); window.location.hash = '#/home' } else if (!quiet) showToast('아직 확인 중이에요') } catch { if (!quiet) showToast('지금은 확인하지 못했어요') } }} /></>
   if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
 
   const bell = <BellLink unread={unread} />

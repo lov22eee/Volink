@@ -162,11 +162,14 @@ export function WheelColumn<T extends string | number>({ items, value, label, re
     const index = items.indexOf(value)
     if (box.current && index >= 0 && Math.abs(box.current.scrollTop - index * row) > 2) box.current.scrollTop = index * row
   }, [items, value])
+  // A late scroll timer must not change the value after the wheel has left the screen (its scrollTop then reads 0).
+  useEffect(() => () => window.clearTimeout(settle.current), [])
   return <div className="m-wheel-col" ref={box} role="listbox" aria-label={label} tabIndex={0}
     onScroll={() => {
       window.clearTimeout(settle.current)
       settle.current = window.setTimeout(() => {
-        const index = Math.max(0, Math.min(items.length - 1, Math.round((box.current?.scrollTop ?? 0) / row)))
+        if (!box.current) return
+        const index = Math.max(0, Math.min(items.length - 1, Math.round(box.current.scrollTop / row)))
         if (items[index] !== value) onChange(items[index])
       }, 90)
     }}

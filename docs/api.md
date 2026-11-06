@@ -115,6 +115,7 @@
 | 내 활동 · 신청 | `GET /api/me/participations`, offer 응답 | status, waitOrder, offerExpiresAt | 상태 이름 5종 안내(화면 반영 완료) |
 | 내 활동 · 개설 | 신청자 목록·승인·QR | 확정/제안/대기 수, 남은 응답 시간, 상태 기록 | 정원 초과 409 |
 | 내 활동 · 기록 | `GET /api/me/records`, 이의제기 | confirmedAt, appealDeadline, status | 7일 지나면 버튼 숨김 |
+| 기관 가입 항목(V23) | `POST /api/auth/signup` | `organizationType`(VOLUNTEER_CENTER/WELFARE/SCHOOL/NONPROFIT/PUBLIC/OTHER)·`organizationAddress`(200자)·`vmsRegistered`·`vmsCode`(영문·숫자·-, 30자) | 모두 선택(웹·예전 앱은 안 보냄). 관리자 `GET /api/admin/organizations`에 `orgType`·`address`·`vmsRegistered`·`vmsCode`. 승인·반려하면 담당자에게 `ORGANIZATION_REVIEW` 알림 |
 | 로그인 | `POST /api/auth/login` | 토큰, 회원 유형 | 이메일·비밀번호 오류는 하나의 문구로. 앱은 `memberType`(GENERAL/INSTITUTION, 로그인 탭)을 함께 보내고, 비밀번호가 맞은 뒤에만 계정 유형과 비교해 다르면 409 `MEMBER_TYPE_MISMATCH`(토큰 없음). 웹은 보내지 않음(그대로) |
 | 회원가입 | `POST /api/auth/signup` | 생성된 회원, 기관 상태 PENDING | `UNDER_AGE`, `EMAIL_TAKEN`, 칸별 오류 |
 

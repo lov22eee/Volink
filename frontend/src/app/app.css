@@ -971,3 +971,25 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-box h2 { font-size: 16px; } .lab-note { font-size: 12.5px; color: var(--ink-3); }
 .lab-box textarea { width: 100%; min-height: 84px; font-size: 16px; }
 .lab-nums { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* 가입 흐름 (2026-11-06): one question per screen, a two-line question, agreements first, the birth wheel on the page */
+.m-flow .m-flow-h { margin: 14px 0 4px; font-size: 25px; font-weight: 750; line-height: 1.38; letter-spacing: -0.035em; white-space: pre-line; }
+.m-flow .m-q { gap: 12px; }
+.m-flow .m-q > .m-help { margin: -4px 0 6px; }
+.m-flow-err { margin: 0 0 4px; }
+.m-terms { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.m-terms .m-check.all { padding: 4px 2px 6px; font-size: 17px; }
+.m-terms-box { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; border-radius: 18px; background: #fff; border: 1px solid var(--line); }
+.m-terms-box .m-check { border-bottom: 0; min-height: 0; padding: 10px 0; font-size: 15px; line-height: 1.45; align-items: flex-start; }
+.m-birth { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.m-birth .m-help { margin: 0; }
+.m-flow-chips { margin: 4px 0 0; padding: 0; }
+.m-flow-chips .m-chip { min-height: 46px; padding: 0 18px; font-size: 15.5px; background: #fff; border: 1px solid var(--line-2); color: var(--ink-2); }
+.m-flow-pick .m-type-card { min-height: 56px; display: grid; place-items: center; font-size: 15.5px; font-weight: 600; }
+.m-addr { margin: 0; padding: 0; list-style: none; }
+.m-addr button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font: inherit; color: var(--ink-3); }
+.m-addr button > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.m-addr b { color: var(--ink); font-size: 15.5px; font-weight: 600; } .m-addr small { font-size: 13px; }
+.m-addr button.on, .m-addr button.on b { color: var(--m-green-ink); }
+.m-flow-alt { align-self: flex-start; padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; }
+.m-org-ask { display: flex; flex-direction: column; gap: 10px; }
