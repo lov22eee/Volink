@@ -64,7 +64,8 @@ class CommunityIntegrationTest extends ApiTestSupport {
         mvc.perform(get("/api/community/posts?category=QUESTION").header("Authorization", "Bearer " + other))
                 .andExpect(jsonPath("$[0].id").value(id)).andExpect(jsonPath("$[0].author").value(containsString("글쓴이")))
                 .andExpect(jsonPath("$[0].mine").value(false)).andExpect(jsonPath("$[0].verified").value(false)).andExpect(jsonPath("$[0].preview").exists());
-        mvc.perform(get("/api/community/posts?category=REVIEW").header("Authorization", "Bearer " + other)).andExpect(jsonPath("$.length()").value(0));
+        // The question is not under 봉사후기 (other tests in the same database may have written reviews).
+        mvc.perform(get("/api/community/posts?category=REVIEW").header("Authorization", "Bearer " + other)).andExpect(jsonPath("$[?(@.id == " + id + ")]").isEmpty());
     }
 
     @Test
