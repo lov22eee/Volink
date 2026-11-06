@@ -80,7 +80,6 @@ function toward(name: string) {
 function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
   initial: PlaceResult | null; initialMeeting: string; onClose: () => void; onPick: (place: PlaceResult, meetingPoint: string) => void; app?: boolean
 }) {
-  const [showList, setShowList] = useState(true)
   // App: suggestions while typing, under the search box (the map stays visible). 2+ characters, after 0.3 s, each word once.
   const [suggest, setSuggest] = useState<PlaceResult[]>([])
   const typed = useRef(false)
@@ -143,7 +142,6 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     setQuery(item.name)
     setItems(current => [item, ...current.filter(x => keyOf(x) !== keyOf(item))])
     choose(item)
-    setShowList(false)
     ;(document.activeElement as HTMLElement | null)?.blur()
   }
 
@@ -156,7 +154,6 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       const result = await request()
       setMode(result.mode)
       setItems(result.items)
-      setShowList(true)
       if (!result.items.length) setMessage(empty || '찾은 장소가 없습니다. 다른 이름으로 검색해 보세요.')
       const first = result.items.find(item => item.latitude != null)
       if (first && !chosen && !keepCentre) setCentre({ lat: Number(first.latitude), lng: Number(first.longitude) })
@@ -174,13 +171,14 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     event.stopPropagation()
     typed.current = false
     setSuggest([])
-    if (query.trim()) run(() => searchPlaces(query.trim(), centre), '')
+    // App with a map (2026-11-06, no bottom sheet): the results open as the same short list under the search box.
+    if (query.trim()) run(() => searchPlaces(query.trim(), centre), '', undefined, app && kakaoEnabled ? result => setSuggest(result.items.slice(0, 8)) : undefined)
   }
 
   function choose(item: PlaceResult) {
     if (item.placeClass === 'BLOCKED') return
     setChosen(item)
-    if (item.latitude != null && kakaoEnabled && mode !== 'LOCAL') setShowList(false)
+    setSuggest([])
     if (item.latitude != null) setCentre({ lat: Number(item.latitude), lng: Number(item.longitude) })
   }
 
@@ -219,11 +217,9 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       <div className={'ap-place-body' + (hasMap ? '' : ' nomap')}>
         {hasMap ? <>
           <PinMap noCentrePin centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose}
-            onNearby={point => run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) { choose(spot); setShowList(false) } })} />
-          {!items.length || !showList ? <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span> : null}
-          {(items.length > 0 || message) && (showList
-            ? <div className="ap-list">{items.length > 0 && <button type="button" className="ap-list-head" onClick={() => setShowList(false)}><i />{items.length}곳 · 눌러서 고르기<small>지도 보기</small></button>}{results}</div>
-            : <button type="button" className="ap-list-open" onClick={() => setShowList(true)}><Glyph name="search" size={14} />목록 {items.length}곳 보기</button>)}
+            onNearby={point => { setSuggest([]); run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) choose(spot) }) }} />
+          {/* No result sheet over the map (2026-11-06): results are pins on the map and the list under the search box. */}
+          {message ? <span className="ap-hint warn">{message}</span> : <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span>}
         </> : <div className="ap-list full">{!items.length && !message && <p className="ap-msg">장소 이름으로 검색해 주세요.</p>}{results}</div>}
       </div>
       <div className="ap-place-foot">
