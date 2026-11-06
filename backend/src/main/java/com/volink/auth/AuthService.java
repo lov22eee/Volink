@@ -53,8 +53,10 @@ public class AuthService {
         if (!institution && !"GENERAL".equals(request.memberType())) errors.put("memberType", "회원 유형을 선택해 주세요.");
         String name = trim(request.name());
         if (name.isEmpty() || name.length() > 40) errors.put("name", "이름을 1~40자로 입력해 주세요.");
-        LocalDate birthDate = parseDate(request.birthDate());
-        if (birthDate == null) errors.put("birthDate", "생년월일을 입력해 주세요.");
+        // 기관 담당자: no birth date (2026-11-06, collect only what is used); the age is a consent line and an admin confirms the
+        // organization. Personal members: required, 14+.
+        LocalDate birthDate = institution ? null : parseDate(request.birthDate());
+        if (!institution && birthDate == null) errors.put("birthDate", "생년월일을 입력해 주세요.");
         List<String> interests = request.interests() == null ? List.of()
                 : List.copyOf(new LinkedHashSet<>(request.interests()));
         if (interests.size() > 3) errors.put("interests", "관심 분야는 3개까지 고를 수 있어요.");
@@ -78,7 +80,7 @@ public class AuthService {
         if (!errors.isEmpty()) throw ApiException.validation(errors);
 
         // Age is counted on the Korean calendar date; no guardian consent flow exists, so under 14 is refused.
-        if (Period.between(birthDate, LocalDate.now(clock)).getYears() < MINIMUM_AGE)
+        if (birthDate != null && Period.between(birthDate, LocalDate.now(clock)).getYears() < MINIMUM_AGE)
             throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "UNDER_AGE", "만 14세 미만은 가입할 수 없습니다.",
                     Map.of("birthDate", "만 14세 미만은 가입할 수 없습니다."));
         if (findByEmail(email).isPresent())

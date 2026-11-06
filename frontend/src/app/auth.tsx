@@ -109,7 +109,7 @@ function BirthWheel({ value, onChange }: { value: Birth; onChange: (b: Birth) =>
 /** Agreements first (2026-11-06): every one is required; the same list for e-mail and Kakao / Google signups. */
 const consents = {
   GENERAL: ['만 14세 이상이에요', 'Volink 이용약관에 동의해요', '개인정보 처리방침에 동의해요', 'Volink 활동은 공식 봉사실적·자원봉사 종합보험이 아님을 이해해요', '연락처는 서로 공개하지 않아요'],
-  INSTITUTION: ['담당자는 만 14세 이상이에요', 'Volink 이용약관에 동의해요', '개인정보 처리방침에 동의해요', '기관 정보가 사실이고, 관리자 확인에 동의해요', 'Volink 활동은 공식 봉사실적·자원봉사 종합보험이 아님을 이해해요'],
+  INSTITUTION: ['기관을 대표하는 담당자이며 만 14세 이상이에요', 'Volink 이용약관에 동의해요', '개인정보 처리방침에 동의해요', '기관 정보가 사실이고, 관리자 확인에 동의해요', 'Volink 활동은 공식 봉사실적·자원봉사 종합보험이 아님을 이해해요'],
 }
 function Terms({ items, value, onChange }: { items: string[]; value: boolean[]; onChange: (next: boolean[]) => void }) {
   const all = value.every(Boolean)
@@ -163,9 +163,9 @@ function AddressPicker({ value, onChange }: { value: string; onChange: (address:
 
 export function Signup({ onSession, institution = false }: { onSession: (user: User) => void; institution?: boolean }) {
   type Step = 'terms' | 'email' | 'password' | 'name' | 'birth' | 'interests' | 'orgType' | 'org' | 'address' | 'contact' | 'vms'
-  // 기관회원: the manager's account (e-mail, password, name, birth: the same rules) and then the organization; an admin
-  // confirms it (기관 확인) before institution activities open. Interests are for personal members.
-  const order: Step[] = institution ? ['terms', 'email', 'password', 'name', 'birth', 'orgType', 'org', 'address', 'contact', 'vms'] : ['terms', 'email', 'password', 'name', 'birth', 'interests']
+  // 기관회원: the manager's account (e-mail, password, name; no birth date since 2026-11-06 — the age is a consent line and
+  // an admin confirms the organization) and then the organization. Interests are for personal members.
+  const order: Step[] = institution ? ['terms', 'email', 'password', 'name', 'orgType', 'org', 'address', 'contact', 'vms'] : ['terms', 'email', 'password', 'name', 'birth', 'interests']
   const items = consents[institution ? 'INSTITUTION' : 'GENERAL']
   const [step, setStep] = useState<Step>('terms')
   const [agreed, setAgreed] = useState<boolean[]>(() => items.map(() => false))
@@ -207,7 +207,7 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
     setError('')
     try {
       await api('/api/auth/signup', 'POST', institution
-        ? { memberType: 'INSTITUTION', name: name.trim(), email: email.trim(), password, birthDate: birthIso(birth), interests: [], agreedNotice: true,
+        ? { memberType: 'INSTITUTION', name: name.trim(), email: email.trim(), password, interests: [], agreedNotice: true,
           organizationName: org.trim(), organizationContact: contact.trim(), organizationType: orgType, organizationAddress: address.trim(), vmsRegistered: vms, vmsCode: vms ? vmsCode.trim() : '' }
         : { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate: birthIso(birth), interests, agreedNotice: true })
       if (institution) try { sessionStorage.setItem('volink.orgAsk', '1') } catch { /* private mode */ }
@@ -229,14 +229,14 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   }
   const back = () => index === 0 ? (window.location.hash = institution ? '#/login?type=institution' : '#/login') : (setError(''), setStep(order[index - 1]))
   const headings: Record<Step, string> = {
-    terms: institution ? '기관회원으로 시작하기 전에\n확인해 주세요' : 'Volink를 시작하기 전에\n확인해 주세요', email: institution ? '담당자 이메일을\n알려 주세요' : '이메일을\n알려 주세요',
-    password: '비밀번호를\n정해 주세요', name: institution ? '담당자 이름을\n알려 주세요' : '이름을\n알려 주세요', birth: institution ? '담당자 생년월일을\n알려 주세요' : '생년월일을\n알려 주세요',
-    interests: '어떤 봉사에\n관심 있나요?', orgType: '어떤 기관인가요?', org: '기관 이름을\n알려 주세요', address: '기관 주소를\n알려 주세요', contact: '기관 대표 연락처를\n알려 주세요', vms: '1365에 등록된\n수요처인가요?',
+    terms: institution ? '기관회원으로 시작하기 전에 확인해 주세요' : 'Volink를 시작하기 전에 확인해 주세요', email: institution ? '담당자 이메일을 알려 주세요' : '이메일을 알려 주세요',
+    password: '비밀번호를 정해 주세요', name: institution ? '담당자 이름을 알려 주세요' : '이름을 알려 주세요', birth: institution ? '담당자 생년월일을 알려 주세요' : '생년월일을 알려 주세요',
+    interests: '어떤 봉사에 관심 있나요?', orgType: '어떤 기관인가요?', org: '기관 이름을 알려 주세요', address: '기관 주소를 알려 주세요', contact: '기관 대표 연락처를 알려 주세요', vms: '1365에 등록된 수요처인가요?',
   }
   const subs: Partial<Record<Step, string>> = {
-    email: institution ? '기관 확인 결과를 이 계정으로 알려 드려요.' : undefined, name: institution ? '관리자 확인에만 써요. 참가자에게는 기관 이름으로 보여요.' : '참가자에게는 가운데 글자를 가려서 보여 줘요.',
+    email: institution ? '기관 확인 결과를 이 계정으로 알려 드려요.' : undefined,
     interests: `${signupRules.maxInterests}개까지 고를 수 있어요. 나중에 마이에서 바꿀 수 있어요.`, contact: '관리자가 기관을 확인할 때만 써요. 참가자에게는 보이지 않아요.',
-    vms: '확인이 빨라져요. 증빙 서류 올리기는 다음 업데이트에서 열려요.',
+    vms: '등록된 곳이면 확인이 빨라져요.',
   }
   const label = busy ? (institution ? '제출하는 중…' : '가입하는 중…') : last ? (institution ? '제출하기' : interests.length ? '가입하고 시작하기' : '나중에 고르고 가입하기') : '다음'
 
@@ -363,8 +363,8 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
       setBusy(false)
     }
   }
-  const headings: Record<Step, string> = { terms: 'Volink를 시작하기 전에\n확인해 주세요', name: '이름을\n알려 주세요', birth: '생년월일을\n알려 주세요', interests: '어떤 봉사에\n관심 있나요?' }
-  const subs: Partial<Record<Step, string>> = { terms: '간편 로그인은 개인 회원으로 가입돼요.', name: providerName[provider] + '에서 받은 이름이에요. 고쳐도 돼요.', interests: `${signupRules.maxInterests}개까지 고를 수 있어요. 나중에 마이에서 바꿀 수 있어요.` }
+  const headings: Record<Step, string> = { terms: 'Volink를 시작하기 전에 확인해 주세요', name: '이름을 알려 주세요', birth: '생년월일을 알려 주세요', interests: '어떤 봉사에 관심 있나요?' }
+  const subs: Partial<Record<Step, string>> = { terms: '간편 로그인은 개인 회원으로 가입돼요.', interests: `${signupRules.maxInterests}개까지 고를 수 있어요. 나중에 마이에서 바꿀 수 있어요.` }
   return <Flow title={providerName[provider] + '로 시작하기'} index={index} total={order.length} heading={headings[step]} sub={subs[step]}
     onBack={() => index === 0 ? (window.location.hash = '#/login') : setStep(order[index - 1])}
     onSubmit={() => { if (!ok[step] || busy) return; if (last) void finish(); else setStep(order[index + 1]) }}

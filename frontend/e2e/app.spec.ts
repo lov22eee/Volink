@@ -47,7 +47,7 @@ test('login tabs: 기관회원 signs up with e-mail only, waits for 기관 확�
   await expect(page.getByRole('alert')).toHaveText('개인 회원 계정이에요. 개인회원 탭에서 로그인해 주세요.')
   await expect(page).toHaveURL(/#\/login/)
 
-  // 기관회원 가입: agreements first, the manager (e-mail, password, name, birth), then the organization.
+  // 기관회원 가입: agreements first, the manager (e-mail, password, name — no birth date), then the organization.
   await page.getByRole('link', { name: '기관회원 가입' }).click()
   await expect(page.getByRole('heading', { name: '기관회원으로 시작하기 전에 확인해 주세요' })).toBeVisible()
   const next = page.getByRole('button', { name: '다음' })
@@ -62,9 +62,6 @@ test('login tabs: 기관회원 signs up with e-mail only, waits for 기관 확�
   await page.getByLabel('비밀번호 확인').fill(password)
   await next.click()
   await page.getByPlaceholder('이름').fill('기관 담당자')
-  await next.click()
-  // The birth wheel is on the page (no sheet).
-  await page.getByRole('option', { name: '1995년' }).click()
   await next.click()
   await expect(page.getByRole('heading', { name: '어떤 기관인가요?' })).toBeVisible()
   await page.getByRole('button', { name: '자원봉사센터' }).click()
@@ -224,9 +221,9 @@ test('an organizer creates in three steps, a member applies, the organizer appro
 
   await memberPage.reload()
   await expect(memberPage.getByText('참가가 확정됐어요')).toBeVisible()
-  await expect(memberPage.getByRole('button', { name: '못 가요' })).toBeVisible()
-  // 못 가요 needs a reason before it can be sent.
-  await memberPage.getByRole('button', { name: '못 가요' }).click()
+  await expect(memberPage.getByRole('button', { name: '신청 취소' })).toBeVisible()
+  // 신청 취소 (confirmed) needs a reason before it can be sent.
+  await memberPage.getByRole('button', { name: '신청 취소' }).click()
   await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeDisabled()
   await memberPage.getByRole('button', { name: '몸이 좋지 않아요' }).click()
   await expect(memberPage.getByRole('button', { name: '못 간다고 알리기' })).toBeEnabled()

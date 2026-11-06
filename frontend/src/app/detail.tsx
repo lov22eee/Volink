@@ -170,7 +170,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'waiting': return <button className="m-btn line" disabled={busy} onClick={() => setSheet('cancel')}>신청 취소</button>
       case 'offer': return <><button className="m-btn line" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/decline-offer', undefined, '제안을 거절했어요')}>거절</button>
         <button className="m-btn" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/accept-offer', undefined, '참가가 확정됐어요!')}>수락하기</button></>
-      case 'confirmed': return <><button className="m-btn line" onClick={() => setSheet('cancel')}>못 가요</button>
+      case 'confirmed': return <><button className="m-btn line" onClick={() => setSheet('cancel')}>신청 취소</button>
         <button className="m-btn" onClick={() => { void addToCalendar(activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
       case 'today': return <><button className="m-btn line" onClick={() => setSheet(phase === 'later' || phase === 'soon' ? 'late' : 'late')} disabled={phase === 'ended'}>늦어요</button>
         <button className="m-btn" disabled={!(phase === 'open' || phase === 'late')} onClick={() => setSheet('scan')}><MIcon name="qr" size={19} />{phase === 'open' || phase === 'late' ? 'QR 찍고 체크인' : hhmm(opens) + '부터 체크인'}</button></>
