@@ -37,8 +37,8 @@ export function WelcomeScreen() {
     <div className="m-welcome-dots" aria-hidden="true"><i className="on" /><i className="on" /><i className="on" /></div>
     <div className="m-welcome-body">
       <span className="m-welcome-ico"><MIcon name="moon" size={40} /></span>
-      <h1>밤에도 알림을<br />받을까요?</h1>
-      <p>밤 10시부터 아침 8시까지는 알림을 보내지 않을 수 있어요. 시간은 마이 › 알림 설정에서 언제든 바꿀 수 있어요.</p>
+      <h1>밤에도 알림을 받을까요?</h1>
+      <p>밤 10시~아침 8시엔 쉬게 할 수 있어요.</p>
     </div>
     <div className="m-welcome-actions">
       <button type="button" className="m-btn" disabled={busy} onClick={() => night(true)}>밤에는 조용히 받을게요</button>
@@ -49,9 +49,8 @@ export function WelcomeScreen() {
     <div className="m-welcome-dots" aria-hidden="true"><i className="on" /><i className={location ? '' : 'on'} /><i /></div>
     <div className="m-welcome-body">
       <span className="m-welcome-ico"><MIcon name={location ? 'pin' : 'bell'} size={40} /></span>
-      <h1>{location ? <>내 주변 봉사를 찾으려면<br />위치를 허용해 주세요</> : <>신청 결과와 활동 소식을<br />알려 드릴까요?</>}</h1>
-      <p>{location ? '가까운 활동과 1365 봉사를 거리순으로 보여 드리고, 현장 체크인(200m 안)에 써요. 위치는 저장하지 않아요.'
-        : '승인·자리 제안·공지·하루 전 안내를 놓치지 않게 알려 드려요. 마이 > 알림 설정에서 언제든 바꿀 수 있어요.'}</p>
+      <h1>{location ? '위치를 허용해 주세요' : '알림을 받을까요?'}</h1>
+      <p>{location ? '가까운 봉사 찾기와 현장 체크인에 써요. 저장하지 않아요.' : '승인·공지·하루 전 안내를 알려 드려요.'}</p>
     </div>
     <div className="m-welcome-actions">
       <button type="button" className="m-btn" disabled={busy} onClick={location ? allowLocation : allowNotify}>{busy ? '확인하는 중…' : location ? '위치 허용하기' : '알림 받기'}</button>

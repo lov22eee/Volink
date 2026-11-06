@@ -954,7 +954,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-org-actions { display: flex; flex-direction: column; gap: 10px; }
 
 /* 가입 흐름 (2026-11-06): one question per screen, a two-line question, agreements first, the birth wheel on the page */
-.m-flow .m-flow-h { margin: 14px 0 4px; font-size: 25px; font-weight: 750; line-height: 1.38; letter-spacing: -0.035em; white-space: pre-line; }
+.m-flow .m-flow-h { margin: 14px 0 4px; font-size: 22px; font-weight: 750; line-height: 1.38; letter-spacing: -0.035em; }
 .m-flow .m-q { gap: 12px; }
 .m-flow .m-q > .m-help { margin: -4px 0 6px; }
 .m-flow-err { margin: 0 0 4px; }

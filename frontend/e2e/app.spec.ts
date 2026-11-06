@@ -49,7 +49,7 @@ test('login tabs: 기관회원 signs up with e-mail only, waits for 기관 확�
 
   // 기관회원 가입: agreements first, the manager (e-mail, password, name — no birth date), then the organization.
   await page.getByRole('link', { name: '기관회원 가입' }).click()
-  await expect(page.getByRole('heading', { name: '기관회원으로 시작하기 전에 확인해 주세요' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '시작하기 전에 확인해 주세요' })).toBeVisible()
   const next = page.getByRole('button', { name: '다음' })
   await expect(next).toBeDisabled()
   await page.getByText('모두 동의').click()
@@ -75,7 +75,7 @@ test('login tabs: 기관회원 signs up with e-mail only, waits for 기관 확�
   await next.click()
   await page.getByLabel('기관 연락처').fill('031-000-0000')
   await next.click()
-  await expect(page.getByRole('heading', { name: '1365에 등록된 수요처인가요?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1365 수요처인가요?' })).toBeVisible()
   await page.getByRole('button', { name: '네, 등록돼 있어요' }).click()
   await page.getByLabel('1365 수요처 번호').fill('VMS-77')
   await page.getByRole('button', { name: '제출하기' }).click()
@@ -121,7 +121,7 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await expect(page.getByRole('tab', { name: '개인회원' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('link', { name: '회원가입' }).click()
   // Agreements first; one question per screen; no answers piled up below.
-  await expect(page.getByRole('heading', { name: 'Volink를 시작하기 전에 확인해 주세요' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '시작하기 전에 확인해 주세요' })).toBeVisible()
   const next = page.getByRole('button', { name: '다음' })
   await expect(next).toBeDisabled()
   await page.getByText('모두 동의').click()
@@ -145,16 +145,16 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await page.getByRole('option', { name: '2003년' }).click()
   await next.click()
   // Interests are optional: pick up to 3 or leave them for later.
-  await expect(page.getByRole('heading', { name: '어떤 봉사에 관심 있나요?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '관심 있는 봉사를 골라 주세요' })).toBeVisible()
   await expect(page.getByRole('button', { name: '나중에 고르고 가입하기' })).toBeVisible()
   await page.getByRole('button', { name: '환경' }).click()
   await expect(page.getByText('기관 회원', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '가입하고 시작하기' }).click()
   // Right after signup: why location, then why notifications; both can wait.
   await expect(page).toHaveURL(/#\/welcome$/)
-  await expect(page.getByRole('heading', { name: /위치를 허용해 주세요/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '위치를 허용해 주세요' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
-  await expect(page.getByRole('heading', { name: /알려 드릴까요/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '알림을 받을까요?' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
   await expect(page.getByRole('heading', { name: /앱 회원님/ })).toBeVisible()

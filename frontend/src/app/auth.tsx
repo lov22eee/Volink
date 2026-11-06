@@ -228,16 +228,13 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
     else setStep(order[index + 1])
   }
   const back = () => index === 0 ? (window.location.hash = institution ? '#/login?type=institution' : '#/login') : (setError(''), setStep(order[index - 1]))
+  // One line each (2026-11-06): short questions, no extra helper lines.
   const headings: Record<Step, string> = {
-    terms: institution ? '기관회원으로 시작하기 전에 확인해 주세요' : 'Volink를 시작하기 전에 확인해 주세요', email: institution ? '담당자 이메일을 알려 주세요' : '이메일을 알려 주세요',
-    password: '비밀번호를 정해 주세요', name: institution ? '담당자 이름을 알려 주세요' : '이름을 알려 주세요', birth: institution ? '담당자 생년월일을 알려 주세요' : '생년월일을 알려 주세요',
-    interests: '어떤 봉사에 관심 있나요?', orgType: '어떤 기관인가요?', org: '기관 이름을 알려 주세요', address: '기관 주소를 알려 주세요', contact: '기관 대표 연락처를 알려 주세요', vms: '1365에 등록된 수요처인가요?',
+    terms: '시작하기 전에 확인해 주세요', email: institution ? '담당자 이메일을 알려 주세요' : '이메일을 알려 주세요',
+    password: '비밀번호를 정해 주세요', name: institution ? '담당자 이름을 알려 주세요' : '이름을 알려 주세요', birth: '생년월일을 알려 주세요',
+    interests: '관심 있는 봉사를 골라 주세요', orgType: '어떤 기관인가요?', org: '기관 이름을 알려 주세요', address: '기관 주소를 알려 주세요', contact: '기관 연락처를 알려 주세요', vms: '1365 수요처인가요?',
   }
-  const subs: Partial<Record<Step, string>> = {
-    email: institution ? '기관 확인 결과를 이 계정으로 알려 드려요.' : undefined,
-    interests: `${signupRules.maxInterests}개까지 고를 수 있어요. 나중에 마이에서 바꿀 수 있어요.`, contact: '관리자가 기관을 확인할 때만 써요. 참가자에게는 보이지 않아요.',
-    vms: '등록된 곳이면 확인이 빨라져요.',
-  }
+  const subs: Partial<Record<Step, string>> = { interests: `${signupRules.maxInterests}개까지, 나중에 바꿀 수 있어요` }
   const label = busy ? (institution ? '제출하는 중…' : '가입하는 중…') : last ? (institution ? '제출하기' : interests.length ? '가입하고 시작하기' : '나중에 고르고 가입하기') : '다음'
 
   return <Flow title={institution ? '기관회원 가입' : '회원가입'} index={index} total={order.length} heading={headings[step]} sub={subs[step]} onBack={back} onSubmit={next}
@@ -363,8 +360,8 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
       setBusy(false)
     }
   }
-  const headings: Record<Step, string> = { terms: 'Volink를 시작하기 전에 확인해 주세요', name: '이름을 알려 주세요', birth: '생년월일을 알려 주세요', interests: '어떤 봉사에 관심 있나요?' }
-  const subs: Partial<Record<Step, string>> = { terms: '간편 로그인은 개인 회원으로 가입돼요.', interests: `${signupRules.maxInterests}개까지 고를 수 있어요. 나중에 마이에서 바꿀 수 있어요.` }
+  const headings: Record<Step, string> = { terms: '시작하기 전에 확인해 주세요', name: '이름을 알려 주세요', birth: '생년월일을 알려 주세요', interests: '관심 있는 봉사를 골라 주세요' }
+  const subs: Partial<Record<Step, string>> = { terms: '간편 로그인은 개인 회원으로 가입돼요', interests: `${signupRules.maxInterests}개까지, 나중에 바꿀 수 있어요` }
   return <Flow title={providerName[provider] + '로 시작하기'} index={index} total={order.length} heading={headings[step]} sub={subs[step]}
     onBack={() => index === 0 ? (window.location.hash = '#/login') : setStep(order[index - 1])}
     onSubmit={() => { if (!ok[step] || busy) return; if (last) void finish(); else setStep(order[index + 1]) }}
