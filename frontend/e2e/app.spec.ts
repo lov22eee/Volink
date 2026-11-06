@@ -156,6 +156,7 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page.getByRole('heading', { name: '알림을 받을까요?' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
+  await page.getByRole('button', { name: '괜찮아요, 직접 남길게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
   await expect(page.getByRole('heading', { name: /앱 회원님/ })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
@@ -473,7 +474,11 @@ test('after signup: notifications, then night choice; settings: all off, own qui
   await page.getByRole('button', { name: '알림 받기' }).click()
   await expect(page.getByRole('heading', { name: /밤에도 알림을/ })).toBeVisible()
   await page.getByRole('button', { name: '밤에도 받을게요' }).click()
+  // Last step (V29): how to keep 1365 activities; 직접 남기기 goes home.
+  await expect(page.getByRole('heading', { name: '1365 봉사실적도 함께 모을까요?' })).toBeVisible()
+  await page.getByRole('button', { name: '괜찮아요, 직접 남길게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
+  await expect(page.getByText('1365 봉사는 직접 남기면 돼요')).toBeHidden({ timeout: 10_000 }) // the toast sits over the switches
   await page.goto('/#/my?view=notice-settings')
   const quiet = page.getByRole('switch', { name: /방해 금지/ })
   await expect(quiet).not.toBeChecked()
@@ -643,4 +648,86 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
   await expect(page).toHaveURL(/#\/mine/)
   await expect(page.getByRole('link', { name: /하천 정화 활동/ })).toBeVisible()
+
+  // The 1365 봉사참여 실적 page: total time, count and time per field (the name on that page is not kept).
+  await page.goto('/#/lab1365')
+  await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n실적확인서 발행 내역\n시간인증형\n활동인증형\n홍길동 님의 시간인증형 봉사시간\n총 57시간 30분\n시간인증형 자원봉사 참여\n총 14건\n분야별 봉사시간 조회\n봉사분야\t봉사시간\n기타\t57시간 30분')
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '1365 봉사 실적을 찾았어요' })).toBeVisible()
+  await expect(page.getByText('봉사 실적 총 57시간 30분 · 14건')).toBeVisible()
+  await expect(page.getByText('기타 57시간 30분')).toBeVisible()
+  await page.getByRole('button', { name: '실적 가져오기' }).click()
+  await expect(page.getByRole('region', { name: '1365 누적 실적' })).toContainText('57시간 30분 · 14건')
+  await expect(page.getByRole('region', { name: '1365 누적 실적' })).not.toContainText('홍길동')
+})
+
+test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, then the 3-step guide; 마이 shows Volink + 1365', async ({ page }) => {
+  const member = await signupByApi(page, '연결 확인')
+  await login(page, member)
+  await page.goto('/#/mine?tab=done')
+  await expect(page.getByText('아직 Volink 활동 기록이 없어요')).toBeVisible()
+  await page.getByRole('button', { name: /1365 봉사실적 연결하기/ }).click()
+  const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
+  await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
+  await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
+  await expect(page).toHaveURL(/#\/lab1365/)
+  await expect(page.getByRole('heading', { name: '이렇게 가져와요' })).toBeVisible()
+  await expect(page.getByText('☰ 메뉴 › 나의 봉사 › 봉사참여 실적')).toBeVisible()
+  // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
+  await page.goto('/#/my')
+  await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()
+  await page.request.put('/api/me/external/summary', { headers: { Authorization: await tokenFor(page, member) }, data: { totalMinutes: 3450, count: 14, fields: [{ name: '기타', minutes: 3450 }] } })
+  await page.reload()
+  const total = page.getByRole('region', { name: '함께한 시간' })
+  await expect(total).toContainText('57시간 30분')
+  await expect(total).toContainText('1365 57시간 30분 + Volink 0시간')
+  await expect(total).toContainText('1365 공식 실적')
+  await expect(page.getByRole('button', { name: /1365 연결됨/ })).toBeVisible()
+})
+
+test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larger 1365 count marks it 실적 반영됨(추정); 마이 adds both', async ({ page }) => {
+  const member = await signupByApi(page, '가져오기')
+  await login(page, member)
+  await page.goto('/#/welcome')
+  await page.getByRole('button', { name: '나중에 할게요' }).click()
+  await page.getByRole('button', { name: '나중에 할게요' }).click()
+  await page.getByRole('button', { name: '1365 연결하기' }).click()
+  await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '동의하고 계속하기' }).click()
+  await expect(page).toHaveURL(/#\/lab1365/)
+  const auth = await tokenFor(page, member)
+  await page.request.put('/api/me/external/summary', { headers: { Authorization: auth }, data: { totalMinutes: 3450, count: 14 } })
+  const created = await page.request.post('/api/me/external', { headers: { Authorization: auth }, data: { title: '노인복지관 배식 지원', date: inDays(-4), startTime: '11:00', endTime: '13:00' } })
+  const id = (await created.json()).id
+  await page.goto('/#/mine')
+  await expect(page.getByRole('link', { name: /노인복지관 배식 지원.*실적 확인 대기/ })).toBeVisible()
+  await page.goto('/#/record/' + id)
+  await expect(page.getByText('실적 확인 대기').first()).toBeVisible()
+  await page.getByRole('button', { name: '실적 새로고침' }).click()
+  await expect(page).toHaveURL(/#\/lab1365/)
+  await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n시간인증형\n총 59시간 30분\n총 15건')
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await page.getByRole('button', { name: '실적 가져오기' }).click()
+  await expect(page.getByText('실적이 늘었어요 14→15건')).toBeVisible()
+  await page.goto('/#/record/' + id)
+  await expect(page.getByText('1365 실적 건수가 늘어서')).toBeVisible()
+  await page.goto('/#/my')
+  await expect(page.getByRole('region', { name: '함께한 시간' })).toContainText('1365 59시간 30분 + Volink 0시간')
+  await page.goto('/#/settings')
+  await expect(page.getByRole('button', { name: /1365 기록 방식.*가져오기/ })).toBeVisible()
+})
+
+test('1365 step guide: the words on the page tell which step the person is on (① 로그인 … ④ 이 화면 가져오기)', async ({ page }) => {
+  await page.goto('/#/login')
+  const steps = await page.evaluate(async () => {
+    const { labStep } = await import('/src/app/lab.tsx' as string)
+    return [
+      labStep('1365 로그인 아이디 비밀번호', true), labStep('봉사찾기 로그인 회원가입', false), labStep('홈 로그아웃 봉사찾기 공지사항', false),
+      labStep('로그아웃 나의 봉사 봉사참여 실적 신청 현황 실적확인서', false), labStep('로그아웃 봉사참여 실적 홍길동 님 총 57시간 30분 총 14건', false),
+      labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false),
+      // Several pages in one visit: after the 실적 page, the guide points to 신청 현황 (and 완료).
+      labStep('로그아웃 봉사참여 실적 총 57시간 30분 총 14건', false, true), labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true),
+      labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true, true),
+    ].map(x => x.step + x.kind)
+  })
+  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-'])
 })

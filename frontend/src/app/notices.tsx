@@ -35,6 +35,7 @@ function destination(item: CenterItem): { href: string; label?: string } {
   const a = item.activityId
   if (item.type === 'COMMUNITY_COMMENT' && item.link?.startsWith('#/post/')) return { href: item.link, label: '댓글 보기' }
   if (item.type === 'RECORD_CONFIRMED') return { href: '#/mine?tab=done', label: '내 기록' }
+  if (item.type === 'EXT_REFRESH') return { href: '#/lab1365', label: '새로고침' }
   if ((item.type === 'EXT_CHECK' || item.type === 'EXT_DAY_BEFORE') && item.link?.startsWith('#/record/')) return { href: item.link, label: item.type === 'EXT_CHECK' ? '남기기' : '확인하기' }
   if (!a) return { href: item.link?.replace('#/explore', '#/find') ?? '#/home' }
   switch (item.type) {

@@ -253,7 +253,8 @@ export function ToastHost() {
       const { text, detail } = (event as CustomEvent<{ text: string; detail: string }>).detail
       window.clearTimeout(timer)
       setToast({ id: ++count, text, detail })
-      timer = window.setTimeout(() => setToast(null), 4000)
+      // The app (APK) shows it shorter; the web keeps 4 seconds.
+      timer = window.setTimeout(() => setToast(null), document.documentElement.classList.contains('m-app') ? 2500 : 4000)
     }
     toastBus.addEventListener('toast', show)
     return () => { toastBus.removeEventListener('toast', show); window.clearTimeout(timer) }

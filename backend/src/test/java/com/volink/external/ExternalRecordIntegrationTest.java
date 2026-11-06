@@ -89,4 +89,51 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_CHECK'", Integer.class, mine)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_DAY_BEFORE'", Integer.class, mine)).isEqualTo(1);
     }
+
+    @Test
+    void labSummaryIsReplacedOnEachImportAndOnlyMine() throws Exception {
+        String member = token(member("GENERAL"));
+        perform(get("/api/me/external/summary"), null, member).andExpect(status().isOk()).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3450, "count", 14, "fields", List.of(Map.of("name", "기타", "minutes", 3450))), member)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalMinutes").value(3450)).andExpect(jsonPath("$.count").value(14))
+                .andExpect(jsonPath("$.fields[0].name").value("기타")).andExpect(jsonPath("$.fetchedAt").exists());
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3570, "count", 15), member).andExpect(jsonPath("$.totalMinutes").value(3570)).andExpect(jsonPath("$.fields.length()").value(0));
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", -5), member).andExpect(status().isBadRequest());
+        String other = token(member("GENERAL"));
+        perform(get("/api/me/external/summary"), null, other).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+        perform(delete("/api/me/external/summary"), null, member).andExpect(status().isNoContent());
+        perform(get("/api/me/external/summary"), null, member).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+    }
+
+    @Test
+    void importModeMatchesPendingRecordsWhenTheCountGrowsAndAsksToRefresh() throws Exception {
+        String member = token(member("GENERAL"));
+        perform(get("/api/me/external/mode"), null, member).andExpect(status().isOk()).andExpect(jsonPath("$.mode").doesNotExist());
+        perform(put("/api/me/external/mode"), Map.of("mode", "ADMIN"), member).andExpect(status().isBadRequest());
+        perform(put("/api/me/external/mode"), Map.of("mode", "IMPORT"), member).andExpect(status().isOk()).andExpect(jsonPath("$.mode").value("IMPORT"));
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3450, "count", 14), member).andExpect(jsonPath("$.reflected").value(0));
+
+        long old = id(body(perform(post("/api/me/external"), program("도서관 정리", 3), member)));
+        long newer = id(body(perform(post("/api/me/external"), program("하천 정화", 4), member)));
+        long coming = id(body(perform(post("/api/me/external"), program("배식 지원", 6), member)));
+        long user = jdbc.queryForObject("SELECT user_id FROM external_records WHERE id = ?", Long.class, old);
+        LocalDateTime base = LocalDateTime.now().minusDays(4);
+        jdbc.update("UPDATE external_records SET starts_at = ?, ends_at = ? WHERE id = ?", base.minusDays(1), base.minusDays(1).plusHours(2), old);
+        jdbc.update("UPDATE external_records SET starts_at = ?, ends_at = ? WHERE id = ?", base, base.plusHours(2), newer);
+
+        // Import mode: no "다녀왔어요?", but 3 days after the activity "새로고침해 볼까요?" (once per record).
+        records.remind();
+        records.remind();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_CHECK'", Integer.class, user)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND dedupe_key LIKE 'EXT_REFRESH:%'", Integer.class, user)).isEqualTo(2);
+
+        // One more activity on 1365: the oldest waiting record is marked 실적 반영됨(추정); the future one stays.
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3570, "count", 15), member)
+                .andExpect(jsonPath("$.before").value(14)).andExpect(jsonPath("$.reflected").value(1));
+        perform(get("/api/me/external/" + old), null, member).andExpect(jsonPath("$.reflected").value(true)).andExpect(jsonPath("$.status").value("ATTENDED"));
+        perform(get("/api/me/external/" + newer), null, member).andExpect(jsonPath("$.reflected").value(false));
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3700, "count", 18), member).andExpect(jsonPath("$.reflected").value(1));
+        perform(get("/api/me/external/" + coming), null, member).andExpect(jsonPath("$.reflected").value(false));
+        perform(get("/api/me/external/mode"), null, token(member("GENERAL"))).andExpect(jsonPath("$.mode").doesNotExist());
+    }
 }

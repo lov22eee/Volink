@@ -23,6 +23,10 @@ public class LabPlugin extends Plugin {
     public void open(PluginCall call) {
         Intent intent = new Intent(getContext(), LabActivity.class);
         intent.putExtra("url", HOME);
+        // Plan 1 (2026-11-06): one line above the 1365 page saying where to go after logging in.
+        intent.putExtra("guide", call.getString("guide", ""));
+        // Step guide (2026-11-06): a small script from the app that guesses the step from the page's words.
+        intent.putExtra("step", call.getString("step", ""));
         startActivityForResult(call, intent, "labResult");
     }
 
@@ -34,6 +38,12 @@ public class LabPlugin extends Plugin {
             JSObject out = new JSObject();
             out.put("text", data.getStringExtra("text"));
             out.put("host", data.getStringExtra("host"));
+            java.util.ArrayList<String> texts = data.getStringArrayListExtra("texts");
+            if (texts != null) {
+                com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
+                for (String text : texts) list.put(text);
+                out.put("texts", list);
+            }
             call.resolve(out);
         } else {
             call.reject("closed", "CANCELLED");

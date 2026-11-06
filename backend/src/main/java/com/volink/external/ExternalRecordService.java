@@ -36,6 +36,8 @@ public class ExternalRecordService {
     public record RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus) {}
     public record ImportRequest(List<RecordRequest> items) {}
     public record CertificateRequest(String title, String organization, String date, Integer minutes) {}
+    public record Field(String name, Integer minutes) {}
+    public record SummaryRequest(Integer totalMinutes, Integer count, List<Field> fields) {}
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }
 
@@ -104,7 +106,7 @@ public class ExternalRecordService {
             SELECT e.id, e.program_no AS programNo, e.title, e.organization, e.place, DATE_FORMAT(e.starts_at, '%Y-%m-%d') AS date,
                    DATE_FORMAT(e.starts_at, '%H:%i') AS startTime, DATE_FORMAT(e.ends_at, '%H:%i') AS endTime, e.status, e.source, e.lab_status AS labStatus,
                    e.cert_title AS certTitle, e.cert_org AS certOrganization, DATE_FORMAT(e.cert_date, '%Y-%m-%d') AS certDate, e.cert_minutes AS certMinutes,
-                   e.cert_at IS NOT NULL AS certified, e.starts_at <= ? AS started,
+                   e.cert_at IS NOT NULL AS certified, e.reflected_at IS NOT NULL AS reflected, e.starts_at <= ? AS started,
                    (SELECT p.id FROM community_posts p WHERE p.external_id = e.id AND p.deleted_at IS NULL ORDER BY p.id DESC LIMIT 1) AS reviewId
             FROM external_records e""";
 
@@ -123,6 +125,7 @@ public class ExternalRecordService {
     private static void shape(Map<String, Object> row) {
         row.put("certified", truthy(row.get("certified")));
         row.put("started", truthy(row.get("started")));
+        row.put("reflected", truthy(row.get("reflected")));
     }
 
     private static boolean truthy(Object v) { return v instanceof Boolean b ? b : v instanceof Number n && n.intValue() != 0; }
@@ -170,6 +173,75 @@ public class ExternalRecordService {
         jdbc.update("DELETE FROM external_records WHERE id = ?", id);
     }
 
+    /** V29: how the person keeps 1365 activities — IMPORT (가져오기), MANUAL (직접 남기기) or null (not chosen yet). */
+    public Map<String, Object> mode(long userId) {
+        String mode = jdbc.queryForObject("SELECT ext_mode FROM users WHERE id = ?", String.class, userId);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("mode", mode);
+        return out;
+    }
+
+    @Transactional
+    public Map<String, Object> setMode(long userId, String mode) {
+        if (!List.of("IMPORT", "MANUAL").contains(String.valueOf(mode))) throw ApiException.validation(Map.of("mode", "방식을 골라 주세요."));
+        jdbc.update("UPDATE users SET ext_mode = ? WHERE id = ?", mode, userId);
+        return mode(userId);
+    }
+
+    /** Lab (V28): the person's 1365 total as read from their own 실적 page; replaces the previous one. */
+    @Transactional
+    public Map<String, Object> saveSummary(long userId, SummaryRequest request) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        Integer total = request == null ? null : request.totalMinutes();
+        if (total == null || total < 0 || total > 600_000) errors.put("totalMinutes", "봉사 시간을 확인해 주세요.");
+        Integer count = request == null ? null : request.count();
+        if (count != null && (count < 0 || count > 100_000)) errors.put("count", "봉사 건수를 확인해 주세요.");
+        List<Field> fields = request == null || request.fields() == null ? List.of() : request.fields();
+        if (fields.size() > 20) errors.put("fields", "분야는 20개까지예요.");
+        List<Map<String, Object>> clean = new java.util.ArrayList<>();
+        for (Field f : fields) {
+            String name = text(f.name(), 20);
+            if (name.isEmpty() || f.minutes() == null || f.minutes() < 0 || f.minutes() > 600_000) { errors.put("fields", "분야별 시간을 확인해 주세요."); break; }
+            clean.add(Map.of("name", name, "minutes", f.minutes()));
+        }
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        List<Integer> last = jdbc.queryForList("SELECT activity_count FROM external_summaries WHERE user_id = ? FOR UPDATE", Integer.class, userId);
+        Integer before = last.isEmpty() ? null : last.get(0);
+        String json;
+        try { json = JSON.writeValueAsString(clean); } catch (Exception e) { throw new IllegalStateException(e); }
+        jdbc.update("INSERT INTO external_summaries(user_id, total_minutes, activity_count, fields, fetched_at) VALUES (?, ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE total_minutes = VALUES(total_minutes), activity_count = VALUES(activity_count), fields = VALUES(fields), fetched_at = VALUES(fetched_at)",
+                userId, total, count, json, now());
+        // More activities than last time: that many past 1365 records still waiting (oldest first) become "실적 반영됨(추정)".
+        int reflected = 0;
+        if (before != null && count != null && count > before)
+            reflected = jdbc.update("""
+                    UPDATE external_records SET reflected_at = ?, status = 'ATTENDED'
+                    WHERE user_id = ? AND ends_at <= ? AND reflected_at IS NULL AND cert_at IS NULL AND status = 'PLANNED'
+                    ORDER BY starts_at, id LIMIT ?""", now(), userId, now(), count - before);
+        Map<String, Object> out = new LinkedHashMap<>(summary(userId));
+        out.put("before", before);
+        out.put("reflected", reflected);
+        return out;
+    }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /** The saved 1365 total, or {} when there is none. */
+    public Map<String, Object> summary(long userId) {
+        return jdbc.queryForList("SELECT total_minutes AS totalMinutes, activity_count AS count, CAST(fields AS CHAR) AS fields, "
+                + "DATE_FORMAT(fetched_at, '%Y-%m-%d %H:%i') AS fetchedAt FROM external_summaries WHERE user_id = ?", userId).stream().findFirst().map(row -> {
+            Map<String, Object> out = new LinkedHashMap<>(row);
+            try { out.put("fields", JSON.readValue(String.valueOf(row.get("fields")), List.class)); } catch (Exception e) { out.put("fields", List.of()); }
+            return out;
+        }).orElse(Map.of());
+    }
+
+    @Transactional
+    public void deleteSummary(long userId) {
+        jdbc.update("DELETE FROM external_summaries WHERE user_id = ?", userId);
+    }
+
     /**
      * Every minute (with the activity scheduler): within 24 hours before the start "1365 봉사가 곧 있어요", and from 2 hours
      * after the end (for a week) "다녀왔어요?". Each once per record (dedupe key).
@@ -186,11 +258,34 @@ public class ExternalRecordService {
             sent++;
         }
         for (Map<String, Object> row : jdbc.queryForList("""
-                SELECT id, user_id, title FROM external_records WHERE status = 'PLANNED' AND ends_at <= ? AND ends_at > ?""", now.minusHours(2), now.minusDays(7))) {
+                SELECT e.id, e.user_id, e.title FROM external_records e JOIN users u ON u.id = e.user_id
+                WHERE e.status = 'PLANNED' AND e.ends_at <= ? AND e.ends_at > ? AND (u.ext_mode IS NULL OR u.ext_mode <> 'IMPORT')""", now.minusHours(2), now.minusDays(7))) {
             long id = ((Number) row.get("id")).longValue();
             notifications.send(((Number) row.get("user_id")).longValue(), "EXT_CHECK", "1365 봉사 다녀왔어요?", row.get("title")
                     + " · 다녀왔다고 남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.", "#/record/" + id, null, "EXT_CHECK:" + id);
             sent++;
+        }
+        // IMPORT (V29): 3 days after the activity, "1365 실적 새로고침해 볼까요?" (1365 needs a few days to show it), once per record.
+        for (Map<String, Object> row : jdbc.queryForList("""
+                SELECT e.id, e.user_id, e.title FROM external_records e JOIN users u ON u.id = e.user_id
+                WHERE u.ext_mode = 'IMPORT' AND e.status = 'PLANNED' AND e.reflected_at IS NULL AND e.cert_at IS NULL
+                  AND e.ends_at <= ? AND e.ends_at > ?""", now.minusDays(3), now.minusDays(10))) {
+            long id = ((Number) row.get("id")).longValue();
+            notifications.send(((Number) row.get("user_id")).longValue(), "EXT_REFRESH", "1365 실적 새로고침해 볼까요?", row.get("title")
+                    + " · 1365에 실적이 올라왔는지 가져와서 맞춰 봐요.", "#/lab1365", null, "EXT_REFRESH:" + id);
+            sent++;
+        }
+        // IMPORT: once a month (daytime) when the last import is over 30 days old or there is none, for activities done outside Volink.
+        if (now.getHour() >= 10 && now.getHour() < 20) {
+            String month = now.toLocalDate().toString().substring(0, 7);
+            for (Map<String, Object> row : jdbc.queryForList("""
+                    SELECT u.id FROM users u LEFT JOIN external_summaries s ON s.user_id = u.id
+                    WHERE u.ext_mode = 'IMPORT' AND (s.fetched_at IS NULL OR s.fetched_at <= ?)""", now.minusDays(30))) {
+                long user = ((Number) row.get("id")).longValue();
+                notifications.send(user, "EXT_REFRESH", "이번 달 1365 실적을 맞춰 볼까요?", "1365에서 한 봉사가 있다면 가져와서 함께한 시간에 더해요.",
+                        "#/lab1365", null, "EXT_MONTH:" + user + ":" + month);
+                sent++;
+            }
         }
         return sent;
     }
