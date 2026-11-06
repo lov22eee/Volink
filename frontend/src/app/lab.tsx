@@ -32,7 +32,7 @@ export function useConnect1365(): [ReactNode, () => void] {
     <ul className="lab-consent">
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
       <li><MIcon name="record" size={18} /><span><b>내가 연 화면의 글자만 폰 안에서 읽어요</b><small>총 시간·건수·분야와 고른 신청 내역만 남기고, 이름은 남기지 않아요</small></span></li>
-      <li><MIcon name="checkCircle" size={18} /><span><b>공식 실적이 아니에요</b><small>Volink가 확인한 기록이 아니에요. 공식 실적은 1365 기준이에요</small></span></li>
+      <li><MIcon name="checkCircle" size={18} /><span><b>1365 공식 실적을 내 화면에서 옮겨 와요</b><small>가져온 날 기준이에요. 그 뒤 바뀐 실적과 확인서 발급은 1365에서 확인해 주세요</small></span></li>
       <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’나 실적확인서로 넣어 주세요</small></span></li>
     </ul>
   </Sheet>
@@ -154,7 +154,7 @@ export function LabScreen() {
           <span className="lab-row"><b>{r.title}</b><small>{r.date.slice(5).replace('-', '/')}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>)}</div>
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
-      <p className="m-help">Volink가 1365 신청이나 실적을 확인하는 기능이 아니에요. 공식 실적은 1365에서 확인해 주세요.</p>
+      <p className="m-help">가져온 실적은 내 1365 화면에 나온 공식 실적을 옮긴 거예요(가져온 날 기준). 최신 실적·확인서는 1365에서 확인해 주세요.</p>
     </div>
     <ActionBar>{!rows
       ? (native ? <button className="m-btn blue" onClick={open}>1365 열기</button> : <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button>)

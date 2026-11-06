@@ -75,7 +75,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
       {view === 'done' && summary && <section className="ext-sum" aria-label="1365 누적 실적">
         <span className="m-row-ico ext"><b>1365</b></span>
         <span><small>1365 누적 봉사 실적</small><b>{hoursText(summary.totalMinutes)}{summary.count != null ? <em> · {summary.count}건</em> : null}</b>
-          <small>{summary.fetchedAt.slice(5, 10).replace('-', '/')} 내 1365 화면에서 가져옴 · 공식 실적은 1365 기준</small></span></section>}
+          <small>{summary.fetchedAt.slice(5, 10).replace('-', '/')} 기준 · 내 1365 화면의 공식 실적을 옮겨 왔어요</small></span></section>}
       {view === 'done' && extDone.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><small>본인 기록 · 실적확인서</small></div>
         <div className="m-list">{extDone.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
       {view === 'done' && (!records ? <Loading /> : records.length ? <>
@@ -92,7 +92,7 @@ export function MineScreen({ actions, initial }: { actions: ReactNode; initial?:
           <p>1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요.</p>
           <button type="button" className="m-btn blue" onClick={connect}><MIcon name="outward" size={18} />1365 봉사실적 연결하기</button>
           <a className="m-btn line" href="#/find"><MIcon name="search" size={18} />Volink 봉사 찾아보기</a>
-          <small>1365 연결은 실험 기능이에요. 공식 실적은 1365 기준이에요.</small></div>))}
+          <small>1365 연결은 실험 기능이에요. 내 1365 화면의 공식 실적을 옮겨 와요.</small></div>))}
     </div>
     {connectSheet}
     {view !== 'done' && <RecruitFab />}

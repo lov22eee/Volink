@@ -68,7 +68,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
         <span className="my-legend"><span><i />Volink {hoursText(volinkMinutes)} · {valid.length}건</span>
           {ext && <span><i className="ext" />1365 {hoursText(extMinutes)}{ext.count != null ? ` · ${ext.count}건` : ''}</span>}</span>
       </section>
-      {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져옴 · 공식 실적은 1365 기준</span><em>새로고침</em></button>
+      {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>새로고침</em></button>
         : ext === null && <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 봉사실적 연결하기</b> · 1365에서 한 봉사도 함께 모아요</span><em>연결</em></button>}
       {list('내 봉사', mine)}
       {list('커뮤니티 · 안내', more)}
