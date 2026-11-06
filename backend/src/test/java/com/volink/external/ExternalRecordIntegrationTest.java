@@ -89,4 +89,19 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_CHECK'", Integer.class, mine)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = 'EXT_DAY_BEFORE'", Integer.class, mine)).isEqualTo(1);
     }
+
+    @Test
+    void labSummaryIsReplacedOnEachImportAndOnlyMine() throws Exception {
+        String member = token(member("GENERAL"));
+        perform(get("/api/me/external/summary"), null, member).andExpect(status().isOk()).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3450, "count", 14, "fields", List.of(Map.of("name", "기타", "minutes", 3450))), member)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalMinutes").value(3450)).andExpect(jsonPath("$.count").value(14))
+                .andExpect(jsonPath("$.fields[0].name").value("기타")).andExpect(jsonPath("$.fetchedAt").exists());
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3570, "count", 15), member).andExpect(jsonPath("$.totalMinutes").value(3570)).andExpect(jsonPath("$.fields.length()").value(0));
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", -5), member).andExpect(status().isBadRequest());
+        String other = token(member("GENERAL"));
+        perform(get("/api/me/external/summary"), null, other).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+        perform(delete("/api/me/external/summary"), null, member).andExpect(status().isNoContent());
+        perform(get("/api/me/external/summary"), null, member).andExpect(jsonPath("$.totalMinutes").doesNotExist());
+    }
 }

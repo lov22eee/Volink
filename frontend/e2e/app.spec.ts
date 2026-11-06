@@ -643,4 +643,15 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
   await expect(page).toHaveURL(/#\/mine/)
   await expect(page.getByRole('link', { name: /하천 정화 활동/ })).toBeVisible()
+
+  // The 1365 봉사참여 실적 page: total time, count and time per field (the name on that page is not kept).
+  await page.goto('/#/lab1365')
+  await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n실적확인서 발행 내역\n시간인증형\n활동인증형\n홍길동 님의 시간인증형 봉사시간\n총 57시간 30분\n시간인증형 자원봉사 참여\n총 14건\n분야별 봉사시간 조회\n봉사분야\t봉사시간\n기타\t57시간 30분')
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '1365 봉사 실적을 찾았어요' })).toBeVisible()
+  await expect(page.getByText('봉사 실적 총 57시간 30분 · 14건')).toBeVisible()
+  await expect(page.getByText('기타 57시간 30분')).toBeVisible()
+  await page.getByRole('button', { name: '실적 가져오기' }).click()
+  await expect(page.getByRole('region', { name: '1365 누적 실적' })).toContainText('57시간 30분 · 14건')
+  await expect(page.getByRole('region', { name: '1365 누적 실적' })).not.toContainText('홍길동')
 })

@@ -36,6 +36,8 @@ public class ExternalRecordService {
     public record RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus) {}
     public record ImportRequest(List<RecordRequest> items) {}
     public record CertificateRequest(String title, String organization, String date, Integer minutes) {}
+    public record Field(String name, Integer minutes) {}
+    public record SummaryRequest(Integer totalMinutes, Integer count, List<Field> fields) {}
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }
 
@@ -168,6 +170,48 @@ public class ExternalRecordService {
         if (jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE external_id = ?", Integer.class, id) > 0)
             throw new ApiException(HttpStatus.CONFLICT, "HAS_REVIEW", "후기가 연결된 기록은 지울 수 없어요.");
         jdbc.update("DELETE FROM external_records WHERE id = ?", id);
+    }
+
+    /** Lab (V28): the person's 1365 total as read from their own 실적 page; replaces the previous one. */
+    @Transactional
+    public Map<String, Object> saveSummary(long userId, SummaryRequest request) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        Integer total = request == null ? null : request.totalMinutes();
+        if (total == null || total < 0 || total > 600_000) errors.put("totalMinutes", "봉사 시간을 확인해 주세요.");
+        Integer count = request == null ? null : request.count();
+        if (count != null && (count < 0 || count > 100_000)) errors.put("count", "봉사 건수를 확인해 주세요.");
+        List<Field> fields = request == null || request.fields() == null ? List.of() : request.fields();
+        if (fields.size() > 20) errors.put("fields", "분야는 20개까지예요.");
+        List<Map<String, Object>> clean = new java.util.ArrayList<>();
+        for (Field f : fields) {
+            String name = text(f.name(), 20);
+            if (name.isEmpty() || f.minutes() == null || f.minutes() < 0 || f.minutes() > 600_000) { errors.put("fields", "분야별 시간을 확인해 주세요."); break; }
+            clean.add(Map.of("name", name, "minutes", f.minutes()));
+        }
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        String json;
+        try { json = JSON.writeValueAsString(clean); } catch (Exception e) { throw new IllegalStateException(e); }
+        jdbc.update("INSERT INTO external_summaries(user_id, total_minutes, activity_count, fields, fetched_at) VALUES (?, ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE total_minutes = VALUES(total_minutes), activity_count = VALUES(activity_count), fields = VALUES(fields), fetched_at = VALUES(fetched_at)",
+                userId, total, count, json, now());
+        return summary(userId);
+    }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /** The saved 1365 total, or {} when there is none. */
+    public Map<String, Object> summary(long userId) {
+        return jdbc.queryForList("SELECT total_minutes AS totalMinutes, activity_count AS count, CAST(fields AS CHAR) AS fields, "
+                + "DATE_FORMAT(fetched_at, '%Y-%m-%d %H:%i') AS fetchedAt FROM external_summaries WHERE user_id = ?", userId).stream().findFirst().map(row -> {
+            Map<String, Object> out = new LinkedHashMap<>(row);
+            try { out.put("fields", JSON.readValue(String.valueOf(row.get("fields")), List.class)); } catch (Exception e) { out.put("fields", List.of()); }
+            return out;
+        }).orElse(Map.of());
+    }
+
+    @Transactional
+    public void deleteSummary(long userId) {
+        jdbc.update("DELETE FROM external_summaries WHERE user_id = ?", userId);
     }
 
     /**

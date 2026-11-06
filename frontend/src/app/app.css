@@ -1230,3 +1230,9 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-entry { margin-bottom: 4px; }
 .r-reading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 36px 0 28px; font-size: 16px; font-weight: 650; color: var(--ink-2); }
 .m-spin.big { width: 40px; height: 40px; border-width: 4px; }
+.ext-sum { display: flex; align-items: center; gap: 12px; padding: 14px; margin-bottom: 12px; border-radius: 16px; background: #fff; border: 1px solid var(--line); }
+.ext-sum > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.ext-sum b { font-size: 20px; font-weight: 750; color: var(--blue); }
+.ext-sum b em { font-style: normal; font-size: 15px; color: var(--ink-2); }
+.ext-sum small { font-size: 12px; color: var(--ink-3); }
+.lab-sum { padding: 12px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
