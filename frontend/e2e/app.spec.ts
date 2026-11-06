@@ -160,7 +160,7 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await expect(page.getByRole('heading', { name: /알려 드릴까요/ })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
-  await expect(page.getByText('앱 회원님, 반가워요')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /앱 회원님/ })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
 })
 

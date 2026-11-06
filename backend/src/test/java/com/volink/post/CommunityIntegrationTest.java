@@ -132,4 +132,25 @@ class CommunityIntegrationTest extends ApiTestSupport {
         jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ? WHERE id = ?", now.minusMinutes(90), now.minusMinutes(30), activity);
         perform(post("/api/participations/" + pid + "/complete"), Map.of(), organizer).andExpect(status().isNoContent());
     }
+
+    @Test
+    void anOrganizerIntroducesTheirRecruitingActivityOnceWithALiveCard() throws Exception {
+        nickname(organizer, "주최" + seq());
+        Map<String, Object> promo = Map.of("category", "PROMO", "title", "이번 주말 공원 정리 함께해요", "body", "편한 신발만 있으면 돼요. 처음 오셔도 괜찮아요.", "activityId", activity);
+        perform(post("/api/community/posts"), promo, organizer).andExpect(status().is2xxSuccessful())
+                .andExpect(jsonPath("$.category").value("PROMO")).andExpect(jsonPath("$.activityId").value(activity))
+                .andExpect(jsonPath("$.activityOpen").value(true)).andExpect(jsonPath("$.activityConfirmed").value(0))
+                .andExpect(jsonPath("$.verified").value(false));
+        // Once per activity; only the organizer; it shows in the PROMO list.
+        perform(post("/api/community/posts"), promo, organizer).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PROMO_EXISTS"));
+        perform(post("/api/community/posts"), promo, writer).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[?(@.field == 'activityId')]").exists());
+        mvc.perform(get("/api/community/posts?category=PROMO").header("Authorization", "Bearer " + writer)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.activityId == " + activity + ")].activityTitle").value("공원 산책로 함께 정리하기"));
+        // 통합검색: words in the title or text.
+        mvc.perform(get("/api/community/posts").param("q", "주말 공원 정리").header("Authorization", "Bearer " + writer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.category == 'PROMO')].title").value("이번 주말 공원 정리 함께해요"));
+        mvc.perform(get("/api/community/posts").param("q", "없는검색어%_").header("Authorization", "Bearer " + writer))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+    }
 }

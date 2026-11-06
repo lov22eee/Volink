@@ -381,6 +381,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
       {open && <section className="m-ops" aria-label="활동 운영 관리"><h2>활동 운영 관리</h2>
         <nav className="m-menu flat">
           <a href={'#/edit/' + id}><MIcon name="edit" size={20} /><span>활동 정보 수정<small>{(activity.applicants ?? 0) > 0 ? '신청자가 있어 소개·만나는 곳만 바꿀 수 있어요' : '모든 정보를 바꿀 수 있어요'}</small></span><MIcon name="chevron" size={18} /></a>
+          {activity.status === 'RECRUITING' && <a href={'#/write?category=PROMO&activity=' + id}><MIcon name="megaphone" size={20} /><span>커뮤니티에 홍보하기<small>이 모집글을 커뮤니티에 소개해요 · [바로 신청하기] 카드가 붙어요</small></span><MIcon name="chevron" size={18} /></a>}
           {canMove && <button type="button" onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 바꾸기<small>한 번만, 시작 24시간 전까지 · 신청자에게 알려요</small></span><MIcon name="chevron" size={18} /></button>}
           {checked === 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소하기<small>참가자 전원에게 취소 안내</small></span><MIcon name="chevron" size={18} /></button>}
         </nav></section>}

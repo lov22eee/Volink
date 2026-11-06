@@ -11,6 +11,7 @@ import { Login, OrgReview, Signup, SocialDone, SocialSignup } from './auth'
 import { ActivityScreen, ManageScreen } from './detail'
 import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
+import { SearchScreen } from './search'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
@@ -90,11 +91,12 @@ export default function MobileApp() {
   if (user.role === 'ADMIN') return <div className="m-screen"><TopBar brand /><div className="m-body"><div className="m-note">관리자 기능은 PC에서 이용해 주세요.</div><button className="m-btn line" onClick={signOut}>로그아웃</button></div></div>
 
   const bell = <BellLink unread={unread} />
-  const search = <a href="#/find?focus=1" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
+  const search = <a href="#/search" className="m-icon-btn" aria-label="검색"><MIcon name="search" /></a>
   const tab: Tab | null = (['home', 'find', 'community', 'mine', 'my'] as Tab[]).includes(route.page as Tab) ? route.page as Tab : null
   let screen
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
+    case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
     case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break
