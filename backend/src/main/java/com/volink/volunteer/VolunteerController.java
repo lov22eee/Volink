@@ -23,9 +23,9 @@ public class VolunteerController {
                                       @RequestParam(required = false) Double radiusKm, @RequestParam(required = false) String q,
                                       @RequestParam(required = false) Boolean youth, @RequestParam(required = false) Boolean recruiting,
                                       @RequestParam(required = false) String sido, @RequestParam(required = false) String sigungu,
-                                      @RequestParam(required = false) String category, HttpServletRequest request) {
+                                      @RequestParam(required = false) String category, @RequestParam(required = false) Boolean nationwide, HttpServletRequest request) {
         limiter.check(request);
-        return volunteers.search(new VolunteerService.Query(lat, lng, radiusKm, q, youth, recruiting, sido, sigungu, com.volink.activity.ActivityService.categoryList(category)));
+        return volunteers.search(new VolunteerService.Query(lat, lng, radiusKm, q, youth, recruiting, sido, sigungu, com.volink.activity.ActivityService.categoryList(category), Boolean.TRUE.equals(nationwide)));
     }
 
     /** Admin only (/api/admin/**): region codes and live field names, without values. */

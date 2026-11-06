@@ -156,10 +156,10 @@ export function CommunityScreen({ actions }: { actions: ReactNode }) {
   useEffect(() => { api<Profile>('/api/community/me').then(setProfile).catch(() => setProfile(null)) }, [])
   if (profile === undefined) return <div className="m-screen"><TopBar title="커뮤니티" actions={actions} /><Loading /></div>
   if (!profile?.ready) return <CommunityOnboarding profile={profile ?? null} onDone={setProfile} />
-  return <CommunityBoard actions={actions} nickname={profile.nickname ?? ''} />
+  return <CommunityBoard actions={actions} />
 }
 
-function CommunityBoard({ actions, nickname }: { actions: ReactNode; nickname: string }) {
+function CommunityBoard({ actions }: { actions: ReactNode }) {
   const [category, setCategory] = useState<Category | ''>('')
   const [sort, setSort] = useState<'latest' | 'popular'>('latest')
   const [items, setItems] = useState<PostSummary[] | null>(null)
@@ -174,7 +174,7 @@ function CommunityBoard({ actions, nickname }: { actions: ReactNode; nickname: s
   return <div className="m-screen">
     <TopBar title="커뮤니티" actions={actions} />
     <div className="m-body c-list">
-      <section className="c-banner"><strong><MIcon name="sprout" size={20} />함께하는 봉사 이야기</strong><span>궁금한 건 묻고, 따뜻한 경험은 나눠요. 나는 <b>{nickname}</b></span></section>
+      <section className="c-banner"><strong><MIcon name="sprout" size={20} />함께하는 봉사 이야기</strong><span>궁금한 건 묻고, 따뜻한 경험은 나눠요.</span></section>
       <div className="m-chips" role="group" aria-label="글 종류">
         <button type="button" className={'m-chip' + (category === '' ? ' on' : '')} aria-pressed={category === ''} onClick={() => setCategory('')}>전체</button>
         {order.map(c => <button key={c} type="button" className={'m-chip' + (category === c ? ' on' : '')} aria-pressed={category === c} onClick={() => setCategory(c)}>{categoryLabel[c]}</button>)}
@@ -341,10 +341,14 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  // ••• (2026-11-06): 임시 저장 / 미리보기 / 처음부터 다시 쓰기 / 글쓰기 규칙 instead of a second 등록 button at the top.
+  const [menu, setMenu] = useState<null | 'menu' | 'preview' | 'reset' | 'rules'>(null)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const original = useRef<{ title: string; body: string } | null>(null)
   const [loaded, setLoaded] = useState(!editId)
   useEffect(() => { if (saved && (saved.title || saved.body)) showToast('작성 중이던 글을 불러왔어요') }, [saved])
   useEffect(() => {
-    if (editId) { api<Post>('/api/community/posts/' + editId).then(p => { setCategory(p.category); setTitle(p.title); setBody(p.body); setLoaded(true) }).catch(() => { showToast('글을 불러오지 못했어요'); go('#/community') }); return }
+    if (editId) { api<Post>('/api/community/posts/' + editId).then(p => { setCategory(p.category); setTitle(p.title); setBody(p.body); original.current = { title: p.title, body: p.body }; setLoaded(true) }).catch(() => { showToast('글을 불러오지 못했어요'); go('#/community') }); return }
     api<Reviewable[]>('/api/community/reviewable').then(list => { setReviewable(list); if ((!activity || initial === 'PROMO') && !saved?.picked && list[0]) setPicked(list[0].id) }).catch(() => setReviewable([]))
   }, [activity, editId, saved])
   // Keep the draft (new posts only) as the person types.
@@ -374,10 +378,18 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
     } finally { setBusy(false) }
   }
   const dirty = Boolean(title.trim() || body.trim())
+  const now = () => new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(new Date())
+  function saveDraft() { writeDraft({ category, title, body, picked }); setSavedAt(now()); setMenu(null); showToast('임시 저장했어요', '다음에 글쓰기를 열면 이어서 쓸 수 있어요') }
+  function reset() {
+    if (editId && original.current) { setTitle(original.current.title); setBody(original.current.body) } else { setTitle(''); setBody(''); writeDraft(null); setSavedAt(null) }
+    setErrors({}); setMenu(null); showToast(editId ? '처음 내용으로 되돌렸어요' : '새로 쓸 수 있게 비웠어요')
+  }
+  const promoActivity = category === 'PROMO' ? promotable?.find(x => x.id === promoPick) : undefined
+  const reviewTitle = category === 'REVIEW' ? (pickedExt ? extList.find(r => r.id === pickedExt)?.title : reviewable?.find(a => a.id === picked)?.title) : undefined
   if (!loaded) return <div className="m-screen"><TopBar title="글 수정" back="history" /><Loading /></div>
   return <div className="m-screen m-create c-write">
     <TopBar title={editId ? '글 수정' : '글쓰기'} back={() => dirty ? setLeaving(true) : goBack('#/community')}
-      actions={<button type="button" className="c-post-btn" disabled={busy || !ready} onClick={() => submit()}>{editId ? '저장' : '등록'}</button>} />
+      actions={<button type="button" className="m-icon-btn" aria-label="글쓰기 메뉴" onClick={() => setMenu('menu')}><MIcon name="more" /></button>} />
     <form className="m-body m-form" onSubmit={submit} noValidate>
       {!editId && <div className="m-field"><span className="m-label">어떤 이야기를 나눌까요?</span><div className="c-kinds">{order.map(c =>
         <button type="button" key={c} className={'m-chip' + (category === c ? ' on' : '')} aria-pressed={category === c} onClick={() => setCategory(c)}>{categoryLabel[c]}</button>)}</div></div>}
@@ -409,6 +421,26 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
       {errors.form && <div className="m-note bad">{errors.form}</div>}
       <ActionBar><button className="m-btn" disabled={busy || (!editId && category === 'REVIEW' && !canReview)}>{busy ? '올리는 중…' : editId ? '수정 저장하기' : '게시글 등록하기'}</button></ActionBar>
     </form>
+    {menu === 'menu' && <Sheet title="글쓰기 메뉴" onClose={() => setMenu(null)}><nav className="c-menu">
+      {!editId && <button type="button" disabled={!dirty} onClick={saveDraft}><MIcon name="bookmark" size={20} /><span>임시 저장<small>{savedAt ? `마지막 저장 ${savedAt} · 쓰는 동안에도 자동으로 저장돼요` : '쓰는 동안에도 자동으로 저장돼요'}</small></span></button>}
+      <button type="button" disabled={!dirty} onClick={() => setMenu('preview')}><MIcon name="eye" size={20} /><span>미리보기<small>올렸을 때 보이는 모습</small></span></button>
+      <button type="button" disabled={!dirty} onClick={() => setMenu('reset')}><MIcon name="refresh" size={20} /><span>{editId ? '처음 내용으로 되돌리기' : '처음부터 다시 쓰기'}<small>{editId ? '고친 내용을 버려요' : '제목·내용과 임시 저장을 비워요'}</small></span></button>
+      <button type="button" onClick={() => setMenu('rules')}><MIcon name="book" size={20} /><span>커뮤니티 이용 규칙<small>올리기 전에 한 번 확인해요</small></span></button>
+    </nav></Sheet>}
+    {menu === 'preview' && <Sheet title="미리보기" onClose={() => setMenu(null)} footer={<button type="button" className="m-btn" disabled={busy || !ready} onClick={() => { setMenu(null); void submit() }}>{editId ? '이대로 저장하기' : '이대로 올리기'}</button>}>
+      <article className="c-preview"><span className="m-badge gray">{categoryLabel[category]}</span><h3>{title.trim() || '(제목 없음)'}</h3><p>{body.trim() || '(내용 없음)'}</p>
+        {(promoActivity || reviewTitle) && <div className="c-preview-card"><MIcon name={promoActivity ? 'megaphone' : 'record'} size={17} /><span>{promoActivity ? `${promoActivity.title} · [바로 신청하기]` : `함께한 봉사 · ${reviewTitle}`}</span></div>}</article>
+      {!ready && <p className="m-help">제목 2자, 내용 5자 이상이어야 올릴 수 있어요.</p>}
+    </Sheet>}
+    {menu === 'reset' && <Sheet title={editId ? '처음 내용으로 되돌릴까요?' : '처음부터 다시 쓸까요?'} onClose={() => setMenu(null)}
+      footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setMenu(null)}>계속 쓰기</button><button type="button" className="m-btn danger" onClick={reset}>{editId ? '되돌리기' : '비우기'}</button></div>}>
+      <p className="m-help">{editId ? '지금까지 고친 내용이 사라져요.' : '지금 쓴 제목·내용과 임시 저장한 글이 사라져요.'}</p></Sheet>}
+    {menu === 'rules' && <Sheet title="커뮤니티 이용 규칙" onClose={() => setMenu(null)}><ul className="m-bullets">
+      <li>전화번호·카톡 아이디 같은 <b>연락처는 올릴 수 없어요.</b> 소식·질문으로 이야기해요.</li>
+      <li>사진 속 다른 사람의 얼굴·이름은 가려 주세요.</li>
+      <li>같이 할 사람을 찾을 땐 글 대신 <b>모집</b>으로 열어 주세요(안전 검토·출석 확인).</li>
+      <li>광고·비방·개인 정보 노출 글은 내려갈 수 있어요.</li>
+    </ul></Sheet>}
     {leaving && <Sheet title="작성 중인 글을 버릴까요?" onClose={() => setLeaving(false)} footer={<div className="c-leave">
       {!editId && <button type="button" className="m-btn" onClick={() => { setLeaving(false); goBack('#/community') }}>임시 저장하고 나가기</button>}
       <button type="button" className="m-btn line danger-text" onClick={() => { if (!editId) writeDraft(null); setLeaving(false); goBack('#/community') }}>{editId ? '고친 내용 버리기' : '버리기'}</button>

@@ -93,11 +93,74 @@ public class VolunteerService {
      * Near a point (lat/lng/radiusKm), or in a chosen region (sido, optional sigungu) without any position.
      * {@code categories}: Volink category names; {@code recruiting} false also keeps programs known to be closed.
      */
-    public record Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting, String sido, String sigungu, List<String> categories) {
-        public Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting) { this(lat, lng, radiusKm, q, youth, recruiting, null, null, List.of()); }
+    public record Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting, String sido, String sigungu, List<String> categories, boolean nationwide) {
+        public Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting) { this(lat, lng, radiusKm, q, youth, recruiting, null, null, List.of(), false); }
+        public Query(Double lat, Double lng, Double radiusKm, String q, Boolean youth, Boolean recruiting, String sido, String sigungu, List<String> categories) { this(lat, lng, radiusKm, q, youth, recruiting, sido, sigungu, categories, false); }
     }
 
+    static final int NATIONWIDE_MAX = 30;
+
+    /**
+     * 검색 화면 only (2026-11-06): a keyword across the whole country. The 1365 gateway ignores the keyword, so the 17
+     * province lists are fetched without one (cached 3 h, so at most 17 list calls per 3 h whatever people search) and the
+     * keyword is matched here on the list title first; only matching programs get details (budget {@link #NEW_DETAILS}).
+     */
+    private Map<String, Object> searchNationwide(Query query) {
+        String q = query.q() == null ? "" : query.q().trim();
+        if (q.length() < 1 || q.length() > 50) throw ApiException.validation(Map.of("q", "검색어를 1~50자로 입력해 주세요."));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", api.enabled() && kakao.enabled());
+        result.put("region", "전국");
+        if (!api.enabled() || !kakao.enabled()) { result.put("items", List.of()); return result; }
+        Map<String, String> provinces = RegionCodes.provinces();
+        List<String> codes = new ArrayList<>(provinces.keySet());
+        List<List<Map<String, String>>> lists = together(codes.stream().<Callable<List<Map<String, String>>>>map(code -> () -> list(new RegionCodes.Codes(code, null), "")).toList());
+        List<String> words = com.volink.common.SearchWords.expand(q);
+        Optional<String> pointed = com.volink.common.SearchWords.category(q);
+        List<String> numbers = new ArrayList<>();
+        Map<String, Map<String, String>> entries = new LinkedHashMap<>();
+        Map<String, String> hints = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
+        int found = 0;
+        for (int i = 0; i < codes.size(); i++) {
+            List<Map<String, String>> list = lists.get(i);
+            if (list == null) continue;
+            found += list.size();
+            for (Map<String, String> entry : list) {
+                String no = first(entry, "progrmRegistNo");
+                if (no == null || entries.containsKey(no)) continue;
+                String title = first(entry, "progrmSj");
+                Map<String, Object> stored = stored(no);
+                // Before details: the list title (and the stored field/category when known) must match.
+                boolean match = com.volink.common.SearchWords.matches(title + " " + nz(first(entry, "mnnstNm")), words)
+                        || (stored != null && pointed.isPresent() && pointed.get().equals(ProgramCategory.of((String) stored.get("field"), (String) stored.get("title")).category()));
+                if (!match) continue;
+                entries.put(no, entry);
+                hints.put(no, provinces.get(codes.get(i)));
+                numbers.add(no);
+                if (stored != null) rows.put(no, stored);
+                if ((stored == null || stale(stored)) && missing.size() < NEW_DETAILS) missing.add(no);
+            }
+        }
+        List<Map<String, Object>> refreshed = together(missing.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), hints.get(no))).toList());
+        for (int i = 0; i < missing.size(); i++) if (refreshed.get(i) != null) rows.put(missing.get(i), refreshed.get(i));
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (String no : numbers) if (rows.containsKey(no)) items.add(view(rows.get(no), query.lat(), query.lng()));
+        String today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))).format(YMD);
+        items.removeIf(item -> item.get("periodEnd") != null && ((String) item.get("periodEnd")).replace("-", "").compareTo(today) < 0);
+        if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
+        keepWords(items, q);
+        items.sort(Comparator.comparing(item -> item.get("periodStart") == null ? "9999" : (String) item.get("periodStart")));
+        result.put("items", items.size() > NATIONWIDE_MAX ? items.subList(0, NATIONWIDE_MAX) : items);
+        result.put("found", found);
+        return result;
+    }
+
+    private static String nz(String value) { return value == null ? "" : value; }
+
     public Map<String, Object> search(Query query) {
+        if (query.nationwide()) return searchNationwide(query);
         boolean byRegion = query.sido() != null && !query.sido().isBlank() && (query.lat() == null || query.lng() == null);
         if (byRegion) return searchRegion(query);
         if (query.lat() == null || query.lng() == null || query.lat() < 33 || query.lat() > 39 || query.lng() < 124 || query.lng() > 132)
@@ -144,6 +207,7 @@ public class VolunteerService {
         if (!Boolean.FALSE.equals(query.recruiting())) items.removeIf(item -> item.get("recruitStatus") != null && !"모집중".equals(item.get("recruitStatus")));
         items.removeIf(item -> item.get("distanceKm") != null && (Double) item.get("distanceKm") > radiusKm);
         keepCategories(items, query.categories());
+        keepWords(items, q);
         items.sort(Comparator.comparing(item -> item.get("distanceKm") == null ? Double.MAX_VALUE : (Double) item.get("distanceKm")));
         result.put("items", items);
         result.put("found", list.size());
@@ -191,10 +255,24 @@ public class VolunteerService {
             items.removeIf(item -> item.get("place") == null || !String.valueOf(item.get("place")).contains(stem));
         }
         keepCategories(items, query.categories());
+        keepWords(items, q);
         items.sort(Comparator.comparing(item -> item.get("periodStart") == null ? "9999" : (String) item.get("periodStart")));
         result.put("items", items);
         result.put("found", list.size());
         return result;
+    }
+
+    /**
+     * Keyword filter (2026-11-06): the 1365 gateway ignores the keyword and returns the whole area, so a search for "강아지"
+     * showed every nearby program. Kept: title / organization / place / field containing the word or its group, or the
+     * category the word points to.
+     */
+    private static void keepWords(List<Map<String, Object>> items, String q) {
+        if (q == null || q.isBlank()) return;
+        List<String> words = com.volink.common.SearchWords.expand(q);
+        Optional<String> pointed = com.volink.common.SearchWords.category(q);
+        items.removeIf(item -> !com.volink.common.SearchWords.matches(String.join(" ", String.valueOf(item.get("title")), String.valueOf(item.get("organization")),
+                String.valueOf(item.get("place")), String.valueOf(item.get("field"))), words) && !(pointed.isPresent() && pointed.get().equals(item.get("category"))));
     }
 
     /** Category filter. A program whose field is not known is kept under 기타, so a guess never hides it. */

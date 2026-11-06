@@ -235,7 +235,14 @@ public class NotificationService {
         return out;
     }
 
+    /**
+     * One change at a time per person (2026-11-06): two quick changes (a new quiet-hours start, then push off) used to
+     * read the same old row and the later write put the old start back. Now they wait for each other.
+     */
+    @org.springframework.transaction.annotation.Transactional
     public Map<String, Object> saveSettings(long userId, Map<String, Object> request) {
+        // The person's own users row is the lock (always there; locking a missing settings row would deadlock two inserts).
+        jdbc.queryForList("SELECT id FROM users WHERE id = ? FOR UPDATE", userId);
         Map<String, Object> current = settings(userId);
         if (request != null) {
             for (String key : List.of("push", "apply", "activity", "talk", "quiet")) if (request.get(key) instanceof Boolean on) current.put(key, on);

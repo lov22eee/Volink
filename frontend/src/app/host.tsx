@@ -271,8 +271,43 @@ export function CreateWizard({ user, from, editId }: { user: User; from?: number
   </div>
 }
 
-export function DateSheet({ value, first, last, onPick, onClose }: { value: string; first: string; last: string; onPick: (date: string) => void; onClose: () => void }) {
-  const [month, setMonth] = useState(value.slice(0, 7))
+/** A date field in our own calendar sheet (2026-11-06: instead of the phone's date box). */
+export function DateField({ label, value, first, last, onChange, placeholder = '날짜를 골라 주세요', note, error }: { label: string; value: string; first: string; last: string; onChange: (date: string) => void; placeholder?: string; note?: string; error?: string }) {
+  const [open, setOpen] = useState(false)
+  const full = value ? new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(value + 'T12:00:00+09:00')) : ''
+  const word = value ? (dayWord(value).length <= 2 ? dayWord(value) + ' · ' : '') + full : ''
+  return <>
+    <PickField label={label} icon="calendar" value={word} placeholder={placeholder} error={error} onOpen={() => setOpen(true)} />
+    {open && <DateSheet value={value} first={first} last={last} note={note} onClose={() => setOpen(false)} onPick={date => { onChange(date); setOpen(false) }} />}
+  </>
+}
+
+/** A time field in our own wheel sheet (06:00~21:50, 10-minute steps). */
+export function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (time: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return <>
+    <PickField label={label} icon="clock" value={value} onOpen={() => setOpen(true)} />
+    {open && <AnyTimeSheet title={label} value={value} onClose={() => setOpen(false)} onPick={time => { onChange(time); setOpen(false) }} />}
+  </>
+}
+
+/** Any time of day, 5-minute steps (a 1365 time is not limited to Volink's activity hours). */
+function AnyTimeSheet({ title, value, onPick, onClose }: { title: string; value: string; onPick: (time: string) => void; onClose: () => void }) {
+  const hours = Array.from({ length: 24 }, (_, i) => i)
+  const mins = Array.from({ length: 12 }, (_, i) => i * 5)
+  const [h, setH] = useState(Number(value.slice(0, 2)) || 0)
+  const [mm, setMm] = useState(Math.round((Number(value.slice(3, 5)) || 0) / 5) * 5 % 60)
+  const result = String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0')
+  return <Sheet title={title} onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => onPick(result)}>{result}로 정하기</button>}>
+    <Wheels>
+      <WheelColumn label="시" items={hours} value={h} render={x => (x < 12 ? '오전 ' : '오후 ') + (x % 12 === 0 ? 12 : x % 12) + '시'} onChange={setH} />
+      <WheelColumn label="분" items={mins} value={mm} render={x => String(x).padStart(2, '0') + '분'} onChange={setMm} />
+    </Wheels>
+  </Sheet>
+}
+
+export function DateSheet({ value, first, last, onPick, onClose, note }: { value: string; first: string; last: string; onPick: (date: string) => void; onClose: () => void; note?: string }) {
+  const [month, setMonth] = useState((value || first).slice(0, 7))
   const today = seoulToday()
   const [y, m] = month.split('-').map(Number)
   const lead = new Date(Date.UTC(y, m - 1, 1)).getUTCDay()
@@ -291,7 +326,7 @@ export function DateSheet({ value, first, last, onPick, onClose }: { value: stri
         return <button type="button" key={date} disabled={!can} aria-pressed={date === value} aria-label={dayWord(date)}
           className={'m-day' + (date === value ? ' on' : '') + (date === today ? ' today' : '') + (weekday === 0 ? ' sun' : weekday === 6 ? ' sat' : '')} onClick={() => onPick(date)}>{i + 1}</button>
       })}</div>
-    <p className="m-help center">내일부터 {r.maxDaysAhead}일 안에서 고를 수 있어요</p>
+    <p className="m-help center">{note ?? `내일부터 ${r.maxDaysAhead}일 안에서 고를 수 있어요`}</p>
   </Sheet>
 }
 

@@ -24,6 +24,16 @@ async function signupByApi(page: Page, name: string) {
   return email
 }
 
+/** Our own calendar sheet (2026-11-06): open the field, go to the month, tap the day. */
+async function pickDay(page: Page, field: string | RegExp, date: string) {
+  await page.getByRole('button', { name: field }).last().click()
+  const sheet = page.getByRole('dialog', { name: '날짜' })
+  const [y, m, d] = date.split('-').map(Number)
+  for (let i = 0; i < 14 && !(await sheet.getByText(`${y}년 ${m}월`).count()); i++) await sheet.getByRole('button', { name: '다음 달' }).click()
+  await sheet.locator('button.m-day').filter({ hasText: new RegExp(`^${d}$`) }).click()
+  await expect(sheet).toHaveCount(0)
+}
+
 async function login(page: Page, email: string) {
   await page.goto('/#/login')
   await page.getByLabel('이메일').fill(email)
@@ -288,7 +298,8 @@ test('community: a question, a like and a comment, and a review only after compl
   await expect(start).toBeDisabled()
   await rules.getByText('이용 규칙을 읽었고 지킬게요').click()
   await start.click()
-  await expect(page.getByText('나는 ' + nickname)).toBeVisible()
+  await expect(page.getByText('함께하는 봉사 이야기')).toBeVisible()
+  await expect(page.getByText('나는 ' + nickname)).toHaveCount(0)
   await page.getByRole('radio', { name: '인기순' }).click()
   await expect(page.getByRole('radio', { name: '인기순' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('link', { name: '글쓰기' }).first().click()
@@ -519,13 +530,10 @@ test('find: detail filter with categories, status, source and dates; applied chi
   await sheet.getByRole('radio', { name: 'Volink' }).click()
   // Volink only: the server counts exactly.
   await expect(sheet.getByRole('button', { name: /개 활동 보기$/ })).toBeVisible()
-  // A wrong date range is refused before applying.
+  // Dates come from our calendar sheet; the end cannot be picked before the start.
   await sheet.getByRole('button', { name: '날짜 직접 선택' }).click()
-  await sheet.getByLabel('시작일').fill(inDays(5))
-  await sheet.getByLabel('종료일').fill(inDays(3))
-  await expect(sheet.getByText('시작일이 종료일보다 늦을 수 없어요.')).toBeVisible()
-  await sheet.getByLabel('종료일').fill(inDays(6))
-  await sheet.getByLabel('시작일').fill(inDays(1))
+  await pickDay(page, /^시작일/, inDays(1))
+  await pickDay(page, /^종료일/, inDays(6))
   await sheet.getByRole('button', { name: /활동 보기$/ }).click()
 
   await expect(page.getByText(`필터 환경 ${stamp}`)).toBeVisible()
@@ -622,7 +630,7 @@ test('1365: a marked activity → went → certificate PDF read on the phone →
   const check = page.getByRole('dialog', { name: '이 내용이 맞나요?' })
   await expect(check.getByLabel('활동명')).toHaveValue('노인복지관 배식 지원')
   await expect(check.getByLabel('기관')).toHaveValue('양주시자원봉사센터')
-  await expect(check.getByLabel('날짜')).toHaveValue(yesterday)
+  await expect(check.getByRole('button', { name: /^날짜/ })).toContainText(`${Number(yesterday.slice(5, 7))}월 ${Number(yesterday.slice(8))}일`)
   await expect(check.getByLabel('인정 시간(분)')).toHaveValue('150')
   await check.getByRole('button', { name: '맞아요, 남길게요' }).click()
   await expect(page.getByText('실적확인서 있음').first()).toBeVisible()
@@ -665,8 +673,8 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   const member = await signupByApi(page, '연결 확인')
   await login(page, member)
   await page.goto('/#/mine?tab=done')
-  await expect(page.getByText('아직 Volink 활동 기록이 없어요')).toBeVisible()
-  await page.getByRole('button', { name: /1365 봉사실적 연결하기/ }).click()
+  await expect(page.getByText('아직 완료 기록이 없어요')).toBeVisible()
+  await page.getByRole('button', { name: '1365 실적 연결' }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
@@ -727,7 +735,81 @@ test('1365 step guide: the words on the page tell which step the person is on (�
       // Several pages in one visit: after the 실적 page, the guide points to 신청 현황 (and 완료).
       labStep('로그아웃 봉사참여 실적 총 57시간 30분 총 14건', false, true), labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true),
       labStep('로그아웃 나의 봉사 신청 현황 하천 정화 2026.11.12 승인완료', false, true, true),
+      // On the phone '로그아웃' is only in the closed ☰ menu (textContent), or the login page was just left.
+      labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '3-', '4S', '4A', '5-', '4A', '5-', '2-', '2-'])
+})
+
+test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {
+  const member = await signupByApi(page, '기간 확인')
+  await login(page, member)
+  const dot = (n: number) => inDays(n).replaceAll('-', '.')
+  await page.goto('/#/settings')
+  await page.getByRole('switch', { name: /1365 연결/ }).click()
+  await page.goto('/#/lab1365')
+  await page.getByPlaceholder(/1365 신청 현황/).fill(`나의 봉사 신청 현황\n어르신 말벗 봉사\n봉사기간 ${dot(3)} ~ ${dot(20)}\n모집기간 ${dot(-5)} ~ ${dot(2)}\n승인완료\n하천 정화 활동\n봉사기간 ${dot(6)} ~ ${dot(6)}\n신청완료`)
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '신청 내역 2개를 찾았어요' })).toBeVisible()
+  await expect(page.getByText('봉사기간', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '참여하는 날을 골라 주세요 (1개)' })).toBeDisabled()
+  await pickDay(page, /어르신 말벗 봉사 · 참여하는 날/, inDays(10))
+  await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
+  await expect(page).toHaveURL(/#\/mine/)
+  await expect(page.getByRole('link', { name: /어르신 말벗 봉사.*시간 미정/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: new RegExp('어르신 말벗 봉사.*' + inDays(10).slice(5).replace('-', '/')) })).toBeVisible()
+})
+
+test('a bottom sheet closes when dragged down like ✕, and springs back on a short drag', async ({ page }) => {
+  const member = await signupByApi(page, '쓸어내리기')
+  await login(page, member)
+  await page.goto('/#/settings')
+  const cdp = await page.context().newCDPSession(page)
+  const drag = async (from: number, to: number) => {
+    const box = (await page.locator('.m-sheet-head').boundingBox())!
+    const x = box.x + box.width / 2, y = box.y + box.height / 2
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y + from }] })
+    for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + from + (to - from) * i / 8 }] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  }
+  await page.getByRole('button', { name: '로그아웃' }).click()
+  const sheet = page.getByRole('dialog', { name: '로그아웃할까요?' })
+  await expect(sheet).toBeVisible()
+  await drag(0, 40)
+  await page.waitForTimeout(400)
+  await expect(sheet).toBeVisible()
+  await drag(0, 260)
+  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/settings/)
+})
+
+test('글쓰기 •••: 임시 저장, 미리보기, 처음부터 다시 쓰기, 이용 규칙', async ({ page }) => {
+  const member = await signupByApi(page, '메뉴 확인')
+  const auth = await tokenFor(page, member)
+  await page.request.put('/api/community/me', { headers: { Authorization: auth }, data: { nickname: '메뉴' + Math.floor(Math.random() * 9000 + 1000), agree: true } })
+  await login(page, member)
+  await page.goto('/#/write')
+  await expect(page.getByRole('button', { name: '등록', exact: true })).toHaveCount(0)
+  await page.locator('input[name=title]').fill('같이 하실 분 구해요')
+  await page.locator('textarea[name=body]').fill('주말에 하천 정화 같이 해요.')
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('dialog', { name: '글쓰기 메뉴' }).getByRole('button', { name: /^임시 저장/ }).click()
+  await expect(page.getByText('임시 저장했어요')).toBeVisible()
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /미리보기/ }).click()
+  const preview = page.getByRole('dialog', { name: '미리보기' })
+  await expect(preview.getByRole('heading', { name: '같이 하실 분 구해요' })).toBeVisible()
+  await expect(preview.getByRole('button', { name: '이대로 올리기' })).toBeEnabled()
+  await preview.getByRole('button', { name: '닫기' }).click()
+  await page.reload()
+  await expect(page.locator('input[name=title]')).toHaveValue('같이 하실 분 구해요')
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /커뮤니티 이용 규칙/ }).click()
+  await expect(page.getByText('연락처는 올릴 수 없어요.')).toBeVisible()
+  await page.getByRole('dialog', { name: '커뮤니티 이용 규칙' }).getByRole('button', { name: '닫기' }).click()
+  await page.getByRole('button', { name: '글쓰기 메뉴' }).click()
+  await page.getByRole('button', { name: /처음부터 다시 쓰기/ }).click()
+  await page.getByRole('button', { name: '비우기' }).click()
+  await expect(page.locator('input[name=title]')).toHaveValue('')
 })

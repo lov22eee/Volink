@@ -13,6 +13,7 @@ import { currentPosition, declined, decline, remember, remembered } from '../loc
 import { PlaceMap } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
+import { DateField } from './host'
 import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar, TextInput } from './ui'
 
 type Area = { kind: 'all' } | { kind: 'near'; km: 2 | 5 | 10 } | { kind: 'region'; sido: string; sigungu: string }
@@ -313,9 +314,9 @@ function FilterSheet({ value, q, origin, onClose, onApply }: { value: Filters; q
         <button type="button" className={'m-chip' + (rangeOpen ? ' on' : '')} aria-pressed={rangeOpen} onClick={() => setRangeOpen(true)}>날짜 직접 선택</button>
       </div>
       {rangeOpen && <div className="m-range">
-        <label><span>시작일</span><input type="date" className="m-input" value={from} min={seoulDay()} onChange={event => setFrom(event.target.value)} /></label>
+        <DateField label="시작일" value={from} first={seoulDay()} last={seoulDay(365)} note="오늘부터 1년 안에서 골라요" onChange={day => { setFrom(day); if (to && to < day) setTo(day) }} />
         <span aria-hidden="true">~</span>
-        <label><span>종료일</span><input type="date" className="m-input" value={to} min={from || seoulDay()} onChange={event => setTo(event.target.value)} /></label>
+        <DateField label="종료일" value={to} first={from || seoulDay()} last={seoulDay(365)} note="시작일부터 골라요" onChange={setTo} />
       </div>}
       {rangeError && <p className="m-err" role="alert">{rangeError}</p>}
     </section>

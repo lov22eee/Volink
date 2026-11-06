@@ -49,8 +49,12 @@ public class LabActivity extends AppCompatActivity {
     private int summaryAt = -1, applicationsAt = -1;
     private String host = "";
 
+    /** A login page (password box) was seen; once it is gone the person is taken as logged in. */
+    private boolean sawLogin = false, loggedIn = false;
+
     private String stepCall(String text) {
-        return "(function(t,pw,ds,da){" + stepScript + "})(" + text + ",!!document.querySelector('input[type=password]')," + (summaryAt >= 0) + "," + (applicationsAt >= 0) + ")";
+        return "(function(t,pw,ds,da,full,was){" + stepScript + "})(" + text + ",!!document.querySelector('input[type=password]')," + (summaryAt >= 0) + "," + (applicationsAt >= 0)
+                + ",(document.body?String(document.body.textContent||'').slice(0,60000):'')," + loggedIn + ")";
     }
     private final Handler timer = new Handler(Looper.getMainLooper());
     /** Every 1.5s: run the app's step script on the page and show its line (① 로그인 … ④ 이 화면 가져오기). */
@@ -61,7 +65,14 @@ public class LabActivity extends AppCompatActivity {
                 web.evaluateJavascript(js, value -> {
                     String out;
                     try { Object parsed = new JSONTokener(value).nextValue(); out = parsed == null ? "" : parsed.toString(); } catch (Exception e) { out = ""; }
-                    if (out.length() > 3 && out.charAt(2) == '|') showStep(out.charAt(0) - '0', out.substring(3));
+                    if (out.length() > 3 && out.charAt(2) == '|') {
+                        int step = out.charAt(0) - '0';
+                        // Left the login page (no password box any more) → logged in, so the guide moves on to ②.
+                        // Only the password-box line mentions 간편인증. After it, the first page without the box = logged in.
+                        if (out.contains("간편인증")) sawLogin = true;
+                        else if (sawLogin && !loggedIn) { loggedIn = true; lastStep = 0; return; }
+                        showStep(step, out.substring(3));
+                    }
                 });
             }
             timer.postDelayed(this, 1500);

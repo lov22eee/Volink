@@ -311,9 +311,17 @@ public class ActivityService {
         if (to != null) { sql.append(" AND a.starts_at < ?"); args.add(to.plusDays(1).atStartOfDay()); }
         if (part != null) sql.append(part.equals("AM") ? " AND HOUR(a.starts_at) < 12" : " AND HOUR(a.starts_at) >= 12");
         if (!q.isEmpty()) {
-            String like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-            sql.append(" AND (a.title LIKE ? OR a.description LIKE ? OR p.name LIKE ?)");
-            args.add(like); args.add(like); args.add(like);
+            // The typed word and its group (강아지 → 유기견·반려동물 …), plus the category it points to (강아지 → 동물).
+            List<String> words = com.volink.common.SearchWords.expand(q);
+            List<String> parts = new ArrayList<>();
+            for (String word : words) {
+                String like = "%" + like(word) + "%";
+                parts.add("a.title LIKE ? OR a.description LIKE ? OR p.name LIKE ?");
+                args.add(like); args.add(like); args.add(like);
+            }
+            java.util.Optional<String> pointed = com.volink.common.SearchWords.category(q);
+            if (pointed.isPresent()) { parts.add("c.name = ?"); args.add(pointed.get()); }
+            sql.append(" AND (").append(String.join(" OR ", parts)).append(")");
         }
         if (!categories.isEmpty()) {
             sql.append(" AND c.name IN (").append(String.join(", ", categories.stream().map(name -> "?").toList())).append(")");
