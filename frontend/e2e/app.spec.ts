@@ -200,7 +200,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await expect(memberPage.getByText('모집자 확인을 기다리고 있어요')).toBeVisible()
 
   await page.reload()
-  await page.getByRole('button', { name: '승인' }).click()
+  await page.getByRole('button', { name: '승인', exact: true }).click()
   await expect(page.getByText('참가 확정').first()).toBeVisible()
   await page.getByRole('button', { name: '활동 메뉴' }).click()
   await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
@@ -236,8 +236,9 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  // 활동 운영 관리 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
-  await page.getByRole('region', { name: '활동 운영 관리' }).getByRole('button', { name: /활동 취소하기/ }).click()
+  // 운영 탭 → 취소 시트: 사유·안내 필수, 확인 체크, 미리보기, 최종 확인.
+  await page.getByRole('tab', { name: '운영' }).click()
+  await page.getByRole('region', { name: '운영' }).getByRole('button', { name: /활동 취소하기/ }).click()
   const sheet = page.getByRole('dialog', { name: '활동을 취소하시겠어요?' })
   await expect(sheet).toContainText('확정 0명 · 대기 0명 · 승인 대기 1명')
   await expect(sheet.getByRole('button', { name: '취소 사유를 골라 주세요' })).toBeDisabled()
@@ -252,7 +253,7 @@ test('the organizer cancels with a reason and the member sees it', async ({ page
   await confirm.getByRole('button', { name: '활동 취소 확정' }).click()
   await expect(page.getByText('활동 취소 안내')).toBeVisible()
   await expect(page.getByText('취소 당시 확정 0명 · 대기 0명 · 승인 대기 1명')).toBeVisible()
-  await expect(page.getByRole('region', { name: '활동 운영 관리' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /활동 취소하기/ })).toHaveCount(0)
 
   await login(memberPage, member)
   await memberPage.goto('/#/notifications')
@@ -342,7 +343,8 @@ test('activity news: the organizer posts a notice from a template, a member asks
 
   await login(page, organizer)
   await page.goto('/#/manage/' + id)
-  await page.getByRole('link', { name: '공지 올리기' }).click()
+  await page.getByRole('tab', { name: /소식/ }).click()
+  await page.getByRole('region', { name: '활동 소식' }).getByRole('link', { name: '공지 쓰기' }).click()
   await page.getByRole('button', { name: '집결 장소' }).click()
   await expect(page.getByLabel('공지 내용')).toHaveValue(/정문 안내판 앞에서 10:00에 만나요/)
   await page.getByRole('button', { name: '보내기' }).click()

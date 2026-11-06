@@ -117,7 +117,7 @@ public class PostService {
         String body = checked(userId, activity, rawBody);
         long id = insert(activity.id(), userId, "QUESTION", null, body);
         if (privately) jdbc.update("UPDATE activity_posts SET private_post = TRUE WHERE id = ?", id);
-        notifications.send(activity.organizerId(), "QUESTION", privately ? "모집자에게만 보이는 질문이 있어요" : "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link());
+        notifications.send(activity.organizerId(), "QUESTION", privately ? "모집자에게만 보이는 질문이 있어요" : "새 질문이 있어요", activity.title() + " · " + preview(body), activity.link(), activity.id(), null, id);
         return Map.of("id", id);
     }
 

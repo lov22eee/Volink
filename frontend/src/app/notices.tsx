@@ -11,6 +11,8 @@ type Category = 'ALL' | 'APPLY' | 'ACTIVITY' | 'TALK'
 export type CenterItem = {
   id: number; ids: number[]; count: number; type: string; category: string; title: string; body: string; link: string | null
   read: boolean; activityId: number | null; activityTitle: string | null; activityGone: boolean; createdAt: string
+  /** Handled (승인 완료 · 거절함 · 답변 완료 …), set by the server once the organizer acted on it. */
+  done?: string | null
 }
 type CenterPage = { items: CenterItem[]; next: number | null; unread: Record<string, number> }
 
@@ -136,14 +138,15 @@ export function NoticesScreen({ onChange }: { onChange: () => void }) {
             <ul className="m-center-list">{group.items.map(item => {
               const style = look[item.type] ?? { icon: 'bell' as MIconName }
               const to = destination(item)
-              return <li key={item.id}><div role="button" tabIndex={0} className={'m-center-card' + (item.read ? '' : ' new')} onClick={() => open(item)} onKeyDown={event => { if (event.key === 'Enter') void open(item) }}>
+              return <li key={item.id}><div role="button" tabIndex={0} className={'m-center-card' + (item.read ? '' : ' new') + (item.done ? ' done' : '')} onClick={() => open(item)} onKeyDown={event => { if (event.key === 'Enter') void open(item) }}>
                 <span className={'m-center-ico' + (style.tone ? ' ' + style.tone : '')}><MIcon name={style.icon} size={20} /></span>
                 <span className="m-center-main">
                   <span className="m-center-title"><strong>{item.title}</strong>{!item.read && <em>NEW</em>}</span>
                   {item.activityTitle && <span className="m-center-act">{item.activityGone ? '삭제된 활동' : item.activityTitle}</span>}
                   <span className="m-center-body">{stripTitle(item.body, item.activityTitle)}</span>
                   <span className="m-center-foot"><small>{group.label === '오늘' || group.label === '어제' ? item.createdAt.slice(11, 16) : item.createdAt.slice(5, 10).replace('-', '월 ') + '일 · ' + item.createdAt.slice(11, 16)}</small>
-                    {to.label && !item.activityGone && <span className="m-center-go">{to.label}<MIcon name="chevron" size={15} /></span>}</span>
+                    {item.done ? <span className="m-center-done"><MIcon name="check" size={14} />{item.done}</span>
+                      : to.label && !item.activityGone && <span className="m-center-go">{to.label}<MIcon name="chevron" size={15} /></span>}</span>
                 </span></div></li>
             })}</ul></section>)}
           {next && <button type="button" className="m-btn line" disabled={more} onClick={() => { setMore(true); void load(next, false) }}>{more ? '불러오는 중…' : '이전 알림 더 보기'}</button>}
