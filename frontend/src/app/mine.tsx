@@ -132,11 +132,8 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
         <p className="m-help">Volink 자체 기록이에요. 공식 봉사실적이 아니에요.</p></section>
       : !extDone.length && (summary
         ? <p className="m-help center">Volink 활동을 마치면 여기에 쌓여요 · <a href="#/find">봉사 찾기 ›</a></p>
-        : <div className="ext-empty"><span className="ext-empty-ico"><MIcon name="record" size={26} /></span><strong>아직 Volink 활동 기록이 없어요</strong>
-          <p>1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요.</p>
-          <button type="button" className="m-btn blue" onClick={connect}><MIcon name="outward" size={18} />1365 봉사실적 연결하기</button>
-          <a className="m-btn line" href="#/find"><MIcon name="search" size={18} />Volink 봉사 찾아보기</a>
-          <small>1365 연결은 실험 기능이에요. 내 1365 화면의 공식 실적을 옮겨 와요.</small></div>))}
+        : <Empty bare icon="record" title="아직 완료 기록이 없어요" text="1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요."
+          action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={connect}>1365 실적 연결</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />))}
     </div>
     {connectSheet}
     {view !== 'done' && <RecruitFab />}
