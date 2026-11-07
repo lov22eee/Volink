@@ -90,6 +90,7 @@ public class LabActivity extends AppCompatActivity {
                         if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
                         showStep(step, out.substring(3));
                         updateTake();
+                        maybeStartHarvest();
                     }
                 });
             }
@@ -281,6 +282,10 @@ public class LabActivity extends AppCompatActivity {
         root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
         frame = new FrameLayout(this);
         frame.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        progressCard = buildProgressCard();
+        FrameLayout.LayoutParams cardPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        cardPlace.setMargins(dp(12), 0, dp(12), dp(12));
+        frame.addView(progressCard, cardPlace);
         root.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottom, wide);
         setContentView(root);
@@ -291,6 +296,224 @@ public class LabActivity extends AppCompatActivity {
     }
 
     private LinearLayout bottom;
+    /** 실적 목록 자동 읽기 (2026-11-07): one step on the page per call; the activity drives the order (see harvestTick). */
+    private static final String HARVEST = ""
+            + "var T=document.body?document.body.innerText:'';\n"
+            + "function nz(s){return String(s||'').replace(/\\s+/g,'');}\n"
+            + "var C=nz(T);\n"
+            + "if(C.indexOf('현재페이지')<0)return JSON.stringify({a:'wait'});\n"
+            + "var inA=C.indexOf('활동인증형자원봉사실적')>=0,inT=C.indexOf('시간인증형자원봉사실적')>=0;\n"
+            + "var tab=inA&&!inT?'activity':(inT&&!inA?'time':'');\n"
+            + "function vis(e){return !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length);}\n"
+            + "function find(sel,txt,scope){var els=(scope||document).querySelectorAll(sel);for(var i=0;i<els.length;i++){var e=els[i];if(!vis(e))continue;var t=nz(e.innerText||e.value||e.textContent);if(t===txt)return e;}return null;}\n"
+            + "if(tab!==st.phase){var want=st.phase==='time'?'시간인증형':'활동인증형';var b=find('a,button',want)||find('li,span,strong,div',want);if(!b)return JSON.stringify({a:'stuck',m:'tab'});b.click();return JSON.stringify({a:'tab'});}\n"
+            + "var all=null,rs=document.querySelectorAll('input[type=radio]');\n"
+            + "for(var i=0;i<rs.length;i++){var r=rs[i];var l=r.id?document.querySelector('label[for=\"'+r.id+'\"]'):null;var t=nz(l?l.innerText:'');if(!t&&r.nextSibling)t=nz(r.nextSibling.textContent);if(!t&&r.parentNode&&r.parentNode.tagName==='LABEL')t=nz(r.parentNode.innerText);if(t==='전체'){all=r;break;}}\n"
+            + "var early=false,ds=document.querySelectorAll('input');for(var j=0;j<ds.length;j++){var m=/^(\\d{4})[-.]\\d{1,2}[-.]\\d{1,2}$/.exec(String(ds[j].value||''));if(m){early=Number(m[1])<=2000;break;}}\n"
+            + "if(all&&!all.checked&&!early&&st.searched<2){all.click();var s=find('button,a,input[type=button],input[type=submit]','검색');if(!s)return JSON.stringify({a:'stuck',m:'search'});setTimeout(function(){s.click();},200);return JSON.stringify({a:'search'});}\n"
+            + "var pm=/현재페이지\\s*(\\d+)\\s*\\/\\s*(\\d+)/.exec(T);var cur=pm?Number(pm[1]):1,last=pm?Number(pm[2]):1;\n"
+            + "var tm=/전체\\s*(\\d+)\\s*건/.exec(T);var total=tm?Number(tm[1]):-1;\n"
+            + "var key=st.phase+'-'+cur;\n"
+            + "if(st.seen.indexOf(key)<0){\n"
+            + "var s0=T.indexOf('현재페이지');var e0=T.lastIndexOf('중복여부');if(e0<s0)e0=s0+12000;\n"
+            + "var head=(st.phase==='time'&&cur===1)?T.slice(0,Math.min(s0,8000)):'';\n"
+            + "var body=T.slice(Math.max(0,s0-1500),Math.min(T.length,e0+300));\n"
+            + "var n=(body.match(/(봉사|활동)\\s*일자/g)||[]).length;\n"
+            + "return JSON.stringify({a:'read',key:key,cur:cur,last:last,total:total,rows:n,text:(st.phase==='time'?'시간인증형 자원봉사 실적':'활동인증형 자원봉사 실적')+'\\n'+head+'\\n'+body});}\n"
+            + "if(cur<last){var nx=String(cur+1);var pg=document.querySelector('[class*=pag],[id*=pag],[class*=Pag]');var a=(pg&&find('a,button',nx,pg))||find('a',nx)||(pg&&(find('a,button','다음',pg)||pg.querySelector('[class*=next],[title*=다음],[aria-label*=다음]')));if(!a)return JSON.stringify({a:'stuck',m:'page'});a.click();return JSON.stringify({a:'next',cur:cur,last:last});}\n"
+            + "return JSON.stringify({a:st.phase==='time'?'phase':'done'});\n";
+
+    // ---- 실적 목록 자동 읽기 (2026-11-07, target S): on the 실적 page the app sets 기간 전체 and 검색, reads every page of
+    // 시간인증형 then 활동인증형, shows its progress and returns to Volink by itself. Only while the person has this screen
+    // open, at most MAX_PAGES pages, never past a login or security step: anything unexpected stops and asks.
+    private static final int MAX_PAGES = 20, MAX_TICKS = 150;
+    private boolean harvesting = false, harvestStarted = false;
+    private String harvestPhase = "time";
+    private final java.util.List<String> harvestSeen = new ArrayList<>();
+    private final java.util.LinkedHashMap<String, String> harvestTexts = new java.util.LinkedHashMap<>();
+    private int harvestSearched = 0, harvestIdle = 0, harvestCool = 0, harvestTries = 0, harvestTicks = 0, harvestRows = 0;
+    private LinearLayout progressCard, progressButtons;
+    private TextView progressTitle, progressNote, progressPeriod, progressTime, progressActivity;
+    private android.widget.ProgressBar progressBar;
+    private Button progressMain, progressAgain;
+
+    private final Runnable harvestTick = new Runnable() {
+        @Override public void run() {
+            if (!harvesting || web == null) return;
+            if (++harvestTicks > MAX_TICKS) { harvestStuck(); return; }
+            if (harvestCool > 0) { harvestCool--; timer.postDelayed(this, 900); return; }
+            String state;
+            try {
+                state = new JSONObject().put("phase", harvestPhase).put("searched", harvestSearched).put("seen", new org.json.JSONArray(harvestSeen)).toString();
+            } catch (Exception e) { harvestStuck(); return; }
+            String js = "(function(st){try{" + HARVEST + "}catch(e){return JSON.stringify({a:'err'});}})(" + state + ")";
+            web.evaluateJavascript(js, value -> {
+                if (!harvesting) return;
+                JSONObject out;
+                try { Object parsed = new JSONTokener(value).nextValue(); out = new JSONObject(parsed == null ? "{}" : parsed.toString()); } catch (Exception e) { out = new JSONObject(); }
+                handleHarvest(out);
+                if (harvesting) timer.postDelayed(harvestTick, 900);
+            });
+        }
+    };
+
+    private void handleHarvest(JSONObject out) {
+        String a = out.optString("a", "");
+        switch (a) {
+            case "wait":
+                if (++harvestIdle > 20) harvestStuck();
+                break;
+            case "tab":
+            case "next":
+                harvestIdle = 0; harvestCool = 2;
+                if (++harvestTries > 4) harvestStuck();
+                break;
+            case "search":
+                harvestIdle = 0; harvestCool = 2; harvestSearched++;
+                progressPeriod.setText("✓ 기간을 전체로 맞췄어요");
+                break;
+            case "read":
+                harvestIdle = 0; harvestTries = 0;
+                String key = out.optString("key", "");
+                if (!harvestSeen.contains(key)) {
+                    harvestSeen.add(key);
+                    harvestTexts.put(key, out.optString("text", ""));
+                    harvestRows += out.optInt("rows", 0);
+                }
+                int cur = out.optInt("cur", 1), last = Math.max(1, out.optInt("last", 1));
+                if (harvestSearched == 0) progressPeriod.setText("✓ 기간을 전체로 맞췄어요");
+                if ("time".equals(harvestPhase)) {
+                    progressTime.setText("● 시간인증형 " + last + "쪽 중 " + cur + "쪽");
+                    progressBar.setProgress(10 + (int) (55.0 * cur / last));
+                } else {
+                    progressActivity.setText("● 활동인증형 " + last + "쪽 중 " + cur + "쪽");
+                    progressBar.setProgress(70 + (int) (25.0 * cur / last));
+                }
+                if (harvestSeen.size() >= MAX_PAGES) harvestFinish();
+                break;
+            case "phase":
+                harvestPhase = "activity"; harvestSearched = 0; harvestTries = 0; harvestIdle = 0;
+                progressTime.setText("✓ 시간인증형을 읽었어요");
+                progressActivity.setText("● 활동인증형 읽는 중");
+                break;
+            case "done":
+                progressActivity.setText("✓ 활동인증형을 읽었어요");
+                harvestFinish();
+                break;
+            default:
+                harvestStuck();
+        }
+    }
+
+    private void startHarvest() {
+        harvestStarted = true;
+        harvesting = true;
+        harvestPhase = "time";
+        harvestSeen.clear(); harvestTexts.clear();
+        harvestSearched = 0; harvestIdle = 0; harvestCool = 0; harvestTries = 0; harvestTicks = 0; harvestRows = 0;
+        bottom.setVisibility(View.GONE);
+        progressTitle.setText("1365 실적을 읽고 있어요");
+        progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
+        progressPeriod.setText("● 기간을 전체로 맞추는 중");
+        progressTime.setText("○ 시간인증형");
+        progressActivity.setText("○ 활동인증형");
+        progressPeriod.setVisibility(View.VISIBLE); progressTime.setVisibility(View.VISIBLE); progressActivity.setVisibility(View.VISIBLE);
+        progressBar.setVisibility(View.VISIBLE);
+        progressBar.setProgress(5);
+        progressButtons.setVisibility(View.GONE);
+        progressCard.setVisibility(View.VISIBLE);
+        timer.postDelayed(harvestTick, 600);
+    }
+
+    private void harvestFinish() {
+        harvesting = false;
+        timer.removeCallbacks(harvestTick);
+        progressBar.setProgress(100);
+        progressTitle.setText(harvestRows > 0 ? "✓ " + harvestRows + "건을 다 읽었어요" : "✓ 다 읽었어요");
+        progressNote.setText("Volink로 돌아가요…");
+        pages.clear();
+        pages.addAll(harvestTexts.values());
+        Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
+        host = page.getHost() == null ? "" : page.getHost();
+        timer.postDelayed(this::done, 1000);
+    }
+
+    private void harvestStuck() {
+        harvesting = false;
+        timer.removeCallbacks(harvestTick);
+        progressTitle.setText("끝까지 읽지 못했어요");
+        progressNote.setText(harvestRows > 0 ? "지금까지 읽은 " + harvestRows + "건만 가져갈 수 있어요" : "1365 화면이 달라졌을 수 있어요. 다시 읽거나 닫아 주세요");
+        progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
+        progressBar.setVisibility(View.GONE);
+        progressMain.setText(harvestRows > 0 ? harvestRows + "건만 가져가기" : "닫기");
+        progressButtons.setVisibility(View.VISIBLE);
+    }
+
+    private TextView progressLine() {
+        TextView view = text("", 13.5f, INK, false);
+        view.setPadding(0, dp(4), 0, 0);
+        return view;
+    }
+
+    /** The progress card at the bottom (instead of a button) while the 실적 list is read. */
+    private LinearLayout buildProgressCard() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(14), dp(16), dp(14));
+        GradientDrawable bg = round(Color.WHITE, 18);
+        bg.setStroke(dp(1), Color.parseColor("#E1E6E2"));
+        box.setBackground(bg);
+        progressTitle = text("", 15.5f, INK, true);
+        progressPeriod = progressLine(); progressTime = progressLine(); progressActivity = progressLine();
+        progressBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(GREEN));
+        progressNote = text("", 12.5f, Color.parseColor("#7A867F"), false);
+        progressNote.setPadding(0, dp(6), 0, 0);
+        progressButtons = new LinearLayout(this);
+        progressButtons.setOrientation(LinearLayout.VERTICAL);
+        progressButtons.setPadding(0, dp(10), 0, 0);
+        progressMain = new Button(this);
+        progressMain.setAllCaps(false);
+        progressMain.setTextColor(Color.WHITE);
+        progressMain.setBackground(round(GREEN, 12));
+        progressMain.setOnClickListener(v -> {
+            if (harvestTexts.isEmpty()) { done(); return; }
+            pages.clear();
+            pages.addAll(harvestTexts.values());
+            done();
+        });
+        progressAgain = new Button(this);
+        progressAgain.setAllCaps(false);
+        progressAgain.setText("다시 읽기");
+        progressAgain.setTextColor(INK);
+        GradientDrawable line = round(Color.WHITE, 12);
+        line.setStroke(dp(1), Color.parseColor("#CFD8D2"));
+        progressAgain.setBackground(line);
+        progressAgain.setOnClickListener(v -> startHarvest());
+        LinearLayout.LayoutParams tall = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        LinearLayout.LayoutParams tall2 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        tall2.topMargin = dp(8);
+        progressButtons.addView(progressMain, tall);
+        progressButtons.addView(progressAgain, tall2);
+        box.addView(progressTitle);
+        box.addView(progressPeriod); box.addView(progressTime); box.addView(progressActivity);
+        LinearLayout.LayoutParams barAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
+        barAt.topMargin = dp(10);
+        box.addView(progressBar, barAt);
+        box.addView(progressNote);
+        box.addView(progressButtons);
+        box.setVisibility(View.GONE);
+        return box;
+    }
+
+    /** On the 실적 page with its list (현재페이지 shown): start reading by itself, once per visit. */
+    private void maybeStartHarvest() {
+        if (!"S".equals(target) || harvestStarted || harvesting || web == null || !onAllowedPage()) return;
+        web.evaluateJavascript("(function(){return document.body&&document.body.innerText.replace(/\\s+/g,'').indexOf('현재페이지')>=0;})()", value -> {
+            if ("true".equals(value) && !harvestStarted && onAllowedPage()) startHarvest();
+        });
+    }
     /** The two 1365 pages that may be taken (2026-11-06: never a login page, whose text could hold account details). */
     private static final String SUMMARY_PAGE = "/mypage/partcptnAcmslt.do", APPLICATIONS_PAGE = "/mypage/reqstDtls.do";
 
@@ -307,7 +530,8 @@ public class LabActivity extends AppCompatActivity {
 
     private void updateTake() {
         if (bottom == null) return;
-        boolean show = onAllowedPage();
+        // 실적 (S): no button — the list is read by itself (maybeStartHarvest).
+        boolean show = onAllowedPage() && !"S".equals(target);
         if (show && bottom.getVisibility() != View.VISIBLE)
             take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -451,6 +675,7 @@ public class LabActivity extends AppCompatActivity {
             Uri page = Uri.parse(url);
             where.setText(page.getHost() == null ? "" : page.getHost());
             updateTake();
+            maybeStartHarvest();
         }
     }
 
@@ -505,6 +730,7 @@ public class LabActivity extends AppCompatActivity {
         WebStorage storage = WebStorage.getInstance();
         for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
+        timer.removeCallbacks(harvestTick);
         closePopup();
         if (web != null) {
             web.stopLoading();

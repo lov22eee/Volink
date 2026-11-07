@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class ExternalRecordService {
-    static final int IMPORT_MAX = 20;
+    static final int IMPORT_MAX = 300;
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final NotificationService notifications;
@@ -33,11 +33,20 @@ public class ExternalRecordService {
         this.notifications = notifications;
     }
 
-    public record RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus) {}
+    /** {@code kind} TIME / ACTIVITY (V32): a finished activity from the 1365 실적 list, with its recognised {@code minutes} (TIME only). */
+    public record RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus,
+                                Integer minutes, String kind) {
+        public RecordRequest(String programNo, String title, String organization, String place, String date, String startTime, String endTime, String labStatus) {
+            this(programNo, title, organization, place, date, startTime, endTime, labStatus, null, null);
+        }
+    }
     public record ImportRequest(List<RecordRequest> items) {}
     public record CertificateRequest(String title, String organization, String date, Integer minutes) {}
     public record Field(String name, Integer minutes) {}
-    public record SummaryRequest(Integer totalMinutes, Integer count, List<Field> fields) {}
+    /** {@code listed}: the 1365 실적 list was read with it (V32), so records were matched one by one and the count is not used to guess. */
+    public record SummaryRequest(Integer totalMinutes, Integer count, List<Field> fields, Boolean listed) {
+        public SummaryRequest(Integer totalMinutes, Integer count, List<Field> fields) { this(totalMinutes, count, fields, null); }
+    }
 
     private LocalDateTime now() { return LocalDateTime.now(clock); }
 
@@ -66,9 +75,12 @@ public class ExternalRecordService {
     public Map<String, Object> importRows(long userId, ImportRequest request) {
         List<RecordRequest> items = request == null || request.items() == null ? List.of() : request.items();
         if (items.isEmpty() || items.size() > IMPORT_MAX) throw ApiException.validation(Map.of("items", "가져올 활동을 1~" + IMPORT_MAX + "개 골라 주세요."));
-        int added = 0;
-        for (RecordRequest item : items) if (insert(userId, item, "LAB", false) > 0) added++;
-        return Map.of("added", added, "items", list(userId));
+        int added = 0, matched = 0;
+        for (RecordRequest item : items) {
+            if (kindOf(item) != null) { int got = listed(userId, item); if (got == 1) added++; else if (got == 2) matched++; }
+            else if (insert(userId, item, "LAB", false) > 0) added++;
+        }
+        return Map.of("added", added, "matched", matched, "items", list(userId));
     }
 
     private long insert(long userId, RecordRequest r, String source, boolean strict) {
@@ -102,13 +114,52 @@ public class ExternalRecordService {
         return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
     }
 
+    private static String kindOf(RecordRequest r) {
+        String kind = r.kind() == null ? "" : r.kind().trim().toUpperCase();
+        return kind.equals("TIME") || kind.equals("ACTIVITY") ? kind : null;
+    }
+
+    /**
+     * One row of the 1365 실적 list (V32): 0 = already there, 1 = added as a finished activity, 2 = a waiting record of the same
+     * name and day (marked 신청 or 1365 신청 현황) is now 실적 반영됨 — matched by name and day, not guessed from the count.
+     */
+    private int listed(long userId, RecordRequest r) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String title = text(r.title(), 255);
+        if (title.length() < 2) errors.put("title", "활동 이름을 확인해 주세요.");
+        LocalDate day = date(r.date());
+        if (day == null || day.isAfter(now().toLocalDate()) || day.isBefore(LocalDate.of(1990, 1, 1))) errors.put("date", "봉사일자를 확인해 주세요.");
+        String kind = kindOf(r);
+        Integer minutes = "TIME".equals(kind) ? r.minutes() : null;
+        if (minutes != null && (minutes < 0 || minutes > 99999)) errors.put("minutes", "봉사시간을 확인해 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        List<Map<String, Object>> same = jdbc.queryForList(
+                "SELECT id, ext_kind FROM external_records WHERE user_id = ? AND DATE(starts_at) = ? AND title = ? ORDER BY id LIMIT 1 FOR UPDATE", userId, day, title);
+        if (!same.isEmpty()) {
+            if (same.get(0).get("ext_kind") != null) return 0;
+            jdbc.update("UPDATE external_records SET status = 'ATTENDED', reflected_at = COALESCE(reflected_at, ?), ext_minutes = ?, ext_kind = ? WHERE id = ?",
+                    now(), minutes, kind, ((Number) same.get(0).get("id")).longValue());
+            return 2;
+        }
+        LocalTime start = time(r.startTime()), end = time(r.endTime());
+        boolean timeKnown = start != null;
+        if (start == null) start = LocalTime.of(9, 0);
+        if (end == null || !end.isAfter(start)) {
+            int span = minutes != null && minutes > 0 ? Math.min(minutes, 14 * 60) : 120;
+            end = start.plusMinutes(span).isAfter(start) ? start.plusMinutes(span) : LocalTime.of(23, 59);
+        }
+        jdbc.update("INSERT INTO external_records(user_id, title, organization, starts_at, ends_at, time_known, status, source, ext_minutes, ext_kind) "
+                + "VALUES (?, ?, ?, ?, ?, ?, 'ATTENDED', 'LAB', ?, ?)", userId, title, emptyNull(text(r.organization(), 255)), day.atTime(start), day.atTime(end), timeKnown, minutes, kind);
+        return 1;
+    }
+
     private static String emptyNull(String value) { return value == null || value.isEmpty() ? null : value; }
 
     private static final String COLUMNS = """
             SELECT e.id, e.program_no AS programNo, e.title, e.organization, e.place, DATE_FORMAT(e.starts_at, '%Y-%m-%d') AS date,
                    DATE_FORMAT(e.starts_at, '%H:%i') AS startTime, DATE_FORMAT(e.ends_at, '%H:%i') AS endTime, e.status, e.source, e.lab_status AS labStatus,
                    e.cert_title AS certTitle, e.cert_org AS certOrganization, DATE_FORMAT(e.cert_date, '%Y-%m-%d') AS certDate, e.cert_minutes AS certMinutes,
-                   e.cert_at IS NOT NULL AS certified, e.reflected_at IS NOT NULL AS reflected, e.time_known AS timeKnown, e.starts_at <= ? AS started,
+                   e.cert_at IS NOT NULL AS certified, e.reflected_at IS NOT NULL AS reflected, e.ext_minutes AS extMinutes, e.ext_kind AS extKind, e.time_known AS timeKnown, e.starts_at <= ? AS started,
                    (SELECT p.id FROM community_posts p WHERE p.external_id = e.id AND p.deleted_at IS NULL ORDER BY p.id DESC LIMIT 1) AS reviewId
             FROM external_records e""";
 
@@ -218,7 +269,7 @@ public class ExternalRecordService {
                 userId, total, count, json, now());
         // More activities than last time: that many past 1365 records still waiting (oldest first) become "실적 반영됨(추정)".
         int reflected = 0;
-        if (before != null && count != null && count > before)
+        if (before != null && count != null && count > before && !Boolean.TRUE.equals(request.listed()))
             reflected = jdbc.update("""
                     UPDATE external_records SET reflected_at = ?, status = 'ATTENDED'
                     WHERE user_id = ? AND ends_at <= ? AND reflected_at IS NULL AND cert_at IS NULL AND status = 'PLANNED'

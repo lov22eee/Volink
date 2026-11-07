@@ -1406,21 +1406,10 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .wd-list b { color: var(--ink); }
 .wd-foot { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .wd-agree { padding: 2px 2px; font-size: 14.5px; align-items: center; }
-/* 1365 실적 · 확인서로 넣기 (2026-11-07): what was read, marked on the paper, then checked and fixed. */
-.pf-lead { margin: 0 0 4px; color: var(--ink); }
-.pf-kind { align-self: flex-start; display: inline-block; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 10px; background: #eaf0fa; color: #2f5596; }
-.pf-warn { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.4; }
-.pf-doc { position: relative; flex: none; height: 240px; max-width: 100%; margin: 10px auto 4px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #fff; }
-.pf-doc img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
-.pf-mark { position: absolute; border: 2px solid #e0b400; background: rgba(255, 228, 92, 0.35); border-radius: 3px; margin: -2px; }
-.pf-vals { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.pf-val { padding: 10px 12px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-.pf-val.empty b { color: var(--amber-ink); font-weight: 600; font-size: 13px; }
-.pf-val-head { display: flex; align-items: center; justify-content: space-between; }
-.pf-label { font-size: 12px; color: var(--ink-3); }
-.pf-val b { font-size: 15.5px; }
-.pf-fix { font: inherit; font-size: 12.5px; font-weight: 700; color: #2f5596; background: #fff; border: 1px solid #c9d6ef; border-radius: 9px; padding: 4px 10px; }
-.pf-link { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; padding: 12px; border-radius: 12px; background: #eef3fb; color: #2f5596; text-decoration: none; }
-.pf-link > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.pf-link b { font-size: 14px; }
-.pf-link small { font-size: 12px; color: #5a6f94; }
+/* 1365 실적 목록 (V32, 2026-11-07). */
+.lab-got { padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.lab-got b { font-size: 18px; }
+.lab-got small { font-size: 12.5px; color: var(--ink-3); }
+.lab-kind { font-style: normal; font-size: 10.5px; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #eaf0fa; color: #2f5596; vertical-align: 2px; }
+.lab-kind.act { background: #f1e9fb; color: #6a3fb0; }
+.lab-item.had { opacity: 0.55; }
