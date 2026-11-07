@@ -317,7 +317,7 @@ export function CertificateSheet({ record, onClose, onSaved }: { record?: Extern
  * 1365 연결 › 신청 현황 › 직접 추가하기 (2026-11-07): find the 1365 activity (nationwide search) and put in the day, or type the name
  * and day by hand when it is not found. Joins 참여 예정 like ‘이미 신청했어요’.
  */
-export function AddApplicationSheet({ onClose }: { onClose: () => void }) {
+export function AddApplicationSheet({ onClose, onSaved }: { onClose: () => void; onSaved?: () => void }) {
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Program[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -328,7 +328,7 @@ export function AddApplicationSheet({ onClose }: { onClose: () => void }) {
     setBusy(true)
     try { setFound((await api<{ items: Program[] }>('/api/volunteer-programs?nationwide=true&q=' + encodeURIComponent(q.trim()))).items.slice(0, 8)) } catch { setFound([]) } finally { setBusy(false) }
   }
-  const done = () => { onClose(); window.location.hash = '#/mine' }
+  const done = () => { onClose(); if (onSaved) onSaved(); else window.location.hash = '#/mine' }
   if (chosen) return <MarkSheet program={chosen} onClose={() => setChosen(null)} onSaved={done} manual={manual} />
   return <Sheet title="신청한 활동 넣기" onClose={onClose}
     footer={<button type="button" className="m-btn line" onClick={() => { setManual(true); setChosen({ programNo: '', title: q.trim(), organization: null, place: null, field: null, periodStart: null, periodEnd: null, beginTime: null, endTime: null, weekdays: null, recruitStatus: null, recruitEnd: null, capacity: null, youthOk: null, latitude: null, longitude: null, distanceKm: null, link: '' }) }}>못 찾으면 이름·날짜 직접 적기</button>}>

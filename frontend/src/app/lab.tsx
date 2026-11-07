@@ -63,6 +63,36 @@ function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () =
   </Sheet>
 }
 
+/** 1365에서 가져오기 / 직접 추가하기 for the 실적 (S) or 신청 현황 (A) card (2026-11-07). */
+function WaysSheet({ target, note, onClose, on1365, onAdd }: { target: 'S' | 'A'; note?: string; onClose: () => void; on1365: () => void; onAdd: () => void }) {
+  return <Sheet title={target === 'S' ? '봉사참여 실적' : '신청 현황'} onClose={onClose}>
+    <div className="lab-ways">
+      <button type="button" className="lab-way" onClick={on1365}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
+        <span><b>1365에서 가져오기</b><small>{target === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
+      <button type="button" className="lab-way" onClick={onAdd}><span className="lab-way-ico"><MIcon name={target === 'S' ? 'camera' : 'calendar'} size={20} /></span>
+        <span><b>직접 추가하기</b><small>{target === 'S' ? '실적확인서 사진·PDF로 활동 하나씩' : '신청한 활동과 날짜를 넣어요'}</small></span></button>
+    </div>
+    <p className="m-help">{note ? note + ' · ' : ''}비밀번호는 Volink로 오지 않아요</p>
+  </Sheet>
+}
+
+/**
+ * 내 활동의 빈 화면 [가져오기] (2026-11-07): the same 1365에서 가져오기 / 직접 추가하기 sheet as on the 1365 screen, here.
+ * 1365에서 가져오기 → consent → the 1365 screen opens that page right away (#/lab1365?go=S|A). {@code onSaved} after 직접 추가.
+ */
+export function useImport1365(onSaved?: () => void): [ReactNode, (target: 'S' | 'A') => void] {
+  const [choosing, setChoosing] = useState<'' | 'S' | 'A'>('')
+  const [asking, setAsking] = useState<'' | 'S' | 'A'>('')
+  const [adding, setAdding] = useState<'' | 'S' | 'A'>('')
+  const node = <>
+    {choosing && <WaysSheet target={choosing} onClose={() => setChoosing('')} on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
+    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); setLabOn(true); window.location.hash = '#/lab1365?go=' + t }} />}
+    {adding === 'S' && <CertificateSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); onSaved?.() }} />}
+    {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} onSaved={onSaved} />}
+  </>
+  return [node, setChoosing]
+}
+
 /**
  * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정, 시작 안내): the lab turns on and its screen opens. The consent
  * sheet comes when a card there is tapped (2026-11-07). Returns nothing to render (kept for callers) and the function to start.
@@ -162,7 +192,7 @@ export function parseLabText(text: string): LabRow[] {
   return rows.slice(0, 20)
 }
 
-export function LabScreen() {
+export function LabScreen({ go }: { go?: string }) {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
@@ -177,6 +207,13 @@ export function LabScreen() {
   const used = () => { try { return localStorage.getItem(USED) === '1' } catch { return false } }
   const tap = (target: 'S' | 'A') => last || used() ? setChoosing(target) : setAsking(target)
   const go1365 = (target: 'S' | 'A') => { setLastTarget(target); if (native) open(target); else setWebFor(target) }
+  // From 내 활동 [가져오기] (consent already given there): straight to that 1365 page, once.
+  useEffect(() => {
+    if (go !== 'S' && go !== 'A') return
+    window.history.replaceState(null, '', '#/lab1365')
+    go1365(go)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setLast(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   const [rows, setRows] = useState<LabRow[] | null>(null)
@@ -283,15 +320,8 @@ export function LabScreen() {
       {error && <p className="m-err" role="alert">{error}</p>}
     </div>
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
-    {choosing && <Sheet title={choosing === 'S' ? '봉사참여 실적' : '신청 현황'} onClose={() => setChoosing('')}>
-      <div className="lab-ways">
-        <button type="button" className="lab-way" onClick={() => { const t = choosing; setChoosing(''); setAsking(t) }}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
-          <span><b>1365에서 가져오기</b><small>{choosing === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
-        <button type="button" className="lab-way" onClick={() => { const t = choosing; setChoosing(''); setAdding(t) }}><span className="lab-way-ico"><MIcon name={choosing === 'S' ? 'camera' : 'calendar'} size={20} /></span>
-          <span><b>직접 추가하기</b><small>{choosing === 'S' ? '실적확인서 사진·PDF로 활동 하나씩' : '신청한 활동과 날짜를 넣어요'}</small></span></button>
-      </div>
-      <p className="m-help">{last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')} · ` : ''}비밀번호는 Volink로 오지 않아요</p>
-    </Sheet>}
+    {choosing && <WaysSheet target={choosing} note={last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')}` : undefined} onClose={() => setChoosing('')}
+      on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
     {adding === 'S' && <CertificateSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); window.location.hash = '#/mine?tab=done' }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows

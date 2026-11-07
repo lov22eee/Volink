@@ -694,15 +694,13 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await login(page, member)
   await page.goto('/#/mine?tab=done')
   await expect(page.getByText('아직 완료 기록이 없어요')).toBeVisible()
-  await page.getByRole('button', { name: '1365 실적 연결' }).click()
-  await expect(page).toHaveURL(/#\/lab1365/)
-  await expect(page.getByRole('heading', { name: '무엇을 가져올까요?' })).toBeVisible()
-  // 2026-11-07: each card asks first (bottom sheet), then goes on (on the web: the paste box).
-  await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
+  // 2026-11-07: [가져오기] → 1365에서 가져오기 / 직접 추가하기 → consent → that 1365 page (on the web: the paste box).
+  await page.getByRole('button', { name: '가져오기', exact: true }).click()
+  await page.getByRole('dialog', { name: '봉사참여 실적' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
-  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/lab1365$/)
   await expect(page.getByText(/봉사참여 실적 화면 글자를 붙여 넣기/)).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
