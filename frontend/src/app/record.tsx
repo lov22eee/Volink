@@ -83,7 +83,6 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
   if (saved) return <Sheet title="내 캘린더에도 추가할까요?" onClose={() => finish(false)}
     footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
     <div className="m-summary"><strong>{saved.title}</strong><span>{`${saved.date.slice(5).replace('-', '/')} ${saved.startTime}~${saved.endTime}`}{saved.organization ? ' · ' + saved.organization : ''}</span></div>
-    <p className="m-help">내 활동에는 이미 넣었어요. 휴대폰 캘린더에도 일정으로 넣어 둘까요?</p>
   </Sheet>
   return <Sheet title="1365에서 신청을 마쳤나요?" onClose={onClose}
     footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>{!date ? '참여하는 날을 골라 주세요' : '네, 신청했어요'}</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
