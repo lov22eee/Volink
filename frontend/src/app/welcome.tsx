@@ -4,7 +4,6 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { remember } from '../location'
-import { showToast } from '../App'
 import { saveExtMode, useConnect1365 } from './lab'
 import { askNotifications } from './native'
 import { MIcon } from './ui'
@@ -25,7 +24,7 @@ export function WelcomeScreen() {
       window.history.replaceState(null, '', '#/home')
       connect()
     }
-    else { showToast('1365 봉사는 직접 남기면 돼요', '다녀온 뒤 ‘참여했나요?’ → 실적확인서 올리기'); done() }
+    else done()
   }
   async function allowLocation() {
     setBusy(true)
@@ -64,7 +63,7 @@ export function WelcomeScreen() {
     </div>
     <div className="m-welcome-actions">
       <button type="button" className="m-btn blue" disabled={busy} onClick={() => chooseExt('IMPORT')}>1365 연결하기</button>
-      <button type="button" className="m-btn line" disabled={busy} onClick={() => chooseExt('MANUAL')}>괜찮아요, 직접 남길게요</button>
+      <button type="button" className="m-text-btn" disabled={busy} onClick={() => chooseExt('MANUAL')}>나중에 할게요</button>
       <small className="m-welcome-foot">설정 › 실험실에서 언제든 바꿀 수 있어요</small>
     </div>
     {connectSheet}

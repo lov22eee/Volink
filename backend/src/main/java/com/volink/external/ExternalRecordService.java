@@ -77,7 +77,8 @@ public class ExternalRecordService {
         if (title.length() < 2) errors.put("title", "활동 이름을 2자 이상 적어 주세요.");
         LocalDate day = date(r.date());
         LocalDate today = now().toLocalDate();
-        if (day == null || day.isBefore(today.minusYears(1)) || day.isAfter(today.plusYears(1))) errors.put("date", "날짜를 1년 안에서 골라 주세요.");
+        // 2026-11-07: a certificate can be for an activity years ago (10 years back at most); planned ones up to a year ahead.
+        if (day == null || day.isBefore(today.minusYears(10)) || day.isAfter(today.plusYears(1))) errors.put("date", "날짜를 확인해 주세요.");
         LocalTime start = time(r.startTime()), end = time(r.endTime());
         boolean timeKnown = start != null;
         if (start == null) start = LocalTime.of(9, 0);
@@ -160,7 +161,8 @@ public class ExternalRecordService {
         LocalDate day = date(request.date());
         if (day == null || day.isAfter(now().toLocalDate())) errors.put("date", "실적 날짜를 확인해 주세요.");
         Integer minutes = request.minutes();
-        if (minutes == null || minutes < 1 || minutes > 1440) errors.put("minutes", "인정 시간을 확인해 주세요.");
+        // V31: a 확인서 may total a whole period (46 hours …), not one day.
+        if (minutes == null || minutes < 1 || minutes > 99999) errors.put("minutes", "인정 시간을 확인해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         jdbc.update("UPDATE external_records SET cert_title = ?, cert_org = ?, cert_date = ?, cert_minutes = ?, cert_at = ?, status = 'ATTENDED' WHERE id = ?",
                 title, emptyNull(text(request.organization(), 255)), day, minutes, now(), id);
