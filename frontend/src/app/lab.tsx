@@ -9,7 +9,6 @@ import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import { DateField } from './host'
 import { AddApplicationSheet } from './record'
-import { ProofSheet } from './proof'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A'; url?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
@@ -59,7 +58,7 @@ function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () =
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365에 직접 로그인하고, 창을 닫으면 로그아웃돼요</small></span></li>
       <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 체크한 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
       <li><MIcon name="checkCircle" size={18} /><span><b>가져온 날 기준이에요</b><small>이후에 늘어난 실적은 다시 가져오면 돼요</small></span></li>
-      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 안 될 수 있어요</b><small>업데이트 전까지 직접 신청등록/실적등록을 이용해 주세요</small></span></li>
+      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 안 될 수 있어요</b><small>업데이트 전까지 신청은 직접 등록해 주세요</small></span></li>
     </ul>
   </Sheet>
 }
@@ -70,8 +69,8 @@ function WaysSheet({ target, note, onClose, on1365, onAdd }: { target: 'S' | 'A'
     <div className="lab-ways">
       <button type="button" className="lab-way" onClick={on1365}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
         <span><b>1365에서 가져오기</b><small>{target === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
-      <button type="button" className="lab-way" onClick={onAdd}><span className="lab-way-ico"><MIcon name={target === 'S' ? 'record' : 'search'} size={20} /></span>
-        <span><b>{target === 'S' ? '실적확인서로 넣기' : '1365 활동 찾아서 넣기'}</b><small>{target === 'S' ? '1365 자원봉사활동 확인서 PDF·사진' : '신청한 1365 활동을 검색해서 골라요'}</small></span></button>
+      <button type="button" className="lab-way" onClick={onAdd}><span className="lab-way-ico"><MIcon name="search" size={20} /></span>
+        <span><b>1365 활동 찾아서 넣기</b><small>신청한 1365 활동을 검색해서 골라요</small></span></button>
     </div>
     <p className="m-help">{note ? note + ' · ' : ''}비밀번호는 Volink로 오지 않아요</p>
   </Sheet>
@@ -88,11 +87,11 @@ export function useImport1365(onSaved?: () => void): [ReactNode, (target: 'S' | 
   const node = <>
     {choosing && <WaysSheet target={choosing} onClose={() => setChoosing('')} on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); setLabOn(true); window.location.hash = '#/lab1365?go=' + t }} />}
-    {adding === 'S' && <ProofSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); onSaved?.() }} onUse1365={() => { setAdding(''); setAsking('S') }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} onSaved={onSaved} />}
   </>
-  // 완료 기록 [가져오기] (2026-11-07): straight to 실적확인서로 넣기; 참여 예정 keeps 1365에서 가져오기 / 1365 활동 찾기.
-  return [node, (target: 'S' | 'A') => target === 'S' ? setAdding('S') : setChoosing(target)]
+  // 완료 기록 [가져오기]: 실적 is 1365에서 가져오기 only (2026-11-07; 확인서 PDF·사진 again in week 7) → consent right away.
+  // 참여 예정 keeps 1365에서 가져오기 / 1365 활동 찾기.
+  return [node, (target: 'S' | 'A') => target === 'S' ? setAsking('S') : setChoosing(target)]
 }
 
 /**
@@ -200,14 +199,14 @@ export function LabScreen({ go }: { go?: string }) {
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
   // The card tapped: the consent sheet first, then that 1365 page (2026-11-07).
   const [asking, setAsking] = useState<'' | 'S' | 'A'>('')
-  // The page last asked for, so 다시 가져오기 opens it again; 직접 등록하기 shows the ways to put records in by hand.
+  // The page last asked for, so 다시 가져오기 opens it again; for 신청 현황, 직접 등록하기 = 1365 활동 찾아서 넣기.
   const [lastTarget, setLastTarget] = useState<'' | 'S' | 'A'>('')
-  const [manual, setManual] = useState(false)
   // After the first connection (2026-11-07): a card opens 1365에서 가져오기 / 직접 추가하기 first; 1365에서 가져오기 still asks the consent sheet every time.
   const [choosing, setChoosing] = useState<'' | 'S' | 'A'>('')
   const [adding, setAdding] = useState<'' | 'S' | 'A'>('')
   const used = () => { try { return localStorage.getItem(USED) === '1' } catch { return false } }
-  const tap = (target: 'S' | 'A') => last || used() ? setChoosing(target) : setAsking(target)
+  // 실적: 1365에서 가져오기 only (2026-11-07; 확인서 PDF·사진 in week 7). 신청: after a first connection also 1365 활동 찾기.
+  const tap = (target: 'S' | 'A') => target === 'A' && (last || used()) ? setChoosing(target) : setAsking(target)
   const go1365 = (target: 'S' | 'A') => { setLastTarget(target); if (native) open(target); else setWebFor(target) }
   // From 내 활동 [가져오기] (consent already given there): straight to that 1365 page, once.
   useEffect(() => {
@@ -302,7 +301,7 @@ export function LabScreen({ go }: { go?: string }) {
           <p className="lab-sub">1365 화면이 바뀌었거나<br />아직 기록이 없을 수 있어요</p>
           <ul className="lab-fail-why">
             <li>실적·신청 내역 화면에서 버튼을 눌렀는지 확인해 주세요</li>
-            <li>계속 안 되면 직접 신청등록·실적등록을 이용해 주세요</li>
+            <li>계속 안 되면 잠시 뒤 다시 가져와 주세요</li>
           </ul>
         </div>
         : <h1 className="m-h2">{summary && !rows.length ? '1365 봉사 실적을 찾았어요' : `신청 내역 ${rows.length}개를 찾았어요`}</h1>}
@@ -324,22 +323,14 @@ export function LabScreen({ go }: { go?: string }) {
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
     {choosing && <WaysSheet target={choosing} note={last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')}` : undefined} onClose={() => setChoosing('')}
       on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
-    {adding === 'S' && <ProofSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); window.location.hash = '#/mine?tab=done' }} onUse1365={() => { setAdding(''); setAsking('S') }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <div className="lab-actions">
         <button className="m-btn" onClick={() => { setRows(null); setPaste(''); if (native && lastTarget) open(lastTarget) }}>다시 가져오기</button>
-        <button className="m-btn line" onClick={() => setManual(true)}>직접 등록하기</button>
+        {lastTarget === 'A' && <button className="m-btn line" onClick={() => setAdding('A')}>직접 등록하기</button>}
         <button className="m-text-btn" onClick={() => { setRows(null); setWebFor('') }}>나중에 할게요</button>
       </div>}</ActionBar>}
-    {manual && <Sheet title="직접 등록하기" onClose={() => setManual(false)}>
-      <div className="r-opts">
-        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('A') }}><MIcon name="search" size={20} /><span><b>신청 등록</b><small>신청한 1365 활동을 찾아서 날짜를 넣어요</small></span></button>
-        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('S') }}><MIcon name="record" size={20} /><span><b>실적 등록</b><small>1365 자원봉사활동 확인서 PDF·사진으로 넣어요</small></span></button>
-      </div>
-      <p className="m-help">실적확인서 파일은 Volink로 보내지 않고 폰 안에서만 읽어요.</p>
-    </Sheet>}
   </div>
 }
