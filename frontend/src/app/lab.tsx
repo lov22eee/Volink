@@ -8,12 +8,15 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import { DateField } from './host'
+import { AddApplicationSheet, CertificateSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A'; url?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
+/** Set after the first time something was brought in from 1365: from then on a card asks 1365에서 가져오기 / 직접 추가하기. */
+const USED = 'volink.lab1365.used'
 
 /** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
 export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 아래 ‘이 화면 가져오기’ (신청 현황도 이어서)'
@@ -168,6 +171,12 @@ export function LabScreen() {
   // The page last asked for, so 다시 가져오기 opens it again; 직접 등록하기 shows the ways to put records in by hand.
   const [lastTarget, setLastTarget] = useState<'' | 'S' | 'A'>('')
   const [manual, setManual] = useState(false)
+  // After the first connection (2026-11-07): a card opens 1365에서 가져오기 / 직접 추가하기 first.
+  const [choosing, setChoosing] = useState<'' | 'S' | 'A'>('')
+  const [adding, setAdding] = useState<'' | 'S' | 'A'>('')
+  const used = () => { try { return localStorage.getItem(USED) === '1' } catch { return false } }
+  const tap = (target: 'S' | 'A') => last || used() ? setChoosing(target) : setAsking(target)
+  const go1365 = (target: 'S' | 'A') => { setLastTarget(target); if (native) open(target); else setWebFor(target) }
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setLast(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   const [rows, setRows] = useState<LabRow[] | null>(null)
@@ -214,6 +223,7 @@ export function LabScreen() {
       if (saved?.reflected) showToast(`실적이 늘었어요 ${saved.before}→${saved.count}건`, `활동 ${saved.reflected}개를 ‘실적 반영됨(추정)’으로 바꿨어요`)
       else if (saved && saved.before != null && saved.before === saved.count) showToast('새로 늘어난 실적은 아직 없어요', '1365에 반영되기까지 며칠 걸릴 수 있어요')
       else showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', '내 활동에서 볼 수 있어요')
+      try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
       window.location.hash = total ? '#/mine?tab=done' : '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
@@ -232,10 +242,10 @@ export function LabScreen() {
         <p className="lab-sub">1365에 있는 내 기록을 바로 가져와요</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
-          <button type="button" className="lab-choice" onClick={() => setAsking('S')}>
+          <button type="button" className="lab-choice" onClick={() => tap('S')}>
             <span className="lab-choice-ico"><MIcon name="timer" size={24} /></span>
             <span><b>봉사참여 실적</b><small>총 봉사시간·건수</small></span><MIcon name="chevron" size={18} /></button>
-          <button type="button" className="lab-choice" onClick={() => setAsking('A')}>
+          <button type="button" className="lab-choice" onClick={() => tap('A')}>
             <span className="lab-choice-ico g"><MIcon name="list" size={24} /></span>
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>
@@ -272,7 +282,18 @@ export function LabScreen() {
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
     </div>
-    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); if (native) open(t); else setWebFor(t) }} />}
+    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
+    {choosing && <Sheet title={choosing === 'S' ? '봉사참여 실적' : '신청 현황'} onClose={() => setChoosing('')}>
+      <div className="lab-ways">
+        <button type="button" className="lab-way main" onClick={() => { const t = choosing; setChoosing(''); go1365(t) }}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
+          <span><b>1365에서 가져오기</b><small>{choosing === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
+        <button type="button" className="lab-way" onClick={() => { const t = choosing; setChoosing(''); setAdding(t) }}><span className="lab-way-ico"><MIcon name={choosing === 'S' ? 'camera' : 'calendar'} size={20} /></span>
+          <span><b>직접 추가하기</b><small>{choosing === 'S' ? '실적확인서 사진·PDF로 활동 하나씩' : '신청한 활동과 날짜를 넣어요'}</small></span></button>
+      </div>
+      <p className="m-help">{last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')} · ` : ''}비밀번호는 Volink로 오지 않아요</p>
+    </Sheet>}
+    {adding === 'S' && <CertificateSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); window.location.hash = '#/mine?tab=done' }} />}
+    {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
@@ -283,8 +304,8 @@ export function LabScreen() {
       </div>}</ActionBar>}
     {manual && <Sheet title="직접 등록하기" onClose={() => setManual(false)}>
       <div className="r-opts">
-        <a className="r-opt" href="#/find?chip=1365" onClick={() => setManual(false)}><MIcon name="calendar" size={20} /><span><b>신청 등록</b><small>1365 활동을 찾아 ‘이미 신청했어요’로 날짜를 넣어요</small></span></a>
-        <a className="r-opt" href="#/mine?tab=done" onClick={() => setManual(false)}><MIcon name="record" size={20} /><span><b>실적 등록</b><small>내 활동의 1365 기록에서 실적확인서를 올려요</small></span></a>
+        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('A') }}><MIcon name="calendar" size={20} /><span><b>신청 등록</b><small>신청한 1365 활동과 날짜를 넣어요</small></span></button>
+        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('S') }}><MIcon name="camera" size={20} /><span><b>실적 등록</b><small>실적확인서 사진·PDF로 활동을 넣어요</small></span></button>
       </div>
       <p className="m-help">실적확인서 파일은 Volink로 보내지 않고 폰 안에서만 읽어요.</p>
     </Sheet>}

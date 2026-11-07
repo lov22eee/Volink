@@ -52,7 +52,9 @@ export function useRecords(refresh = 0) {
 }
 
 /** "1365에서 신청을 마쳤나요?": the day (inside the 1365 period) and time, then it joins 내 활동. */
-export function MarkSheet({ program, onClose, onSaved }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void }) {
+export function MarkSheet({ program, onClose, onSaved, manual }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void; manual?: boolean }) {
+  // manual (2026-11-07, 직접 추가하기 › 이름·날짜 직접 적기): no 1365 program, the person types the name.
+  const [title, setTitle] = useState(program.title)
   const today = ymd(new Date())
   const first = fromCompact(program.periodStart), last = fromCompact(program.periodEnd)
   // A period of several days (11/12 ~ 11/30): no day is assumed; the person picks the day they go.
@@ -63,12 +65,12 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
   const [end, setEnd] = useState(program.endTime ?? '12:00')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const outside = Boolean((first && date < first) || (last && date > last))
+  const outside = Boolean(date && ((first && date < first) || (last && date > last)))
   async function save() {
     setBusy(true)
     setError('')
     try {
-      const record = await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo, title: program.title, organization: program.organization,
+      const record = await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo || undefined, title: title.trim(), organization: program.organization,
         place: program.place, date, startTime: start, endTime: end })
       onSaved?.(record)
       onClose()
@@ -76,10 +78,11 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
       else showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
-  return <Sheet title="1365에서 신청을 마쳤나요?" onClose={onClose}
-    footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>{date ? '네, 신청했어요' : '참여하는 날을 골라 주세요'}</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
+  return <Sheet title={manual ? '신청한 활동 넣기' : '1365에서 신청을 마쳤나요?'} onClose={onClose}
+    footer={<><button type="button" className="m-btn" disabled={busy || !date || title.trim().length < 2} onClick={save}>{!date ? '참여하는 날을 골라 주세요' : manual ? '참여 예정에 넣기' : '네, 신청했어요'}</button><button type="button" className="m-btn line" onClick={onClose}>{manual ? '닫기' : '아직이요'}</button></>}>
     <p className="m-help">표시해 두면 내 활동에 넣고 하루 전·다녀온 뒤에 알려 드려요. 신청·승인은 1365에서 확인해요.</p>
-    <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
+    {manual ? <label className="m-field"><span className="m-label">활동 이름</span><TextInput className="m-input" maxLength={255} value={title} placeholder="1365에서 신청한 활동 이름" onChange={event => setTitle(event.target.value)} /></label>
+      : <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>}
     {span && <p className="m-help">1365 모집 기간은 {first?.slice(5).replace('-', '/')} ~ {last?.slice(5).replace('-', '/')}이에요. 1365에서 신청한 그 날을 골라 주세요.</p>}
     <DateField label="참여하는 날" value={date} first={first ?? today} last={last ?? addYear(today)} onChange={setDate}
       note={first && last ? `1365 모집 기간 ${first.slice(5).replace('-', '/')} ~ ${last.slice(5).replace('-', '/')} 안에서 골라요` : '1년 안에서 골라요'} />
@@ -238,12 +241,18 @@ async function imageText(file: File, progress: (p: number) => void) {
   try { return (await worker.recognize(file)).data.text } finally { await worker.terminate() }
 }
 
-export function CertificateSheet({ record, onClose, onSaved }: { record: ExternalRecord; onClose: () => void; onSaved: (record: ExternalRecord) => void }) {
+/**
+ * Without {@code record} (2026-11-07, 1365 연결 › 직접 추가하기): a new 1365 record is made from the certificate alone
+ * (POST, then the certificate on it; the new record is removed again when the certificate is refused).
+ */
+export function CertificateSheet({ record, onClose, onSaved }: { record?: ExternalRecord; onClose: () => void; onSaved: (record: ExternalRecord) => void }) {
+  const today = ymd(new Date())
+  const base = record ?? { title: '', organization: null, date: today, startTime: '10:00', endTime: '12:00' }
   const [step, setStep] = useState<'pick' | 'reading' | 'check'>('pick')
   const [read, setRead] = useState<Read | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const pdf = useRef<HTMLInputElement>(null), image = useRef<HTMLInputElement>(null)
+  const pdf = useRef<HTMLInputElement>(null), image = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null)
   async function take(file: File | undefined, kind: 'pdf' | 'image') {
     if (!file) return
     setError('')
@@ -251,10 +260,10 @@ export function CertificateSheet({ record, onClose, onSaved }: { record: Externa
     setStep('reading')
     try {
       const text = kind === 'pdf' ? await pdfText(file) : await imageText(file, () => {})
-      setRead(parseCertificate(text, record))
+      setRead(parseCertificate(text, base))
       if (!text.trim()) setError('글자를 찾지 못했어요. 아래 칸을 직접 고쳐 주세요.')
     } catch {
-      setRead(parseCertificate('', record))
+      setRead(parseCertificate('', base))
       setError('파일을 읽지 못했어요. 아래 칸을 직접 고쳐 주세요.')
     }
     setStep('check')
@@ -262,29 +271,74 @@ export function CertificateSheet({ record, onClose, onSaved }: { record: Externa
   async function save() {
     if (!read) return
     setBusy(true)
-    try { onSaved(await api<ExternalRecord>('/api/me/external/' + record.id + '/certificate', 'PUT', read)); showToast('실적확인서 내용을 남겼어요', '파일은 저장하지 않았어요') }
-    catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+    if (record) {
+      try { onSaved(await api<ExternalRecord>('/api/me/external/' + record.id + '/certificate', 'PUT', read)); showToast('실적확인서 내용을 남겼어요', '파일은 저장하지 않았어요') }
+      catch (cause) { setError(message(cause)) } finally { setBusy(false) }
+      return
+    }
+    let made: ExternalRecord | null = null
+    try {
+      made = await api<ExternalRecord>('/api/me/external', 'POST', { title: read.title, organization: read.organization, date: read.date })
+      onSaved(await api<ExternalRecord>('/api/me/external/' + made.id + '/certificate', 'PUT', read))
+      showToast('완료 기록에 넣었어요', '실적확인서 파일은 저장하지 않았어요')
+    } catch (cause) {
+      if (made) await api('/api/me/external/' + made.id, 'DELETE').catch(() => {})
+      setError(message(cause))
+    } finally { setBusy(false) }
   }
-  if (step === 'pick') return <Sheet title="실적확인서를 골라 주세요" onClose={onClose}>
+  if (step === 'pick') return <Sheet title={record ? '실적확인서를 골라 주세요' : '실적확인서 추가'} onClose={onClose}>
     <div className="r-opts">
+      <button type="button" className="r-opt" onClick={() => camera.current?.click()}><MIcon name="camera" size={20} /><span><b>사진 찍기</b><small>종이 확인서를 바로 찍어요 · 폰 안에서 읽어요</small></span></button>
+      <button type="button" className="r-opt" onClick={() => image.current?.click()}><MIcon name="camera" size={20} /><span><b>앨범에서 고르기</b><small>캡처·저장한 사진</small></span></button>
       <button type="button" className="r-opt" onClick={() => pdf.current?.click()}><MIcon name="record" size={20} /><span><b>PDF 파일</b><small>1365에서 받은 파일 · 가장 정확해요</small></span></button>
-      <button type="button" className="r-opt" onClick={() => image.current?.click()}><MIcon name="camera" size={20} /><span><b>캡처·사진</b><small>글자를 폰 안에서 읽어요(OCR) · 조금 걸려요</small></span></button>
     </div>
     <input ref={pdf} type="file" accept="application/pdf" hidden onChange={event => take(event.target.files?.[0], 'pdf')} />
     <input ref={image} type="file" accept="image/*" hidden onChange={event => take(event.target.files?.[0], 'image')} />
+    <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={event => take(event.target.files?.[0], 'image')} />
     <div className="m-note"><MIcon name="lock" size={14} /> 파일은 폰 안에서만 읽고 보내지 않아요. 활동명·기관·날짜·시간만 남기고, 이름·생년월일은 남기지 않아요.</div>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
   // While reading: only a spinner and one line (no percentages or file messages).
   if (step === 'reading') return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />확인 중이에요</div></Sheet>
-  return <Sheet title="이 내용이 맞나요?" onClose={onClose} footer={<button type="button" className="m-btn" disabled={busy || !read} onClick={save}>맞아요, 남길게요</button>}>
+  return <Sheet title="이 내용이 맞나요?" onClose={onClose} footer={<button type="button" className="m-btn" disabled={busy || !read || (read?.title.trim().length ?? 0) < 2} onClick={save}>{record ? '맞아요, 남길게요' : '완료 기록에 넣기'}</button>}>
     {error && <p className="m-err" role="alert">{error}</p>}
     {read && <div className="r-read">
       <label><span>활동명</span><TextInput className="m-input" value={read.title} maxLength={255} onChange={event => setRead({ ...read, title: event.target.value })} /></label>
       <label><span>기관</span><TextInput className="m-input" value={read.organization} maxLength={255} onChange={event => setRead({ ...read, organization: event.target.value })} /></label>
-      <DateField label="날짜" value={read.date} first={addYear(ymd(new Date()), -1)} last={ymd(new Date())} note="실적확인서에 적힌 날짜를 골라 주세요" onChange={date => setRead({ ...read, date })} />
+      <DateField label="날짜" value={read.date} first={addYear(today, -1)} last={today} note="실적확인서에 적힌 날짜를 골라 주세요" onChange={date => setRead({ ...read, date })} />
       <label><span>인정 시간(분)</span><TextInput type="number" inputMode="numeric" className="m-input" value={String(read.minutes)} onChange={event => setRead({ ...read, minutes: Number(event.target.value) || 0 })} /></label>
     </div>}
-    <p className="m-help">‘{record.title}’ 기록에 붙어요. Volink가 확인서의 진위를 확인한 건 아니에요.</p>
+    <p className="m-help">{record ? `‘${record.title}’ 기록에 붙어요. ` : '완료 기록에 1365 활동으로 들어가요. '}Volink가 확인서의 진위를 확인한 건 아니에요.</p>
+  </Sheet>
+}
+
+
+/**
+ * 1365 연결 › 신청 현황 › 직접 추가하기 (2026-11-07): find the 1365 activity (nationwide search) and put in the day, or type the name
+ * and day by hand when it is not found. Joins 참여 예정 like ‘이미 신청했어요’.
+ */
+export function AddApplicationSheet({ onClose }: { onClose: () => void }) {
+  const [q, setQ] = useState('')
+  const [found, setFound] = useState<Program[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [chosen, setChosen] = useState<Program | null>(null)
+  const [manual, setManual] = useState(false)
+  async function search() {
+    if (q.trim().length < 2) return
+    setBusy(true)
+    try { setFound((await api<{ items: Program[] }>('/api/volunteer-programs?nationwide=true&q=' + encodeURIComponent(q.trim()))).items.slice(0, 8)) } catch { setFound([]) } finally { setBusy(false) }
+  }
+  const done = () => { onClose(); window.location.hash = '#/mine' }
+  if (chosen) return <MarkSheet program={chosen} onClose={() => setChosen(null)} onSaved={done} manual={manual} />
+  return <Sheet title="신청한 활동 넣기" onClose={onClose}
+    footer={<button type="button" className="m-btn line" onClick={() => { setManual(true); setChosen({ programNo: '', title: q.trim(), organization: null, place: null, field: null, periodStart: null, periodEnd: null, beginTime: null, endTime: null, weekdays: null, recruitStatus: null, recruitEnd: null, capacity: null, youthOk: null, latitude: null, longitude: null, distanceKm: null, link: '' }) }}>못 찾으면 이름·날짜 직접 적기</button>}>
+    <form className="m-search-row" onSubmit={event => { event.preventDefault(); search() }}>
+      <label className="m-search"><MIcon name="search" size={18} /><TextInput type="search" enterKeyHint="search" value={q} placeholder="1365 활동 이름·기관 검색" aria-label="1365 활동 검색" onChange={event => setQ(event.target.value)} /></label>
+    </form>
+    {busy ? <div className="r-reading" role="status"><span className="m-spin" />찾는 중이에요</div>
+      : found === null ? <p className="m-help">1365에서 신청한 활동 이름을 검색해 주세요.</p>
+      : found.length === 0 ? <p className="m-help">찾지 못했어요. 아래에서 이름·날짜를 직접 적을 수 있어요.</p>
+      : <div className="r-opts">{found.map(p => <button key={p.programNo} type="button" className="r-opt" onClick={() => { setManual(false); setChosen(p) }}>
+        <MIcon name="calendar" size={20} /><span><b>{p.title}</b><small>{[p.organization, p.periodStart && p.periodEnd ? `${fromCompact(p.periodStart)?.slice(5).replace('-', '/')} ~ ${fromCompact(p.periodEnd)?.slice(5).replace('-', '/')}` : null].filter(Boolean).join(' · ')}</small></span></button>)}</div>}
   </Sheet>
 }

@@ -1365,6 +1365,15 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-pick > .lab-tag { align-self: center; }
 .lab-pick > .m-h2 { margin: 12px 0 0; text-align: center; font-size: 24px; letter-spacing: -0.02em; }
 .lab-sub { margin: 6px 0 22px; text-align: center; font-size: 14px; color: var(--ink-3); }
+/* 1365 연결 · after the first connection: 1365에서 가져오기 / 직접 추가하기 (2026-11-07). */
+.lab-ways { display: flex; flex-direction: column; gap: 10px; }
+.lab-way { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); text-align: left; font: inherit; color: var(--ink); }
+.lab-way.main { border: 1.5px solid var(--m-green); background: #f3faf6; }
+.lab-way > span:last-child { display: flex; flex-direction: column; gap: 3px; }
+.lab-way b { font-size: 15.5px; }
+.lab-way small { font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
+.lab-way-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; flex: none; background: #eaf0fa; color: #3b67ad; }
+.lab-way.main .lab-way-ico { background: var(--m-mint); color: var(--m-green-ink); }
 /* 1365 연결 · 못 찾았을 때 (2026-11-07): centred, a short why, then 다시 가져오기 / 직접 등록하기 / 나중에 할게요. */
 .lab-fail { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 4vh; }
 .lab-fail-ico { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--amber-soft); color: var(--amber-ink); margin-bottom: 14px; }
