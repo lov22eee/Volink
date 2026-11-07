@@ -1365,6 +1365,14 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-pick > .lab-tag { align-self: center; }
 .lab-pick > .m-h2 { margin: 12px 0 0; text-align: center; font-size: 24px; letter-spacing: -0.02em; }
 .lab-sub { margin: 6px 0 22px; text-align: center; font-size: 14px; color: var(--ink-3); }
+/* 1365 연결 · 못 찾았을 때 (2026-11-07): centred, a short why, then 다시 가져오기 / 직접 등록하기 / 나중에 할게요. */
+.lab-fail { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 4vh; }
+.lab-fail-ico { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--amber-soft); color: var(--amber-ink); margin-bottom: 14px; }
+.lab-fail .m-h2 { margin: 0; font-size: 21px; }
+.lab-fail .lab-sub { margin: 8px 0 18px; line-height: 1.5; }
+.lab-fail-why { list-style: none; margin: 0; padding: 12px 14px; width: 100%; border-radius: 14px; background: #fff; border: 1px solid var(--line); text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.lab-fail-why li { font-size: 13px; color: var(--ink-2); padding-left: 12px; position: relative; line-height: 1.45; }
+.lab-fail-why li::before { content: ''; position: absolute; left: 0; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-3); }
 .lab-pick > .lab-last { margin-bottom: 12px; justify-content: center; }
 .lab-choices { display: flex; flex-direction: column; gap: 12px; }
 .lab-choice { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 18px 16px 18px 18px; border-radius: 20px; background: #fff; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(20, 40, 30, 0.04); text-align: left; font: inherit; color: var(--ink); transition: transform .12s, background .12s; }
