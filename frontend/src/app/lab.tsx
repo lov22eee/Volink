@@ -51,12 +51,11 @@ function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () =
   return <Sheet title="연결 전에 확인해 주세요" onClose={onClose}
     footer={<><button type="button" className="m-btn blue" onClick={onAgree}>동의하고 계속하기</button>
       <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
-    <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
     <ul className="lab-consent">
-      <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
-      <li><MIcon name="record" size={18} /><span><b>내가 연 화면의 글자만 폰 안에서 읽어요</b><small>총 시간·건수·분야와 고른 신청 내역만 남기고, 이름은 남기지 않아요</small></span></li>
-      <li><MIcon name="checkCircle" size={18} /><span><b>1365 공식 실적을 내 화면에서 옮겨 와요</b><small>가져온 날 기준이에요. 그 뒤 바뀐 실적과 확인서 발급은 1365에서 확인해 주세요</small></span></li>
-      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’나 실적확인서로 넣어 주세요</small></span></li>
+      <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365에 직접 로그인하고, 창을 닫으면 로그아웃돼요</small></span></li>
+      <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 고른 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
+      <li><MIcon name="checkCircle" size={18} /><span><b>가져온 날 기준이에요</b><small>그 뒤에 늘어난 실적은 다시 가져오면 돼요</small></span></li>
+      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 안 될 수 있어요</b><small>그때는 날짜를 직접 넣어 주세요</small></span></li>
     </ul>
   </Sheet>
 }
@@ -225,7 +224,7 @@ export function LabScreen() {
         {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. 2026-11-07: in the middle of the screen. */}
         <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
         <h1 className="m-h2">무엇을 가져올까요?</h1>
-        <p className="lab-sub">고른 1365 화면에서 바로 가져와요</p>
+        <p className="lab-sub">1365에 있는 내 기록을 바로 가져와요</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
           <button type="button" className="lab-choice" onClick={() => setAsking('S')}>
