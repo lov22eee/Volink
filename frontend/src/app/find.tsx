@@ -10,7 +10,8 @@ import type { Program } from '../explore'
 import { AskSheet, MarkSheet } from './record'
 import { useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
-import { PlaceMap } from '../map'
+import { kmBetween, PlaceMap } from '../map'
+import type { MapView } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
 import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
 import { DateField } from './host'
@@ -52,23 +53,37 @@ function chipsOf(f: Filters): { key: string; label: string; clear: (f: Filters) 
   return out
 }
 
+/** Same question within 3 minutes on this phone: the answer kept (moving the map back and forth asks nothing new). */
+const answers = new Map<string, { at: number; answer: Promise<unknown> }>()
+function cached<T>(path: string): Promise<T> {
+  const hit = answers.get(path)
+  if (hit && Date.now() - hit.at < 180_000) return hit.answer as Promise<T>
+  const answer = api<T>(path)
+  answers.set(path, { at: Date.now(), answer })
+  answer.catch(() => answers.delete(path))
+  if (answers.size > 60) answers.delete(answers.keys().next().value as string)
+  return answer
+}
+
 /** Server query for our activities. */
-function volinkParams(f: Filters, q: string, origin: { lat: number; lng: number } | null) {
+function volinkParams(f: Filters, q: string, origin: { lat: number; lng: number } | null, area: MapView | null = null) {
   const params = new URLSearchParams({ status: f.status })
   if (q) params.set('q', q)
   if (f.categories.length) params.set('category', f.categories.join(','))
   const d = dates(f.when)
   if (d.from) params.set('from', d.from)
   if (d.to) params.set('to', d.to)
+  if (area) { params.set('lat', String(area.lat)); params.set('lng', String(area.lng)); params.set('radiusKm', String(area.radiusKm)); return params }
   if (f.area.kind === 'near' && origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', String(f.area.km)) }
   if (f.area.kind === 'region') { params.set('sido', f.area.sido); if (f.area.sigungu) params.set('sigungu', f.area.sigungu) }
   return params
 }
 
 /** 1365 needs a place to look: the chosen region, or the position (near: the radius; all areas: 5 km around you). */
-function programParams(f: Filters, q: string, origin: { lat: number; lng: number } | null) {
+function programParams(f: Filters, q: string, origin: { lat: number; lng: number } | null, area: MapView | null = null) {
   const params = new URLSearchParams()
-  if (f.area.kind === 'region') { params.set('sido', f.area.sido); if (f.area.sigungu) params.set('sigungu', f.area.sigungu) }
+  if (area) { params.set('lat', String(area.lat)); params.set('lng', String(area.lng)); params.set('radiusKm', String(area.radiusKm)) }
+  else if (f.area.kind === 'region') { params.set('sido', f.area.sido); if (f.area.sigungu) params.set('sigungu', f.area.sigungu) }
   else if (origin) { params.set('lat', origin.lat.toFixed(6)); params.set('lng', origin.lng.toFixed(6)); params.set('radiusKm', f.area.kind === 'near' ? String(f.area.km) : '5') }
   else return null
   if (q) params.set('q', q)
@@ -103,6 +118,9 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const [programsState, setProgramsState] = useState<'off' | 'error' | 'needPlace' | 'ok'>('ok')
   const [program, setProgram] = useState<Program | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  // 지도 (2026-11-07): where the person moved the map; results follow it there (see moved()).
+  const [mapArea, setMapArea] = useState<MapView | null>(null)
+  const [tooWide, setTooWide] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => { if (focus) input.current?.focus() }, [focus])
 
@@ -124,25 +142,51 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   useEffect(() => { if (remembered()) currentPosition().then(position => { if (position) setOrigin(position); setWaitPos(false) }) }, [])
 
   const showVolink = filters.source !== '1365', show1365 = filters.source !== 'VOLINK'
+  const area = view === 'map' ? mapArea : null
   useEffect(() => {
-    if (!showVolink || (near && !origin)) { setItems(showVolink ? null : []); return }
+    if (!showVolink || (near && !origin && !area)) { setItems(showVolink ? null : []); return }
     let current = true
-    setItems(null)
-    api<LiveActivity[]>('/api/activities?' + volinkParams(filters, q, origin)).then(list => { if (current) setItems(list) }).catch(() => { if (current) setItems([]) })
+    // Moving the map keeps the pins until the new ones arrive (no empty map in between).
+    if (!area) setItems(null)
+    const url = '/api/activities?' + volinkParams(filters, q, origin, area)
+    ;(area ? cached<LiveActivity[]>(url) : api<LiveActivity[]>(url)).then(list => { if (current) setItems(list) }).catch(() => { if (current) setItems([]) })
     return () => { current = false }
-  }, [filters, q, origin, near, showVolink])
+  }, [filters, q, origin, near, showVolink, area])
 
   useEffect(() => {
-    if (!show1365 || (near && !origin)) { setPrograms(show1365 ? null : []); return }
-    const params = programParams(filters, q, origin)
+    if (!show1365 || (near && !origin && !area)) { setPrograms(show1365 ? null : []); return }
+    const params = programParams(filters, q, origin, area)
     if (!params) { if (waitPos) { setPrograms(null); return } setPrograms([]); setProgramsState('needPlace'); return }
     let current = true
-    setPrograms(null)
-    api<{ enabled: boolean; items: Program[] }>('/api/volunteer-programs?' + params)
+    if (!area) setPrograms(null)
+    const url = '/api/volunteer-programs?' + params
+    ;(area ? cached<{ enabled: boolean; items: Program[] }>(url) : api<{ enabled: boolean; items: Program[] }>(url))
       .then(result => { if (!current) return; setProgramsState(result.enabled ? 'ok' : 'off'); setPrograms(result.items.filter(p => programInDates(p, filters))) })
       .catch(() => { if (current) { setProgramsState('error'); setPrograms([]) } })
     return () => { current = false }
-  }, [filters, q, origin, near, show1365, waitPos])
+  }, [filters, q, origin, near, show1365, waitPos, area])
+  // A new filter or area chip starts from it again, not from where the map was left.
+  useEffect(() => { setMapArea(null); setTooWide(false) }, [filters.area])
+
+  /**
+   * The map stopped after the person moved it. To keep the 1365 quota (900 a day for everyone): nothing when zoomed out past
+   * about 20 km (‘지도를 확대하면 찾아요’), nothing when zooming in inside what was already found, nothing for a small nudge (less than a third of the view, about the same zoom), and the
+   * centre is rounded to about 500 m so the same spot is the same question (answered from this phone's 3-minute cache, and on
+   * the server from the 3-hour 1365 list cache per district).
+   */
+  function moved(next: MapView) {
+    if (next.radiusKm > 20) { setTooWide(true); return }
+    setTooWide(false)
+    const round = (x: number) => Math.round(x * 200) / 200
+    const at = { lat: round(next.lat), lng: round(next.lng), radiusKm: Math.min(20, Math.max(1, Math.ceil(next.radiusKm))) }
+    setMapArea(last => {
+      if (!last) return at
+      const apart = kmBetween(last, at)
+      // Zoomed in (or moved) inside what was already found: those results already cover it.
+      if (apart + at.radiusKm <= last.radiusKm) return last
+      return apart < last.radiusKm / 3 && Math.abs(at.radiusKm - last.radiusKm) / last.radiusKm < 0.3 ? last : at
+    })
+  }
 
   // Full activities go to the end (the waitlist may still be open).
   const shown = useMemo(() => (items ?? []).filter(a => !filters.newcomer || isNewcomer(a)).sort((a, b) => Number(seatsLeft(a) === 0) - Number(seatsLeft(b) === 0)), [items, filters.newcomer])
@@ -198,11 +242,12 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
       {show1365 && programsState === 'needPlace' && <p className="m-help">1365 활동은 위치를 허용하거나 상세 필터에서 지역을 고르면 함께 보여요.</p>}
       {show1365 && programsState === 'off' && <p className="m-help">지금은 1365 활동을 불러올 수 없어요.</p>}
       {show1365 && programsState === 'error' && <p className="m-help">1365 활동을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>}
-      {loading ? <Loading />
+      {loading && view !== 'map' ? <Loading />
         : view === 'map' ? <div className="m-map-box">
+          {tooWide ? <p className="m-map-note">지도를 조금 더 확대하면 이 근처 활동을 찾아요</p> : area && pending ? <p className="m-map-note">이 근처 활동을 찾는 중…</p> : null}
           <PlaceMap label="활동 위치 지도" places={mapPlaces}
             origin={origin && filters.area.kind !== 'region' ? { ...origin, label: '내 위치' } : null} radiusKm={filters.area.kind === 'near' ? filters.area.km : undefined} selected={selected}
-            onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} />
+            onSelect={id => { if (id != null && id < 0) { const p = mapPrograms[-id - 1]; if (p) setProgram(p) } else setSelected(id) }} onMove={moved} />
           <p className="m-map-legend">{showVolink && <><i className="local" />동네 활동 {shown.length}개</>}{show1365 && mapPrograms.length > 0 && <><i className="program" />1365 활동 {mapPrograms.length}개</>}</p>
           {selected && shown.find(a => a.id === selected) && <div className="m-map-card"><ActivityRow activity={shown.find(a => a.id === selected)!} /></div>}
         </div>

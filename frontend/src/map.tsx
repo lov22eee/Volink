@@ -40,11 +40,103 @@ export function placesCentre(places: MapPlace[]): Origin | null {
   return { lat: points.reduce((sum, p) => sum + Number(p.latitude), 0) / points.length, lng: points.reduce((sum, p) => sum + Number(p.longitude), 0) / points.length, label: '활동 장소 중심' }
 }
 
-type Props = { places: MapPlace[]; origin?: Origin | null; radiusKm?: number; selected?: number | null; onSelect?: (id: number | null) => void; onPick?: (lat: number, lng: number) => void; label: string }
+/** The part of the map on screen after the person moved it: its centre and the distance to a corner. */
+export type MapView = { lat: number; lng: number; radiusKm: number }
+type Props = { places: MapPlace[]; origin?: Origin | null; radiusKm?: number; selected?: number | null; onSelect?: (id: number | null) => void; onPick?: (lat: number, lng: number) => void; label: string
+  /** 찾기 (2026-11-07): the map stays put while results change, and says where the person moved it (dragged or zoomed). */
+  onMove?: (view: MapView) => void }
 
 export function PlaceMap(props: Props) {
   const [failed, setFailed] = useState(false)
-  return kakaoEnabled && !failed ? <KakaoMap {...props} onFail={() => setFailed(true)} /> : <SketchMap {...props} />
+  return kakaoEnabled && !failed ? (props.onMove ? <MovingKakaoMap {...props} onFail={() => setFailed(true)} /> : <KakaoMap {...props} onFail={() => setFailed(true)} />) : <SketchMap {...props} />
+}
+
+const levelFor = (radiusKm: number | undefined, near: boolean) => near ? (radiusKm && radiusKm > 5 ? 7 : radiusKm && radiusKm > 2 ? 6 : 5) : 6
+
+/** Straight-line distance in km (good enough for a few km on a phone map). */
+export function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const dLat = (a.lat - b.lat) * 111, dLng = (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180)
+  return Math.sqrt(dLat * dLat + dLng * dLng)
+}
+
+/**
+ * One Kakao map that is made once and kept: pins and the radius circle are redrawn on it, so new results do not throw the
+ * person's view away. When the person drags or zooms, {@code onMove} gets the view 0.6 s after the map stops.
+ */
+function MovingKakaoMap({ places, origin, radiusKm, selected, onSelect, onMove, label, onFail }: Props & { onFail: () => void }) {
+  const box = useRef<HTMLDivElement>(null)
+  const map = useRef<any>(null)
+  const [kakao, setKakao] = useState<any>(null)
+  const choose = useRef(onSelect), move = useRef(onMove), fail = useRef(onFail)
+  choose.current = onSelect; move.current = onMove; fail.current = onFail
+  // Moves made by the code (centring on 내 위치, fitting the pins) are not the person's and do not ask for new results.
+  const quiet = useRef(false), touched = useRef(false), movedEver = useRef(false), fitted = useRef(false)
+  const start = useRef({ origin, places, radiusKm })
+  useEffect(() => {
+    let cancelled = false, timer = 0
+    loadKakao().then(k => {
+      if (cancelled || !box.current) return
+      const { origin: o, places: p, radiusKm: r } = start.current
+      const centre = o ?? placesCentre(p) ?? { lat: 37.8, lng: 127.08 }
+      const made = new k.maps.Map(box.current, { center: new k.maps.LatLng(centre.lat, centre.lng), level: levelFor(r, Boolean(o)) })
+      map.current = made
+      const mark = () => { if (!quiet.current) { touched.current = true; movedEver.current = true } }
+      k.maps.event.addListener(made, 'dragend', mark)
+      k.maps.event.addListener(made, 'zoom_changed', mark)
+      k.maps.event.addListener(made, 'idle', () => {
+        if (!touched.current) return
+        touched.current = false
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          const c = made.getCenter(), ne = made.getBounds().getNorthEast()
+          const at = { lat: c.getLat(), lng: c.getLng() }
+          move.current?.({ ...at, radiusKm: kmBetween(at, { lat: ne.getLat(), lng: ne.getLng() }) })
+        }, 600)
+      })
+      setKakao(k)
+    }).catch(() => fail.current())
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [])
+  const quietly = (work: () => void) => { quiet.current = true; try { work() } finally { window.setTimeout(() => { quiet.current = false }, 0) } }
+
+  // 내 위치 and its circle: centred again when it changes (unless the person has moved the map since).
+  useEffect(() => {
+    if (!kakao || !map.current || !origin) return
+    const position = new kakao.maps.LatLng(origin.lat, origin.lng)
+    if (!movedEver.current) quietly(() => { map.current.setLevel(levelFor(radiusKm, true)); map.current.setCenter(position) })
+    const drawn: any[] = [new kakao.maps.CustomOverlay({ map: map.current, position, content: '<span class="map-origin">●</span>' })]
+    if (radiusKm) drawn.push(new kakao.maps.Circle({ map: map.current, center: position, radius: radiusKm * 1000, strokeWeight: 2, strokeColor: '#2f6b4f', strokeOpacity: 0.7, fillColor: '#2f6b4f', fillOpacity: 0.08 }))
+    return () => drawn.forEach(item => item.setMap(null))
+  }, [kakao, origin, radiusKm])
+
+  useEffect(() => {
+    if (!kakao || !map.current) return
+    const drawn: any[] = []
+    const bounds = new kakao.maps.LatLngBounds()
+    const markers = located(places).map(place => {
+      const position = new kakao.maps.LatLng(place.latitude, place.longitude)
+      const big = selected === place.id
+      const image = place.tone ? new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pinSvg(toneColour[place.tone], big)),
+        new kakao.maps.Size(big ? 36 : 28, big ? 36 : 28), { offset: new kakao.maps.Point(big ? 18 : 14, big ? 34 : 26) }) : undefined
+      const marker = new kakao.maps.Marker({ position, title: place.name, image, zIndex: big ? 3 : place.tone === 'local' ? 2 : 1 })
+      kakao.maps.event.addListener(marker, 'click', () => choose.current?.(place.id))
+      bounds.extend(position)
+      return marker
+    })
+    if (markers.length >= 12 && kakao.maps.MarkerClusterer) {
+      const clusterer = new kakao.maps.MarkerClusterer({ map: map.current, averageCenter: true, minLevel: 5, gridSize: 50, disableClickZoom: false,
+        styles: [{ width: '40px', height: '40px', lineHeight: '40px', borderRadius: '20px', background: 'rgba(47, 111, 82, 0.88)', color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: '14px', border: '2px solid #fff' }] })
+      clusterer.addMarkers(markers)
+      drawn.push({ setMap: () => clusterer.clear() })
+    } else markers.forEach(marker => { marker.setMap(map.current); drawn.push(marker) })
+    // Without 내 위치: fit the first pins once, never after the person has moved the map.
+    if (!origin && !fitted.current && !movedEver.current && !bounds.isEmpty()) {
+      fitted.current = true
+      quietly(() => { map.current.setBounds(bounds); if (map.current.getLevel() > 8) map.current.setLevel(8) })
+    }
+    return () => drawn.forEach(item => item.setMap(null))
+  }, [kakao, places, selected, origin])
+  return <div ref={box} className="kakao-map" role="img" aria-label={label} />
 }
 
 function KakaoMap({ places, origin, radiusKm, selected, onSelect, onPick, label, onFail }: Props & { onFail: () => void }) {

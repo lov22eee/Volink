@@ -263,6 +263,8 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-map-box .kakao-map, .m-map-box .map-canvas { height: 56vh; min-height: 320px; border-radius: 0; }
 .m-map-card { position: absolute; left: 10px; right: 10px; bottom: 10px; }
 .m-map-box > .m-help { padding: 8px; }
+/* 찾기 지도: a small pill over the map while it looks again where the person moved it (or asks to zoom in). */
+.m-map-note { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; margin: 0; padding: 7px 14px; border-radius: 999px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 650; box-shadow: 0 2px 10px rgba(0,0,0,.15); white-space: nowrap; }
 
 /* detail */
 .m-detail .m-top { background: rgb(246 247 244 / 90%); }
@@ -1359,7 +1361,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 /* 1365 연결 A안 (2026-11-06): two choice cards with the app's line icons, safety notes. */
 .lab-choices { display: flex; flex-direction: column; gap: 10px; }
 .lab-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); text-align: left; font: inherit; color: var(--ink); }
-.lab-choice.main { border: 2px solid #3b67ad; background: #f5f8fd; }
+.lab-choice:active { background: #f3f5f3; transform: scale(0.99); }
 .lab-choice > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .lab-choice b { font-size: 16px; }
 .lab-choice small { font-size: 13px; color: var(--ink-3); line-height: 1.45; }

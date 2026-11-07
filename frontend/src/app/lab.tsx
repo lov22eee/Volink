@@ -15,7 +15,6 @@ const lab = registerPlugin<{ open(options: { guide: string; step?: string; targe
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
 
-const AGREED = 'volink.lab1365.agreed'
 /** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
 export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 아래 ‘이 화면 가져오기’ (신청 현황도 이어서)'
 /**
@@ -47,19 +46,11 @@ export function labStep(text: string, password: boolean, tookSummary = false, to
   return { step: Number(out.slice(0, 1)), kind: out.slice(1, 2), line: out.slice(3) }
 }
 
-const agreed = () => { try { return localStorage.getItem(AGREED) === '1' } catch { return false } }
-
-/**
- * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정): the first time a consent sheet, then the lab turns on and its
- * screen opens. Returns the sheet to render and the function to start.
- */
-export function useConnect1365(onCancel?: () => void): [ReactNode, () => void] {
-  const [open, setOpen] = useState(false)
-  const go = () => { setLabOn(true); window.location.hash = '#/lab1365' }
-  const start = () => agreed() ? go() : setOpen(true)
-  const sheet = open && <Sheet title="연결 전에 확인해 주세요" onClose={() => setOpen(false)}
-    footer={<><button type="button" className="m-btn blue" onClick={() => { try { localStorage.setItem(AGREED, '1') } catch { /* asked again next time */ } setOpen(false); go() }}>동의하고 계속하기</button>
-      <button type="button" className="m-btn line" onClick={() => { setOpen(false); onCancel?.() }}>다음에 할게요</button></>}>
+/** What happens when connecting (2026-11-07: shown every time a card is tapped, before 1365 opens). */
+function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () => void }) {
+  return <Sheet title="연결 전에 확인해 주세요" onClose={onClose}
+    footer={<><button type="button" className="m-btn blue" onClick={onAgree}>동의하고 계속하기</button>
+      <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
     <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
     <ul className="lab-consent">
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
@@ -68,7 +59,15 @@ export function useConnect1365(onCancel?: () => void): [ReactNode, () => void] {
       <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’나 실적확인서로 넣어 주세요</small></span></li>
     </ul>
   </Sheet>
-  return [sheet, start]
+}
+
+/**
+ * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정, 시작 안내): the lab turns on and its screen opens. The consent
+ * sheet comes when a card there is tapped (2026-11-07). Returns nothing to render (kept for callers) and the function to start.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function useConnect1365(_onCancel?: () => void): [ReactNode, () => void] {
+  return [null, () => { setLabOn(true); window.location.hash = '#/lab1365' }]
 }
 
 /**
@@ -165,6 +164,8 @@ export function LabScreen() {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
+  // The card tapped: the consent sheet first, then that 1365 page (2026-11-07).
+  const [asking, setAsking] = useState<'' | 'S' | 'A'>('')
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setLast(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   const [rows, setRows] = useState<LabRow[] | null>(null)
@@ -225,10 +226,10 @@ export function LabScreen() {
         <h1 className="m-h2">무엇을 가져올까요?</h1>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
-          <button type="button" className="lab-choice main" onClick={() => native ? open('S') : setWebFor('S')}>
+          <button type="button" className="lab-choice" onClick={() => setAsking('S')}>
             <span className="lab-choice-ico"><MIcon name="timer" size={24} /></span>
             <span><b>봉사참여 실적</b><small>총 봉사시간·건수</small></span><MIcon name="chevron" size={18} /></button>
-          <button type="button" className="lab-choice" onClick={() => native ? open('A') : setWebFor('A')}>
+          <button type="button" className="lab-choice" onClick={() => setAsking('A')}>
             <span className="lab-choice-ico g"><MIcon name="list" size={24} /></span>
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>
@@ -255,6 +256,7 @@ export function LabScreen() {
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
     </div>
+    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); if (native) open(t); else setWebFor(t) }} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
