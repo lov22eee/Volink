@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
 import { showToast } from '../App'
-import { Loading, MIcon, Sheet, TopBar } from './ui'
+import { ActionBar, Loading, MIcon, Sheet, TopBar } from './ui'
 import type { MIconName } from './ui'
 
 type Account = { method: 'EMAIL' | 'KAKAO' | 'GOOGLE'; email: string | null; links: { provider: string; linkedOn: string }[]; joinedOn: string; memberType: string }
@@ -83,8 +83,9 @@ export function AccountScreen({ onWithdrawn }: { onWithdrawn: () => void }) {
     setBusy(true)
     try {
       await api('/api/me/withdraw', 'POST', { confirm: true })
-      showToast('탈퇴했어요. 그동안 고마웠어요.')
-      onWithdrawn()
+      // After the switch to the login screen (its own toast host), or the toast goes away with this screen.
+      await onWithdrawn()
+      window.setTimeout(() => showToast('완료되었습니다.', '그동안 이용해 주셔서 감사합니다.'), 150)
     } catch (error) {
       showToast(error instanceof Error ? error.message : '탈퇴하지 못했어요')
       api<Preview>('/api/me/withdrawal').then(setPreview).catch(() => {})
@@ -98,22 +99,27 @@ export function AccountScreen({ onWithdrawn }: { onWithdrawn: () => void }) {
         <p>아래 활동을 먼저 취소해야 탈퇴할 수 있어요.</p>
         <div className="m-set-links">{preview.blocking.map(a => <a key={a.id} href={'#/manage/' + a.id}><span>{a.title}</span><small>{a.date}</small><MIcon name="chevron" size={17} /></a>)}</div>
       </section> : null}
-      <section className="m-set-card pad" aria-label="탈퇴하면">
-        <strong>탈퇴하면 이렇게 돼요</strong>
-        <ul className="m-bullets">
-          {preview.applications > 0 && <li>시작 전인 신청 <b>{preview.applications}개</b>가 취소되고, 자리는 다음 대기자에게 넘어가요.</li>}
-          {preview.hosted > 0 && <li>내가 올린 모집글 <b>{preview.hosted}개</b>가 지난 것까지 모두 삭제돼요. 커뮤니티 후기에 붙은 모집글 연결도 사라져요.</li>}
-          <li>이름·이메일·생년월일·닉네임·관심 분야·저장한 봉사·알림이 지워져요.</li>
-          <li>커뮤니티 글과 댓글은 남고 작성자는 ‘탈퇴한 회원’으로 보여요. 지우고 싶은 글은 탈퇴 전에 지워 주세요.</li>
-          <li>Volink 활동 기록은 되살릴 수 없어요. 같은 카카오·구글 계정으로 다시 가입하면 새 계정이 돼요.</li>
+      {/* 2026-11-07: no card — a title, rows with the app's line icons, the check and the buttons at the bottom. */}
+      <section className="wd" aria-label="탈퇴하면">
+        <h2 className="wd-title">탈퇴하면 이렇게 돼요</h2>
+        <ul className="wd-list">
+          {preview.applications > 0 && <li><MIcon name="calendar" size={20} /><span>시작 전인 신청 <b>{preview.applications}개</b>가 취소되고, 자리는 다음 대기자에게 넘어가요.</span></li>}
+          {preview.hosted > 0 && <li><MIcon name="trash" size={20} /><span>내가 올린 모집글 <b>{preview.hosted}개</b>가 지난 것까지 모두 삭제돼요. 커뮤니티 후기에 붙은 모집글 연결도 사라져요.</span></li>}
+          <li><MIcon name="user" size={20} /><span>이름·이메일·생년월일·닉네임·관심 분야·저장한 봉사·알림이 지워져요.</span></li>
+          <li><MIcon name="chat" size={20} /><span>커뮤니티 글과 댓글은 남고 작성자는 ‘탈퇴한 회원’으로 보여요. 지우고 싶은 글은 탈퇴 전에 지워 주세요.</span></li>
+          <li><MIcon name="alert" size={20} /><span>Volink 활동 기록은 되살릴 수 없어요. 같은 카카오·구글 계정으로 다시 가입하면 새 계정이 돼요.</span></li>
         </ul>
       </section>
-      <label className="m-check box"><input type="checkbox" checked={agreed} onChange={event => setAgreed(event.target.checked)} /><span className="m-box" /><span>위 내용을 확인했고 탈퇴할게요.</span></label>
-      <div className="m-two">
-        <button type="button" className="m-btn line" onClick={() => { setStep('view'); setAgreed(false) }}>돌아가기</button>
-        <button type="button" className="m-btn danger" disabled={!agreed || busy || !preview.allowed} onClick={withdraw}>탈퇴하기</button>
-      </div>
     </>}</div>
+    {preview && <ActionBar>
+      <div className="wd-foot">
+        <label className="m-check wd-agree"><input type="checkbox" checked={agreed} onChange={event => setAgreed(event.target.checked)} /><span className="m-box" /><span>위 내용을 확인했고 탈퇴할게요.</span></label>
+        <div className="m-two">
+          <button type="button" className="m-btn line" onClick={() => { setStep('view'); setAgreed(false) }}>돌아가기</button>
+          <button type="button" className="m-btn danger" disabled={!agreed || busy || !preview.allowed} onClick={withdraw}>탈퇴하기</button>
+        </div>
+      </div>
+    </ActionBar>}
   </div>
 
   return <div className="m-screen"><TopBar title="연결된 로그인 계정" back="#/settings" />

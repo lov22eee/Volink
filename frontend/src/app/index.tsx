@@ -98,7 +98,7 @@ export default function MobileApp() {
   let screen
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
-    case 'lab1365': screen = <LabScreen />; break
+    case 'lab1365': screen = <LabScreen go={route.query.get('go') ?? undefined} />; break
     case 'record': screen = route.id ? <RecordScreen key={route.id} id={route.id} /> : null; break
     case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break

@@ -6,7 +6,7 @@ import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, dDay, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
 import { RecordRow, useRecords } from './record'
-import { hoursText, useConnect1365 } from './lab'
+import { hoursText, useConnect1365, useImport1365 } from './lab'
 import type { LabSummary } from './lab'
 
 type View = 'join' | 'host' | 'done'
@@ -72,13 +72,16 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
   }, [])
   // 1365 activities I marked (V27): still to come or waiting for "다녀왔어요?" under 참여 예정, the ones I went to under 완료 기록.
-  const external = useRecords()
+  const [recordsVersion, setRecordsVersion] = useState(0)
+  const external = useRecords(recordsVersion)
   const extPlanned = (external ?? []).filter(r => r.status === 'PLANNED').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
   const extDone = (external ?? []).filter(r => r.status === 'ATTENDED').sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
   const hostLive = (hosted ?? []).filter(isLive)
   const volinkDone = (records ?? []).slice().sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime))
   // Lab (V28): my 1365 total as read from my own 1365 page (not checked by Volink).
   const [connectSheet, connect] = useConnect1365()
+  // Empty 참여 예정 / 완료 기록 [가져오기] (2026-11-07): 1365에서 가져오기 / 직접 추가하기 right here.
+  const [importSheet, importFrom] = useImport1365(() => setRecordsVersion(v => v + 1))
   const [summary, setSummary] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(s => setSummary(s.fetchedAt ? s as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   // 완료 기록 (B): one list, newest first, filtered by the chip.
@@ -110,7 +113,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
           {dDay(p.date) && <span className="m-dday">{dDay(p.date)}</span>}
           <span className="m-btn sm">{p.status === 'OFFERED' ? '자리 제안 확인' : '활동 상세 보기'}</span>
         </a>)}</div> : !extPlanned.length && <Empty bare icon="calendar" title="참여 예정인 활동이 없어요"
-          action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={connect}>1365 가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />}
+          action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('A')}>가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />}
         {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><button type="button" className="m-more" onClick={connect}>1365 가져오기 ›</button></div>
           <div className="m-list">{extPlanned.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
         {ended.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 신청</h2></div><div className="m-list">{ended.map(p =>
@@ -132,7 +135,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
       {/* 2026-11-06 (B): 함께한 시간 (1365 + Volink) · 1365 연결/새로고침 · chips [전체 · 1365 · Volink] · one list, newest first. */}
       {view === 'done' && (!records || !external ? <Loading /> : !records.length && !extDone.length && !summary
         ? <Empty bare icon="record" title="아직 완료 기록이 없어요" text="1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요."
-            action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={connect}>1365 실적 연결</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />
+            action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('S')}>가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />
         : <>
           <section className="my-total" aria-label="함께한 시간">
             <small>함께한 시간</small>
@@ -149,6 +152,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
         </>)}
     </div>
     {connectSheet}
+    {importSheet}
     {view !== 'done' && <RecruitFab />}
   </div>
 }

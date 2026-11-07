@@ -28,7 +28,12 @@ async function signupByApi(page: Page, name: string) {
 /** A 1365 연결 card: the consent sheet comes first (2026-11-07), then the page (on the web: the paste box). */
 async function labCard(page: Page, name: RegExp) {
   await page.getByRole('button', { name }).click()
-  await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '동의하고 계속하기' }).click()
+  // After the first connection the card asks 1365에서 가져오기 / 직접 추가하기 instead (2026-11-07).
+  const consent = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '동의하고 계속하기' })
+  const from1365 = page.getByRole('button', { name: /^1365에서 가져오기/ })
+  await expect(consent.or(from1365)).toBeVisible()
+  if (await from1365.isVisible()) await from1365.click()
+  await consent.click()
 }
 
 async function pickDay(page: Page, field: string | RegExp, date: string) {
@@ -689,15 +694,13 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await login(page, member)
   await page.goto('/#/mine?tab=done')
   await expect(page.getByText('아직 완료 기록이 없어요')).toBeVisible()
-  await page.getByRole('button', { name: '1365 실적 연결' }).click()
-  await expect(page).toHaveURL(/#\/lab1365/)
-  await expect(page.getByRole('heading', { name: '무엇을 가져올까요?' })).toBeVisible()
-  // 2026-11-07: each card asks first (bottom sheet), then goes on (on the web: the paste box).
-  await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
+  // 2026-11-07: [가져오기] → 1365에서 가져오기 / 직접 추가하기 → consent → that 1365 page (on the web: the paste box).
+  await page.getByRole('button', { name: '가져오기', exact: true }).click()
+  await page.getByRole('dialog', { name: '봉사참여 실적' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
-  await expect(sheet).toHaveCount(0)
+  await expect(page).toHaveURL(/#\/lab1365$/)
   await expect(page.getByText(/봉사참여 실적 화면 글자를 붙여 넣기/)).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
@@ -844,4 +847,39 @@ test('search: a 1365 result opens that program, not the 찾기 list', async ({ p
   await expect(sheet.getByRole('link', { name: /1365에서 신청하기/ })).toBeVisible()
   await expect(page).toHaveURL(/#\/search/)
   await page.unroute('**/api/volunteer-programs**')
+})
+
+test('1365 직접 추가하기: after a first connection a card offers 1365 or by hand — a certificate makes a 완료 기록, a typed name a 참여 예정', async ({ page }) => {
+  const member = await signupByApi(page, '직접 추가')
+  await login(page, member)
+  const auth = await tokenFor(page, member)
+  await page.request.put('/api/me/external/summary', { headers: { Authorization: auth }, data: { totalMinutes: 3450, count: 14 } })
+  await page.goto('/#/lab1365')
+  await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
+  const ways = page.getByRole('dialog', { name: '봉사참여 실적' })
+  // 1365에서 가져오기 still asks for consent first.
+  await ways.getByRole('button', { name: /^1365에서 가져오기/ }).click()
+  await expect(page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })).toBeVisible()
+  await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '다음에 할게요' }).click()
+  await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
+  await ways.getByRole('button', { name: /^직접 추가하기/ }).click()
+  await expect(page.getByRole('dialog', { name: '실적확인서 추가' })).toBeVisible()
+  await page.locator('input[type=file][accept="application/pdf"]').setInputFiles({ name: 'cert.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a pdf') })
+  const check = page.getByRole('dialog', { name: '이 내용이 맞나요?' })
+  await check.locator('label:has-text("활동명") input').fill('노인복지관 배식 지원')
+  await check.locator('label:has-text("인정 시간") input').fill('180')
+  await check.getByRole('button', { name: '완료 기록에 넣기' }).click()
+  await expect(page).toHaveURL(/tab=done/)
+  await expect(page.getByRole('link', { name: /노인복지관 배식 지원.*실적확인서 있음/ })).toBeVisible()
+
+  await page.goto('/#/lab1365')
+  await page.getByRole('button', { name: /^신청 현황/ }).click()
+  await page.getByRole('dialog', { name: '신청 현황' }).getByRole('button', { name: /^직접 추가하기/ }).click()
+  await page.getByRole('button', { name: /이름·날짜 직접 적기/ }).click()
+  const mark = page.getByRole('dialog', { name: '신청한 활동 넣기' })
+  await mark.getByPlaceholder('1365에서 신청한 활동 이름').fill('경로당 말벗 봉사')
+  await mark.getByRole('checkbox').uncheck({ force: true })
+  await mark.getByRole('button', { name: '참여 예정에 넣기' }).click()
+  await expect(page).toHaveURL(/#\/mine/)
+  await expect(page.getByRole('link', { name: /경로당 말벗 봉사/ })).toBeVisible()
 })
