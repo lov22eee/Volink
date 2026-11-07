@@ -53,7 +53,7 @@ function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () =
       <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
     <ul className="lab-consent">
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365에 직접 로그인하고, 창을 닫으면 로그아웃돼요</small></span></li>
-      <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 고른 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
+      <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 체크한 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
       <li><MIcon name="checkCircle" size={18} /><span><b>가져온 날 기준이에요</b><small>그 뒤에 늘어난 실적은 다시 가져오면 돼요</small></span></li>
       <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 안 될 수 있어요</b><small>그때는 날짜를 직접 넣어 주세요</small></span></li>
     </ul>
