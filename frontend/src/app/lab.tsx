@@ -8,7 +8,8 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import { DateField } from './host'
-import { AddApplicationSheet, CertificateSheet } from './record'
+import { AddApplicationSheet } from './record'
+import { ProofSheet } from './proof'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A'; url?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
@@ -69,8 +70,8 @@ function WaysSheet({ target, note, onClose, on1365, onAdd }: { target: 'S' | 'A'
     <div className="lab-ways">
       <button type="button" className="lab-way" onClick={on1365}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
         <span><b>1365에서 가져오기</b><small>{target === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
-      <button type="button" className="lab-way" onClick={onAdd}><span className="lab-way-ico"><MIcon name={target === 'S' ? 'camera' : 'calendar'} size={20} /></span>
-        <span><b>직접 추가하기</b><small>{target === 'S' ? '실적확인서 사진·PDF로 활동 하나씩' : '신청한 활동과 날짜를 넣어요'}</small></span></button>
+      <button type="button" className="lab-way" onClick={onAdd}><span className="lab-way-ico"><MIcon name={target === 'S' ? 'record' : 'search'} size={20} /></span>
+        <span><b>{target === 'S' ? '실적확인서로 넣기' : '1365 활동 찾아서 넣기'}</b><small>{target === 'S' ? '1365 자원봉사활동 확인서 PDF·사진' : '신청한 1365 활동을 검색해서 골라요'}</small></span></button>
     </div>
     <p className="m-help">{note ? note + ' · ' : ''}비밀번호는 Volink로 오지 않아요</p>
   </Sheet>
@@ -87,7 +88,7 @@ export function useImport1365(onSaved?: () => void): [ReactNode, (target: 'S' | 
   const node = <>
     {choosing && <WaysSheet target={choosing} onClose={() => setChoosing('')} on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); setLabOn(true); window.location.hash = '#/lab1365?go=' + t }} />}
-    {adding === 'S' && <CertificateSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); onSaved?.() }} />}
+    {adding === 'S' && <ProofSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); onSaved?.() }} onUse1365={() => { setAdding(''); setAsking('S') }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} onSaved={onSaved} />}
   </>
   return [node, setChoosing]
@@ -322,7 +323,7 @@ export function LabScreen({ go }: { go?: string }) {
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
     {choosing && <WaysSheet target={choosing} note={last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')}` : undefined} onClose={() => setChoosing('')}
       on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
-    {adding === 'S' && <CertificateSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); window.location.hash = '#/mine?tab=done' }} />}
+    {adding === 'S' && <ProofSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); window.location.hash = '#/mine?tab=done' }} onUse1365={() => { setAdding(''); setAsking('S') }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
@@ -334,8 +335,8 @@ export function LabScreen({ go }: { go?: string }) {
       </div>}</ActionBar>}
     {manual && <Sheet title="직접 등록하기" onClose={() => setManual(false)}>
       <div className="r-opts">
-        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('A') }}><MIcon name="calendar" size={20} /><span><b>신청 등록</b><small>신청한 1365 활동과 날짜를 넣어요</small></span></button>
-        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('S') }}><MIcon name="camera" size={20} /><span><b>실적 등록</b><small>실적확인서 사진·PDF로 활동을 넣어요</small></span></button>
+        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('A') }}><MIcon name="search" size={20} /><span><b>신청 등록</b><small>신청한 1365 활동을 찾아서 날짜를 넣어요</small></span></button>
+        <button type="button" className="r-opt" onClick={() => { setManual(false); setAdding('S') }}><MIcon name="record" size={20} /><span><b>실적 등록</b><small>1365 자원봉사활동 확인서 PDF·사진으로 넣어요</small></span></button>
       </div>
       <p className="m-help">실적확인서 파일은 Volink로 보내지 않고 폰 안에서만 읽어요.</p>
     </Sheet>}

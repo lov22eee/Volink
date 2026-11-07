@@ -113,13 +113,18 @@ export function AskSheet({ program, onClose, onManual }: { program: Program; onC
 }
 
 /** A row for 내 활동 (참여 예정 / 완료 기록). */
+const hoursOf = (minutes: number) => `${Math.floor(minutes / 60)}시간${minutes % 60 ? ' ' + (minutes % 60) + '분' : ''}`
+
 export function RecordRow({ r }: { r: ExternalRecord }) {
   const tag = recordTag(r)
   const wait = waiting(r, useExtMode())
   const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
   return <a className="m-row" href={'#/record/' + r.id}>
     <span className="m-row-ico ext"><b>1365</b></span>
-    <span className="m-row-main"><strong>{r.title}</strong><small>{recordWhen(r)} · {tag.text}{r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}</small></span>
+    <span className="m-row-main"><strong>{r.title}</strong><small>{r.certified && r.certDate
+      // A certificate (2026-11-07: it may be years ago and sum a period): its day with the year when it is not this year, and its hours.
+      ? `${r.certDate.slice(0, 4) === String(new Date().getFullYear()) ? r.certDate.slice(5).replace('-', '/') : r.certDate.replaceAll('-', '.')} · ${tag.text} · ${hoursOf(r.certMinutes ?? 0)}`
+      : `${recordWhen(r)} · ${tag.text}${r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}`}</small></span>
     <span className={'m-badge ' + (wait ? 'amber' : r.reflected ? 'blue' : r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
   </a>
 }
@@ -322,23 +327,22 @@ export function AddApplicationSheet({ onClose, onSaved }: { onClose: () => void;
   const [found, setFound] = useState<Program[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [chosen, setChosen] = useState<Program | null>(null)
-  const [manual, setManual] = useState(false)
   async function search() {
     if (q.trim().length < 2) return
     setBusy(true)
     try { setFound((await api<{ items: Program[] }>('/api/volunteer-programs?nationwide=true&q=' + encodeURIComponent(q.trim()))).items.slice(0, 8)) } catch { setFound([]) } finally { setBusy(false) }
   }
   const done = () => { onClose(); if (onSaved) onSaved(); else window.location.hash = '#/mine' }
-  if (chosen) return <MarkSheet program={chosen} onClose={() => setChosen(null)} onSaved={done} manual={manual} />
-  return <Sheet title="신청한 활동 넣기" onClose={onClose}
-    footer={<button type="button" className="m-btn line" onClick={() => { setManual(true); setChosen({ programNo: '', title: q.trim(), organization: null, place: null, field: null, periodStart: null, periodEnd: null, beginTime: null, endTime: null, weekdays: null, recruitStatus: null, recruitEnd: null, capacity: null, youthOk: null, latitude: null, longitude: null, distanceKm: null, link: '' }) }}>못 찾으면 이름·날짜 직접 적기</button>}>
+  if (chosen) return <MarkSheet program={chosen} onClose={() => setChosen(null)} onSaved={done} />
+  return <Sheet title="1365 활동 찾아서 넣기" onClose={onClose}>
+    <p className="m-help">1365에서 신청한 활동을 검색해서 골라 주세요.</p>
     <form className="m-search-row" onSubmit={event => { event.preventDefault(); search() }}>
       <label className="m-search"><MIcon name="search" size={18} /><TextInput type="search" enterKeyHint="search" value={q} placeholder="1365 활동 이름·기관 검색" aria-label="1365 활동 검색" onChange={event => setQ(event.target.value)} /></label>
     </form>
     {busy ? <div className="r-reading" role="status"><span className="m-spin" />찾는 중이에요</div>
-      : found === null ? <p className="m-help">1365에서 신청한 활동 이름을 검색해 주세요.</p>
-      : found.length === 0 ? <p className="m-help">찾지 못했어요. 아래에서 이름·날짜를 직접 적을 수 있어요.</p>
-      : <div className="r-opts">{found.map(p => <button key={p.programNo} type="button" className="r-opt" onClick={() => { setManual(false); setChosen(p) }}>
+      : found === null ? null
+      : found.length === 0 ? <p className="m-help">찾지 못했어요. 다른 이름으로 찾거나 ‘1365에서 가져오기’로 신청 내역을 가져와 주세요.</p>
+      : <div className="r-opts">{found.map(p => <button key={p.programNo} type="button" className="r-opt" onClick={() => setChosen(p)}>
         <MIcon name="calendar" size={20} /><span><b>{p.title}</b><small>{[p.organization, p.periodStart && p.periodEnd ? `${fromCompact(p.periodStart)?.slice(5).replace('-', '/')} ~ ${fromCompact(p.periodEnd)?.slice(5).replace('-', '/')}` : null].filter(Boolean).join(' · ')}</small></span></button>)}</div>}
   </Sheet>
 }
