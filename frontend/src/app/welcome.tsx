@@ -19,7 +19,12 @@ export function WelcomeScreen() {
     setBusy(true)
     try { await saveExtMode(mode) } catch { /* asked again in 설정 */ }
     setBusy(false)
-    if (mode === 'IMPORT') connect()
+    if (mode === 'IMPORT') {
+      // 2026-11-07: the guide is done — its place in the history becomes 홈, so back from the 1365 screen goes home
+      // instead of starting the guide again at 위치 허용.
+      window.history.replaceState(null, '', '#/home')
+      connect()
+    }
     else { showToast('1365 봉사는 직접 남기면 돼요', '다녀온 뒤 ‘참여했나요?’ → 실적확인서 올리기'); done() }
   }
   async function allowLocation() {
