@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.os.Message;
 import android.view.View;
+import android.webkit.JsResult;
 import android.webkit.WebChromeClient;
 import android.widget.FrameLayout;
 import android.view.ViewGroup;
@@ -242,6 +243,9 @@ public class LabActivity extends AppCompatActivity {
                 popup.setWebViewClient(new Guard(false));
                 popup.setWebChromeClient(new WebChromeClient() {
                     @Override public void onCloseWindow(WebView window) { closePopup(); }
+
+                    @Override
+                    public boolean onJsAlert(WebView view, String url, String message, JsResult result) { return quietAlert(message, result); }
                 });
                 frame.addView(popup, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 ((WebView.WebViewTransport) resultMsg.obj).setWebView(popup);
@@ -250,6 +254,9 @@ public class LabActivity extends AppCompatActivity {
             }
 
             @Override public void onCloseWindow(WebView window) { closePopup(); }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, JsResult result) { return quietAlert(message, result); }
         });
 
         // Bottom: the button exists only on the 실적 / 신청 현황 page itself (updateTake), green.
@@ -381,6 +388,15 @@ public class LabActivity extends AppCompatActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         // The auth pages are framed or set their cookies from another site; everything is wiped when this screen closes.
         CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+    }
+
+    /**
+     * 1365 says '로그인 정보가 없습니다' when its 실적/신청 page is opened before signing in (the app opens that page directly),
+     * then goes to its login page by itself: that one alert is passed over. Any other alert shows as usual.
+     */
+    private boolean quietAlert(String message, JsResult result) {
+        if (message != null && message.replace(" ", "").contains("로그인정보가없")) { result.confirm(); return true; }
+        return false;
     }
 
     private void closePopup() {
