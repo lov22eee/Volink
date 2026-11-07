@@ -285,7 +285,7 @@ export function LabScreen() {
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
     {choosing && <Sheet title={choosing === 'S' ? '봉사참여 실적' : '신청 현황'} onClose={() => setChoosing('')}>
       <div className="lab-ways">
-        <button type="button" className="lab-way main" onClick={() => { const t = choosing; setChoosing(''); go1365(t) }}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
+        <button type="button" className="lab-way" onClick={() => { const t = choosing; setChoosing(''); go1365(t) }}><span className="lab-way-ico"><MIcon name="refresh" size={20} /></span>
           <span><b>1365에서 가져오기</b><small>{choosing === 'S' ? '1365에 로그인해 총 시간·건수를 가져와요' : '1365 신청 내역을 그대로 가져와요'}</small></span></button>
         <button type="button" className="lab-way" onClick={() => { const t = choosing; setChoosing(''); setAdding(t) }}><span className="lab-way-ico"><MIcon name={choosing === 'S' ? 'camera' : 'calendar'} size={20} /></span>
           <span><b>직접 추가하기</b><small>{choosing === 'S' ? '실적확인서 사진·PDF로 활동 하나씩' : '신청한 활동과 날짜를 넣어요'}</small></span></button>
