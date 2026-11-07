@@ -93,7 +93,7 @@ export function MarkSheet({ program, onClose, onSaved }: { program: Program; onC
     <DateField label="참여하는 날" value={date} first={first ?? today} last={last ?? addYear(today)} onChange={setDate}
       note={first && last ? `1365 모집 기간 ${first.slice(5).replace('-', '/')} ~ ${last.slice(5).replace('-', '/')} 안에서 골라요` : '1년 안에서 골라요'} />
     {outside && <span className="m-err">1365 모집 기간({first} ~ {last}) 밖의 날짜예요. 맞는지 확인해 주세요.</span>}
-    <div className="m-two"><TimeField label="시작" value={start} onChange={setStart} /><TimeField label="끝" value={end} onChange={setEnd} /></div>
+    <div className="m-two"><TimeField label="시작" value={start} onChange={setStart} /><TimeField label="종료" value={end} onChange={setEnd} /></div>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
 }
