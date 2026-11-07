@@ -15,7 +15,6 @@ const lab = registerPlugin<{ open(options: { guide: string; step?: string; targe
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
 
-const AGREED = 'volink.lab1365.agreed'
 /** The one line shown above the 1365 page in the app (plan 1, 2026-11-06): where to go after logging in. */
 export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사참여 실적 → 아래 ‘이 화면 가져오기’ (신청 현황도 이어서)'
 /**
@@ -47,28 +46,27 @@ export function labStep(text: string, password: boolean, tookSummary = false, to
   return { step: Number(out.slice(0, 1)), kind: out.slice(1, 2), line: out.slice(3) }
 }
 
-const agreed = () => { try { return localStorage.getItem(AGREED) === '1' } catch { return false } }
-
-/**
- * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정): the first time a consent sheet, then the lab turns on and its
- * screen opens. Returns the sheet to render and the function to start.
- */
-export function useConnect1365(onCancel?: () => void): [ReactNode, () => void] {
-  const [open, setOpen] = useState(false)
-  const go = () => { setLabOn(true); window.location.hash = '#/lab1365' }
-  const start = () => agreed() ? go() : setOpen(true)
-  const sheet = open && <Sheet title="연결 전에 확인해 주세요" onClose={() => setOpen(false)}
-    footer={<><button type="button" className="m-btn blue" onClick={() => { try { localStorage.setItem(AGREED, '1') } catch { /* asked again next time */ } setOpen(false); go() }}>동의하고 계속하기</button>
-      <button type="button" className="m-btn line" onClick={() => { setOpen(false); onCancel?.() }}>다음에 할게요</button></>}>
-    <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
+/** What happens when connecting (2026-11-07: shown every time a card is tapped, before 1365 opens). */
+function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () => void }) {
+  return <Sheet title="연결 전에 확인해 주세요" onClose={onClose}
+    footer={<><button type="button" className="m-btn blue" onClick={onAgree}>동의하고 계속하기</button>
+      <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
     <ul className="lab-consent">
-      <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365 화면에 직접 로그인하고, 닫으면 로그인도 지워요</small></span></li>
-      <li><MIcon name="record" size={18} /><span><b>내가 연 화면의 글자만 폰 안에서 읽어요</b><small>총 시간·건수·분야와 고른 신청 내역만 남기고, 이름은 남기지 않아요</small></span></li>
-      <li><MIcon name="checkCircle" size={18} /><span><b>1365 공식 실적을 내 화면에서 옮겨 와요</b><small>가져온 날 기준이에요. 그 뒤 바뀐 실적과 확인서 발급은 1365에서 확인해 주세요</small></span></li>
-      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 멈출 수 있어요</b><small>그때는 ‘이미 신청했어요’나 실적확인서로 넣어 주세요</small></span></li>
+      <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365에 직접 로그인하고, 창을 닫으면 로그아웃돼요</small></span></li>
+      <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 체크한 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
+      <li><MIcon name="checkCircle" size={18} /><span><b>가져온 날 기준이에요</b><small>이후에 늘어난 실적은 다시 가져오면 돼요</small></span></li>
+      <li><MIcon name="alert" size={18} /><span><b>1365 화면이 바뀌면 안 될 수 있어요</b><small>업데이트 전까지 직접 신청등록/실적등록을 이용해 주세요</small></span></li>
     </ul>
   </Sheet>
-  return [sheet, start]
+}
+
+/**
+ * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정, 시작 안내): the lab turns on and its screen opens. The consent
+ * sheet comes when a card there is tapped (2026-11-07). Returns nothing to render (kept for callers) and the function to start.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function useConnect1365(_onCancel?: () => void): [ReactNode, () => void] {
+  return [null, () => { setLabOn(true); window.location.hash = '#/lab1365' }]
 }
 
 /**
@@ -165,6 +163,8 @@ export function LabScreen() {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
+  // The card tapped: the consent sheet first, then that 1365 page (2026-11-07).
+  const [asking, setAsking] = useState<'' | 'S' | 'A'>('')
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
   useEffect(() => { api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setLast(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => {}) }, [])
   const [rows, setRows] = useState<LabRow[] | null>(null)
@@ -218,27 +218,29 @@ export function LabScreen() {
   const md = (d?: string) => d ? d.slice(5).replace('-', '/') : ''
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
-    <div className="m-body lab">
-      <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
-      {!rows ? <>
-        {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. */}
+    <div className={'m-body lab' + (rows ? '' : ' pick')}>
+      {rows && <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>}
+      {!rows ? <div className="lab-pick">
+        {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. 2026-11-07: in the middle of the screen. */}
+        <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
         <h1 className="m-h2">무엇을 가져올까요?</h1>
+        <p className="lab-sub">1365에 있는 내 기록을 바로 가져와요</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
-          <button type="button" className="lab-choice main" onClick={() => native ? open('S') : setWebFor('S')}>
+          <button type="button" className="lab-choice" onClick={() => setAsking('S')}>
             <span className="lab-choice-ico"><MIcon name="timer" size={24} /></span>
             <span><b>봉사참여 실적</b><small>총 봉사시간·건수</small></span><MIcon name="chevron" size={18} /></button>
-          <button type="button" className="lab-choice" onClick={() => native ? open('A') : setWebFor('A')}>
+          <button type="button" className="lab-choice" onClick={() => setAsking('A')}>
             <span className="lab-choice-ico g"><MIcon name="list" size={24} /></span>
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>
         <ul className="lab-safe">
-          <li><MIcon name="lock" size={16} />비밀번호는 Volink로 오지 않아요</li>
-          <li><MIcon name="user" size={16} />이름은 저장하지 않아요</li>
+          <li><MIcon name="lock" size={14} />비밀번호는 Volink로 오지 않아요</li>
+          <li><MIcon name="user" size={14} />이름은 저장하지 않아요</li>
         </ul>
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
-      </> : <>
+      </div> : <>
         <h1 className="m-h2">{summary && !rows.length ? '1365 봉사 실적을 찾았어요' : rows.length ? `신청 내역 ${rows.length}개를 찾았어요` : '읽을 내용을 찾지 못했어요'}</h1>
         {summary && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
@@ -255,6 +257,7 @@ export function LabScreen() {
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
     </div>
+    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); if (native) open(t); else setWebFor(t) }} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>

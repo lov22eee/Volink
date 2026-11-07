@@ -263,6 +263,8 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-map-box .kakao-map, .m-map-box .map-canvas { height: 56vh; min-height: 320px; border-radius: 0; }
 .m-map-card { position: absolute; left: 10px; right: 10px; bottom: 10px; }
 .m-map-box > .m-help { padding: 8px; }
+/* 찾기 지도: a small pill over the map while it looks again where the person moved it (or asks to zoom in). */
+.m-map-note { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; margin: 0; padding: 7px 14px; border-radius: 999px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 650; box-shadow: 0 2px 10px rgba(0,0,0,.15); white-space: nowrap; }
 
 /* detail */
 .m-detail .m-top { background: rgb(246 247 244 / 90%); }
@@ -1356,17 +1358,24 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-empty.bare:has(+ .m-section) { min-height: 44dvh; }
 .lab-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .lab-actions .m-text-btn { align-self: center; color: var(--ink-3); font-size: 13.5px; }
-/* 1365 연결 A안 (2026-11-06): two choice cards with the app's line icons, safety notes. */
-.lab-choices { display: flex; flex-direction: column; gap: 10px; }
-.lab-choice { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); text-align: left; font: inherit; color: var(--ink); }
-.lab-choice.main { border: 2px solid #3b67ad; background: #f5f8fd; }
-.lab-choice > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.lab-choice b { font-size: 16px; }
-.lab-choice small { font-size: 13px; color: var(--ink-3); line-height: 1.45; }
+/* 1365 연결 A안 (2026-11-06): two choice cards with the app's line icons, safety notes. 2026-11-07: the block sits in the
+   middle of the screen, title centred; cards with an even rhythm (icon 52 · title 17 · note 13.5). */
+.m-body.lab.pick { display: flex; flex-direction: column; }
+.lab-pick { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 0; padding-bottom: 6vh; }
+.lab-pick > .lab-tag { align-self: center; }
+.lab-pick > .m-h2 { margin: 12px 0 0; text-align: center; font-size: 24px; letter-spacing: -0.02em; }
+.lab-sub { margin: 6px 0 22px; text-align: center; font-size: 14px; color: var(--ink-3); }
+.lab-pick > .lab-last { margin-bottom: 12px; justify-content: center; }
+.lab-choices { display: flex; flex-direction: column; gap: 12px; }
+.lab-choice { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 88px; padding: 18px 16px 18px 18px; border-radius: 20px; background: #fff; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(20, 40, 30, 0.04); text-align: left; font: inherit; color: var(--ink); transition: transform .12s, background .12s; }
+.lab-choice:active { background: #f3f5f3; transform: scale(0.985); }
+.lab-choice > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lab-choice b { font-size: 17px; font-weight: 750; letter-spacing: -0.01em; }
+.lab-choice small { font-size: 13.5px; color: var(--ink-3); line-height: 1.4; }
 .lab-choice > svg:last-child { color: var(--ink-3); flex: none; }
-.lab-choice-ico { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex: none; background: #eaf0fa; color: #3b67ad; }
+.lab-choice-ico { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; flex: none; background: #eaf0fa; color: #3b67ad; }
 .lab-choice-ico.g { background: var(--m-mint); color: var(--m-green-ink); }
-.lab-safe { list-style: none; margin: 4px 0 0; padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-.lab-safe li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.lab-safe { list-style: none; margin: 20px 0 0; padding: 0; display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; }
+.lab-safe li { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-3); }
 .lab-safe svg { color: var(--ink-3); flex: none; }
 .lab-last { display: flex; align-items: center; gap: 6px; margin: 0; padding: 10px 12px; border-radius: 12px; background: #eef3fb; color: #3b67ad; font-size: 13px; }

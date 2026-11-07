@@ -287,9 +287,27 @@ public class VolunteerService {
     private List<Optional<KakaoLocal.Region>> regions(double lat, double lng) {
         double dLat = RING_KM / 111.0, dLng = RING_KM / (111.0 * Math.cos(Math.toRadians(lat)));
         double[][] points = {{lat, lng}, {lat + dLat, lng}, {lat - dLat, lng}, {lat, lng + dLng}, {lat, lng - dLng}};
-        List<Optional<KakaoLocal.Region>> found = together(java.util.Arrays.stream(points).<Callable<Optional<KakaoLocal.Region>>>map(point -> () -> kakao.region(point[0], point[1])).toList());
+        List<Optional<KakaoLocal.Region>> found = together(java.util.Arrays.stream(points).<Callable<Optional<KakaoLocal.Region>>>map(point -> () -> region(point[0], point[1])).toList());
         return found.stream().map(region -> region == null ? Optional.<KakaoLocal.Region>empty() : region).toList();
     }
+
+    /**
+     * The district of a point, kept per ~1 km square (2026-11-07: the 찾기 map asks again as it is moved, and nearby points
+     * fall in the same squares). A district border does not move, so only answers that found one are kept.
+     */
+    private Optional<KakaoLocal.Region> region(double lat, double lng) {
+        String key = Math.round(lat * 100) + ":" + Math.round(lng * 100);
+        Optional<KakaoLocal.Region> known = regionCache.get(key);
+        if (known != null) return known;
+        Optional<KakaoLocal.Region> found = kakao.region(lat, lng);
+        if (found.isPresent()) {
+            if (regionCache.size() > 20_000) regionCache.clear();
+            regionCache.put(key, found);
+        }
+        return found;
+    }
+
+    private final Map<String, Optional<KakaoLocal.Region>> regionCache = new ConcurrentHashMap<>();
 
     /** Districts to ask 1365 about: the centre's first, at most {@link #MAX_AREAS}; none when the centre is unknown. */
     private List<RegionCodes.Codes> areas(List<Optional<KakaoLocal.Region>> regions) {
