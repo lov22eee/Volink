@@ -219,11 +219,13 @@ export function LabScreen() {
   const md = (d?: string) => d ? d.slice(5).replace('-', '/') : ''
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
-    <div className="m-body lab">
-      <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
-      {!rows ? <>
-        {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. */}
+    <div className={'m-body lab' + (rows ? '' : ' pick')}>
+      {rows && <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>}
+      {!rows ? <div className="lab-pick">
+        {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. 2026-11-07: in the middle of the screen. */}
+        <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
         <h1 className="m-h2">무엇을 가져올까요?</h1>
+        <p className="lab-sub">고른 1365 화면에서 바로 가져와요</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
         <div className="lab-choices">
           <button type="button" className="lab-choice" onClick={() => setAsking('S')}>
@@ -234,12 +236,12 @@ export function LabScreen() {
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>
         <ul className="lab-safe">
-          <li><MIcon name="lock" size={16} />비밀번호는 Volink로 오지 않아요</li>
-          <li><MIcon name="user" size={16} />이름은 저장하지 않아요</li>
+          <li><MIcon name="lock" size={14} />비밀번호는 Volink로 오지 않아요</li>
+          <li><MIcon name="user" size={14} />이름은 저장하지 않아요</li>
         </ul>
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
-      </> : <>
+      </div> : <>
         <h1 className="m-h2">{summary && !rows.length ? '1365 봉사 실적을 찾았어요' : rows.length ? `신청 내역 ${rows.length}개를 찾았어요` : '읽을 내용을 찾지 못했어요'}</h1>
         {summary && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
