@@ -32,7 +32,8 @@ async function labCard(page: Page, name: RegExp) {
   const consent = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '동의하고 계속하기' })
   const from1365 = page.getByRole('button', { name: /^1365에서 가져오기/ })
   await expect(consent.or(from1365)).toBeVisible()
-  await (await consent.isVisible() ? consent : from1365).click()
+  if (await from1365.isVisible()) await from1365.click()
+  await consent.click()
 }
 
 async function pickDay(page: Page, field: string | RegExp, date: string) {
@@ -858,7 +859,11 @@ test('1365 직접 추가하기: after a first connection a card offers 1365 or b
   await page.goto('/#/lab1365')
   await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
   const ways = page.getByRole('dialog', { name: '봉사참여 실적' })
-  await expect(ways.getByRole('button', { name: /^1365에서 가져오기/ })).toBeVisible()
+  // 1365에서 가져오기 still asks for consent first.
+  await ways.getByRole('button', { name: /^1365에서 가져오기/ }).click()
+  await expect(page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })).toBeVisible()
+  await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '다음에 할게요' }).click()
+  await page.getByRole('button', { name: /^봉사참여 실적/ }).click()
   await ways.getByRole('button', { name: /^직접 추가하기/ }).click()
   await expect(page.getByRole('dialog', { name: '실적확인서 추가' })).toBeVisible()
   await page.locator('input[type=file][accept="application/pdf"]').setInputFiles({ name: 'cert.pdf', mimeType: 'application/pdf', buffer: Buffer.from('not a pdf') })
