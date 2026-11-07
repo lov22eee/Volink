@@ -1406,3 +1406,10 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .wd-list b { color: var(--ink); }
 .wd-foot { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .wd-agree { padding: 2px 2px; font-size: 14.5px; align-items: center; }
+/* 1365 실적 목록 (V32, 2026-11-07). */
+.lab-got { padding: 12px 14px; border-radius: 14px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.lab-got b { font-size: 18px; }
+.lab-got small { font-size: 12.5px; color: var(--ink-3); }
+.lab-kind { font-style: normal; font-size: 10.5px; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #eaf0fa; color: #2f5596; vertical-align: 2px; }
+.lab-kind.act { background: #f1e9fb; color: #6a3fb0; }
+.lab-item.had { opacity: 0.55; }

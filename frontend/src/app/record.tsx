@@ -18,6 +18,8 @@ export type ExternalRecord = {
   id: number; programNo: string | null; title: string; organization: string | null; place: string | null
   date: string; startTime: string; endTime: string; status: 'PLANNED' | 'ATTENDED' | 'MISSED'; source: 'SELF' | 'LAB'; labStatus: string | null
   certTitle: string | null; certOrganization: string | null; certDate: string | null; certMinutes: number | null; certified: boolean; started: boolean
+  /** V32: a finished activity read from the 1365 실적 list — TIME (with its hours) or ACTIVITY (counted once). */
+  extMinutes?: number | null; extKind?: 'TIME' | 'ACTIVITY' | null
   reflected: boolean; timeKnown: boolean
   reviewId: number | null
 }
@@ -41,7 +43,9 @@ export async function recordToCalendar(r: Pick<ExternalRecord, 'id' | 'title' | 
 }
 
 /** Trust word for a record: 실적확인서 있음 (values from the certificate), 1365 연결 (lab), or 본인 표시. */
-export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source' | 'reflected'>) {
+export function recordTag(r: Pick<ExternalRecord, 'certified' | 'source' | 'reflected'> & { extKind?: string | null }) {
+  // V32: matched by name and day with the 1365 실적 list → 실적 반영됨 (no 추정); a row from the list itself → 1365 실적.
+  if (r.extKind) return r.reflected ? { text: '실적 반영됨', tone: 'blue' } : { text: '1365 실적', tone: 'blue' }
   return r.reflected ? { text: '실적 반영됨(추정)', tone: 'blue' } : r.certified ? { text: '실적확인서 있음', tone: 'blue' } : r.source === 'LAB' ? { text: '1365 연결', tone: 'blue' } : { text: '본인 표시', tone: 'gray' }
 }
 
@@ -125,7 +129,9 @@ export function RecordRow({ r }: { r: ExternalRecord }) {
   const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
   return <a className="m-row" href={'#/record/' + r.id}>
     <span className="m-row-ico ext"><b>1365</b></span>
-    <span className="m-row-main"><strong>{r.title}</strong><small>{r.certified && r.certDate
+    <span className="m-row-main"><strong>{r.title}</strong><small>{r.extKind
+      ? `${r.date.slice(0, 4) === String(new Date().getFullYear()) ? r.date.slice(5).replace('-', '/') : r.date.replaceAll('-', '.')} · ${r.extKind === 'TIME' ? (r.extMinutes != null ? hoursOf(r.extMinutes) : '시간 미정') : '활동 1회'} · ${r.extKind === 'TIME' ? '시간인증' : '활동인증'}`
+      : r.certified && r.certDate
       // A certificate (2026-11-07: it may be years ago and sum a period): its day with the year when it is not this year, and its hours.
       ? `${r.certDate.slice(0, 4) === String(new Date().getFullYear()) ? r.certDate.slice(5).replace('-', '/') : r.certDate.replaceAll('-', '.')} · ${tag.text} · ${hoursOf(r.certMinutes ?? 0)}`
       : `${recordWhen(r)} · ${tag.text}${r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}`}</small></span>

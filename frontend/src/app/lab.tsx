@@ -193,6 +193,43 @@ export function parseLabText(text: string): LabRow[] {
   return rows.slice(0, 20)
 }
 
+/** One finished activity from the list under the 1365 봉사참여 실적 page (V32): 시간인증형 with its hours, 활동인증형 counted once. */
+export type LabDone = { title: string; date: string; minutes: number | null; kind: 'TIME' | 'ACTIVITY'; startTime?: string; endTime?: string; organization?: string }
+
+const compact = (s: string) => s.replace(/\s+/g, '')
+/** The 실적 list page (either tab): its header and the 봉사일자 rows. */
+export const isRecordPage = (text: string) => /자원봉사실적/.test(compact(text)) && /(봉사|활동)일자/.test(compact(text))
+
+/**
+ * Reads the rows of the 1365 실적 list (2026-11-07, from the page: “[적십자사] 헌혈실적연계 · 봉사일자 2023.12.14 · 봉사시간
+ * 05:01~05:02 (4시간 0분) · 인증기관 VMS · 모집기관 대한적십자사혈액관리본부”). The tab is told by the list header
+ * (시간인증형 / 활동인증형 자원봉사 실적). Labels and values may be on one line or on their own lines.
+ */
+export function parseLabRecords(text: string): LabDone[] {
+  const lines = text.replace(/\r/g, '').split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  const all = compact(text)
+  const kind: LabDone['kind'] = all.includes('활동인증형자원봉사실적') && !all.includes('시간인증형자원봉사실적') ? 'ACTIVITY' : 'TIME'
+  const badge = /^(시간인증|활동인증)\s*/
+  const starts = lines.map((l, i) => /^(봉사|활동)\s*일자/.test(l) ? i : -1).filter(i => i >= 0)
+  const out: LabDone[] = []
+  starts.forEach((at, n) => {
+    let k = at - 1
+    while (k >= 0 && /^(시간인증|활동인증)$/.test(lines[k])) k--
+    const title = (lines[k] ?? '').replace(badge, '').trim()
+    if (title.length < 2 || /^(봉사|활동|모집|인증|중복)/.test(title) || /현재페이지|전체\s*\d+건|모두선택/.test(title)) return
+    const block = lines.slice(at, Math.min(starts[n + 1] ?? lines.length, at + 14) - (starts[n + 1] ? 1 : 0)).join(' ')
+    const day = new RegExp(DATE.source).exec(block)
+    if (!day) return
+    const paren = /\(\s*(\d{1,4})\s*시간\s*(?:(\d{1,2})\s*분)?\s*\)/.exec(block) ?? /(\d{1,4})\s*시간\s*(\d{1,2})\s*분/.exec(block)
+    const time = TIME.exec(block)
+    const org = /모집\s*기관\s*:?\s*(.+?)(?=\s+(?:중복\s*여부|인증\s*기관|봉사|활동|시간인증|활동인증)|$)/.exec(block)
+    out.push({ title: title.slice(0, 120), date: ymdOf(day), kind, minutes: kind === 'TIME' && paren ? Number(paren[1]) * 60 + Number(paren[2] ?? 0) : null,
+      startTime: time ? `${time[1].padStart(2, '0')}:${time[2]}` : undefined, endTime: time ? `${time[3].padStart(2, '0')}:${time[4]}` : undefined,
+      organization: org ? org[1].trim().slice(0, 120) : undefined })
+  })
+  return out.slice(0, 300)
+}
+
 export function LabScreen({ go }: { go?: string }) {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
@@ -224,6 +261,11 @@ export function LabScreen({ go }: { go?: string }) {
   // The day the person goes, for rows where 1365 shows only a period (11/12 ~ 11/30).
   const [days, setDays] = useState<string[]>([])
   const [paste, setPaste] = useState('')
+  // The 1365 실적 list (V32): every finished activity, and which are already in 내 활동 (same name and day).
+  const [done, setDone] = useState<LabDone[]>([])
+  const [donePicked, setDonePicked] = useState<boolean[]>([])
+  const [mine, setMine] = useState<{ title: string; date: string; status: string; extKind: string | null }[]>([])
+  const [activityCount, setActivityCount] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   /** One or more pages taken in one visit: the 실적 page gives the total, the 신청 현황 page the rows. */
@@ -231,11 +273,28 @@ export function LabScreen({ go }: { go?: string }) {
     const pages = (Array.isArray(input) ? input : [input]).filter(Boolean)
     let total: LabSummary | null = null
     const found: LabRow[] = []
+    const finished: LabDone[] = []
+    let acts: number | null = null
     for (const page of pages) {
       const sum = parseLabSummary(page)
-      if (sum) { total = sum; continue }
+      if (sum && !total) total = sum
+      if (isRecordPage(page)) {
+        for (const row of parseLabRecords(page)) if (!finished.some(r => r.title === row.title && r.date === row.date && r.kind === row.kind)) finished.push(row)
+        const a = /활동인증형활동건수총(\d{1,5})건/.exec(compact(page))
+        if (a) acts = Number(a[1])
+        continue
+      }
+      if (sum) continue
       for (const row of parseLabText(page)) if (!found.some(r => r.title === row.title && r.date === row.date) && found.length < 20) found.push(row)
     }
+    finished.sort((a, b) => b.date.localeCompare(a.date))
+    setDone(finished)
+    setActivityCount(acts)
+    if (finished.length) api<{ title: string; date: string; status: string; extKind: string | null }[]>('/api/me/external').then(list => {
+      setMine(list)
+      setDonePicked(finished.map(r => !list.some(m => m.title === r.title && m.date === r.date && m.extKind)))
+    }).catch(() => setDonePicked(finished.map(() => true)))
+    else setDonePicked([])
     setRows(found)
     setSummary(total)
     setPicked(found.map(() => true))
@@ -248,6 +307,19 @@ export function LabScreen({ go }: { go?: string }) {
     setLastTarget(target)
     const guide = target === 'S' ? '로그인하면 ‘봉사참여 실적’ 화면으로 바로 가요' : '로그인하면 ‘신청 현황’ 화면으로 바로 가요'
     try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target] }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
+  }
+  /** The 실적 list: picked rows → finished 1365 activities (waiting ones of the same name and day become 실적 반영됨), then the total. */
+  async function saveDone() {
+    const items = done.filter((_, i) => donePicked[i])
+    setBusy(true)
+    try {
+      const result = items.length ? await api<{ added: number; matched: number }>('/api/me/external/import', 'POST', { items }) : { added: 0, matched: 0 }
+      if (summary) await api('/api/me/external/summary', 'PUT', { ...summary, listed: true })
+      showToast(result.added || result.matched ? `1365 실적 ${result.added + result.matched}건을 넣었어요` : '새로 넣을 실적은 없어요',
+        result.matched ? `참여 예정이던 ${result.matched}건은 실적 반영됨으로 바꿨어요` : '완료 기록에서 볼 수 있어요')
+      try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
+      window.location.hash = '#/mine?tab=done'
+    } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   async function save() {
     const items = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i])
@@ -265,7 +337,13 @@ export function LabScreen({ go }: { go?: string }) {
       window.location.hash = total ? '#/mine?tab=done' : '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
-  const failed = rows !== null && !rows.length && !summary
+  const failed = rows !== null && !rows.length && !summary && !done.length
+  const listed = done.length > 0
+  const had = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && m.extKind)
+  const waits = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && !m.extKind)
+  const doneCount = donePicked.filter(Boolean).length
+  const timeRows = done.filter(r => r.kind === 'TIME'), actRows = done.filter(r => r.kind === 'ACTIVITY')
+  const dots = (d: string) => d.replaceAll('-', '.')
   const count = picked.filter(Boolean).length
   const undated = (rows ?? []).filter((_, i) => picked[i] && !days[i]).length
   const md = (d?: string) => d ? d.slice(5).replace('-', '/') : ''
@@ -294,7 +372,20 @@ export function LabScreen({ go }: { go?: string }) {
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
       </div> : <>
-        {!rows.length && !summary ? <div className="lab-fail">
+        {listed ? <>
+          {/* 2026-11-07 (V32): the whole 1365 실적 list, both tabs, every period. */}
+          <h1 className="m-h2">1365 실적 {done.length}건을 찾았어요</h1>
+          <div className="lab-got"><b>{summary ? hoursText(summary.totalMinutes) : hoursText(timeRows.reduce((s, r) => s + (r.minutes ?? 0), 0))} · {done.length}건</b>
+            <small>시간인증 {timeRows.length}건{actRows.length || activityCount ? ` · 활동인증 ${actRows.length || activityCount}건` : ''} · 1365 공식 실적 · 오늘 기준</small></div>
+          {summary?.count != null && summary.count !== timeRows.length && <p className="m-err">1365에는 시간인증 {summary.count}건인데 {timeRows.length}건만 읽었어요. 다시 가져오면 맞춰질 수 있어요.</p>}
+          <div className="lab-rows">{done.map((r, i) => <div key={r.kind + r.title + r.date + i} className={'lab-item' + (had(r) ? ' had' : '')}>
+            <label className="m-check">
+              <input type="checkbox" disabled={had(r)} checked={Boolean(donePicked[i])} onChange={event => setDonePicked(donePicked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
+              <span className="lab-row"><b>{r.title}<em className={'lab-kind' + (r.kind === 'ACTIVITY' ? ' act' : '')}>{r.kind === 'TIME' ? '시간인증' : '활동인증'}</em></b>
+                <small>{dots(r.date)} · {r.kind === 'TIME' ? (r.minutes != null ? hoursText(r.minutes) : '시간 미정') : '활동 1회'}{had(r) ? ' · 이미 넣었어요' : waits(r) ? ' · 참여 예정과 같아 실적 반영됨으로 바꿔요' : ''}</small></span></label>
+          </div>)}</div>
+        </>
+        : !rows.length && !summary ? <div className="lab-fail">
           {/* 2026-11-07: not found → what may have happened, and the next step right here (again / by hand / later). */}
           <span className="lab-fail-ico"><MIcon name="alert" size={30} /></span>
           <h1 className="m-h2">1365 화면을 읽지 못했어요</h1>
@@ -305,7 +396,7 @@ export function LabScreen({ go }: { go?: string }) {
           </ul>
         </div>
         : <h1 className="m-h2">{summary && !rows.length ? '1365 봉사 실적을 찾았어요' : `신청 내역 ${rows.length}개를 찾았어요`}</h1>}
-        {summary && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
+        {summary && !listed && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
             <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') + ' · ' : ''}1365 공식 실적 · 오늘 기준</small></span></label>}
         {rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
@@ -326,6 +417,7 @@ export function LabScreen({ go }: { go?: string }) {
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
+      : listed ? <button className="m-btn" disabled={busy || (!doneCount && !summary)} onClick={saveDone}>{doneCount ? `${doneCount}건 완료 기록에 넣기` : '새로 넣을 실적이 없어요 · 합계만 갱신'}</button>
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <div className="lab-actions">
         <button className="m-btn" onClick={() => { setRows(null); setPaste(''); if (native && lastTarget) open(lastTarget) }}>다시 가져오기</button>

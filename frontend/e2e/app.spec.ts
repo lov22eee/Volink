@@ -856,3 +856,35 @@ test('1365 after a first connection: 실적 goes to 1365 (consent) only; 신청 
   await expect(page.getByRole('dialog', { name: '1365 활동 찾아서 넣기' })).toBeVisible()
   await expect(page.getByText(/이름·날짜 직접 적기/)).toHaveCount(0)
 })
+
+test('1365 실적 list (V32): every row with its hours and kind goes to 완료 기록; a waiting 신청 of the same name and day becomes 실적 반영됨', async ({ page }) => {
+  const member = await signupByApi(page, '실적 목록')
+  await login(page, member)
+  const auth = await tokenFor(page, member)
+  const past = inDays(-3)
+  await page.request.post('/api/me/external', { headers: { Authorization: auth }, data: { title: '하천 쓰레기 줍기 플로깅', date: past, startTime: '10:00', endTime: '12:00' } })
+  const d = (s: string) => s.replaceAll('-', '.')
+  const text = `봉사참여 실적\n실적확인서 발행 내역\n시간인증형\n활동인증형\n홍길동 님의 시간인증형 봉사시간\n총 10시간 0분\n시간인증형 자원봉사 참여\n총 3건\n시간인증형 자원봉사 실적 3건 (10시간 0분)\n※ 기간 선택 후 검색 하시기 바랍니다.\n[전체 3건, 현재페이지 1/1]\n현재 페이지 모두선택\n` +
+    `시간인증\n[적십자사] 헌혈실적연계\n봉사일자\n2023.12.14\n봉사시간\n05:01~05:02 (4시간 0분)\n인증기관\nVMS\n모집기관\n대한적십자사혈액관리본부\n중복여부\n해당없음\n` +
+    `시간인증 [적십자사] 헌혈실적연계\n봉사일자 2023.11.30 봉사시간 05:01~05:02 (4시간 0분) 인증기관 VMS\n모집기관 대한적십자사혈액관리본부 중복여부 해당없음\n` +
+    `시간인증\n하천 쓰레기 줍기 플로깅\n봉사일자 ${d(past)}\n봉사시간 10:00~12:00 (2시간 0분)\n모집기관 양주시자원봉사센터`
+  await page.goto('/#/lab1365')
+  await labCard(page, /^봉사참여 실적/)
+  await page.getByPlaceholder(/1365 신청 현황/).fill(text)
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByRole('heading', { name: '1365 실적 3건을 찾았어요' })).toBeVisible()
+  await expect(page.getByText('10시간 · 3건')).toBeVisible()
+  await expect(page.getByText(/2023\.12\.14 · 4시간/)).toBeVisible()
+  await expect(page.getByText(/참여 예정과 같아 실적 반영됨으로 바꿔요/)).toBeVisible()
+  await page.getByRole('button', { name: '3건 완료 기록에 넣기' }).click()
+  await expect(page).toHaveURL(/tab=done/)
+  await expect(page.getByRole('link', { name: /헌혈실적연계.*2023\.12\.14 · 4시간 · 시간인증/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /하천 쓰레기 줍기 플로깅.*2시간 · 시간인증.*반영됨/ })).toBeVisible()
+  // Again: all three are already in.
+  await page.goto('/#/lab1365')
+  await labCard(page, /^봉사참여 실적/)
+  await page.getByPlaceholder(/1365 신청 현황/).fill(text)
+  await page.getByRole('button', { name: '붙여 넣은 글자 읽기' }).click()
+  await expect(page.getByText('이미 넣었어요').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /새로 넣을 실적이 없어요/ })).toBeVisible()
+})

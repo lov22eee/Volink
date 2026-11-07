@@ -81,6 +81,42 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void the1365ListAddsFinishedActivitiesAndMatchesWaitingOnesByNameAndDay() throws Exception {
+        String member = token(member("GENERAL"));
+        // Marked earlier from a 1365 신청 (day passed, still waiting).
+        long waiting = id(body(perform(post("/api/me/external"), program("하천 쓰레기 줍기 플로깅", 2), member).andExpect(status().isCreated())));
+        long user = jdbc.queryForObject("SELECT user_id FROM external_records WHERE id = ?", Long.class, waiting);
+        jdbc.update("UPDATE external_records SET starts_at = ?, ends_at = ? WHERE id = ?", TODAY.minusDays(3).atTime(10, 0), TODAY.minusDays(3).atTime(12, 0), waiting);
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3450, "count", 14), member).andExpect(status().isOk());
+
+        Map<String, Object> blood = Map.of("title", "[적십자사] 헌혈실적연계", "date", "2023-12-14", "startTime", "05:01", "endTime", "05:02", "minutes", 240, "kind", "TIME", "organization", "대한적십자사혈액관리본부");
+        Map<String, Object> river = Map.of("title", "하천 쓰레기 줍기 플로깅", "date", TODAY.minusDays(3).toString(), "minutes", 120, "kind", "TIME");
+        Map<String, Object> mentor = Map.of("title", "지역아동센터 학습 멘토링", "date", "2023-05-20", "kind", "ACTIVITY");
+        perform(post("/api/me/external/import"), Map.of("items", List.of(blood, river, mentor)), member).andExpect(status().isOk())
+                .andExpect(jsonPath("$.added").value(2)).andExpect(jsonPath("$.matched").value(1));
+        // Again: nothing new.
+        perform(post("/api/me/external/import"), Map.of("items", List.of(blood, river, mentor)), member)
+                .andExpect(jsonPath("$.added").value(0)).andExpect(jsonPath("$.matched").value(0));
+
+        perform(get("/api/me/external/" + waiting), null, member).andExpect(jsonPath("$.status").value("ATTENDED"))
+                .andExpect(jsonPath("$.reflected").value(true)).andExpect(jsonPath("$.extKind").value("TIME")).andExpect(jsonPath("$.extMinutes").value(120));
+        Map<String, Object> row = jdbc.queryForMap("SELECT status, ext_minutes, ext_kind, organization, DATE_FORMAT(starts_at, '%H:%i') AS t FROM external_records WHERE user_id = ? AND title = ?", user, "[적십자사] 헌혈실적연계");
+        assertThat(row.get("status")).isEqualTo("ATTENDED");
+        assertThat(((Number) row.get("ext_minutes")).intValue()).isEqualTo(240);
+        assertThat(row.get("t")).isEqualTo("05:01");
+        assertThat(jdbc.queryForObject("SELECT ext_minutes IS NULL FROM external_records WHERE user_id = ? AND ext_kind = 'ACTIVITY'", Integer.class, user)).isEqualTo(1);
+
+        // With the list read, a larger count does not guess (no 추정 marking).
+        long other = id(body(perform(post("/api/me/external"), program("도서관 정리", 2), member)));
+        jdbc.update("UPDATE external_records SET starts_at = ?, ends_at = ? WHERE id = ?", TODAY.minusDays(4).atTime(10, 0), TODAY.minusDays(4).atTime(12, 0), other);
+        perform(put("/api/me/external/summary"), Map.of("totalMinutes", 3700, "count", 16, "listed", true), member).andExpect(jsonPath("$.reflected").value(0));
+        perform(get("/api/me/external/" + other), null, member).andExpect(jsonPath("$.reflected").value(false));
+        // A future day or a broken kind is refused.
+        perform(post("/api/me/external/import"), Map.of("items", List.of(Map.of("title", "미래 활동", "date", TODAY.plusDays(2).toString(), "kind", "TIME", "minutes", 60))), member)
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void labImportSkipsRowsAlreadyThereAndRemindersGoOnce() throws Exception {
         String member = token(member("GENERAL"));
         Map<String, Object> soon = Map.of("title", "도서관 정리 도우미", "date", TODAY.plusDays(1).toString(), "startTime", "10:00", "endTime", "12:00", "labStatus", "승인완료");
