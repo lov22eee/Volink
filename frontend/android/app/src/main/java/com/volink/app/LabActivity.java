@@ -11,7 +11,10 @@ import android.util.TypedValue;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
+import android.os.Message;
 import android.view.View;
+import android.webkit.WebChromeClient;
+import android.widget.FrameLayout;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -226,37 +229,27 @@ public class LabActivity extends AppCompatActivity {
         cardAt.setMargins(dp(12), 0, dp(12), dp(10));
 
         web = new WebView(this);
-        WebSettings settings = web.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setSaveFormData(false);
-        web.setWebViewClient(new WebViewClient() {
+        setUp(web);
+        web.setWebViewClient(new Guard(true));
+        // 간편인증 (2026-11-07): the auth window is a popup that tells 1365 and closes itself. It opens over the 1365 page in
+        // its own view (window.opener stays), and closing it shows the 1365 page again.
+        web.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                Uri url = request.getUrl();
-                if (is1365(url)) return false;
-                // Only 1365 opens in this screen (where the person types the 1365 password); anything else goes to the phone's browser.
-                if (request.isForMainFrame()) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
-                    if ("https".equals(url.getScheme()) || "http".equals(url.getScheme())) Toast.makeText(LabActivity.this, "1365 밖의 주소는 브라우저로 열어요", Toast.LENGTH_SHORT).show();
-                }
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                closePopup();
+                popup = new WebView(LabActivity.this);
+                setUp(popup);
+                popup.setWebViewClient(new Guard(false));
+                popup.setWebChromeClient(new WebChromeClient() {
+                    @Override public void onCloseWindow(WebView window) { closePopup(); }
+                });
+                frame.addView(popup, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ((WebView.WebViewTransport) resultMsg.obj).setWebView(popup);
+                resultMsg.sendToTarget();
                 return true;
             }
 
-            @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
-                // A redirect that slipped past the check above: stop before anything is shown or typed.
-                Uri page = Uri.parse(url);
-                if (!is1365(page)) { view.stopLoading(); if (view.canGoBack()) view.goBack(); else view.loadUrl(LabPlugin.HOME); return; }
-                visited.add(page.getScheme() + "://" + page.getHost());
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                Uri page = Uri.parse(url);
-                where.setText(page.getHost() == null ? "" : page.getHost());
-                updateTake();
-            }
+            @Override public void onCloseWindow(WebView window) { closePopup(); }
         });
 
         // Bottom: the button exists only on the 실적 / 신청 현황 page itself (updateTake), green.
@@ -279,7 +272,9 @@ public class LabActivity extends AppCompatActivity {
         // 2026-11-06: the step card is gone (it guessed wrong too often); the page check still turns the button green
         // and moves to the asked page after logging in.
         root.addView(line(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
-        root.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        frame = new FrameLayout(this);
+        frame.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottom, wide);
         setContentView(root);
         String start = getIntent().getStringExtra("url");
@@ -367,14 +362,120 @@ public class LabActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack();
+        if (popup != null) { if (popup.canGoBack()) popup.goBack(); else closePopup(); }
+        else if (web != null && web.canGoBack()) web.goBack();
         else done();
     }
 
-    /** https://1365.go.kr or a subdomain of it. */
+    private FrameLayout frame;
+    /** The 간편인증 window while it is open (over the 1365 page). */
+    private WebView popup;
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void setUp(WebView view) {
+        WebSettings settings = view.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setSaveFormData(false);
+        settings.setSupportMultipleWindows(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        // The auth pages are framed or set their cookies from another site; everything is wiped when this screen closes.
+        CookieManager.getInstance().setAcceptThirdPartyCookies(view, true);
+    }
+
+    private void closePopup() {
+        if (popup == null) return;
+        WebView gone = popup;
+        popup = null;
+        frame.removeView(gone);
+        gone.stopLoading();
+        gone.destroy();
+        updateTake();
+    }
+
+    /**
+     * Which pages may open in this screen: 1365 itself and the sign-in services its 간편인증 goes through. Anything else
+     * goes to the phone's browser (a link) or is stopped (a redirect), and its host is shown so it can be added if 1365
+     * needs it. Framed parts of a page are not stopped; the take button stays on the two 1365 pages only.
+     */
+    private class Guard extends WebViewClient {
+        private final boolean main;
+        Guard(boolean main) { this.main = main; }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            Uri url = request.getUrl();
+            String scheme = url.getScheme() == null ? "" : url.getScheme();
+            if (scheme.equals("intent")) { openApp(url.toString()); return true; }
+            if (!scheme.equals("https") && !scheme.equals("http")) {
+                // kakaotalk://, tauthlink:// and other sign-in apps.
+                try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception e) { Toast.makeText(LabActivity.this, "인증 앱을 열지 못했어요", Toast.LENGTH_SHORT).show(); }
+                return true;
+            }
+            if (!request.isForMainFrame() || allowed(url)) return false;
+            try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
+            Toast.makeText(LabActivity.this, "1365 밖의 주소는 브라우저로 열어요 (" + url.getHost() + ")", Toast.LENGTH_LONG).show();
+            return true;
+        }
+
+        @Override
+        public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            Uri page = Uri.parse(url);
+            if (url.startsWith("about:") || allowed(page)) { if (page.getHost() != null) visited.add(page.getScheme() + "://" + page.getHost()); return; }
+            // A redirect that slipped past the check above: stop before anything is shown or typed, and say which host it was.
+            view.stopLoading();
+            Toast.makeText(LabActivity.this, "막힌 주소: " + page.getHost(), Toast.LENGTH_LONG).show();
+            if (!main) return;
+            if (view.canGoBack()) view.goBack(); else view.loadUrl(LabPlugin.HOME);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (!main) return;
+            Uri page = Uri.parse(url);
+            where.setText(page.getHost() == null ? "" : page.getHost());
+            updateTake();
+        }
+    }
+
+    /** An intent:// link (a sign-in app): open the app, or its web fallback, or its store page. */
+    private void openApp(String link) {
+        try {
+            Intent intent = Intent.parseUri(link, Intent.URI_INTENT_SCHEME);
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            intent.setComponent(null);
+            intent.setSelector(null);
+            try { startActivity(intent); return; } catch (Exception notInstalled) { /* below */ }
+            String fallback = intent.getStringExtra("browser_fallback_url");
+            if (fallback != null && allowed(Uri.parse(fallback)) && popup != null) { popup.loadUrl(fallback); return; }
+            if (fallback != null && allowed(Uri.parse(fallback))) { web.loadUrl(fallback); return; }
+            if (intent.getPackage() != null) startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + intent.getPackage())));
+        } catch (Exception e) {
+            Toast.makeText(LabActivity.this, "인증 앱을 열지 못했어요", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 1365 (also over http, which 1365 sometimes redirects through). */
     static boolean is1365(Uri url) {
         String host = url.getHost();
-        return "https".equals(url.getScheme()) && host != null && (host.equals("1365.go.kr") || host.endsWith(".1365.go.kr"));
+        String scheme = url.getScheme();
+        return ("https".equals(scheme) || "http".equals(scheme)) && host != null && (host.equals("1365.go.kr") || host.endsWith(".1365.go.kr"));
+    }
+
+    /**
+     * Sign-in services 1365's 간편인증 may pass through (2026-11-07, white screen after 카카오 인증): government sign-in
+     * (*.go.kr) and the 간편인증 companies. Only https. Checked on the phone with the host shown when something is stopped.
+     */
+    private static final String[] AUTH_HOSTS = { "go.kr", "kakao.com", "naver.com", "toss.im", "tosspayments.com", "payco.com",
+            "kbstar.com", "shinhan.com", "samsungpass.com", "pass.go.kr", "passauth.co.kr", "kcb.co.kr", "niceid.co.kr", "nice.co.kr",
+            "sktelecom.com", "kt.com", "uplus.co.kr", "yessign.or.kr", "kftc.or.kr", "signkorea.com", "dreamsecurity.com", "raonsecure.com" };
+
+    static boolean allowed(Uri url) {
+        if (is1365(url)) return true;
+        String host = url.getHost();
+        if (!"https".equals(url.getScheme()) || host == null) return false;
+        for (String suffix : AUTH_HOSTS) if (host.equals(suffix) || host.endsWith("." + suffix)) return true;
+        return false;
     }
 
     @Override
@@ -388,6 +489,7 @@ public class LabActivity extends AppCompatActivity {
         WebStorage storage = WebStorage.getInstance();
         for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
+        closePopup();
         if (web != null) {
             web.stopLoading();
             web.clearCache(true);
