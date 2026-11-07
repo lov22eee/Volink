@@ -52,43 +52,48 @@ export function useRecords(refresh = 0) {
 }
 
 /** "1365에서 신청을 마쳤나요?": the day (inside the 1365 period) and time, then it joins 내 활동. */
-export function MarkSheet({ program, onClose, onSaved, manual }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void; manual?: boolean }) {
-  // manual (2026-11-07, 직접 추가하기 › 이름·날짜 직접 적기): no 1365 program, the person types the name.
-  const [title, setTitle] = useState(program.title)
+export function MarkSheet({ program, onClose, onSaved }: { program: Program; onClose: () => void; onSaved?: (record: ExternalRecord) => void }) {
   const today = ymd(new Date())
   const first = fromCompact(program.periodStart), last = fromCompact(program.periodEnd)
   // A period of several days (11/12 ~ 11/30): no day is assumed; the person picks the day they go.
   const span = Boolean(first && last && first !== last)
   const [date, setDate] = useState(span ? '' : first && first > today ? first : today)
-  const [calendar, setCalendar] = useState(true)
   const [start, setStart] = useState(program.beginTime ?? '10:00')
   const [end, setEnd] = useState(program.endTime ?? '12:00')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // 2026-11-07: after 네, 신청했어요 a second sheet asks about the phone calendar (no checkbox beforehand).
+  const [saved, setSaved] = useState<ExternalRecord | null>(null)
   const outside = Boolean(date && ((first && date < first) || (last && date > last)))
   async function save() {
     setBusy(true)
     setError('')
     try {
-      const record = await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo || undefined, title: title.trim(), organization: program.organization,
-        place: program.place, date, startTime: start, endTime: end })
-      onSaved?.(record)
-      onClose()
-      if (calendar) await recordToCalendar(record).catch(() => showToast('내 활동에 넣었어요'))
-      else showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
+      setSaved(await api<ExternalRecord>('/api/me/external', 'POST', { programNo: program.programNo || undefined, title: program.title, organization: program.organization,
+        place: program.place, date, startTime: start, endTime: end }))
     } catch (cause) { setError(message(cause)) } finally { setBusy(false) }
   }
-  return <Sheet title={manual ? '신청한 활동 넣기' : '1365에서 신청을 마쳤나요?'} onClose={onClose}
-    footer={<><button type="button" className="m-btn" disabled={busy || !date || title.trim().length < 2} onClick={save}>{!date ? '참여하는 날을 골라 주세요' : manual ? '참여 예정에 넣기' : '네, 신청했어요'}</button><button type="button" className="m-btn line" onClick={onClose}>{manual ? '닫기' : '아직이요'}</button></>}>
+  async function finish(calendar: boolean) {
+    const record = saved!
+    onSaved?.(record)
+    onClose()
+    if (calendar) await recordToCalendar(record).catch(() => showToast('내 활동에 넣었어요'))
+    else showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
+  }
+  if (saved) return <Sheet title="내 캘린더에도 추가할까요?" onClose={() => finish(false)}
+    footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
+    <div className="m-summary"><strong>{saved.title}</strong><span>{`${saved.date.slice(5).replace('-', '/')} ${saved.startTime}~${saved.endTime}`}{saved.organization ? ' · ' + saved.organization : ''}</span></div>
+    <p className="m-help">내 활동에는 이미 넣었어요. 휴대폰 캘린더에도 일정으로 넣어 둘까요?</p>
+  </Sheet>
+  return <Sheet title="1365에서 신청을 마쳤나요?" onClose={onClose}
+    footer={<><button type="button" className="m-btn" disabled={busy || !date} onClick={save}>{!date ? '참여하는 날을 골라 주세요' : '네, 신청했어요'}</button><button type="button" className="m-btn line" onClick={onClose}>아직이요</button></>}>
     <p className="m-help">표시해 두면 내 활동에 넣고 하루 전·다녀온 뒤에 알려 드려요. 신청·승인은 1365에서 확인해요.</p>
-    {manual ? <label className="m-field"><span className="m-label">활동 이름</span><TextInput className="m-input" maxLength={255} value={title} placeholder="1365에서 신청한 활동 이름" onChange={event => setTitle(event.target.value)} /></label>
-      : <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>}
+    <div className="m-summary"><strong>{program.title}</strong><span>{[program.organization, program.place].filter(Boolean).join(' · ')}</span></div>
     {span && <p className="m-help">1365 모집 기간은 {first?.slice(5).replace('-', '/')} ~ {last?.slice(5).replace('-', '/')}이에요. 1365에서 신청한 그 날을 골라 주세요.</p>}
     <DateField label="참여하는 날" value={date} first={first ?? today} last={last ?? addYear(today)} onChange={setDate}
       note={first && last ? `1365 모집 기간 ${first.slice(5).replace('-', '/')} ~ ${last.slice(5).replace('-', '/')} 안에서 골라요` : '1년 안에서 골라요'} />
     {outside && <span className="m-err">1365 모집 기간({first} ~ {last}) 밖의 날짜예요. 맞는지 확인해 주세요.</span>}
     <div className="m-two"><TimeField label="시작" value={start} onChange={setStart} /><TimeField label="끝" value={end} onChange={setEnd} /></div>
-    <label className="m-check"><input type="checkbox" checked={calendar} onChange={event => setCalendar(event.target.checked)} /><span className="m-box" /><span>내 캘린더에도 추가하기</span></label>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
 }

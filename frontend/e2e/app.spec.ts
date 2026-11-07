@@ -694,14 +694,19 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await login(page, member)
   await page.goto('/#/mine?tab=done')
   await expect(page.getByText('아직 완료 기록이 없어요')).toBeVisible()
-  // 2026-11-07: [가져오기] → 1365에서 가져오기 / 직접 추가하기 → consent → that 1365 page (on the web: the paste box).
+  // 2026-11-07: 완료 기록 [가져오기] → 실적확인서로 넣기 only.
   await page.getByRole('button', { name: '가져오기', exact: true }).click()
-  await page.getByRole('dialog', { name: '봉사참여 실적' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
+  await expect(page.getByRole('dialog', { name: '실적확인서로 넣기' })).toContainText('자원봉사활동 확인서')
+  await page.getByRole('dialog', { name: '실적확인서로 넣기' }).getByRole('button', { name: '닫기' }).click()
+  // 참여 예정 [가져오기] → 1365에서 가져오기 / 1365 활동 찾기 → consent → that 1365 page (on the web: the paste box).
+  await page.getByRole('tab', { name: '참여 예정' }).click()
+  await page.getByRole('button', { name: '가져오기', exact: true }).click()
+  await page.getByRole('dialog', { name: '신청 현황' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365$/)
-  await expect(page.getByText(/봉사참여 실적 화면 글자를 붙여 넣기/)).toBeVisible()
+  await expect(page.getByText(/신청 현황 화면 글자를 붙여 넣기/)).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 봉사실적 연결하기/ })).toBeVisible()

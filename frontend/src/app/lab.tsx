@@ -91,7 +91,8 @@ export function useImport1365(onSaved?: () => void): [ReactNode, (target: 'S' | 
     {adding === 'S' && <ProofSheet onClose={() => setAdding('')} onSaved={() => { setAdding(''); onSaved?.() }} onUse1365={() => { setAdding(''); setAsking('S') }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} onSaved={onSaved} />}
   </>
-  return [node, setChoosing]
+  // 완료 기록 [가져오기] (2026-11-07): straight to 실적확인서로 넣기; 참여 예정 keeps 1365에서 가져오기 / 1365 활동 찾기.
+  return [node, (target: 'S' | 'A') => target === 'S' ? setAdding('S') : setChoosing(target)]
 }
 
 /**

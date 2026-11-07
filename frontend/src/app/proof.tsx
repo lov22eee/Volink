@@ -14,6 +14,8 @@ type Page = { text: string; lines: Line[]; preview: string; width: number; heigh
 export type ProofKind = 'total' | 'one' | 'page' | 'none'
 export type ProofRead = { kind: ProofKind; title: string; from: string; to: string; minutes: number | null; count: number | null; used: number[] }
 
+/** 1365 나의 봉사 › 봉사참여 실적 (the same page 1365에서 가져오기 opens; its tabs lead to 실적확인서). */
+const PAGE_1365_RECORDS = 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do'
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
 const compact = (s: string) => s.replace(/\s+/g, '')
 const DATE = /(20\d{2}|19\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/g
@@ -163,6 +165,8 @@ export function ProofSheet({ onClose, onSaved, onUse1365 }: { onClose: () => voi
       <button type="button" className="r-opt" onClick={() => camera.current?.click()}><MIcon name="camera" size={20} /><span><b>확인서 사진 찍기</b><small>잘못 읽을 수 있어서 숫자를 꼭 확인해 주세요</small></span></button>
       <button type="button" className="r-opt" onClick={() => image.current?.click()}><MIcon name="camera" size={20} /><span><b>앨범에서 확인서 고르기</b><small>확인서를 찍거나 캡처한 사진</small></span></button>
     </div>
+    {/* 2026-11-07: 활동별 실적과 확인서 발급은 1365 나의 봉사(봉사참여 실적 → 실적확인서)에 있어요. */}
+    <a className="pf-link" href={PAGE_1365_RECORDS} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={18} /><span><b>1365에서 활동별 실적·확인서 보기</b><small>나의 봉사 › 봉사참여 실적 · 실적확인서 발급</small></span><MIcon name="chevron" size={16} /></a>
     <p className="m-help">1365 실적 화면 캡처는 읽지 않아요. ‘1365에서 가져오기’로 정확하게 가져와 주세요. 파일은 보내지 않고 폰 안에서만 읽어요.</p>
     {error && <p className="m-err" role="alert">{error}</p>}
     {inputs}
