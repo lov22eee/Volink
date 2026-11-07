@@ -70,6 +70,17 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void aCertificateForAWholePeriodYearsAgoIsKept() throws Exception {
+        String member = token(member("GENERAL"));
+        String ended = TODAY.minusYears(5).toString();
+        long id = id(body(perform(post("/api/me/external"), Map.of("title", "유엔아이 플로깅활동 외 7건", "date", ended), member).andExpect(status().isCreated())));
+        perform(put("/api/me/external/" + id + "/certificate"), Map.of("title", "유엔아이 플로깅활동 외 7건", "date", ended, "minutes", 2760), member)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.certMinutes").value(2760)).andExpect(jsonPath("$.status").value("ATTENDED"));
+        perform(post("/api/me/external"), Map.of("title", "너무 오래된 기록", "date", TODAY.minusYears(11).toString()), member).andExpect(status().isBadRequest());
+        perform(put("/api/me/external/" + id + "/certificate"), Map.of("title", "x2", "date", ended, "minutes", 100000), member).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void labImportSkipsRowsAlreadyThereAndRemindersGoOnce() throws Exception {
         String member = token(member("GENERAL"));
         Map<String, Object> soon = Map.of("title", "도서관 정리 도우미", "date", TODAY.plusDays(1).toString(), "startTime", "10:00", "endTime", "12:00", "labStatus", "승인완료");
