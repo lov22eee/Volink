@@ -2,6 +2,7 @@
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { categoryTone } from '../categories'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User, ViewerInfo } from '../api'
@@ -17,6 +18,17 @@ import type { Thread } from './news'
 import { RollCall } from './rollcall'
 import { statusWord } from './mine'
 import { ActionBar, dayWord, dDay, go, Loading, MIcon, PickField, Sheet, TopBar, TextArea, TextInput } from './ui'
+
+/** APK: the attendance QR asks Android for the camera on the [QR 찍고 체크인] tap (system dialog), see CameraPlugin. */
+const camera = registerPlugin<{ checkPermissions(): Promise<{ camera: string }>; requestPermissions(): Promise<{ camera: string }>; openSettings(): Promise<void> }>('VolinkCamera')
+async function cameraAllowed() {
+  if (!Capacitor.isNativePlatform()) return true
+  try {
+    let state = (await camera.checkPermissions()).camera
+    if (state !== 'granted') state = (await camera.requestPermissions()).camera
+    return state === 'granted'
+  } catch { return true }
+}
 
 const message = (cause: unknown) => cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : cause instanceof Error ? cause.message : '처리하지 못했어요.'
 
@@ -71,7 +83,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   const [saved, setSaved] = useState(false)
   const [failed, setFailed] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sheet, setSheet] = useState<'cancel' | 'late' | 'scan' | 'safety' | null>(null)
+  const [sheet, setSheet] = useState<'cancel' | 'late' | 'scan' | 'camera' | 'safety' | null>(null)
   const load = useCallback(() => {
     api<LiveActivity>('/api/activities/' + id).then(a => {
       if (a.organizerId === user.id) { window.location.replace('#/manage/' + id); return }
@@ -173,7 +185,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'confirmed': return <><button className="m-btn line" onClick={() => setSheet('cancel')}>신청 취소</button>
         <button className="m-btn" onClick={() => { void addToCalendar(activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
       case 'today': return <><button className="m-btn line" onClick={() => setSheet(phase === 'later' || phase === 'soon' ? 'late' : 'late')} disabled={phase === 'ended'}>늦어요</button>
-        <button className="m-btn" disabled={!(phase === 'open' || phase === 'late')} onClick={() => setSheet('scan')}><MIcon name="qr" size={19} />{phase === 'open' || phase === 'late' ? 'QR 찍고 체크인' : hhmm(opens) + '부터 체크인'}</button></>
+        <button className="m-btn" disabled={!(phase === 'open' || phase === 'late')} onClick={async () => setSheet(await cameraAllowed() ? 'scan' : 'camera')}><MIcon name="qr" size={19} />{phase === 'open' || phase === 'late' ? 'QR 찍고 체크인' : hhmm(opens) + '부터 체크인'}</button></>
       case 'done': return <><a className="m-btn line" href="#/mine?tab=done">내 기록</a><a className="m-btn" href={'#/write?activity=' + id}><MIcon name="edit" size={19} />후기 쓰기</a></>
       default: return null
     }
@@ -213,6 +225,10 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       <button type="button" className="m-text-btn danger" onClick={() => setSheet('cancel')}>아예 못 가요</button>
     </Sheet>}
     {sheet === 'scan' && <ScanSheet codeHref={'#/checkin/' + id} onClose={() => setSheet(null)} />}
+    {sheet === 'camera' && <Sheet title="카메라 권한이 꺼져 있어요" onClose={() => setSheet(null)}
+      footer={<><button type="button" className="m-btn" onClick={() => { void camera.openSettings().catch(() => {}); setSheet(null) }}>설정에서 카메라 켜기</button><a className="m-btn line" href={'#/checkin/' + id}>출석 코드 4자리로 체크인</a></>}>
+      <p className="m-help">출석 QR을 찍으려면 카메라가 필요해요. 설정 › 권한 › 카메라에서 허용한 뒤 다시 눌러 주세요.</p>
+    </Sheet>}
   </div>
 }
 

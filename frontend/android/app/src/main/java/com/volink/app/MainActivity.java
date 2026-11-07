@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         // Local plugins are registered before the bridge starts.
         registerPlugin(CalendarPlugin.class);
         registerPlugin(LabPlugin.class);
+        registerPlugin(CameraPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
