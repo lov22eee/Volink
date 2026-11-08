@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { remember } from '../location'
-import { saveExtMode, useConnect1365 } from './lab'
+import { ConsentSheet, saveExtMode, setLabOn } from './lab'
 import { askNotifications } from './native'
 import { MIcon } from './ui'
 
@@ -12,8 +12,10 @@ export function WelcomeScreen() {
   const [step, setStep] = useState<'location' | 'notify' | 'night' | 'ext'>('location')
   const [busy, setBusy] = useState(false)
   const done = () => { window.location.hash = '#/home' }
-  // 1365 연결: the consent sheet, then the 1365 screen; "다음에 할게요" there still keeps 가져오기 and goes home.
-  const [connectSheet, connect] = useConnect1365(done)
+  // 1365 연결 (2026-11-08): the consent sheet, then the 1365 window right away — 실적 first, then it offers 신청 현황 too
+  // (no '무엇을 가져올까요?' step here). "다음에 할게요" still keeps 가져오기 and goes home.
+  const [consent, setConsent] = useState(false)
+  const connectSheet = consent && <ConsentSheet onClose={done} onAgree={() => { setConsent(false); setLabOn(true); window.location.hash = '#/lab1365?go=S&both=1' }} />
   async function chooseExt(mode: 'IMPORT' | 'MANUAL') {
     setBusy(true)
     try { await saveExtMode(mode) } catch { /* asked again in 설정 */ }
@@ -22,7 +24,7 @@ export function WelcomeScreen() {
       // 2026-11-07: the guide is done — its place in the history becomes 홈, so back from the 1365 screen goes home
       // instead of starting the guide again at 위치 허용.
       window.history.replaceState(null, '', '#/home')
-      connect()
+      setConsent(true)
     }
     else done()
   }
@@ -54,11 +56,11 @@ export function WelcomeScreen() {
     {dots(4)}
     <div className="m-welcome-body">
       <span className="m-welcome-ico ext"><b>1365</b></span>
-      <h1>1365 봉사실적도 함께 모을까요?</h1>
+      <h1>1365를 연결할까요?</h1>
       <p>1365 봉사시간과 Volink 활동을 한눈에 볼 수 있어요.</p>
       <ul className="m-welcome-facts">
         <li><MIcon name="timer" size={20} /><span>5분 정도면 충분해요</span></li>
-        <li><MIcon name="checkCircle" size={20} /><span>로그인하면 고른 화면이 바로 열려요</span></li>
+        <li><MIcon name="checkCircle" size={20} /><span>로그인하면 실적부터 가져와요</span></li>
       </ul>
     </div>
     <div className="m-welcome-actions">

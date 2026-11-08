@@ -209,7 +209,7 @@ public class LabActivity extends AppCompatActivity {
         String guideText = getIntent().getStringExtra("guide");
         stepScript = getIntent().getStringExtra("step");
         String wanted = getIntent().getStringExtra("target");
-        target = "S".equals(wanted) || "A".equals(wanted) ? wanted : "";
+        target = "S".equals(wanted) || "A".equals(wanted) || "P".equals(wanted) ? wanted : "";
         guide.setText(guideText == null ? "" : guideText);
         words.addView(stepLabel);
         words.addView(guide);
@@ -272,7 +272,7 @@ public class LabActivity extends AppCompatActivity {
         take.setStateListAnimator(null);
         take.setBackground(round(GREEN, 14));
         take.setTextColor(Color.WHITE);
-        take.setOnClickListener(v -> takePage());
+        take.setOnClickListener(v -> { if ("P".equals(target) && !jumped && !applied) goToProgram(); else takePage(); });
         bottom.setVisibility(View.GONE);
         bottom.addView(take, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
@@ -286,6 +286,12 @@ public class LabActivity extends AppCompatActivity {
         FrameLayout.LayoutParams cardPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
         cardPlace.setMargins(dp(12), 0, dp(12), dp(12));
         frame.addView(progressCard, cardPlace);
+        slim = text("", 13.5f, Color.parseColor("#1E3A8A"), true);
+        slim.setPadding(dp(14), dp(11), dp(14), dp(11));
+        slim.setVisibility(View.GONE);
+        FrameLayout.LayoutParams slimPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        slimPlace.setMargins(dp(12), 0, dp(12), dp(12));
+        frame.addView(slim, slimPlace);
         root.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottom, wide);
         setContentView(root);
@@ -293,6 +299,154 @@ public class LabActivity extends AppCompatActivity {
         targetUrl = start != null && !start.equals(LabPlugin.HOME) ? start : "";
         web.loadUrl(start == null ? LabPlugin.HOME : start);
         timer.postDelayed(checkStep, 1200);
+        String other = getIntent().getStringExtra("other");
+        otherUrl = other != null && other.startsWith(LabPlugin.HOME + "/") ? other : "";
+        if ("P".equals(target)) {
+            String next = getIntent().getStringExtra("next");
+            listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
+            // Login first (the 신청 현황 page asks for it), then the program page (2026-11-08, user decision).
+            String program = getIntent().getStringExtra("program");
+            targetUrl = program != null && program.startsWith(LabPlugin.HOME + "/") ? program : "";
+            progressMain.setOnClickListener(v -> done());
+            progressAgain.setOnClickListener(v -> retryRead());
+            showSlim("① 1365에 로그인해 주세요", 1, false);
+            timer.postDelayed(applyTick, 1500);
+        }
+    }
+
+    // ---- 1365 신청 반자동 (2026-11-08, target P): the person applies on the 1365 program page themselves; when 1365 says the
+    // application is done (an alert or the page's words), the app opens the 신청 현황 page, reads it and returns to Volink.
+    // The app never presses 신청 or ticks a consent box.
+    private boolean applied = false, applyRead = false;
+    /** Ticks in a row without a password box: the login is taken as finished after two (so its redirects can end first). */
+    private int clearTicks = 0;
+    private String listUrl = "";
+    private static final java.util.regex.Pattern APPLIED_WORDS = java.util.regex.Pattern.compile(
+            "신청이완료|신청완료되었|신청되었습니다|신청이되었습니다|정상적으로신청|신청이접수|접수되었습니다|이미신청");
+    private static boolean appliedText(String text) {
+        return text != null && APPLIED_WORDS.matcher(text.replaceAll("\\s+", "")).find();
+    }
+    private final Runnable applyTick = new Runnable() {
+        @Override public void run() {
+            if (web == null || !"P".equals(target)) return;
+            String js = "(function(){var pw=Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;});"
+                    + "var t=document.body?String(document.body.innerText||'').slice(0,20000):'';"
+                    + "var h=document.documentElement?String(document.documentElement.innerHTML||'').slice(0,300000):'';var c=document.body?String(document.body.textContent||''):'';return JSON.stringify({pw:pw,len:t.length,out:/로그아웃/.test(c)||/logout/i.test(h)||/님\\s*(환영|안녕)/.test(t),done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
+            web.evaluateJavascript(js, value -> {
+                try {
+                    Object parsed = new JSONTokener(value).nextValue();
+                    JSONObject page = new JSONObject(parsed == null ? "{}" : parsed.toString());
+                    boolean pw = page.optBoolean("pw"), done = page.optBoolean("done");
+                    if (pw) { sawLogin = true; jumped = false; clearTicks = 0; } else clearTicks++;
+                    // Logged in = the page offers 로그아웃 (or the 신청 현황 list opened), no password box for two ticks, no 간편인증 window open.
+                    String at = web.getUrl() == null ? "" : web.getUrl().toLowerCase();
+                    if (!pw && !applied && !jumped && !targetUrl.isEmpty() && clearTicks >= 2 && !at.contains("login")
+                            && (page.optBoolean("out") || (onApplicationsPage() && page.optInt("len") > 300))) {
+                        // to the program page (a 간편인증 window still open is closed first).
+                        if (popup != null) closePopup();
+                        goToProgram();
+                    }
+                    updateTake();
+                    // Only on the program (after the login step), so nothing on the 신청 현황 page is taken for a new application.
+                    if (done && !applied && jumped && !onApplicationsPage()) applyDetected();
+                    if (applied && !applyRead && onApplicationsPage() && page.optInt("len") > 100) readApplications();
+                } catch (Exception ignored) { }
+            });
+            if (!applyRead) timer.postDelayed(this, 1500);
+        }
+    };
+
+    /** 로그인 → 이 봉사 페이지 (by itself after the login, or with the button [로그인했어요 · 이 봉사로 가기]). */
+    private void goToProgram() {
+        if (jumped || targetUrl.isEmpty() || web == null) return;
+        loggedIn = true; jumped = true;
+        web.loadUrl(targetUrl);
+        updateTake();
+        applyCard("1365 신청을 도와드릴게요", 1, 30, "");
+        // The person's turn again: fold the card to one line so the 신청 page is not covered.
+        timer.postDelayed(() -> { if (!applied) showSlim("③ 신청 진행하기", 3, true); }, 2500);
+    }
+
+    /** One line at the bottom (the person's turn): ① login (blue) or ③ 신청 진행하기 (orange), with "n / 4". */
+    private void showSlim(String line, int step, boolean warm) {
+        progressCard.setVisibility(View.GONE);
+        slim.setText(line + "      " + step + " / 4");
+        slim.setTextColor(Color.parseColor(warm ? "#9A4F00" : "#1E3A8A"));
+        GradientDrawable bg = round(Color.parseColor(warm ? "#FFF8EF" : "#EEF3FB"), 14);
+        bg.setStroke(dp(1), Color.parseColor(warm ? "#F1C99A" : "#B9CBE8"));
+        slim.setBackground(bg);
+        slim.setVisibility(View.VISIBLE);
+    }
+
+    /** The step card (the app's turn): done steps ✓, the current one ●, the rest ○. */
+    private void applyCard(String title, int current, int percent, String note) {
+        String[] steps = { "로그인", "신청 페이지로 이동", "신청 진행하기", "신청 내역 확인 · 내 활동에 넣기" };
+        String[] doing = { "1365에 로그인해 주세요", "신청 페이지로 이동하는 중…", "신청 진행하기", "신청 내역 확인하는 중…" };
+        String[] done = { "로그인 확인됐어요", "신청 페이지", "신청 완료 (1365)", "신청 내역을 읽었어요" };
+        TextView[] lines = { progressPeriod, progressTime, progressActivity, progressExtra };
+        for (int i = 0; i < 4; i++) {
+            lines[i].setVisibility(View.VISIBLE);
+            lines[i].setText(i < current ? "✓ " + done[i] : i == current ? "● " + doing[i] : "○ " + steps[i]);
+            lines[i].setTextColor(i < current ? GREEN : i == current ? INK : Color.parseColor("#9AA3A0"));
+            lines[i].setTypeface(Typeface.DEFAULT, i == current ? Typeface.BOLD : Typeface.NORMAL);
+        }
+        progressTitle.setText(title);
+        progressBar.setIndeterminate(false);
+        progressBar.setProgress(percent);
+        progressNote.setText(note);
+        progressNote.setVisibility(note.isEmpty() ? View.GONE : View.VISIBLE);
+        progressButtons.setVisibility(View.GONE);
+        slim.setVisibility(View.GONE);
+        progressCard.setVisibility(View.VISIBLE);
+    }
+
+    /** 신청 내역 not read in 20 s: [다시 시도] reads the 신청 현황 page again, [닫기] goes back with what there is. */
+    private void retryRead() {
+        applyRead = false;
+        applyCard("신청됐어요!", 3, 80, "신청 현황에서 이 봉사만 읽어요");
+        if (web != null && !listUrl.isEmpty()) web.loadUrl(listUrl);
+        timer.postDelayed(applyTick, 1500);
+        timer.postDelayed(this::readStuck, 20000);
+    }
+
+    private void readStuck() {
+        if (applyRead || isFinishing()) return;
+        applyRead = true;
+        timer.removeCallbacks(applyTick);
+        applyCard("신청 내역을 읽지 못했어요", 3, 80, "1365 화면이 달라졌을 수 있어요. 닫으면 날짜를 직접 골라 넣을 수 있어요");
+        progressMain.setText("닫기");
+        progressButtons.setVisibility(View.VISIBLE);
+    }
+
+    private boolean onApplicationsPage() {
+        String url = web == null ? null : web.getUrl();
+        if (url == null || !url.startsWith(LabPlugin.HOME + "/")) return false;
+        String path = Uri.parse(url).getPath();
+        return path != null && path.endsWith(APPLICATIONS_PAGE);
+    }
+
+    /** 1365 said the application went through: show it, then go to 신청 현황 (20 s at most, then back with what we have). */
+    private void applyDetected() {
+        if (applied) return;
+        applied = true;
+        bottom.setVisibility(View.GONE);
+        applyCard("신청됐어요!", 3, 80, "신청 현황에서 이 봉사만 읽어요");
+        timer.postDelayed(() -> { if (web != null && !listUrl.isEmpty() && !onApplicationsPage()) web.loadUrl(listUrl); }, 1200);
+        timer.postDelayed(this::readStuck, 20000);
+    }
+
+    private void readApplications() {
+        applyRead = true;
+        timer.postDelayed(() -> web.evaluateJavascript("(function(){return document.body?document.body.innerText:'';})()", value -> {
+            String text = "";
+            try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception ignored) { }
+            if (text.length() > MAX) text = text.substring(0, MAX);
+            if (!text.trim().isEmpty()) { pages.add(text); applicationsAt = pages.size() - 1; }
+            Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
+            host = page.getHost() == null ? "" : page.getHost();
+            applyCard("✓ 다 됐어요", 4, 100, "Volink로 돌아가요…");
+            timer.postDelayed(this::done, 1000);
+        }), 1200);
     }
 
     private LinearLayout bottom;
@@ -333,7 +487,9 @@ public class LabActivity extends AppCompatActivity {
     private final java.util.LinkedHashMap<String, String> harvestTexts = new java.util.LinkedHashMap<>();
     private int harvestSearched = 0, harvestIdle = 0, harvestCool = 0, harvestTries = 0, harvestTicks = 0, harvestRows = 0;
     private LinearLayout progressCard, progressButtons;
-    private TextView progressTitle, progressNote, progressPeriod, progressTime, progressActivity;
+    private TextView progressTitle, progressNote, progressPeriod, progressTime, progressActivity, progressExtra;
+    /** 신청 반자동: the one-line note at the bottom while it is the person's turn (login, then 신청). */
+    private TextView slim;
     private android.widget.ProgressBar progressBar;
     private Button progressMain, progressAgain;
 
@@ -405,7 +561,20 @@ public class LabActivity extends AppCompatActivity {
         }
     }
 
+    /** The card's two buttons as the 실적 reading uses them ([n건만 가져가기]/[닫기] and [다시 읽기]). */
+    private void harvestButtons() {
+        progressMain.setOnClickListener(v -> {
+            pages.clear();
+            pages.addAll(carried);
+            pages.addAll(harvestTexts.values());
+            done();
+        });
+        progressAgain.setText("다시 읽기");
+        progressAgain.setOnClickListener(v -> startHarvest());
+    }
+
     private void startHarvest() {
+        harvestButtons();
         harvestStarted = true;
         harvesting = true;
         harvestPhase = "time";
@@ -432,11 +601,72 @@ public class LabActivity extends AppCompatActivity {
         progressTitle.setText(harvestRows > 0 ? "✓ " + harvestRows + "건을 다 읽었어요" : "✓ 다 읽었어요");
         progressNote.setText("Volink로 돌아가요…");
         pages.clear();
+        pages.addAll(carried);
         pages.addAll(harvestTexts.values());
         Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
         host = page.getHost() == null ? "" : page.getHost();
+        // A안 (2026-11-08): while still logged in, offer the other page (신청 현황) in this same window.
+        if (!otherAsked && !otherUrl.isEmpty() && carried.isEmpty()) {
+            askOther("신청 현황도 가져올까요?", "신청 현황도 가져오기", () -> readOther());
+            return;
+        }
         timer.postDelayed(this::done, 1000);
     }
+
+    // ---- 이어서 가져오기 (A안, 2026-11-08): 실적 → 신청 현황, or 신청 현황 → 실적, in one visit (one login) ----
+    private String otherUrl = "";
+    private boolean otherAsked = false, otherRead = false;
+    /** Pages already taken before the 실적 reading started (신청 현황 first): kept when the reading finishes. */
+    private final ArrayList<String> carried = new ArrayList<>();
+    private int otherTicks = 0;
+
+    /** The card asks for the other page: [그것도 가져오기] / [Volink로 돌아가기]. */
+    private void askOther(String question, String yes, Runnable go) {
+        progressNote.setText(question);
+        progressNote.setVisibility(View.VISIBLE);
+        progressMain.setText(yes);
+        progressMain.setOnClickListener(v -> { otherAsked = true; go.run(); });
+        progressAgain.setText("Volink로 돌아가기");
+        progressAgain.setOnClickListener(v -> { otherAsked = true; done(); });
+        progressButtons.setVisibility(View.VISIBLE);
+        progressCard.setVisibility(View.VISIBLE);
+    }
+
+    /** 실적 done → the 신청 현황 page in the same window, read once its list is there (20 s at most). */
+    private void readOther() {
+        progressButtons.setVisibility(View.GONE);
+        progressTitle.setText("신청 현황을 읽고 있어요");
+        progressPeriod.setText("✓ 실적 " + harvestRows + "건");
+        progressTime.setText("● 신청 현황 읽는 중…");
+        progressActivity.setVisibility(View.GONE);
+        progressBar.setVisibility(View.VISIBLE);
+        progressBar.setProgress(85);
+        progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
+        otherTicks = 0;
+        web.loadUrl(otherUrl);
+        timer.postDelayed(otherTick, 1500);
+    }
+
+    private final Runnable otherTick = new Runnable() {
+        @Override public void run() {
+            if (web == null || otherRead) return;
+            if (++otherTicks > 14) { otherRead = true; Toast.makeText(LabActivity.this, "신청 현황은 읽지 못했어요", Toast.LENGTH_SHORT).show(); done(); return; }
+            if (!onApplicationsPage()) { timer.postDelayed(this, 1500); return; }
+            web.evaluateJavascript("(function(){return document.body?document.body.innerText:'';})()", value -> {
+                String text = "";
+                try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception ignored) { }
+                if (text.trim().length() < 100) { timer.postDelayed(otherTick, 1500); return; }
+                otherRead = true;
+                if (text.length() > MAX) text = text.substring(0, MAX);
+                pages.add(text);
+                progressTime.setText("✓ 신청 현황을 읽었어요");
+                progressBar.setProgress(100);
+                progressTitle.setText("✓ 다 읽었어요");
+                progressNote.setText("Volink로 돌아가요…");
+                timer.postDelayed(LabActivity.this::done, 1000);
+            });
+        }
+    };
 
     private void harvestStuck() {
         harvesting = false;
@@ -498,6 +728,9 @@ public class LabActivity extends AppCompatActivity {
         progressButtons.addView(progressAgain, tall2);
         box.addView(progressTitle);
         box.addView(progressPeriod); box.addView(progressTime); box.addView(progressActivity);
+        progressExtra = progressLine();
+        progressExtra.setVisibility(View.GONE);
+        box.addView(progressExtra);
         LinearLayout.LayoutParams barAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
         barAt.topMargin = dp(10);
         box.addView(progressBar, barAt);
@@ -524,21 +757,24 @@ public class LabActivity extends AppCompatActivity {
         String path = Uri.parse(url).getPath();
         if (path == null) return false;
         if ("S".equals(target)) return path.endsWith(SUMMARY_PAGE);
-        if ("A".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
+        if ("A".equals(target) || "P".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
         return path.endsWith(SUMMARY_PAGE) || path.endsWith(APPLICATIONS_PAGE);
     }
 
     private void updateTake() {
         if (bottom == null) return;
         // 실적 (S): no button — the list is read by itself (maybeStartHarvest).
-        boolean show = onAllowedPage() && !"S".equals(target);
+        // 신청 반자동 before the program page: a button that goes there (if the login was not noticed by itself).
+        boolean toProgram = false; // 2026-11-08: no button while logging in (it got in the way); the login is noticed by itself
+        boolean show = toProgram || (onAllowedPage() && !"S".equals(target) && !applied && (!"P".equals(target) || jumped));
+        if (take != null && take.isEnabled()) take.setText(toProgram ? "로그인했어요 · 이 봉사로 가기" : takeLabel());
         if (show && bottom.getVisibility() != View.VISIBLE)
             take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
     private String takeLabel() {
-        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
+        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) || "P".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
     }
 
     /** The button shows "가져오는 중…" (lighter, not pressable) while the page is read, then the app takes over. */
@@ -572,6 +808,23 @@ public class LabActivity extends AppCompatActivity {
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
             lastStep = 0;
+            // A안 (2026-11-08): 신청 현황 taken → offer 실적 in the same window (the reading starts by itself there).
+            if ("A".equals(target) && !otherAsked && !otherUrl.isEmpty()) {
+                bottom.setVisibility(View.GONE);
+                progressTitle.setText("✓ 신청 현황을 가져왔어요");
+                progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
+                progressBar.setVisibility(View.GONE);
+                askOther("봉사참여 실적도 가져올까요?", "실적도 가져오기", () -> {
+                    carried.clear();
+                    carried.addAll(pages);
+                    target = "S";
+                    progressButtons.setVisibility(View.GONE);
+                    progressTitle.setText("봉사참여 실적으로 이동하고 있어요");
+                    progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
+                    web.loadUrl(otherUrl);
+                });
+                return;
+            }
             // One page per visit: back to the app (its result screen) right after "가져오는 중…" has been seen.
             timer.postDelayed(this::done, 400);
         });
@@ -579,7 +832,7 @@ public class LabActivity extends AppCompatActivity {
 
     /** 닫기 / 완료: the pages taken so far go back to the app; none taken = cancelled. */
     private void done() {
-        if (pages.isEmpty()) { setResult(RESULT_CANCELED); finish(); return; }
+        if (pages.isEmpty() && !applied) { setResult(RESULT_CANCELED); finish(); return; }
         int total = 0;
         ArrayList<String> out = new ArrayList<>();
         for (String text : pages) { if (total + text.length() > MAX) break; out.add(text); total += text.length(); }
@@ -587,6 +840,7 @@ public class LabActivity extends AppCompatActivity {
         data.putExtra("text", String.join("\n\n", out));
         data.putStringArrayListExtra("texts", out);
         data.putExtra("host", host);
+        data.putExtra("applied", applied);
         setResult(RESULT_OK, data);
         finish();
     }
@@ -620,6 +874,13 @@ public class LabActivity extends AppCompatActivity {
      */
     private boolean quietAlert(String message, JsResult result) {
         if (message != null && message.replace(" ", "").contains("로그인정보가없")) { result.confirm(); return true; }
+        // 신청 반자동: 1365's "신청이 완료되었습니다" (or "이미 신청한 …") is confirmed for the person and shown as a short note.
+        if ("P".equals(target) && jumped && appliedText(message)) {
+            result.confirm();
+            Toast.makeText(this, message.trim(), Toast.LENGTH_SHORT).show();
+            applyDetected();
+            return true;
+        }
         return false;
     }
 
@@ -731,6 +992,8 @@ public class LabActivity extends AppCompatActivity {
         for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
         timer.removeCallbacks(harvestTick);
+        timer.removeCallbacks(applyTick);
+        timer.removeCallbacks(otherTick);
         closePopup();
         if (web != null) {
             web.stopLoading();

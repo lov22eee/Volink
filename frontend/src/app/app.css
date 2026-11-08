@@ -1417,3 +1417,6 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-kind { font-style: normal; font-size: 10.5px; font-weight: 700; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #eaf0fa; color: #2f5596; vertical-align: 2px; }
 .lab-kind.act { background: #f1e9fb; color: #6a3fb0; }
 .lab-item.had { opacity: 0.55; }
+.lab-sec { display: flex; align-items: center; justify-content: space-between; margin: 18px 2px 8px; }
+.lab-sec h2 { font-size: 15px; font-weight: 800; }
+.lab-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; color: var(--m-green); font-size: 13.5px; font-weight: 700; padding: 6px 0; }
