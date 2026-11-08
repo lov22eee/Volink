@@ -272,7 +272,7 @@ public class LabActivity extends AppCompatActivity {
         take.setStateListAnimator(null);
         take.setBackground(round(GREEN, 14));
         take.setTextColor(Color.WHITE);
-        take.setOnClickListener(v -> takePage());
+        take.setOnClickListener(v -> { if ("P".equals(target) && !jumped && !applied) goToProgram(); else takePage(); });
         bottom.setVisibility(View.GONE);
         bottom.addView(take, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
@@ -321,7 +321,7 @@ public class LabActivity extends AppCompatActivity {
             if (web == null || !"P".equals(target)) return;
             String js = "(function(){var pw=Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;});"
                     + "var t=document.body?String(document.body.innerText||'').slice(0,20000):'';"
-                    + "return JSON.stringify({pw:pw,len:t.length,out:/로그아웃/.test(t),done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
+                    + "var h=document.documentElement?String(document.documentElement.innerHTML||'').slice(0,300000):'';var c=document.body?String(document.body.textContent||''):'';return JSON.stringify({pw:pw,len:t.length,out:/로그아웃/.test(c)||/logout/i.test(h)||/님\\s*(환영|안녕)/.test(t),done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
             web.evaluateJavascript(js, value -> {
                 try {
                     Object parsed = new JSONTokener(value).nextValue();
@@ -330,13 +330,13 @@ public class LabActivity extends AppCompatActivity {
                     if (pw) { sawLogin = true; jumped = false; clearTicks = 0; } else clearTicks++;
                     // Logged in = the page offers 로그아웃 (or the 신청 현황 list opened), no password box for two ticks, no 간편인증 window open.
                     String at = web.getUrl() == null ? "" : web.getUrl().toLowerCase();
-                    if (!pw && popup == null && !applied && !jumped && !targetUrl.isEmpty() && clearTicks >= 2 && !at.contains("login")
+                    if (!pw && !applied && !jumped && !targetUrl.isEmpty() && clearTicks >= 2 && !at.contains("login")
                             && (page.optBoolean("out") || (onApplicationsPage() && page.optInt("len") > 300))) {
-                        // to the program page.
-                        loggedIn = true; jumped = true;
-                        web.loadUrl(targetUrl);
-                        Toast.makeText(LabActivity.this, "로그인됐어요. 날짜를 고르고 [신청]을 직접 눌러 주세요.", Toast.LENGTH_LONG).show();
+                        // to the program page (a 간편인증 window still open is closed first).
+                        if (popup != null) closePopup();
+                        goToProgram();
                     }
+                    updateTake();
                     // Only on the program (after the login step), so nothing on the 신청 현황 page is taken for a new application.
                     if (done && !applied && jumped && !onApplicationsPage()) applyDetected();
                     if (applied && !applyRead && onApplicationsPage() && page.optInt("len") > 100) readApplications();
@@ -345,6 +345,15 @@ public class LabActivity extends AppCompatActivity {
             if (!applyRead) timer.postDelayed(this, 1500);
         }
     };
+
+    /** 로그인 → 이 봉사 페이지 (by itself after the login, or with the button [로그인했어요 · 이 봉사로 가기]). */
+    private void goToProgram() {
+        if (jumped || targetUrl.isEmpty() || web == null) return;
+        loggedIn = true; jumped = true;
+        web.loadUrl(targetUrl);
+        updateTake();
+        Toast.makeText(this, "이 봉사 페이지예요. 날짜를 고르고 [신청]을 직접 눌러 주세요.", Toast.LENGTH_LONG).show();
+    }
 
     private boolean onApplicationsPage() {
         String url = web == null ? null : web.getUrl();
@@ -619,7 +628,10 @@ public class LabActivity extends AppCompatActivity {
     private void updateTake() {
         if (bottom == null) return;
         // 실적 (S): no button — the list is read by itself (maybeStartHarvest).
-        boolean show = onAllowedPage() && !"S".equals(target) && !applied;
+        // 신청 반자동 before the program page: a button that goes there (if the login was not noticed by itself).
+        boolean toProgram = "P".equals(target) && !jumped && !applied && !targetUrl.isEmpty();
+        boolean show = toProgram || (onAllowedPage() && !"S".equals(target) && !applied);
+        if (take != null && take.isEnabled()) take.setText(toProgram ? "로그인했어요 · 이 봉사로 가기" : takeLabel());
         if (show && bottom.getVisibility() != View.VISIBLE)
             take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
