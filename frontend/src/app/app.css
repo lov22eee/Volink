@@ -1556,3 +1556,16 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .my-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 2px 0 0; border: 0; background: none; font: inherit; color: var(--ink-3); font-size: 12.5px; text-align: left; }
 .my-line b { color: var(--ink-2); font-weight: 650; }
 .my-line em { font-style: normal; font-weight: 700; color: #3b67ad; display: inline-flex; align-items: center; white-space: nowrap; }
+.hb-todo a.ok { color: var(--m-green-ink); }
+/* 출석부 실시간 (2026-11-08) */
+.r-count { display: inline-block; animation: r-count .4s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes r-count { from { transform: scale(1.5); color: var(--m-green); } to { transform: none; } }
+.r-bar { display: block; height: 6px; border-radius: 3px; background: #e3e8e5; overflow: hidden; margin: -4px 0 8px; }
+.r-bar span { display: block; height: 100%; background: var(--m-green); transition: width .45s ease; }
+.r-just { font-style: normal; margin-left: 6px; font-size: 11px; font-weight: 750; color: var(--m-green-ink); background: var(--m-mint); padding: 1px 6px; border-radius: 8px; }
+.r-awake { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--ink-3); }
+.r-alldone { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 22px 16px 12px; background: #fff; border: 1px solid var(--line); border-radius: 20px; text-align: center; animation: lab-in .35s ease-out both; }
+.r-alldone-ico { width: 60px; height: 60px; border-radius: 50%; background: var(--m-mint); color: var(--m-green); display: grid; place-items: center; margin-bottom: 6px; animation: lab-pop .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+.r-alldone strong { font-size: 18px; }
+.r-alldone small { color: var(--ink-3); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .r-count, .r-alldone, .r-alldone-ico { animation: none; } }

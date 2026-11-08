@@ -16,7 +16,7 @@ import { fieldIcon, isNewcomer, seatsLeft, startsAt } from './cards'
 import { dayWord, Loading, MIcon, TopBar } from './ui'
 import type { MIconName } from './ui'
 
-type Todo = { key: string; icon: MIconName; text: string; href: string; tone?: 'hot' }
+type Todo = { key: string; icon: MIconName; text: string; href: string; tone?: 'hot' | 'ok' }
 const ACTIVE = ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN']
 
 export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }) {
@@ -62,7 +62,12 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   for (const a of running) {
     const phase = phaseOf(a.date, a.startTime, a.durationMinutes, now, Boolean(a.checkinOpenedAt)).phase
     if (phase === 'wait') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석을 시작할 수 있어요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
-    else if (phase === 'open' || phase === 'late') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석 QR을 띄울 시간이에요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
+    // 2026-11-08: by the time and by who is here — 진행 중 n/m, 모두 출석 (green, no QR prompt), after the QR window only who is missing.
+    const expected = a.confirmed ?? 0, here = Math.min(expected, a.checkedIn ?? 0), missing = expected - here
+    if (phase === 'open') todos.push(expected > 0 && missing === 0
+      ? { key: 'q' + a.id, icon: 'checkCircle', tone: 'ok', text: `모두 출석했어요 · ${here}/${expected}명 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' }
+      : { key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석 진행 중 · ${here}/${expected}명 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
+    else if (phase === 'late' && missing > 0) todos.push({ key: 'q' + a.id, icon: 'alert', tone: 'hot', text: `QR 출석 마감 · 미출석 ${missing}명 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
     if ((a.pending ?? 0) > 0) todos.push({ key: 'p' + a.id, icon: 'users', text: `승인할 신청 ${a.pending}건 · ${a.title}`, href: '#/manage/' + a.id })
     if ((a.unanswered ?? 0) > 0) todos.push({ key: 'u' + a.id, icon: 'chat', text: `답변할 질문 ${a.unanswered}개 · ${a.title}`, href: '#/news/' + a.id })
   }
@@ -115,7 +120,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       <Sec title="나의 다음 봉사" more={next || hostNext ? ['내 활동', '#/mine'] : undefined}>
         <NextLine next={next} hostNext={hostNext} done={justDone} />
         {todos.length > 0 && <ul className="hb-todo" aria-label="지금 할 일">{todos.slice(0, 3).map(todo =>
-          <li key={todo.key}><a href={todo.href} className={todo.tone === 'hot' ? 'hot' : ''}><MIcon name={todo.icon} size={18} /><span>{todo.text}</span><MIcon name="chevron" size={16} /></a></li>)}</ul>}
+          <li key={todo.key}><a href={todo.href} className={todo.tone ?? ''}><MIcon name={todo.icon} size={18} /><span>{todo.text}</span><MIcon name="chevron" size={16} /></a></li>)}</ul>}
       </Sec>
 
       {urgent.length > 0 && <Sec title="지금 도움이 필요해요" note="48시간 안" more={['전체 보기', '#/find']}>

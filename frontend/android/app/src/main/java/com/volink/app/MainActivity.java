@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CalendarPlugin.class);
         registerPlugin(LabPlugin.class);
         registerPlugin(CameraPlugin.class);
+        registerPlugin(ScreenPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
