@@ -832,10 +832,12 @@ test('a confirmed participant checks in with the organizer QR on site and gets a
   // A week away: no attendance panel yet.
   await expect(page.getByRole('region', { name: '출석 체크' })).toHaveCount(0)
 
-  // Starts in 10 minutes: the QR is live, rotating, with the attendance count.
+  // Starts in 10 minutes: the organizer opens attendance on site ([출석 시작]), then the QR is live, rotating, with the count.
   moveActivity(activityId, 10)
   await page.reload()
   const attendance = page.getByRole('region', { name: '출석 체크' })
+  await expect(attendance).toContainText('아직 출석을 시작하지 않았어요')
+  await attendance.getByRole('button', { name: '출석 시작' }).click()
   const qr = attendance.getByRole('img', { name: '체크인 QR' })
   await expect(qr).toBeVisible()
   await expect(attendance).toContainText('0 / 1명 출석')
@@ -907,6 +909,7 @@ test('a participant outside the radius is refused with the distance, and the org
   await expect(page.locator('.seat-line')).toContainText('확정 1')
   moveActivity(activityId, 10)
   await page.reload()
+  await page.getByRole('region', { name: '출석 체크' }).getByRole('button', { name: '출석 시작' }).click()
   const url = (await page.getByRole('img', { name: '체크인 QR' }).getAttribute('data-url'))!
 
   // About 1 km away.

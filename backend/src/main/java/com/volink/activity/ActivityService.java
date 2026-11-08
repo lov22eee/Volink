@@ -28,7 +28,7 @@ public class ActivityService {
                    o.name AS organizationName, a.place_id AS placeId, p.name AS placeName, p.area AS placeAddress, a.meeting_point AS meetingPoint, a.supplies,
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
-                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, a.cancel_reason AS cancelReason,
+                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
                    a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId, u.display_name AS organizerName,
                    ST_Latitude(l.location) AS latitude, ST_Longitude(l.location) AS longitude

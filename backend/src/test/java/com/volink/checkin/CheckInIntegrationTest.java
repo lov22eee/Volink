@@ -43,6 +43,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void fullFlowFromQrCheckInToACompletionRecord() throws Exception {
         startsIn(10);
+        open();
         String qrToken = json.readTree(mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.open").value(true)).andExpect(jsonPath("$.validSeconds").value(60))
                 .andReturn().getResponse().getContentAsString()).get("token").asText();
@@ -74,12 +75,14 @@ class CheckInIntegrationTest extends ApiTestSupport {
         startsIn(120);
         mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
                 .andExpect(jsonPath("$.open").value(false)).andExpect(jsonPath("$.token").doesNotExist());
-        checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("CHECKIN_OUT_OF_TIME"));
+        // Not opened yet (two hours ahead): the organizer has not started attendance.
+        checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("CHECKIN_NOT_STARTED"));
     }
 
     @Test
     void expiredForgedOrOtherActivityQrIsRefused() throws Exception {
         startsIn(10);
+        open();
         checkIn(member, qr.token(activity, Instant.now().minusSeconds(61)), LAT, LNG).andExpect(status().isGone()).andExpect(jsonPath("$.code").value("QR_EXPIRED"));
         checkIn(member, activity + "." + Instant.now().getEpochSecond() + ".forged", LAT, LNG).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("QR_INVALID"));
         checkIn(member, qr.issue(activity + 1000), LAT, LNG).andExpect(status().isBadRequest());
@@ -90,6 +93,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void outsideTheRadiusNeedsAManualCheckInWithAReason() throws Exception {
         startsIn(10);
+        open();
         checkIn(member, qr.issue(activity), LAT + 0.3 * DEG_PER_KM, LNG).andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("CHECKIN_OUT_OF_RANGE")).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("200m")));
         checkIn(member, qr.issue(activity), null, null).andExpect(status().isUnprocessableEntity());
@@ -109,6 +113,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
         long pending = json.readTree(perform(post("/api/activities/" + activity + "/participations"), Map.of(), late)
                 .andReturn().getResponse().getContentAsString()).get("participation").get("id").asLong();
         startsIn(-1);
+        open();
         checkIns.advance();
         assertThat(jdbc.queryForObject("SELECT status FROM activities WHERE id = ?", String.class, activity)).isEqualTo("IN_PROGRESS");
         assertThat(jdbc.queryForObject("SELECT status FROM participations WHERE id = ?", String.class, pending)).isEqualTo("EXPIRED");
@@ -124,6 +129,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void theQrRotatesEvery30SecondsAndTheOrganizerSeesAttendance() throws Exception {
         startsIn(10);
+        open();
         mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
                 .andExpect(jsonPath("$.rotateSeconds").value(30)).andExpect(jsonPath("$.expected").value(1)).andExpect(jsonPath("$.checkedIn").value(0));
         checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isCreated()).andExpect(jsonPath("$.checkedInAt").exists());
@@ -133,6 +139,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void reportedGpsErrorIsForgivenUpTo50MetresOnly() throws Exception {
         startsIn(10);
+        open();
         // 230 m away with a 40 m reading error: inside 200 + 40.
         checkIn(member, qr.issue(activity), LAT + 0.23 * DEG_PER_KM, LNG, 40.0).andExpect(status().isCreated());
         String other = joinConfirmed();
@@ -145,6 +152,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     void organizerCompletesEveryoneWhoCheckedInAtOnce() throws Exception {
         joinConfirmed();
         startsIn(10);
+        open();
         checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isCreated());
         perform(post("/api/activities/" + activity + "/complete"), Map.of(), organizer).andExpect(status().isConflict());
         ended();
@@ -161,6 +169,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
         // Capacity 1: the member checks in; a later applicant must find the activity full, not a free seat.
         jdbc.update("UPDATE activities SET capacity = 1 WHERE id = ?", activity);
         startsIn(10);
+        open();
         checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isCreated());
         // Full, and the waitlist closed 2 h before the start, so the application is refused instead of becoming APPLIED.
         perform(post("/api/activities/" + activity + "/participations"), Map.of(), token(member("GENERAL")))
@@ -179,10 +188,10 @@ class CheckInIntegrationTest extends ApiTestSupport {
         startsIn(20);
         checkIns.advance();
         checkIns.advance();
-        mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member)).andExpect(jsonPath("$.items[0].title").value("체크인이 열렸어요"));
-        // Count only this activity's reminders: other tests leave activities in the window too.
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE title = '체크인이 열렸어요' AND link_path = ?", Integer.class, "#/activity/" + activity)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = '출석 QR을 띄울 시간이에요'", Integer.class, organizerId)).isEqualTo(1);
+        // 30 minutes before: only the organizer hears (once); participants hear when the organizer opens attendance.
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE type = 'CHECKIN_OPEN' AND activity_id = ?", Integer.class, activity)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = '출석을 시작할 수 있어요' AND link_path = ?", Integer.class, organizerId,
+                "#/manage/" + activity + "?tab=attendance")).isEqualTo(1);
         startsIn(-1);
         checkIns.advance();
         mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + late)).andExpect(jsonPath("$.items[0].title").value("승인 전에 활동이 시작됐어요"));
@@ -191,6 +200,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void theFourDigitCodeChecksInLikeTheQrAndWrongGuessesAreLimited() throws Exception {
         startsIn(10);
+        open();
         String code = json.readTree(mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
                 .andExpect(jsonPath("$.code").isString()).andExpect(jsonPath("$.codeSecondsLeft").isNumber()).andReturn().getResponse().getContentAsString()).get("code").asText();
         String wrong = code.equals("0000") ? "1111" : "0000";
@@ -205,6 +215,7 @@ class CheckInIntegrationTest extends ApiTestSupport {
     @Test
     void severalPeopleCanBeCheckedInByHandWithOneReason() throws Exception {
         startsIn(10);
+        open();
         String other = joinConfirmed();
         long second = jdbc.queryForObject("SELECT p.id FROM participations p WHERE p.activity_id = ? AND p.id <> ? AND p.status = 'CONFIRMED'", Long.class, activity, participation);
         perform(post("/api/activities/" + activity + "/manual-check-ins"), Map.of("participationIds", java.util.List.of(participation, second), "reason", " "), organizer).andExpect(status().isBadRequest());
@@ -213,6 +224,57 @@ class CheckInIntegrationTest extends ApiTestSupport {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.checkedIn").value(2));
         assertThat(jdbc.queryForList("SELECT method FROM check_ins c JOIN participations p ON p.id = c.participation_id WHERE p.activity_id = ?", String.class, activity)).containsOnly("MANUAL").hasSize(2);
         assertThat(other).isNotBlank();
+    }
+
+    @Test
+    void attendanceOpensOnlyWhenTheOrganizerStartsItAndTheParticipantsAreToldOnce() throws Exception {
+        startsIn(10);
+        mvc.perform(get("/api/activities/" + activity + "/qr").header("Authorization", "Bearer " + organizer))
+                .andExpect(jsonPath("$.opened").value(false)).andExpect(jsonPath("$.canStart").value(true)).andExpect(jsonPath("$.open").value(false))
+                .andExpect(jsonPath("$.token").doesNotExist());
+        checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("CHECKIN_NOT_STARTED"));
+        perform(post("/api/activities/" + activity + "/checkin/start"), Map.of(), member).andExpect(status().isNotFound());
+        perform(post("/api/activities/" + activity + "/checkin/start"), Map.of(), organizer).andExpect(status().isOk())
+                .andExpect(jsonPath("$.opened").value(true)).andExpect(jsonPath("$.notified").value(1));
+        mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + member))
+                .andExpect(jsonPath("$.items[0].type").value("CHECKIN_OPEN")).andExpect(jsonPath("$.items[0].title").value("출석이 시작됐어요"))
+                .andExpect(jsonPath("$.items[0].link").value("#/activity/" + activity + "?scan=1"));
+        // Pressing it again changes nothing and tells nobody again.
+        perform(post("/api/activities/" + activity + "/checkin/start"), Map.of(), organizer).andExpect(status().isOk()).andExpect(jsonPath("$.notified").value(0));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE type = 'CHECKIN_OPEN' AND activity_id = ?", Integer.class, activity)).isEqualTo(1);
+        mvc.perform(get("/api/activities/" + activity)).andExpect(jsonPath("$.checkinOpenedAt").isString());
+        checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isCreated());
+    }
+
+    @Test
+    void attendanceCanBeStartedFrom30MinutesBeforeTheStartTo30MinutesBeforeTheEnd() throws Exception {
+        String other = joinConfirmed();
+        startsIn(45);
+        perform(post("/api/activities/" + activity + "/checkin/start"), Map.of(), organizer).andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("CHECKIN_OUT_OF_TIME"));
+        // A 3-hour activity that began an hour ago: still possible to start, and to check in (the old rule closed at start + 30 minutes).
+        LocalDateTime start = now().minusMinutes(60);
+        jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ? WHERE id = ?", start, start.plusMinutes(180), activity);
+        open();
+        checkIn(member, qr.issue(activity), LAT, LNG).andExpect(status().isCreated());
+        // 20 minutes before the end: closed.
+        jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ? WHERE id = ?", now().minusMinutes(160), now().plusMinutes(20), activity);
+        checkIn(other, qr.issue(activity), LAT, LNG).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("CHECKIN_OUT_OF_TIME"));
+    }
+
+    @Test
+    void neverOpenedAttendanceRemindsTheOrganizerAndMarksNobodyAsANoShow() throws Exception {
+        long organizerId = jdbc.queryForObject("SELECT organizer_id FROM activities WHERE id = ?", Long.class, activity);
+        startsIn(-1);
+        checkIns.advance();
+        checkIns.advance();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND title = '아직 출석을 시작하지 않았어요' AND activity_id = ?", Integer.class, organizerId, activity)).isEqualTo(1);
+        ended();
+        checkIns.advance();
+        assertThat(jdbc.queryForObject("SELECT status FROM activities WHERE id = ?", String.class, activity)).isEqualTo("FINISHED");
+        assertThat(jdbc.queryForObject("SELECT status FROM participations WHERE id = ?", String.class, participation)).isEqualTo("CONFIRMED");
+        assertThat(jdbc.queryForObject("SELECT body FROM notifications WHERE user_id = ? AND type = 'FINISHED' AND activity_id = ?", String.class, organizerId, activity))
+                .contains("출석 미확인");
     }
 
     private ResultActions byCode(String token, String code, Double lat, Double lng) throws Exception {
@@ -249,6 +311,11 @@ class CheckInIntegrationTest extends ApiTestSupport {
         body.put("lat", lat);
         body.put("lng", lng);
         return perform(post("/api/activities/" + activity + "/check-ins"), body, token);
+    }
+
+    /** The organizer presses [출석 시작]. */
+    private void open() throws Exception {
+        perform(post("/api/activities/" + activity + "/checkin/start"), Map.of(), organizer).andExpect(status().isOk()).andExpect(jsonPath("$.opened").value(true));
     }
 
     private void startsIn(int minutes) {

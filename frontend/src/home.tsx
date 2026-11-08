@@ -153,7 +153,7 @@ function MyStatus({ items, name }: { items: MyParticipation[]; name: string }) {
   const offers = upcoming.filter(p => p.status === 'OFFERED')
   // Confirmed and on site now: the check-in window is open (30 min before to 30 min after the start).
   const now = useNow()
-  const checkins = upcoming.filter(p => p.status === 'CONFIRMED').map(p => ({ p, day: phaseOf(p.date, p.startTime, 60, now) })).filter(({ day }) => day.phase === 'open')
+  const checkins = upcoming.filter(p => p.status === 'CONFIRMED').map(p => ({ p, day: phaseOf(p.date, p.startTime, p.durationMinutes ?? 60, now, Boolean(p.checkinOpen)) })).filter(({ day }) => day.phase === 'open')
   return <section className="home-me" aria-label="내 활동 현황">
     <div className="me-bar">
       <div className="me-hi"><strong>{name}님</strong><span>내 활동 현황</span></div>

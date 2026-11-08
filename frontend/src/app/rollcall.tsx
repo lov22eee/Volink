@@ -15,7 +15,7 @@ import { ActionBar, MIcon, Sheet, TextInput } from './ui'
 const reasons = ['휴대폰 없음', '앱·로그인 안 됨', '위치 안 잡힘', '얼굴로 확인함']
 const methodTag: Record<string, { text: string; tone: string }> = { QR: { text: 'QR', tone: '' }, CODE: { text: '코드', tone: '' }, MANUAL: { text: '수동', tone: 'man' } }
 
-export function RollCall({ activity, people, phase, opens, onChanged }: { activity: LiveActivity; people: Applicant[]; phase: Phase; opens: number; onChanged: () => void }) {
+export function RollCall({ activity, people, phase, opens, closes, onChanged }: { activity: LiveActivity; people: Applicant[]; phase: Phase; opens: number; closes: number; onChanged: () => void }) {
   const [info, setInfo] = useState<QrInfo | null>(null)
   const [image, setImage] = useState('')
   const [left, setLeft] = useState(30)
@@ -30,7 +30,19 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
   const [own, setOwn] = useState('')
   const [busy, setBusy] = useState(false)
   const open = phase === 'open'
-  const canManual = phase === 'open' || phase === 'late'
+  const canManual = phase === 'open' || phase === 'wait' || phase === 'late'
+  const [starting, setStarting] = useState(false)
+  // [출석 시작] (2026-11-08): opens QR / code check-in and tells the confirmed participants.
+  async function startNow() {
+    setStarting(true)
+    try {
+      const result = await api<{ notified: number }>('/api/activities/' + activity.id + '/checkin/start', 'POST', {})
+      showToast('출석을 시작했어요', `참가자 ${result.notified}명에게 알렸어요`)
+      load(); onChanged()
+    } catch (cause) {
+      showToast(cause instanceof ApiError ? cause.message : '출석을 시작하지 못했어요')
+    } finally { setStarting(false) }
+  }
 
   const load = useCallback(() => api<QrInfo>('/api/activities/' + activity.id + '/qr').then(next => {
     const secs = Math.max(1, next.codeSecondsLeft ?? next.rotateSeconds)
@@ -77,7 +89,12 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
       <button type="button" className="r-qr-img" aria-label="QR 크게 보기" onClick={() => setBig(true)}>{image && <img src={image} alt="체크인 QR" data-url={url} />}</button>
       <div className="r-qr-info"><small>출석 코드</small><b className="r-code">{info.code}</b>{timer}<small>{left}초</small></div>
     </section>
-      : phase === 'later' || phase === 'soon' ? <div className="m-note"><strong>체크인은 {hhmm(opens)}부터 열려요</strong></div>
+      : phase === 'wait' ? <section className="r-start" aria-label="출석 시작">
+        <span className="r-start-ico"><MIcon name="qr" size={30} /></span>
+        <strong>아직 출석을 시작하지 않았어요</strong>
+        <small>{hhmm(closes)}(종료 30분 전)까지 열 수 있어요.<br />누르면 참가자 {notYet.length}명에게 알림이 가요.</small>
+      </section>
+      : phase === 'later' || phase === 'soon' ? <div className="m-note"><strong>출석은 {hhmm(opens)}부터 시작할 수 있어요</strong><span>현장에 도착하면 [출석 시작]을 눌러 주세요.</span></div>
       : phase === 'late' ? <div className="m-note warm"><strong>QR·코드 체크인 시간이 지났어요</strong></div>
       : null}
 
@@ -108,9 +125,10 @@ export function RollCall({ activity, people, phase, opens, onChanged }: { activi
       })}</ul> : <p className="r-empty">모두 출석했어요</p>}
     </>}
     </>}
-    {phase === 'ended' && notYet.length > 0 && <p className="m-help">체크인하지 않은 {notYet.length}명은 불참으로 처리돼요.</p>}
+    {phase === 'ended' && notYet.length > 0 && <p className="m-help">{activity.checkinOpenedAt ? `체크인하지 않은 ${notYet.length}명은 불참으로 처리돼요.` : `출석을 열지 않아 ${notYet.length}명은 출석 미확인으로 남아요 (불참 처리 안 함).`}</p>}
 
     {selecting ? <ActionBar><button className="m-btn" disabled={!picked.length} onClick={() => { setTarget(notYet.filter(p => picked.includes(p.id))); setReason(reasons[0]); setOwn('') }}>{picked.length ? `${picked.length}명 출석 처리` : '출석 처리할 사람을 골라요'}</button></ActionBar>
+      : phase === 'wait' ? <ActionBar><button className="m-btn" disabled={starting} onClick={startNow}><MIcon name="qr" size={19} />{starting ? '시작하는 중…' : '출석 시작'}</button></ActionBar>
       : open && info?.code && <ActionBar><button className="m-btn" onClick={() => setBig(true)}><MIcon name="qr" size={19} />QR·코드 크게 띄우기</button></ActionBar>}
 
     {target && <Sheet title={target.length === 1 ? target[0].name + ' 님 출석 확인' : target.length + '명 출석 확인'} onClose={() => setTarget(null)}

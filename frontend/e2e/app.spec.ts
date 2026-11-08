@@ -184,6 +184,32 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
 })
 
+test('signing up again with the same e-mail: the same password just logs in, another password stays on the e-mail step with a clear note', async ({ page }) => {
+  const email = await signupByApi(page, '다시 가입')
+  const go = async (pw: string) => {
+    await page.goto('/#/login')
+    await page.getByRole('link', { name: '회원가입' }).click()
+    await page.getByText('모두 동의').click()
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByPlaceholder('example@email.com').fill(email)
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByLabel('비밀번호', { exact: true }).fill(pw)
+    await page.getByLabel('비밀번호 확인').fill(pw)
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByPlaceholder('이름').fill('다시 가입')
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByRole('button', { name: /가입하기|가입하고 시작하기/ }).click()
+  }
+  await go('other12345')
+  await expect(page.getByRole('heading', { name: '이메일을 알려 주세요' })).toBeVisible()
+  await expect(page.getByText('이미 가입한 이메일이에요')).toBeVisible()
+  await expect(page.getByRole('button', { name: '다음' })).toBeDisabled()
+  await expect(page.getByRole('link', { name: '로그인하러 가기' })).toBeVisible()
+  await go(password)
+  await expect(page).not.toHaveURL(/#\/signup/)
+})
+
 test('an organizer creates in three steps, a member applies, the organizer approves, and moves the date, and the member is told', async ({ page, browser }) => {
   const organizer = await signupByApi(page, '앱 모집자')
   await login(page, organizer)
@@ -432,9 +458,28 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   }
   moveActivity(id, 10)
 
+  // Before the organizer opens attendance, the participant waits ("출석 시작 전이에요").
+  const early = await browser.newContext({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
+  const waiting = await early.newPage()
+  await login(waiting, members[0].email)
+  await waiting.goto('/#/activity/' + id)
+  await expect(waiting.getByRole('button', { name: '출석 시작 전이에요' })).toBeDisabled()
+  await expect(waiting.getByText('모집자가 출석을 시작하면 알림으로 알려 드려요', { exact: false })).toBeVisible()
+
   await login(page, organizer)
   await page.goto('/#/manage/' + id + '?tab=attendance')
+  await expect(page.getByText('아직 출석을 시작하지 않았어요')).toBeVisible()
+  await page.getByRole('button', { name: '출석 시작' }).click()
+  await expect(page.getByText('참가자 3명에게 알렸어요')).toBeVisible()
   await expect(page.getByText('출석 코드')).toBeVisible()
+
+  // The participant hears it, and the push opens the camera straight away (here: the QR sheet).
+  const told = await (await page.request.get('/api/me/notifications', { headers: { Authorization: members[0].token } })).json()
+  expect(told.items[0].title).toBe('출석이 시작됐어요')
+  expect(told.items[0].link).toBe('#/activity/' + id + '?scan=1')
+  await waiting.goto('/#/activity/' + id + '?scan=1')
+  await expect(waiting.getByRole('dialog', { name: '출석 QR 찍기' })).toBeVisible()
+  await early.close()
   const code = (await page.locator('.r-code').textContent())!.trim()
   expect(code).toMatch(/^\d{4}$/)
 

@@ -423,7 +423,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   // Started or finished activities stay visible to everyone; only drafts and rejected ones are hidden.
   const hidden = activity.status === 'DRAFT' || activity.status === 'CANCELLED'
   const recruiting = activity.status === 'RECRUITING'
-  const day = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
+  const day = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now, Boolean(activity.checkinOpenedAt))
   const organizer = user != null && activity.organizerId === user.id
   const seats = viewer ?? { confirmed: activity.confirmed, offered: 0, waiting: 0, pending: 0, participation: null }
   const full = seats.confirmed + seats.offered >= activity.capacity
@@ -431,7 +431,7 @@ function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean;
   const item = { ...fromLive(activity), confirmed: seats.confirmed }
   const share = (n: number) => activity.capacity > 0 ? Math.min(100, n / activity.capacity * 100) + '%' : '0%'
   // While check-in is open (or just closed) the check-in hint replaces the general "confirmed" help.
-  const onSite = mine?.status === 'CONFIRMED' && (day.phase === 'open' || day.phase === 'late')
+  const onSite = mine?.status === 'CONFIRMED' && (day.phase === 'open' || day.phase === 'wait' || day.phase === 'late')
   const help = onSite ? null : statusHelp(mine, full, seats.waiting, user != null && !organizer && user.role !== 'ADMIN' && recruiting)
   const left = Math.max(0, activity.capacity - seats.confirmed - seats.offered)
   const action = <div className="apply-box">
@@ -559,7 +559,7 @@ function Applicants({ activityId, phase, tick, onChange }: { activityId: number;
   }
   const decide = (item: Applicant, approve: boolean) => run(item, approve ? 'approve' : 'reject', {}, approve ? '참가를 확정했어요' : '신청을 거절했어요', approve ? '참가자에게 알림을 보냈어요' : '')
   // Manual check-in from 30 min before the start until the end; completion only after the end.
-  const canManual = phase === 'open' || phase === 'late'
+  const canManual = phase === 'open' || phase === 'wait' || phase === 'late'
   if (!data) return null
   const counts = (status: string) => data.items.filter(item => item.status === status).length
   const checked = counts('CHECKED_IN') + counts('COMPLETED')

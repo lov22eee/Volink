@@ -92,13 +92,40 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     api<ViewerInfo>('/api/activities/' + id + '/my-participation').then(setViewer).catch(() => setViewer(null))
   }, [id, user.id])
   useEffect(() => { load() }, [load])
+  // Waiting for the organizer's [출석 시작] (the day itself, confirmed): look again every 20 s and when the app comes back.
+  const waitingStart = Boolean(activity && viewer?.participation?.status === 'CONFIRMED' && !activity.checkinOpenedAt && activity.status !== 'FINISHED'
+    && new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime() - now <= 3 * 3_600_000)
+  useEffect(() => {
+    if (!waitingStart) return
+    const t = window.setInterval(() => { if (!document.hidden) load() }, 20_000)
+    const back = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', back)
+    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', back) }
+  }, [waitingStart, load])
+  // Opened from the "출석이 시작됐어요" push (#/activity/12?scan=1, also while this screen is already open): read the
+  // activity again and go straight to the QR camera once attendance is open.
+  useEffect(() => {
+    const scan = () => {
+      if (!/[?&]scan=1/.test(window.location.hash)) return
+      try { window.history.replaceState(null, '', '#/activity/' + id) } catch { /* keeps the address */ }
+      Promise.all([api<LiveActivity>('/api/activities/' + id), api<ViewerInfo>('/api/activities/' + id + '/my-participation')]).then(([a, v]) => {
+        if (a.organizerId === user.id) return
+        setActivity(a); setViewer(v)
+        const { phase } = phaseOf(a.date, a.startTime, a.durationMinutes, Date.now(), Boolean(a.checkinOpenedAt))
+        if (v.participation?.status === 'CONFIRMED' && phase === 'open') void cameraAllowed().then(ok => setSheet(ok ? 'scan' : 'camera'))
+      }).catch(() => {})
+    }
+    scan()
+    window.addEventListener('hashchange', scan)
+    return () => window.removeEventListener('hashchange', scan)
+  }, [id, user.id])
   useEffect(() => { api<LiveActivity[]>('/api/me/saved').then(list => setSaved(list.some(a => a.id === id))).catch(() => {}) }, [id])
 
   if (failed) return <div className="m-screen"><TopBar title="활동" back="history" /><div className="m-body"><div className="m-note bad">{failed}</div><a className="m-btn line" href="#/find">다른 활동 찾기</a></div></div>
   if (!activity || !viewer) return <div className="m-screen"><TopBar title="활동" back="history" /><Loading /></div>
 
   const mine = viewer.participation
-  const { phase, opens, closes } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
+  const { phase, closes } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now, Boolean(activity.checkinOpenedAt))
   const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
   const cancelled = activity.status === 'CANCELLED'
   const stage: Stage = cancelled ? 'closed'
@@ -164,9 +191,10 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'offer': return <div className="m-state hot"><strong>빈자리 제안이 왔어요!</strong><span>{mine!.offerExpiresAt ? dayWord(mine!.offerExpiresAt.slice(0, 10)) + ' ' + mine!.offerExpiresAt.slice(11, 16) : ''}까지 수락하면 참가가 확정돼요.</span></div>
       case 'confirmed': return <div className="m-state mint"><span className="m-state-dday">{dDay(activity.date)}</span><strong>참가가 확정됐어요</strong>
         <span>하루 전에 알림을 보내 드려요. 못 가게 되면 미리 알려 주세요.</span></div>
-      case 'today': return <div className={'m-state ' + (phase === 'open' || phase === 'late' ? 'hot' : 'mint')}>
-        <strong>{phase === 'open' || phase === 'late' ? '지금 체크인할 수 있어요' : `오늘 ${activity.startTime}에 만나요`}</strong>
-        <span>{phase === 'open' || phase === 'late' ? `${hhmm(closes)}까지 · 현장에서 모집자의 QR을 찍어 주세요` : `체크인은 ${hhmm(opens)}부터 열려요 · ${activity.meetingPoint ?? activity.placeName ?? ''}`}</span>
+      case 'today': return <div className={'m-state ' + (phase === 'open' ? 'hot' : phase === 'late' ? 'amber' : 'mint')}>
+        <strong>{phase === 'open' ? '지금 체크인할 수 있어요' : phase === 'late' ? 'QR 체크인 시간이 지났어요' : `오늘 ${activity.startTime}에 만나요`}</strong>
+        <span>{phase === 'open' ? `${hhmm(closes)}까지 · 현장에서 모집자의 QR을 찍어 주세요` : phase === 'late' ? '현장에 있다면 모집자에게 수동 확인을 요청하세요'
+          : `모집자가 출석을 시작하면 알림으로 알려 드려요 · ${activity.meetingPoint ?? activity.placeName ?? ''}`}</span>
         {mine?.lateMinutes ? <em>모집자에게 약 {mine.lateMinutes}분 늦는다고 알렸어요</em> : null}</div>
       case 'checkedin': return <div className="m-state mint"><strong>출석했어요</strong><span>활동이 끝나면 모집자가 완료를 확인하고 기록이 남아요.</span></div>
       case 'done': return <div className="m-state mint"><strong>함께해 주셔서 고마워요!</strong><span>활동 기록이 남았어요. 공식 봉사실적은 아니에요.</span></div>
@@ -185,7 +213,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'confirmed': return <><button className="m-btn line" onClick={() => setSheet('cancel')}>신청 취소</button>
         <button className="m-btn" onClick={() => { void addToCalendar(activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
       case 'today': return <><button className="m-btn line" onClick={() => setSheet(phase === 'later' || phase === 'soon' ? 'late' : 'late')} disabled={phase === 'ended'}>늦어요</button>
-        <button className="m-btn" disabled={!(phase === 'open' || phase === 'late')} onClick={async () => setSheet(await cameraAllowed() ? 'scan' : 'camera')}><MIcon name="qr" size={19} />{phase === 'open' || phase === 'late' ? 'QR 찍고 체크인' : hhmm(opens) + '부터 체크인'}</button></>
+        <button className="m-btn" disabled={phase !== 'open'} onClick={async () => setSheet(await cameraAllowed() ? 'scan' : 'camera')}><MIcon name="qr" size={19} />{phase === 'open' ? 'QR 찍고 체크인' : phase === 'late' || phase === 'ended' ? '체크인 마감' : '출석 시작 전이에요'}</button></>
       case 'done': return <><a className="m-btn line" href="#/mine?tab=done">내 기록</a><a className="m-btn" href={'#/write?activity=' + id}><MIcon name="edit" size={19} />후기 쓰기</a></>
       default: return null
     }
@@ -201,7 +229,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       {['confirmed', 'today', 'checkedin', 'done'].includes(stage) && !cancelled && <NewsEntry activityId={id} organizer={false} />}
       {stage === 'today' ? <>
         <dl className="m-facts big"><div><dt><MIcon name="pin" size={20} /></dt><dd><strong>{activity.meetingPoint ?? activity.placeName}</strong><small>{activity.placeName}{activity.placeAddress ? ' · ' + activity.placeAddress : ''}</small></dd></div>
-          <div><dt><MIcon name="clock" size={20} /></dt><dd><strong>{activity.startTime} 시작 · {durationLabel(activity.durationMinutes)}</strong><small>체크인 {hhmm(opens)} ~ {hhmm(closes)}</small></dd></div></dl>
+          <div><dt><MIcon name="clock" size={20} /></dt><dd><strong>{activity.startTime} 시작 · {durationLabel(activity.durationMinutes)}</strong><small>{activity.checkinOpenedAt ? `체크인 ${hhmm(closes)}까지` : `모집자가 출석을 시작하면 체크인 · ${hhmm(closes)}까지`}</small></dd></div></dl>
         <Supplies activity={activity} />
       </> : <>
         <Facts activity={activity} />
@@ -328,14 +356,14 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
 
   if (failed) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><div className="m-body"><div className="m-note bad">{failed}</div></div></div>
   if (!activity) return <div className="m-screen"><TopBar title="모집 관리" back="#/mine?tab=host" /><Loading /></div>
-  const { phase, opens } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now)
+  const { phase, opens, closes } = phaseOf(activity.date, activity.startTime, activity.durationMinutes, now, Boolean(activity.checkinOpenedAt))
   const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
   const items = people?.items ?? []
   const count = (s: string) => items.filter(p => p.status === s).length
   const checked = count('CHECKED_IN')
   const open = ['RECRUITING', 'DRAFT'].includes(activity.status) && now < start
   const canMove = activity.status === 'RECRUITING' && (activity.rescheduleCount ?? 0) === 0 && start - now >= 24 * 3_600_000
-  const statusText = activity.status === 'DRAFT' ? (activity.reviewNote ? '반려됨' : '관리자 검토 중') : activity.status === 'RECRUITING' ? (phase === 'open' || phase === 'late' ? '체크인 중' : '모집 중') : activity.status === 'IN_PROGRESS' ? '진행 중' : activity.status === 'FINISHED' ? '종료' : '취소됨'
+  const statusText = activity.status === 'DRAFT' ? (activity.reviewNote ? '반려됨' : '관리자 검토 중') : activity.status === 'RECRUITING' ? (phase === 'open' || phase === 'late' ? '체크인 중' : phase === 'wait' ? '출석 시작 전' : '모집 중') : activity.status === 'IN_PROGRESS' ? '진행 중' : activity.status === 'FINISHED' ? '종료' : '취소됨'
 
   async function run(path: string, body: object | undefined, done: string, after?: () => void) {
     setBusy(true)
@@ -372,7 +400,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   // The bottom button only for what the moment needs: check-in time (QR), after the end (complete all), re-recruit.
   const main = (() => {
     if (activity.status === 'CANCELLED' || tab === 'news') return null
-    if (phase === 'open' || phase === 'late') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />{phase === 'open' ? '출석부 · QR 띄우기' : '출석부 열기'}</button>
+    if (phase === 'open' || phase === 'late' || phase === 'wait') return tab === 'attendance' ? null : <button className="m-btn" onClick={() => setTab('attendance')}><MIcon name="qr" size={19} />{phase === 'wait' ? '출석부 · 출석 시작하기' : phase === 'open' ? '출석부 · QR 띄우기' : '출석부 열기'}</button>
     if (phase === 'ended' && checked > 0) return <button className="m-btn" disabled={busy} onClick={() => run('/api/activities/' + id + '/complete', undefined, `${checked}명 완료를 확인했어요`)}>체크인한 {checked}명 모두 완료</button>
     if (phase === 'ended') return <a className="m-btn line" href={'#/create?from=' + id}><MIcon name="refresh" size={19} />같은 활동 다시 모집</a>
     return null
@@ -422,7 +450,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         </>}
       </section>}
 
-      {tab === 'attendance' && <section className="mg-panel" aria-label="출석">{people ? <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} onChanged={load} /> : <Loading />}</section>}
+      {tab === 'attendance' && <section className="mg-panel" aria-label="출석">{people ? <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} closes={closes} onChanged={load} /> : <Loading />}</section>}
 
       {tab === 'news' && (activity.status === 'DRAFT' ? <p className="mg-none mg-panel">관리자 확인 뒤 공개되면 소식을 올릴 수 있어요.</p>
         : <div className="mg-panel"><NewsScreen id={id} user={user} embedded onChanged={() => api<Thread>('/api/activities/' + id + '/posts').then(setThread).catch(() => {})} /></div>)}

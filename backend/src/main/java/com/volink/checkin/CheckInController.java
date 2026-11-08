@@ -35,6 +35,12 @@ public class CheckInController {
         return checkIns.checkIn(user(jwt), id, request.qrToken(), request.code(), request.lat(), request.lng(), request.accuracy());
     }
 
+    /** Organizer, on site: open attendance ([출석 시작]) and tell the confirmed participants. */
+    @PostMapping("/api/activities/{id}/checkin/start")
+    public Map<String, Object> start(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        return checkIns.start(user(jwt), id);
+    }
+
     /** Organizer, after the end: complete everyone who checked in. */
     @PostMapping("/api/activities/{id}/complete")
     public Map<String, Object> completeAll(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
