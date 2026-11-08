@@ -1546,3 +1546,13 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 }
 .lab-done-head .m-h2 { margin-bottom: 0; }
 .lab-done-head .lab-sub { margin: 0; }
+/* 마이 A안 (2026-11-08): profile + 함께한 시간 + 1365 line in one mint card. */
+.my-card { gap: 12px; }
+.my-rule { border: 0; height: 1px; background: #d3e3d8; margin: 2px 0; }
+.my-total.in { padding: 0; border: 0; background: none; border-radius: 0; }
+.my-total.in .my-split { background: #d6e5db; }
+.my-total.in .my-gain { top: 0; right: 0; }
+.my-card .my-parts > a, .my-card .my-parts > .ext { background: #fff; }
+.my-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 2px 0 0; border: 0; background: none; font: inherit; color: var(--ink-3); font-size: 12.5px; text-align: left; }
+.my-line b { color: var(--ink-2); font-weight: 650; }
+.my-line em { font-style: normal; font-weight: 700; color: #3b67ad; display: inline-flex; align-items: center; white-space: nowrap; }

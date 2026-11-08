@@ -112,14 +112,15 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   return <div className="m-screen">
     <TopBar title="마이페이지" actions={<>{actions}<a className="m-icon-btn" href="#/settings" aria-label="설정"><MIcon name="settings" /></a></>} />
     <div className="m-body">
-      <section className="m-profile">
+      {/* 마이 A안 (2026-11-08): one card — profile, then 함께한 시간, then the 1365 line (no separate boxes). */}
+      <section className="m-profile my-card">
         <div className="m-profile-top"><span className="m-avatar"><MIcon name="user" size={26} /></span>
           {/* 2026-11-06: the member type sits next to the name; the (up to 3) interests stay on one line. */}
           <div><span className="m-profile-name"><strong>{user.name}</strong>{user.memberType === 'INSTITUTION' ? <span className="m-badge blue">기관 회원</span> : <span className="m-badge mint">일반 회원</span>}</span>
             <small>{shownEmail(user.email) ?? loginLabel(user)}</small>
             {user.interests.length > 0 && <span className="m-tags one-line">{user.interests.map(i => <span key={i} className="m-badge gray"><MIcon name={fieldIcon[i] ?? 'sprout'} size={13} />{i}</span>)}</span>}</div></div>
-      </section>
-      <section className="my-total" aria-label="함께한 시간">
+        <hr className="my-rule" />
+      <div className="my-total in" role="region" aria-label="함께한 시간">
         <small>함께한 시간</small>
         {motion.gain && <span className={'my-gain' + (motion.gain.ext ? ' ext' : '')}>+{hoursText(motion.gain.minutes)}</span>}
         <b>{ready ? <>{Math.floor(shownAll / 60)}<em>시간</em>{shownAll % 60 ? <> {shownAll % 60}<em>분</em></> : null}</> : '–'}</b>
@@ -129,9 +130,10 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
           <a className="ext" href="#/records?kind=1365"><small>{ext || !connected ? '1365 공식 실적' : '1365 실적확인서'}</small>{connected ? <><b>{hoursText(shownExt)}</b><em>{extCount != null ? extCount + '건 · ' : ''}{extNote}</em></> : <><b>연결 전</b><em>1365 실적을 함께 모아요</em></>}</a>
           <a href="#/records?kind=volink"><small>Volink 활동</small><b>{hoursText(shownVolink)}</b><em>{valid.length + led.length}건 · 자체 기록</em></a>
         </div>
+        </div>
+        {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-line" onClick={connect}><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>갱신하기<MIcon name="chevron" size={15} /></em></button>
+          : ext === null && <button type="button" className="my-line" onClick={connect}><span><b>1365 연결하기</b> · 봉사 시간을 한곳에</span><em>연결<MIcon name="chevron" size={15} /></em></button>}
       </section>
-      {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>갱신하기</em></button>
-        : ext === null && <button type="button" className="my-conn" onClick={connect}><MIcon name="outward" size={18} /><span><b>1365 연결하기</b> · 봉사 시간을 한곳에</span><em>연결</em></button>}
       {list('내 봉사', mine)}
       {list('커뮤니티 · 안내', more)}
     </div>
