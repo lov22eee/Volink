@@ -1420,3 +1420,55 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-sec { display: flex; align-items: center; justify-content: space-between; margin: 18px 2px 8px; }
 .lab-sec h2 { font-size: 15px; font-weight: 800; }
 .lab-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; color: var(--m-green); font-size: 13.5px; font-weight: 700; padding: 6px 0; }
+
+/* 내 활동 › 일정 (2026-11-08): month calendar · dots 초록 참여 / 파랑 1365 / 주황 나의 모집 / 회색 지난 */
+.sc { display: flex; flex-direction: column; gap: 12px; }
+.sc-chips { padding-top: 2px; }
+.sc-cal { background: #fff; border: 1px solid var(--line-2, #e6e9e6); border-radius: 20px; padding: 12px 10px 10px; }
+.sc-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 6px; }
+.sc-head strong { font-size: 16.5px; font-weight: 750; letter-spacing: -0.02em; }
+.sc-head button { width: 36px; height: 36px; border: 0; border-radius: 12px; background: none; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
+.sc-head button.next svg { transform: scaleX(-1); }
+.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; }
+.sc-w { font-size: 12px; color: var(--ink-3); font-weight: 600; padding: 4px 0 6px; }
+.sc-w.sun, .sc-day.sun > span { color: #c0533f; }
+.sc-w.sat, .sc-day.sat > span { color: #2f62a8; }
+.sc-day { height: 42px; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 4px; gap: 3px; font: inherit; color: var(--ink); }
+.sc-day > span { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; transition: background .18s, color .18s; }
+.sc-day.today > span { box-shadow: inset 0 0 0 1.5px var(--m-green); }
+.sc-day.on > span { background: var(--m-green); color: #fff !important; box-shadow: none; }
+.sc-day i { display: flex; gap: 3px; height: 5px; }
+.sc-day i b, .sc-legend b { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.sc .g { background: var(--m-green); }
+.sc .b { background: #3b5fa0; }
+.sc .o { background: #d9822b; }
+.sc .x { background: #c3cac6; }
+.sc-legend { display: flex; justify-content: flex-end; gap: 12px; padding: 8px 6px 0; font-size: 11.5px; color: var(--ink-3); }
+.sc-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.sc-date { font-size: 15.5px; font-weight: 750; margin: 6px 2px 0; }
+.sc-date small { font-size: 14px; color: var(--ink-3); font-weight: 600; }
+.sc-next { font-size: 14px; color: var(--ink-3); font-weight: 700; margin: 4px 2px 0; }
+.sc-list { display: flex; flex-direction: column; gap: 8px; animation: sc-in .2s ease-out; }
+@keyframes sc-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sc-list { animation: none; } }
+.sc-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff; border: 1px solid var(--line-2, #e6e9e6); border-radius: 16px; color: inherit; text-decoration: none; }
+.sc-bar { width: 4px; align-self: stretch; border-radius: 2px; background: var(--m-green); flex: none; }
+.sc-card.ext .sc-bar { background: #3b5fa0; }
+.sc-card.host { background: #fffaf4; border-color: #f3d9bf; }
+.sc-card.host .sc-bar { background: #d9822b; }
+.sc-card.past { background: #fafbfa; }
+.sc-card.past .sc-bar { background: #c3cac6; }
+.sc-card.past strong { color: var(--ink-2); }
+.sc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sc-main em { font-style: normal; font-size: 11.5px; font-weight: 750; color: #a3541b; }
+.sc-main strong { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-main small { font-size: 12.5px; color: var(--ink-3); }
+.sc-main .sc-alert { color: var(--m-hot); font-weight: 650; }
+.m-badge.host { background: #fbeee2; color: #a3541b; }
+.sc-empty { padding-top: 4px; }
+.sc-empty .m-empty.bare { min-height: 0; padding: 18px 12px 8px; gap: 6px; }
+.sc-empty .m-empty.bare .m-empty-ico { width: 52px; height: 52px; border-radius: 16px; }
+.sc-check { margin-top: 0; }
+.sc-none { margin: 4px 2px 0; }
+.m-newbtns a:only-child { grid-column: 1 / -1; min-height: 64px; }
+.sc-empty .m-empty-ico { display: none; }

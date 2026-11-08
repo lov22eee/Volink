@@ -729,8 +729,9 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   await expect(page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })).toBeVisible()
   await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '다음에 할게요' }).click()
   // 참여 예정 [가져오기] → 1365에서 가져오기 / 1365 활동 찾기 → consent → that 1365 page (on the web: the paste box).
-  await page.getByRole('tab', { name: '참여 예정' }).click()
-  await page.getByRole('button', { name: '가져오기', exact: true }).click()
+  await page.goto('/#/mine')
+  await page.getByRole('tab', { name: '일정' }).click()
+  await page.getByRole('button', { name: '1365 가져오기', exact: true }).click()
   await page.getByRole('dialog', { name: '신청 현황' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
@@ -816,8 +817,11 @@ test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모�
   await pickDay(page, /어르신 말벗 봉사 · 참여하는 날/, inDays(10))
   await page.getByRole('button', { name: '2개 내 활동에 넣기' }).click()
   await expect(page).toHaveURL(/#\/mine/)
+  // 일정 달력 (2026-11-08): the picked day lists it (no time on 1365 = 시간 미정).
+  const day10 = inDays(10)
+  if (day10.slice(0, 7) !== inDays(6).slice(0, 7)) await page.getByRole('button', { name: '다음 달' }).click()
+  await page.getByRole('button', { name: new RegExp('^' + Number(day10.slice(5, 7)) + '월 ' + Number(day10.slice(8, 10)) + '일') }).click()
   await expect(page.getByRole('link', { name: /어르신 말벗 봉사.*시간 미정/ })).toBeVisible()
-  await expect(page.getByRole('link', { name: new RegExp('어르신 말벗 봉사.*' + inDays(10).slice(5).replace('-', '/')) })).toBeVisible()
 })
 
 test('a bottom sheet closes when dragged down like ✕, and springs back on a short drag', async ({ page }) => {

@@ -1,12 +1,14 @@
-// 내 활동: 참여 예정 (my applications) / 내 모집현황 (activities I opened) / 완료 기록 (Volink records).
+// 내 활동 (2026-11-08): 일정 (a month calendar of what I joined, 1365 and what I opened) / 나의 모집 (activities I opened).
+// 완료 기록 is reached from 마이 › 활동 기록 (#/mine?tab=done) and no longer a tab here.
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
-import { dayWord, dDay, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
+import { dayWord, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
 import { RecordRow, useRecords } from './record'
 import { hoursText, useConnect1365, useImport1365 } from './lab'
+import { plansOf, Schedule, todayKst } from './schedule'
 import type { LabSummary } from './lab'
 
 type View = 'join' | 'host' | 'done'
@@ -26,7 +28,7 @@ function HostCard({ a }: { a: LiveActivity }) {
     <div className="m-card-top"><strong>{a.title}</strong><span className={'m-badge ' + (a.status === 'RECRUITING' ? 'mint' : a.status === 'DRAFT' ? 'amber' : 'gray')}>{word}</span></div>
     <p>{dayWord(a.date)} · {a.startTime} · 확정 {a.confirmed}/{a.capacity}명</p>
     {((a.pending ?? 0) > 0 || (a.unanswered ?? 0) > 0) && <p className="m-card-alert"><MIcon name="bell" size={15} />{[a.pending ? `승인 대기 ${a.pending}건` : '', a.unanswered ? `답변할 질문 ${a.unanswered}개` : ''].filter(Boolean).join(' · ')}</p>}
-    <span className={'m-btn sm' + (live ? '' : ' line')}>{live ? '모집 관리' : '결과 보기'}</span>
+    <span className={'m-btn sm' + (live && a.status !== 'DRAFT' ? '' : ' line')}>{a.status === 'DRAFT' ? '내용 보기' : live ? '모집 관리' : '결과 보기'}</span>
   </a>
 }
 
@@ -96,42 +98,35 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
     ...(doneKind !== '1365' ? volinkDone.map(x => ({ kind: 'volink' as const, key: x.date + x.startTime, x })) : []),
   ].sort((a, b) => b.key.localeCompare(a.key))
   const now = Date.now()
-  const ends = (date: string, time: string, minutes = 90) => new Date(`${date}T${time}:00+09:00`).getTime() + minutes * 60_000
-  const upcoming = (joined ?? []).filter(p => ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN'].includes(p.status) && p.activityStatus !== 'CANCELLED' && ends(p.date, p.startTime, p.durationMinutes) > now)
-    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime))
-  const ended = (joined ?? []).filter(p => !upcoming.includes(p) && p.status !== 'COMPLETED').slice(0, 6)
-  const tabs: [View, string][] = [['join', '참여 예정'], ['host', '내 모집현황'], ['done', '완료 기록']]
+  const tabs: [View, string][] = [['join', '일정'], ['host', '나의 모집']]
+  const plans = joined && hosted && records && external ? plansOf(joined, hosted, records, external, now) : null
+  // 1365 activities whose day has passed and still ask "다녀왔어요?" / 실적 확인 대기: on top, not hidden in a past day.
+  const today = todayKst()
+  const toCheck = extPlanned.filter(r => r.date < today)
+  const [morePast, setMorePast] = useState(false)
+  const hostPast = (hosted ?? []).filter(a => !isLive(a))
   return <div className="m-screen">
     <TopBar title="내 활동" actions={actions} />
     <div className="mg-tabs m-mine-tabs" role="tablist" aria-label="내 활동 보기">{tabs.map(([id, label]) =>
       <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>)}</div>
     <div className="m-body">
-      {view === 'join' && (!joined ? <Loading /> : <>
-        {upcoming.length ? <div className="m-cards">{upcoming.map(p => <a key={p.id} className="m-card" href={'#/activity/' + p.activityId}>
-          <div className="m-card-top"><strong>{p.title}</strong><span className={'m-badge ' + statusWord[p.status].tone}>{p.status === 'WAITLISTED' && p.waitOrder ? `대기 ${p.waitOrder}번` : statusWord[p.status].text}</span></div>
-          <p>{dayWord(p.date)} · {p.startTime}{p.placeName ? ' · ' + p.placeName : ''}</p>
-          {dDay(p.date) && <span className="m-dday">{dDay(p.date)}</span>}
-          <span className="m-btn sm">{p.status === 'OFFERED' ? '자리 제안 확인' : '활동 상세 보기'}</span>
-        </a>)}</div> : !extPlanned.length && <Empty bare icon="calendar" title="참여 예정인 활동이 없어요"
-          action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('A')}>가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />}
-        {extPlanned.length > 0 && <section className="m-section"><div className="m-section-head"><h2>1365 활동</h2><button type="button" className="m-more" onClick={connect}>1365 가져오기 ›</button></div>
-          <div className="m-list">{extPlanned.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
-        {ended.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 신청</h2></div><div className="m-list">{ended.map(p =>
-          <a key={p.id} className="m-row dim" href={'#/activity/' + p.activityId}><span className="m-row-main"><strong>{p.title}</strong>
-            <small>{p.date.slice(5).replace('-', '/')} {p.startTime}{p.activityStatus === 'CANCELLED' ? ' · 모집자가 활동을 취소했어요' : ''}</small></span>
-            <span className={'m-badge ' + (statusWord[p.status]?.tone ?? 'gray')}>{p.activityStatus === 'CANCELLED' ? '활동 취소' : statusWord[p.status]?.text ?? p.status}</span></a>)}</div></section>}
-      </>)}
-      {/* 2026-11-06: no live recruitment → no card, in the middle: [새 활동 만들기] (+ [다시 모집] when there is a past one to reuse). */}
-      {view === 'host' && (!hosted ? <Loading /> : hostLive.length ? <>
+      {view === 'join' && (!plans ? <Loading /> : <Schedule plans={plans}
+        after={toCheck.length > 0 && <section className="m-section sc-check"><div className="m-section-head"><h2>확인이 필요해요</h2></div>
+          <div className="m-list">{toCheck.map(r => <RecordRow key={r.id} r={r} />)}</div></section>}
+        empty={<Empty bare icon="calendar" title="아직 일정이 없어요" text="마음에 드는 봉사를 찾아 신청해 보세요"
+          action={<div className="m-empty-two"><a className="m-btn sm" href="#/find">봉사 찾아보기</a><button type="button" className="m-btn sm blue" onClick={() => importFrom('A')}>1365 가져오기</button></div>} />} />)}
+      {/* 나의 모집 (2026-11-08): 진행 중 (with what needs doing) on top, 지난 모집 folded. */}
+      {view === 'host' && (!hosted ? <Loading /> : hosted.length ? <>
         <div className="m-newbtns"><a className="main" href="#/create"><MIcon name="plus" size={22} /><span>새 활동 만들기</span></a>
-          <a href="#/host"><MIcon name="refresh" size={22} /><span>다시 모집</span></a></div>
-        <div className="m-cards">{hosted.map(a => <HostCard key={a.id} a={a} />)}</div></> : <>
-        <Empty bare icon="plus" title={hosted.length ? '진행 중인 모집이 없어요' : '아직 모집한 활동이 없어요'}
-          text={hosted.length ? '지난 모집을 다시 열거나 새 활동을 만들어 보세요.' : '이웃과 함께할 활동을 열어 보세요.'}
-          action={<div className="m-empty-two"><a className="m-btn sm" href="#/create"><MIcon name="plus" size={18} />새 활동 만들기</a>
-            {hosted.length > 0 && <a className="m-btn sm line" href="#/host"><MIcon name="refresh" size={18} />다시 모집</a>}</div>} />
-        {hosted.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 모집</h2></div><div className="m-cards">{hosted.map(a => <HostCard key={a.id} a={a} />)}</div></section>}
-      </>)}
+          {hostPast.length > 0 && <a href="#/host"><MIcon name="refresh" size={22} /><span>다시 모집</span></a>}</div>
+        {hostLive.length > 0 ? <section className="m-section"><div className="m-section-head"><h2>진행 중 {hostLive.length}</h2></div>
+          <div className="m-cards">{hostLive.map(a => <HostCard key={a.id} a={a} />)}</div></section>
+          : <p className="m-help sc-none">진행 중인 모집이 없어요. 지난 모집을 다시 열거나 새 활동을 만들어 보세요.</p>}
+        {hostPast.length > 0 && <section className="m-section"><div className="m-section-head"><h2>지난 모집 {hostPast.length}</h2>
+          {hostPast.length > 3 && <button type="button" className="m-more" onClick={() => setMorePast(!morePast)}>{morePast ? '접기' : '전체보기 ›'}</button>}</div>
+          <div className="m-cards">{(morePast ? hostPast : hostPast.slice(0, 3)).map(a => <HostCard key={a.id} a={a} />)}</div></section>}
+      </> : <Empty bare icon="plus" title="아직 모집한 활동이 없어요" text="이웃과 함께할 봉사를 직접 열어 보세요"
+          action={<a className="m-btn sm" href="#/create"><MIcon name="plus" size={18} />새 활동 만들기</a>} />)}
       {/* 2026-11-06 (B): 함께한 시간 (1365 + Volink) · 1365 연결/새로고침 · chips [전체 · 1365 · Volink] · one list, newest first. */}
       {view === 'done' && (!records || !external ? <Loading /> : !records.length && !extDone.length && !summary
         ? <Empty bare icon="record" title="아직 완료 기록이 없어요" text="1365에서 했던 봉사가 있다면 연결해서 한곳에 모아 보세요."
