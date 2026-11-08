@@ -622,7 +622,7 @@ public class LabActivity extends AppCompatActivity {
 
     /** The card asks for the other page: [그것도 가져오기] / [Volink로 돌아가기]. */
     private void askOther(String question, String yes, Runnable go) {
-        progressNote.setText(question + "\n로그인한 김에 바로 가져와요 · 다시 로그인하지 않아도 돼요");
+        progressNote.setText(question);
         progressNote.setVisibility(View.VISIBLE);
         progressMain.setText(yes);
         progressMain.setOnClickListener(v -> { otherAsked = true; go.run(); });
