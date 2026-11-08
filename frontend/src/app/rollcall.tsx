@@ -165,7 +165,7 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
           <span className="r-nm"><b>{p.name}</b>{p.lateMinutes ? <small className="late">약 {p.lateMinutes}분 늦어요</small> : null}</span>
           {!selecting && canManual && <button type="button" className="m-btn xs line" onClick={() => { setTarget([p]); setReason(reasons[0]); setOwn('') }}>출석 체크</button>}
         </li>
-      })}</ul> : <p className="r-empty">모두 출석했어요</p>}
+      })}</ul> : <p className="r-empty">{allIn && !showAgain ? '남은 사람이 없어요' : '모두 출석했어요'}</p>}
     </>}
     </>}
     {phase === 'ended' && notYet.length > 0 && <p className="m-help">{activity.checkinOpenedAt ? `체크인하지 않은 ${notYet.length}명은 불참으로 처리돼요.` : `출석을 열지 않아 ${notYet.length}명은 출석 미확인으로 남아요 (불참 처리 안 함).`}</p>}
