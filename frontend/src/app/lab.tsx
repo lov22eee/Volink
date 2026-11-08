@@ -346,7 +346,7 @@ export function LabScreen({ go, both: signup }: { go?: string; both?: boolean })
       showToast(result.added || result.matched ? `1365 실적 ${result.added + result.matched}건을 넣었어요` : '새로 넣을 실적은 없어요',
         result.matched ? `참여 예정이던 ${result.matched}건은 실적 반영됨으로 바꿨어요` : '완료 기록에서 볼 수 있어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
-      window.location.hash = '#/mine?tab=done'
+      window.location.hash = '#/records'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   /** 실적 and 신청 현황 from one visit (A안): finished activities, the total, and the picked applications in one go. */
@@ -376,7 +376,7 @@ export function LabScreen({ go, both: signup }: { go?: string; both?: boolean })
       else if (saved && saved.before != null && saved.before === saved.count) showToast('새로 늘어난 실적은 아직 없어요', '1365에 반영되기까지 며칠 걸릴 수 있어요')
       else showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', '내 활동에서 볼 수 있어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
-      window.location.hash = total ? '#/mine?tab=done' : '#/mine'
+      window.location.hash = total ? '#/records' : '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   const failed = rows !== null && !rows.length && !summary && !done.length

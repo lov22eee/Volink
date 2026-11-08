@@ -17,7 +17,7 @@ import { LabScreen } from './lab'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
-import { MineScreen } from './mine'
+import { MineScreen, RecordsScreen } from './mine'
 import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
@@ -99,6 +99,7 @@ export default function MobileApp() {
   switch (route.page) {
     case 'home': screen = <HomeScreen user={user} actions={<>{search}{bell}</>} />; break
     case 'lab1365': screen = <LabScreen go={route.query.get('go') ?? undefined} both={route.query.get('both') === '1'} />; break
+    case 'records': screen = <RecordsScreen key={route.query.get('kind') ?? 'all'} />; break
     case 'record': screen = route.id ? <RecordScreen key={route.id} id={route.id} /> : null; break
     case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break

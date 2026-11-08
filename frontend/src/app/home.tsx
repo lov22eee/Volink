@@ -146,7 +146,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
           : <p className="hb-empty">{featured ? '다음 봉사 이야기를 기다리고 있어요' : '첫 봉사 이야기를 기다리고 있어요'}</p>}
       </Sec>
 
-      <Sec title="나의 봉사 발자취" more={valid.length ? ['전체', '#/mine?tab=done'] : undefined}>
+      <Sec title="나의 봉사 발자취" more={valid.length ? ['전체', '#/records'] : undefined}>
         {records && valid.length === 0 ? <p className="hb-empty">첫 봉사를 마치면 여기에 쌓여요</p>
           : <><div className="hb-stats"><div><b>{records ? valid.length : '–'}</b><small>완료한 활동</small></div><div><b>{records ? hours + 'h' : '–'}</b><small>참여 시간</small></div><div><b>{records ? thisMonth : '–'}</b><small>이번 달</small></div></div>
             <p className="hb-fine">Volink 활동 기록 기준 · 공식 1365 실적이 아니에요</p></>}
