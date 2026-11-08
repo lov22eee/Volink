@@ -418,3 +418,40 @@ export function TextInput(props: FieldProps<HTMLInputElement> & Omit<InputHTMLAt
 export function TextArea(props: FieldProps<HTMLTextAreaElement> & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'defaultValue'>) {
   return <QuietField tag="textarea" props={props as FieldProps<HTMLTextAreaElement> & Record<string, unknown>} />
 }
+
+/**
+ * 앱 안 알림 띠 (2026-11-08): a push that arrives while the app is open drops down from the top for 4 s (tap = its screen,
+ * swipe up = close). Nothing is shown when the person is already on that screen (its own list updates by itself).
+ */
+export function PushBanner({ onArrive }: { onArrive: () => void }) {
+  const [item, setItem] = useState<{ id: number; title: string; body: string; link: string } | null>(null)
+  const start = useRef(0)
+  useEffect(() => {
+    let timer = 0, count = 0
+    const show = (event: Event) => {
+      const { title, body, link } = (event as CustomEvent<{ title: string; body: string; link: string }>).detail
+      onArrive()
+      const here = window.location.hash.split('?')[0]
+      const target = link.split('?')[0]
+      const activity = /#\/(?:activity|manage|news)\/(\d+)/.exec(link)?.[1]
+      // The news of that activity is on screen (its own page, or the 소식 tab of 모집 관리): it updates by itself.
+      const sameActivity = activity && new RegExp('^#/(?:manage|news)/' + activity + '$').test(here) && /공지|질문|답변/.test(title) && Boolean(document.querySelector('.n-body'))
+      if ((target && here === target) || sameActivity) return
+      window.clearTimeout(timer)
+      setItem({ id: ++count, title, body, link })
+      timer = window.setTimeout(() => setItem(null), 4000)
+    }
+    window.addEventListener('volink:push', show)
+    return () => { window.removeEventListener('volink:push', show); window.clearTimeout(timer) }
+  }, [onArrive])
+  if (!item) return null
+  return <div key={item.id} className="m-pushbar" role="status"
+    onTouchStart={event => { start.current = event.touches[0].clientY }}
+    onTouchEnd={event => { if (start.current - event.changedTouches[0].clientY > 24) setItem(null) }}>
+    <button type="button" onClick={() => { setItem(null); if (/^#\/[a-z-]+/.test(item.link)) window.location.hash = item.link }}>
+      <span className="m-pushbar-ico"><MIcon name="bell" size={18} /></span>
+      <span className="m-pushbar-txt"><b>{item.title}</b>{item.body && <small>{item.body}</small>}</span>
+    </button>
+    <i aria-hidden="true" />
+  </div>
+}

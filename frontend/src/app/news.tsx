@@ -53,7 +53,36 @@ export function NewsScreen({ id, user, embedded, onChanged }: { id: number; user
       .catch(() => setFailed('확정된 참가자와 모집자만 볼 수 있어요.'))
   }, [id, load])
   const organizer = Boolean(activity && activity.organizerId === user.id)
-  useEffect(() => { if (organizer && thread && thread.unanswered > 0) setTab('question') }, [organizer, thread?.unanswered]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 실시간 (2026-11-08): while this screen is open (and the app in front) it is read again every 5 s — new 공지·질문·답변
+  // come in with a NEW mark, read counts change in place; what arrives is marked seen like on opening.
+  const known = useRef<Set<number> | null>(null)
+  const [fresh, setFresh] = useState<Set<number>>(new Set())
+  const idsOf = (t: Thread) => [...t.notices, ...t.questions, ...t.questions.flatMap(q => q.answer ? [q.answer] : [])].map(p => p.id)
+  useEffect(() => { if (thread && !known.current) known.current = new Set(idsOf(thread)) }, [thread])
+  useEffect(() => {
+    if (failed) return
+    const quiet = () => {
+      if (document.hidden) return
+      api<Thread>('/api/activities/' + id + '/posts').then(t => {
+        const ids = idsOf(t)
+        const added = known.current ? ids.filter(x => !known.current!.has(x)) : []
+        known.current = new Set(ids)
+        setThread(t)
+        if (added.length) {
+          setFresh(prev => new Set([...prev, ...added]))
+          void api('/api/activities/' + id + '/posts/seen', 'POST').catch(() => {})
+          onChanged?.()
+        }
+      }).catch(() => {})
+    }
+    const timer = window.setInterval(quiet, 5000)
+    const back = () => { if (!document.hidden) quiet() }
+    document.addEventListener('visibilitychange', back)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', back) }
+  }, [id, failed]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Opens on 질문 when something waits for an answer — only when the screen opens, not when a question comes in while reading.
+  const tabSet = useRef(false)
+  useEffect(() => { if (!tabSet.current && organizer && thread) { tabSet.current = true; if (thread.unanswered > 0) setTab('question') } }, [organizer, thread]) // eslint-disable-line react-hooks/exhaustive-deps
   const questions = useMemo(() => [...(thread?.questions ?? [])].reverse(), [thread])
 
   async function send(event?: FormEvent) {
@@ -101,9 +130,10 @@ export function NewsScreen({ id, user, embedded, onChanged }: { id: number; user
   const replies = ['네, 괜찮아요!', '제가 준비해 갈게요.', '공지로 따로 알려 드릴게요.']
   const [latest, ...older] = thread.notices
   const canWrite = answering ? thread.canAnswer : organizer ? thread.canNotice : thread.canAsk
-  const read = (post: Post) => organizer && post.readCount !== undefined && <span className="n-read"><MIcon name="check" size={14} />확정 {thread.audience}명 중 {post.readCount}명 읽음</span>
+  const read = (post: Post) => organizer && post.readCount !== undefined && <span className={'n-read' + (thread.audience > 0 && post.readCount >= thread.audience ? ' all' : '')}><MIcon name="check" size={14} />확정 {thread.audience}명 중 <b key={post.readCount} className="n-count">{post.readCount}</b>명 읽음</span>
+  const isNew = (post: Post) => post.unseen || fresh.has(post.id)
   const noticeCard = (post: Post, pinned: boolean) => <section key={post.id} className={'n-notice' + (pinned ? ' pinned' : '')}>
-    <div className="n-notice-top"><MIcon name="flag" size={15} />{pinned ? '최신 공지' : '공지'}{post.unseen && <span className="n-new">NEW</span>}<small>{ago(post.createdAt)}</small></div>
+    <div className="n-notice-top"><MIcon name="flag" size={15} />{pinned ? '최신 공지' : '공지'}{isNew(post) && <span className="n-new">NEW</span>}<small>{ago(post.createdAt)}</small></div>
     <p>{post.body}</p>
     <div className="n-notice-foot">{read(post)}{post.mine && <button type="button" className="m-text-btn" onClick={() => setRemoving(post)}>지우기</button>}</div>
   </section>
@@ -124,9 +154,9 @@ export function NewsScreen({ id, user, embedded, onChanged }: { id: number; user
       {!organizer && <>
         {questions.length > 0 && <span className="n-day">질문과 답변</span>}
         {questions.map(q => <div key={q.id} className="n-qa">
-          <span className={'n-who' + (q.mine ? ' r' : '')}>{q.mine ? '내 질문' : q.author}{q.private && <span className="n-lock"><MIcon name="lock" size={12} />모집자에게만</span>}{q.mine && <button type="button" className="n-del" onClick={() => setRemoving(q)}>지우기</button>}</span>
+          <span className={'n-who' + (q.mine ? ' r' : '')}>{q.mine ? '내 질문' : q.author}{fresh.has(q.id) && <span className="n-new">NEW</span>}{q.private && <span className="n-lock"><MIcon name="lock" size={12} />모집자에게만</span>}{q.mine && <button type="button" className="n-del" onClick={() => setRemoving(q)}>지우기</button>}</span>
           <div className={'n-bub ' + (q.mine ? 'me' : 'other')}>{q.body}</div>
-          {q.answer ? <><span className="n-who">모집자 <span className="m-badge mint">답변</span>{q.answer.unseen && <span className="n-new">NEW</span>}</span><div className="n-bub org">{q.answer.body}</div></>
+          {q.answer ? <><span className="n-who">모집자 <span className="m-badge mint">답변</span>{isNew(q.answer) && <span className="n-new">NEW</span>}</span><div className="n-bub org">{q.answer.body}</div></>
             : q.mine && <span className="n-wait">답변을 기다리고 있어요</span>}
         </div>)}
         {questions.length === 0 && thread.canAsk && <p className="n-empty">궁금한 점이 있으면 아래에서 모집자에게 물어보세요.</p>}
@@ -134,7 +164,7 @@ export function NewsScreen({ id, user, embedded, onChanged }: { id: number; user
 
       {organizer && tab === 'question' && (thread.questions.length ? [...thread.questions].sort((a, b) => Number(Boolean(a.answer)) - Number(Boolean(b.answer))).map(q =>
         <section key={q.id} className={'n-qcard' + (!q.answer ? ' wait' : '') + (answering?.id === q.id ? ' on' : '')}>
-          <span className="n-who">{q.author} · {ago(q.createdAt)}{q.private && <span className="n-lock"><MIcon name="lock" size={12} />나에게만</span>}{!q.answer && <span className="m-badge hot">답변 대기</span>}</span>
+          <span className="n-who">{q.author} · {ago(q.createdAt)}{fresh.has(q.id) && <span className="n-new">NEW</span>}{q.private && <span className="n-lock"><MIcon name="lock" size={12} />나에게만</span>}{!q.answer && <span className="m-badge hot">답변 대기</span>}</span>
           <p>{q.body}</p>
           {q.answer ? <div className="n-ans"><b>내 답변</b> · {q.answer.body}</div>
             : thread.canAnswer && <button type="button" className="m-btn xs" onClick={() => { setAnswering(q); fill('') }}>답변하기</button>}
