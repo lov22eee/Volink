@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity, MyRecord, User } from '../api'
+import { hostedRecords } from './mine'
 import { categories, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
@@ -67,6 +68,7 @@ function useTimeMotion(final: Parts | null) {
 export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [saved, setSaved] = useState<number | null>(null)
+  const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
   const [about, setAbout] = useState(false)
   const [nickname, setNickname] = useState<string | null>(null)
   // A (2026-11-06): one total = Volink records + the 1365 total read from the person's own 1365 page (not checked by Volink).
@@ -76,10 +78,13 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
     api<LabSummary & { fetchedAt?: string }>('/api/me/external/summary').then(x => setExt(x.fetchedAt ? x as LabSummary & { fetchedAt: string } : null)).catch(() => setExt(null))
     api<{ nickname: string | null }>('/api/community/me').then(p => setNickname(p.nickname)).catch(() => {})
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
+    api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
     api<LiveActivity[]>('/api/me/saved').then(list => setSaved(list.length)).catch(() => setSaved(0))
   }, [])
   const valid = (records ?? []).filter(x => x.status === 'VALID')
-  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0)
+  // 2026-11-08 (user decision): a personal member who ran an activity volunteered too — finished ones count as Volink time.
+  const led = user.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted ?? [])
+  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0) + led.reduce((sum, a) => sum + a.durationMinutes, 0)
   // 1365 part: the imported official total; without one (직접 남기기), the hours on the certificates entered.
   const extRecords = useRecords()
   const certs = (extRecords ?? []).filter(r => r.certified)
@@ -87,13 +92,13 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const extCount = ext ? ext.count : certs.length
   const extNote = ext ? ext.fetchedAt.slice(5, 10).replace('-', '/') + ' 가져옴' : certs.length ? '실적확인서 기준' : '연결 전'
   const allMinutes = volinkMinutes + extMinutes
-  const ready = records !== null && ext !== undefined && (ext !== null || extRecords !== null)
+  const ready = records !== null && hosted !== null && ext !== undefined && (ext !== null || extRecords !== null)
   const motion = useTimeMotion(ready ? { ext: extMinutes, volink: volinkMinutes } : null)
   const shownExt = motion.view?.ext ?? 0, shownVolink = motion.view?.volink ?? 0, shownAll = shownExt + shownVolink
   const connected = !!ext || certs.length > 0
   type Item = { icon: MIconName; label: string; href?: string; note?: string; onClick?: () => void }
   const mine: Item[] = [
-    { icon: 'record', label: '활동 기록', href: '#/records', note: (() => { const n = valid.length + (extRecords ?? []).filter(r => r.status === 'ATTENDED').length; return n ? n + '건' : undefined })() },
+    { icon: 'record', label: '활동 기록', href: '#/records', note: (() => { const n = valid.length + led.length + (extRecords ?? []).filter(r => r.status === 'ATTENDED').length; return n ? n + '건' : undefined })() },
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') || '선택 안 함' },
   ]
@@ -122,7 +127,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
         {allMinutes > 0 && <i className="my-split"><span className="ext" style={{ width: (shownExt / allMinutes * 100) + '%' }} /><span style={{ width: (shownVolink / allMinutes * 100) + '%' }} /></i>}
         <div className="my-parts">
           <a className="ext" href="#/records?kind=1365"><small>{ext || !connected ? '1365 공식 실적' : '1365 실적확인서'}</small>{connected ? <><b>{hoursText(shownExt)}</b><em>{extCount != null ? extCount + '건 · ' : ''}{extNote}</em></> : <><b>연결 전</b><em>1365 실적을 함께 모아요</em></>}</a>
-          <a href="#/records?kind=volink"><small>Volink 활동</small><b>{hoursText(shownVolink)}</b><em>{valid.length}건 · 자체 기록</em></a>
+          <a href="#/records?kind=volink"><small>Volink 활동</small><b>{hoursText(shownVolink)}</b><em>{valid.length + led.length}건 · 자체 기록</em></a>
         </div>
       </section>
       {user.memberType === 'INSTITUTION' ? null : ext ? <button type="button" className="my-conn" onClick={connect}><MIcon name="refresh" size={18} /><span><b>1365 연결됨</b> · {ext.fetchedAt.slice(5, 10).replace('-', '/')} 가져온 1365 공식 실적</span><em>갱신하기</em></button>

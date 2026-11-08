@@ -1,5 +1,6 @@
 // 홈 (2026-11-06, B안): date and greeting, the latest review over its field photo, my next activity in one line (+ things
 // to do now), urgent, this weekend, suits me, categories, 봉사 앨범 (reviews), my record. Space and lines, few boxes.
+import { hostedRecords } from './mine'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
@@ -82,9 +83,12 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const mine3 = user.interests
   const picks = mine3.length ? others.filter(a => mine3.includes(a.category)).sort((a, b) => startsAt(a) - startsAt(b) || Number(isNewcomer(b)) - Number(isNewcomer(a))).slice(0, 3) : []
   const valid = (records ?? []).filter(r => r.status === 'VALID')
-  const hours = Math.round(valid.reduce((sum, r) => sum + r.durationMinutes, 0) / 6) / 10
+  // Activities I ran count too (2026-11-08, personal members): finished with at least one completed participant.
+  const led = user.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted)
+  const done = [...valid, ...led]
+  const hours = Math.round(done.reduce((sum, r) => sum + r.durationMinutes, 0) / 6) / 10
   const month = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 7)
-  const thisMonth = valid.filter(r => r.date.startsWith(month)).length
+  const thisMonth = done.filter(r => r.date.startsWith(month)).length
   // A Volink activity finished in the last 7 days that I have not reviewed yet (my reviews are among the latest 50).
   const reviewed = new Set(allReviews.filter(r => r.mine && r.activityId).map(r => r.activityId))
   const weekAgo = new Date(now + 9 * 3_600_000 - 7 * 86_400_000).toISOString().slice(0, 10)
@@ -146,9 +150,9 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
           : <p className="hb-empty">{featured ? '다음 봉사 이야기를 기다리고 있어요' : '첫 봉사 이야기를 기다리고 있어요'}</p>}
       </Sec>
 
-      <Sec title="나의 봉사 발자취" more={valid.length ? ['전체', '#/records'] : undefined}>
-        {records && valid.length === 0 ? <p className="hb-empty">첫 봉사를 마치면 여기에 쌓여요</p>
-          : <><div className="hb-stats"><div><b>{records ? valid.length : '–'}</b><small>완료한 활동</small></div><div><b>{records ? hours + 'h' : '–'}</b><small>참여 시간</small></div><div><b>{records ? thisMonth : '–'}</b><small>이번 달</small></div></div>
+      <Sec title="나의 봉사 발자취" more={done.length ? ['전체', '#/records'] : undefined}>
+        {records && done.length === 0 ? <p className="hb-empty">첫 봉사를 마치면 여기에 쌓여요</p>
+          : <><div className="hb-stats"><div><b>{records ? done.length : '–'}</b><small>완료한 활동</small></div><div><b>{records ? hours + 'h' : '–'}</b><small>참여 시간</small></div><div><b>{records ? thisMonth : '–'}</b><small>이번 달</small></div></div>
             <p className="hb-fine">Volink 활동 기록 기준 · 공식 1365 실적이 아니에요</p></>}
       </Sec>
     </div>

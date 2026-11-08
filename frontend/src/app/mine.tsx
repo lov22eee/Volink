@@ -17,6 +17,21 @@ export const statusWord: Record<string, { text: string; tone: string }> = {
   REJECTED: { text: '함께하지 못해요', tone: 'gray' }, CANCELLED: { text: '취소함', tone: 'gray' }, EXPIRED: { text: '마감', tone: 'gray' }, NO_SHOW: { text: '불참', tone: 'gray' },
 }
 
+/**
+ * Activities I ran that count as my volunteering too (2026-11-08, personal members): finished, with at least one participant
+ * whose completion the organizer confirmed (so it really took place). Their length is added to Volink 활동 time.
+ */
+export const hostedRecords = (hosted: LiveActivity[]) => hosted.filter(a => a.status === 'FINISHED' && Number((a as LiveActivity & { completed?: number }).completed ?? 0) > 0)
+
+/** A record of an activity I ran (활동 기록). */
+function HostedRow({ a }: { a: LiveActivity }) {
+  const n = Number((a as LiveActivity & { completed?: number }).completed ?? 0)
+  return <a className="m-row" href={'#/manage/' + a.id}>
+    <span className="m-row-ico host"><MIcon name="users" size={20} /></span>
+    <span className="m-row-main"><strong>{a.title}</strong><small>{a.date.slice(5).replace('-', '/')} {a.startTime} · {durationLabel(a.durationMinutes)} · 모집 · {n}명 참여</small></span>
+    <span className="m-badge host">모집 완료</span></a>
+}
+
 const isLive = (a: LiveActivity) => ['RECRUITING', 'IN_PROGRESS', 'DRAFT'].includes(a.status)
 
 /** One of my recruitments (내 모집현황). */
@@ -102,37 +117,43 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
  * 마이 › 활동 기록 (2026-11-08, was the 완료 기록 tab): every finished activity — 1365 (from the 1365 실적 list or marked
  * 다녀왔어요) and Volink records — newest first, this year by month and earlier years by year. Chips 전체 / 1365 / Volink.
  */
-export function RecordsScreen() {
+export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
   const kindParam = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('kind')
   const [kind, setKind] = useState<'all' | '1365' | 'volink'>(kindParam === '1365' || kindParam === 'volink' ? kindParam : 'all')
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [version, setVersion] = useState(0)
-  useEffect(() => { api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([])) }, [])
+  const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
+  useEffect(() => {
+    api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
+    api<LiveActivity[]>('/api/me/activities').then(setHosted).catch(() => setHosted([]))
+  }, [])
+  const led = user?.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted ?? [])
   const external = useRecords(version)
   const [importSheet, importFrom] = useImport1365(() => setVersion(v => v + 1))
   const ext = (external ?? []).filter(r => r.status === 'ATTENDED')
   const volink = records ?? []
-  type Item = { kind: '1365'; key: string; r: NonNullable<typeof external>[number] } | { kind: 'volink'; key: string; x: MyRecord }
+  type Item = { kind: '1365'; key: string; r: NonNullable<typeof external>[number] } | { kind: 'volink'; key: string; x: MyRecord } | { kind: 'led'; key: string; a: LiveActivity }
   const items: Item[] = [
     ...(kind !== 'volink' ? ext.map(r => ({ kind: '1365' as const, key: r.date + r.startTime, r })) : []),
     ...(kind !== '1365' ? volink.map(x => ({ kind: 'volink' as const, key: x.date + x.startTime, x })) : []),
+    ...(kind !== '1365' ? led.map(a => ({ kind: 'led' as const, key: a.date + a.startTime, a })) : []),
   ].sort((a, b) => b.key.localeCompare(a.key))
   const year = todayKst().slice(0, 4)
   const groupOf = (key: string) => key.slice(0, 4) === year ? `${key.slice(0, 4)}년 ${Number(key.slice(5, 7))}월` : `${key.slice(0, 4)}년`
   const groups: [string, Item[]][] = []
   for (const item of items) { const g = groupOf(item.key); const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(item); else groups.push([g, [item]]) }
-  const loading = !records || !external
+  const loading = !records || !external || !hosted
   return <div className="m-screen">
     <TopBar title="활동 기록" back="#/my" />
     <div className="m-body">
-      {loading ? <Loading /> : !ext.length && !volink.length
+      {loading ? <Loading /> : !ext.length && !volink.length && !led.length
         ? <Empty bare icon="record" title="아직 활동 기록이 없어요" text="함께한 봉사가 여기에 모여요"
             action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('S')}>1365 가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />
         : <>
-          <div className="m-chips done-chips" role="radiogroup" aria-label="활동 기록 보기">{([['all', '전체', ext.length + volink.length], ['1365', '1365', ext.length], ['volink', 'Volink', volink.length]] as const).map(([key, label, n]) =>
+          <div className="m-chips done-chips" role="radiogroup" aria-label="활동 기록 보기">{([['all', '전체', ext.length + volink.length + led.length], ['1365', '1365', ext.length], ['volink', 'Volink', volink.length + led.length]] as const).map(([key, label, n]) =>
             <button key={key} type="button" role="radio" aria-checked={kind === key} className={'m-chip' + (kind === key ? ' on' : '')} onClick={() => setKind(key)}>{label} {n}</button>)}</div>
           {groups.map(([title, list]) => <section key={title} className="m-section rec-group"><div className="m-section-head"><h2>{title}</h2></div>
-            <div className="m-list">{list.map(item => item.kind === '1365' ? <RecordRow key={'e' + item.r.id} r={item.r} /> : <VolinkRow key={'v' + item.x.id} x={item.x} />)}</div></section>)}
+            <div className="m-list">{list.map(item => item.kind === '1365' ? <RecordRow key={'e' + item.r.id} r={item.r} /> : item.kind === 'led' ? <HostedRow key={'h' + item.a.id} a={item.a} /> : <VolinkRow key={'v' + item.x.id} x={item.x} />)}</div></section>)}
           {!items.length && <p className="m-help">이 종류의 기록은 아직 없어요.</p>}
           <p className="m-help">1365 기록은 1365 화면에서 가져온 값이고, Volink 기록은 자체 기록이에요. 공식 봉사실적·보험은 1365 기준이에요.</p>
         </>}

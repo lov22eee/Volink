@@ -1484,3 +1484,4 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .rec-kv > div:last-child { border-bottom: 0; }
 .rec-kv span { color: var(--ink-3); }
 .rec-kv b { font-weight: 650; text-align: right; }
+.m-row-ico.host { background: #fbeee2; color: #a3541b; }
