@@ -11,7 +11,7 @@ import { DateField } from './host'
 import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
@@ -330,7 +330,8 @@ export function LabScreen({ go }: { go?: string }) {
     setError('')
     setLastTarget(target)
     const guide = target === 'S' ? '로그인하면 ‘봉사참여 실적’ 화면으로 바로 가요' : '로그인하면 ‘신청 현황’ 화면으로 바로 가요'
-    try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target] }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
+    // A안 (2026-11-08): after the first page the 1365 window offers the other one (one login), so both may come back.
+    try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: PAGE_1365[target === 'S' ? 'A' : 'S'] }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
   }
   /** The 실적 list: picked rows → finished 1365 activities (waiting ones of the same name and day become 실적 반영됨), then the total. */
   async function saveDone() {
@@ -343,6 +344,20 @@ export function LabScreen({ go }: { go?: string }) {
         result.matched ? `참여 예정이던 ${result.matched}건은 실적 반영됨으로 바꿨어요` : '완료 기록에서 볼 수 있어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
       window.location.hash = '#/mine?tab=done'
+    } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
+  }
+  /** 실적 and 신청 현황 from one visit (A안): finished activities, the total, and the picked applications in one go. */
+  async function saveBoth() {
+    const finished = done.filter((_, i) => donePicked[i])
+    const applied = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i])
+    setBusy(true)
+    try {
+      const got = finished.length ? await api<{ added: number; matched: number }>('/api/me/external/import', 'POST', { items: finished }) : { added: 0, matched: 0 }
+      if (summary) await api('/api/me/external/summary', 'PUT', { ...summary, listed: true })
+      const planned = applied.length ? await api<{ added: number }>('/api/me/external/import', 'POST', { items: applied }) : { added: 0 }
+      showToast(`1365에서 ${got.added + got.matched + planned.added}건을 넣었어요`, `실적 ${got.added + got.matched}건 · 신청 ${planned.added}건 · 내 활동에서 볼 수 있어요`)
+      try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
+      window.location.hash = '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   async function save() {
@@ -363,6 +378,7 @@ export function LabScreen({ go }: { go?: string }) {
   }
   const failed = rows !== null && !rows.length && !summary && !done.length
   const listed = done.length > 0
+  const both = listed && (rows?.length ?? 0) > 0
   const had = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && m.extKind)
   const waits = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && !m.extKind)
   const doneCount = donePicked.filter(Boolean).length
@@ -398,7 +414,9 @@ export function LabScreen({ go }: { go?: string }) {
       </div> : <>
         {listed ? <>
           {/* 2026-11-07 (V32): the whole 1365 실적 list, both tabs, every period. */}
-          <h1 className="m-h2">1365 실적 {done.length}건을 찾았어요</h1>
+          <h1 className="m-h2">{both ? '1365에서 가져왔어요' : `1365 실적 ${done.length}건을 찾았어요`}</h1>
+          {both && <p className="lab-sub left">고른 것만 내 활동에 넣어요</p>}
+          {both && <h2 className="lab-sec">봉사참여 실적 · {done.length}건</h2>}
           <div className="lab-got"><b>{summary ? hoursText(summary.totalMinutes) : hoursText(timeRows.reduce((s, r) => s + (r.minutes ?? 0), 0))} · {done.length}건</b>
             <small>시간인증 {timeRows.length}건{actRows.length || activityCount ? ` · 활동인증 ${actRows.length || activityCount}건` : ''} · 1365 공식 실적 · 오늘 기준</small></div>
           {summary?.count != null && summary.count !== timeRows.length && <p className="m-err">1365에는 시간인증 {summary.count}건인데 {timeRows.length}건만 읽었어요. 다시 가져오면 맞춰질 수 있어요.</p>}
@@ -423,7 +441,7 @@ export function LabScreen({ go }: { go?: string }) {
         {summary && !listed && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
             <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') + ' · ' : ''}1365 공식 실적 · 오늘 기준</small></span></label>}
-        {rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
+        {both ? <h2 className="lab-sec">신청 현황 · {rows.length}건</h2> : rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
         <div className="lab-rows">{rows.map((r, i) => <div key={r.title + r.periodStart} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
           <label className="m-check">
             <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
@@ -441,6 +459,7 @@ export function LabScreen({ go }: { go?: string }) {
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
+      : both ? <button className="m-btn" disabled={busy || undated > 0 || (!doneCount && !count && !summary)} onClick={saveBoth}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : `${doneCount + count}건 내 활동에 넣기`}</button>
       : listed ? <button className="m-btn" disabled={busy || (!doneCount && !summary)} onClick={saveDone}>{doneCount ? `${doneCount}건 완료 기록에 넣기` : '새로 넣을 실적이 없어요 · 합계만 갱신'}</button>
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <div className="lab-actions">

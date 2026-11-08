@@ -54,7 +54,7 @@ export function WelcomeScreen() {
     {dots(4)}
     <div className="m-welcome-body">
       <span className="m-welcome-ico ext"><b>1365</b></span>
-      <h1>1365 봉사실적도 함께 모을까요?</h1>
+      <h1>1365를 연결할까요?</h1>
       <p>1365 봉사시간과 Volink 활동을 한눈에 볼 수 있어요.</p>
       <ul className="m-welcome-facts">
         <li><MIcon name="timer" size={20} /><span>5분 정도면 충분해요</span></li>

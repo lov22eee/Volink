@@ -177,7 +177,7 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page.getByRole('heading', { name: '알림을 받을까요?' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
-  await expect(page.getByRole('heading', { name: '1365 봉사실적도 함께 모을까요?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1365를 연결할까요?' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
   await expect(page.getByRole('heading', { name: /앱 회원님/ })).toBeVisible()
@@ -543,7 +543,7 @@ test('after signup: notifications, then night choice; settings: all off, own qui
   await expect(page.getByRole('heading', { name: /밤에도 알림을/ })).toBeVisible()
   await page.getByRole('button', { name: '밤에도 받을게요' }).click()
   // Last step (V29): how to keep 1365 activities; 직접 남기기 goes home.
-  await expect(page.getByRole('heading', { name: '1365 봉사실적도 함께 모을까요?' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1365를 연결할까요?' })).toBeVisible()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await expect(page).toHaveURL(/#\/home$/)
   await page.goto('/#/my?view=notice-settings')

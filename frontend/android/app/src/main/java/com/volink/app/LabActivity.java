@@ -299,6 +299,8 @@ public class LabActivity extends AppCompatActivity {
         targetUrl = start != null && !start.equals(LabPlugin.HOME) ? start : "";
         web.loadUrl(start == null ? LabPlugin.HOME : start);
         timer.postDelayed(checkStep, 1200);
+        String other = getIntent().getStringExtra("other");
+        otherUrl = other != null && other.startsWith(LabPlugin.HOME + "/") ? other : "";
         if ("P".equals(target)) {
             String next = getIntent().getStringExtra("next");
             listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
@@ -559,7 +561,20 @@ public class LabActivity extends AppCompatActivity {
         }
     }
 
+    /** The card's two buttons as the 실적 reading uses them ([n건만 가져가기]/[닫기] and [다시 읽기]). */
+    private void harvestButtons() {
+        progressMain.setOnClickListener(v -> {
+            pages.clear();
+            pages.addAll(carried);
+            pages.addAll(harvestTexts.values());
+            done();
+        });
+        progressAgain.setText("다시 읽기");
+        progressAgain.setOnClickListener(v -> startHarvest());
+    }
+
     private void startHarvest() {
+        harvestButtons();
         harvestStarted = true;
         harvesting = true;
         harvestPhase = "time";
@@ -586,11 +601,72 @@ public class LabActivity extends AppCompatActivity {
         progressTitle.setText(harvestRows > 0 ? "✓ " + harvestRows + "건을 다 읽었어요" : "✓ 다 읽었어요");
         progressNote.setText("Volink로 돌아가요…");
         pages.clear();
+        pages.addAll(carried);
         pages.addAll(harvestTexts.values());
         Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
         host = page.getHost() == null ? "" : page.getHost();
+        // A안 (2026-11-08): while still logged in, offer the other page (신청 현황) in this same window.
+        if (!otherAsked && !otherUrl.isEmpty() && carried.isEmpty()) {
+            askOther("신청 현황도 가져올까요?", "신청 현황도 가져오기", () -> readOther());
+            return;
+        }
         timer.postDelayed(this::done, 1000);
     }
+
+    // ---- 이어서 가져오기 (A안, 2026-11-08): 실적 → 신청 현황, or 신청 현황 → 실적, in one visit (one login) ----
+    private String otherUrl = "";
+    private boolean otherAsked = false, otherRead = false;
+    /** Pages already taken before the 실적 reading started (신청 현황 first): kept when the reading finishes. */
+    private final ArrayList<String> carried = new ArrayList<>();
+    private int otherTicks = 0;
+
+    /** The card asks for the other page: [그것도 가져오기] / [Volink로 돌아가기]. */
+    private void askOther(String question, String yes, Runnable go) {
+        progressNote.setText(question + "\n로그인한 김에 바로 가져와요 · 다시 로그인하지 않아도 돼요");
+        progressNote.setVisibility(View.VISIBLE);
+        progressMain.setText(yes);
+        progressMain.setOnClickListener(v -> { otherAsked = true; go.run(); });
+        progressAgain.setText("Volink로 돌아가기");
+        progressAgain.setOnClickListener(v -> { otherAsked = true; done(); });
+        progressButtons.setVisibility(View.VISIBLE);
+        progressCard.setVisibility(View.VISIBLE);
+    }
+
+    /** 실적 done → the 신청 현황 page in the same window, read once its list is there (20 s at most). */
+    private void readOther() {
+        progressButtons.setVisibility(View.GONE);
+        progressTitle.setText("신청 현황을 읽고 있어요");
+        progressPeriod.setText("✓ 실적 " + harvestRows + "건");
+        progressTime.setText("● 신청 현황 읽는 중…");
+        progressActivity.setVisibility(View.GONE);
+        progressBar.setVisibility(View.VISIBLE);
+        progressBar.setProgress(85);
+        progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
+        otherTicks = 0;
+        web.loadUrl(otherUrl);
+        timer.postDelayed(otherTick, 1500);
+    }
+
+    private final Runnable otherTick = new Runnable() {
+        @Override public void run() {
+            if (web == null || otherRead) return;
+            if (++otherTicks > 14) { otherRead = true; Toast.makeText(LabActivity.this, "신청 현황은 읽지 못했어요", Toast.LENGTH_SHORT).show(); done(); return; }
+            if (!onApplicationsPage()) { timer.postDelayed(this, 1500); return; }
+            web.evaluateJavascript("(function(){return document.body?document.body.innerText:'';})()", value -> {
+                String text = "";
+                try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception ignored) { }
+                if (text.trim().length() < 100) { timer.postDelayed(otherTick, 1500); return; }
+                otherRead = true;
+                if (text.length() > MAX) text = text.substring(0, MAX);
+                pages.add(text);
+                progressTime.setText("✓ 신청 현황을 읽었어요");
+                progressBar.setProgress(100);
+                progressTitle.setText("✓ 다 읽었어요");
+                progressNote.setText("Volink로 돌아가요…");
+                timer.postDelayed(LabActivity.this::done, 1000);
+            });
+        }
+    };
 
     private void harvestStuck() {
         harvesting = false;
@@ -732,6 +808,23 @@ public class LabActivity extends AppCompatActivity {
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
             lastStep = 0;
+            // A안 (2026-11-08): 신청 현황 taken → offer 실적 in the same window (the reading starts by itself there).
+            if ("A".equals(target) && !otherAsked && !otherUrl.isEmpty()) {
+                bottom.setVisibility(View.GONE);
+                progressTitle.setText("✓ 신청 현황을 가져왔어요");
+                progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
+                progressBar.setVisibility(View.GONE);
+                askOther("봉사참여 실적도 가져올까요?", "실적도 가져오기", () -> {
+                    carried.clear();
+                    carried.addAll(pages);
+                    target = "S";
+                    progressButtons.setVisibility(View.GONE);
+                    progressTitle.setText("봉사참여 실적으로 이동하고 있어요");
+                    progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
+                    web.loadUrl(otherUrl);
+                });
+                return;
+            }
             // One page per visit: back to the app (its result screen) right after "가져오는 중…" has been seen.
             timer.postDelayed(this::done, 400);
         });
@@ -900,6 +993,7 @@ public class LabActivity extends AppCompatActivity {
         timer.removeCallbacks(checkStep);
         timer.removeCallbacks(harvestTick);
         timer.removeCallbacks(applyTick);
+        timer.removeCallbacks(otherTick);
         closePopup();
         if (web != null) {
             web.stopLoading();

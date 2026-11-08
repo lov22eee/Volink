@@ -33,6 +33,8 @@ public class LabPlugin extends Plugin {
         // 신청 반자동 (target P): the 신청 현황 page to read after 1365 says the application went through.
         intent.putExtra("next", call.getString("next", ""));
         intent.putExtra("program", call.getString("program", ""));
+        // 이어서 가져오기 (A안): the other page (실적 ↔ 신청 현황), offered in the same window after the first one.
+        intent.putExtra("other", call.getString("other", ""));
         startActivityForResult(call, intent, "labResult");
     }
 
