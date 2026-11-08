@@ -30,6 +30,8 @@ public class LabPlugin extends Plugin {
         // Step guide (2026-11-06): a small script from the app that guesses the step from the page's words.
         intent.putExtra("step", call.getString("step", ""));
         intent.putExtra("target", call.getString("target", ""));
+        // 신청 반자동 (target P): the 신청 현황 page to read after 1365 says the application went through.
+        intent.putExtra("next", call.getString("next", ""));
         startActivityForResult(call, intent, "labResult");
     }
 
@@ -41,6 +43,7 @@ public class LabPlugin extends Plugin {
             JSObject out = new JSObject();
             out.put("text", data.getStringExtra("text"));
             out.put("host", data.getStringExtra("host"));
+            out.put("applied", data.getBooleanExtra("applied", false));
             java.util.ArrayList<String> texts = data.getStringArrayListExtra("texts");
             if (texts != null) {
                 com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();

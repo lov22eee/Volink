@@ -209,7 +209,7 @@ public class LabActivity extends AppCompatActivity {
         String guideText = getIntent().getStringExtra("guide");
         stepScript = getIntent().getStringExtra("step");
         String wanted = getIntent().getStringExtra("target");
-        target = "S".equals(wanted) || "A".equals(wanted) ? wanted : "";
+        target = "S".equals(wanted) || "A".equals(wanted) || "P".equals(wanted) ? wanted : "";
         guide.setText(guideText == null ? "" : guideText);
         words.addView(stepLabel);
         words.addView(guide);
@@ -293,6 +293,84 @@ public class LabActivity extends AppCompatActivity {
         targetUrl = start != null && !start.equals(LabPlugin.HOME) ? start : "";
         web.loadUrl(start == null ? LabPlugin.HOME : start);
         timer.postDelayed(checkStep, 1200);
+        if ("P".equals(target)) {
+            String next = getIntent().getStringExtra("next");
+            listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
+            Toast.makeText(this, "날짜를 고르고 [신청]을 직접 눌러 주세요. 신청이 끝나면 내 활동에 넣어 드려요.", Toast.LENGTH_LONG).show();
+            timer.postDelayed(applyTick, 1500);
+        }
+    }
+
+    // ---- 1365 신청 반자동 (2026-11-08, target P): the person applies on the 1365 program page themselves; when 1365 says the
+    // application is done (an alert or the page's words), the app opens the 신청 현황 page, reads it and returns to Volink.
+    // The app never presses 신청 or ticks a consent box.
+    private boolean applied = false, applyRead = false;
+    private String listUrl = "";
+    private static final java.util.regex.Pattern APPLIED_WORDS = java.util.regex.Pattern.compile(
+            "신청이완료|신청완료되었|신청되었습니다|신청이되었습니다|정상적으로신청|신청이접수|접수되었습니다|이미신청");
+    private static boolean appliedText(String text) {
+        return text != null && APPLIED_WORDS.matcher(text.replaceAll("\\s+", "")).find();
+    }
+    private final Runnable applyTick = new Runnable() {
+        @Override public void run() {
+            if (web == null || !"P".equals(target)) return;
+            String js = "(function(){var pw=Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;});"
+                    + "var t=document.body?String(document.body.innerText||'').slice(0,20000):'';"
+                    + "return JSON.stringify({pw:pw,len:t.length,done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
+            web.evaluateJavascript(js, value -> {
+                try {
+                    Object parsed = new JSONTokener(value).nextValue();
+                    JSONObject page = new JSONObject(parsed == null ? "{}" : parsed.toString());
+                    boolean pw = page.optBoolean("pw"), done = page.optBoolean("done");
+                    if (pw) { sawLogin = true; jumped = false; }
+                    else if (sawLogin && !loggedIn) {
+                        loggedIn = true;
+                        // After logging in, 1365 often lands on its main page: back to the program once.
+                        if (!applied && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
+                    }
+                    if (done && !applied) applyDetected();
+                    if (applied && !applyRead && onApplicationsPage() && page.optInt("len") > 100) readApplications();
+                } catch (Exception ignored) { }
+            });
+            if (!applyRead) timer.postDelayed(this, 1500);
+        }
+    };
+
+    private boolean onApplicationsPage() {
+        String url = web == null ? null : web.getUrl();
+        if (url == null || !url.startsWith(LabPlugin.HOME + "/")) return false;
+        String path = Uri.parse(url).getPath();
+        return path != null && path.endsWith(APPLICATIONS_PAGE);
+    }
+
+    /** 1365 said the application went through: show it, then go to 신청 현황 (20 s at most, then back with what we have). */
+    private void applyDetected() {
+        if (applied) return;
+        applied = true;
+        bottom.setVisibility(View.GONE);
+        progressTitle.setText("✓ 신청됐어요 · 신청 내역을 확인하고 있어요");
+        progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
+        progressBar.setIndeterminate(true);
+        progressNote.setText("1365 신청 현황에서 이 봉사를 찾아 내 활동에 넣어요");
+        progressButtons.setVisibility(View.GONE);
+        progressCard.setVisibility(View.VISIBLE);
+        timer.postDelayed(() -> { if (web != null && !listUrl.isEmpty() && !onApplicationsPage()) web.loadUrl(listUrl); }, 1200);
+        timer.postDelayed(() -> { if (!applyRead) { applyRead = true; done(); } }, 20000);
+    }
+
+    private void readApplications() {
+        applyRead = true;
+        timer.postDelayed(() -> web.evaluateJavascript("(function(){return document.body?document.body.innerText:'';})()", value -> {
+            String text = "";
+            try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception ignored) { }
+            if (text.length() > MAX) text = text.substring(0, MAX);
+            if (!text.trim().isEmpty()) { pages.add(text); applicationsAt = pages.size() - 1; }
+            Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
+            host = page.getHost() == null ? "" : page.getHost();
+            progressBar.setIndeterminate(false); progressBar.setProgress(100);
+            progressTitle.setText("✓ 신청 내역을 읽었어요");
+            timer.postDelayed(this::done, 700);
+        }), 1200);
     }
 
     private LinearLayout bottom;
@@ -524,21 +602,21 @@ public class LabActivity extends AppCompatActivity {
         String path = Uri.parse(url).getPath();
         if (path == null) return false;
         if ("S".equals(target)) return path.endsWith(SUMMARY_PAGE);
-        if ("A".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
+        if ("A".equals(target) || "P".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
         return path.endsWith(SUMMARY_PAGE) || path.endsWith(APPLICATIONS_PAGE);
     }
 
     private void updateTake() {
         if (bottom == null) return;
         // 실적 (S): no button — the list is read by itself (maybeStartHarvest).
-        boolean show = onAllowedPage() && !"S".equals(target);
+        boolean show = onAllowedPage() && !"S".equals(target) && !applied;
         if (show && bottom.getVisibility() != View.VISIBLE)
             take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
         bottom.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
     private String takeLabel() {
-        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
+        return "S".equals(target) ? "실적 가져오기" : "A".equals(target) || "P".equals(target) ? "신청 현황 가져오기" : "이 화면 가져오기";
     }
 
     /** The button shows "가져오는 중…" (lighter, not pressable) while the page is read, then the app takes over. */
@@ -579,7 +657,7 @@ public class LabActivity extends AppCompatActivity {
 
     /** 닫기 / 완료: the pages taken so far go back to the app; none taken = cancelled. */
     private void done() {
-        if (pages.isEmpty()) { setResult(RESULT_CANCELED); finish(); return; }
+        if (pages.isEmpty() && !applied) { setResult(RESULT_CANCELED); finish(); return; }
         int total = 0;
         ArrayList<String> out = new ArrayList<>();
         for (String text : pages) { if (total + text.length() > MAX) break; out.add(text); total += text.length(); }
@@ -587,6 +665,7 @@ public class LabActivity extends AppCompatActivity {
         data.putExtra("text", String.join("\n\n", out));
         data.putStringArrayListExtra("texts", out);
         data.putExtra("host", host);
+        data.putExtra("applied", applied);
         setResult(RESULT_OK, data);
         finish();
     }
@@ -620,6 +699,13 @@ public class LabActivity extends AppCompatActivity {
      */
     private boolean quietAlert(String message, JsResult result) {
         if (message != null && message.replace(" ", "").contains("로그인정보가없")) { result.confirm(); return true; }
+        // 신청 반자동: 1365's "신청이 완료되었습니다" (or "이미 신청한 …") is confirmed for the person and shown as a short note.
+        if ("P".equals(target) && appliedText(message)) {
+            result.confirm();
+            Toast.makeText(this, message.trim(), Toast.LENGTH_SHORT).show();
+            applyDetected();
+            return true;
+        }
         return false;
     }
 
@@ -731,6 +817,7 @@ public class LabActivity extends AppCompatActivity {
         for (String origin : visited) storage.deleteOrigin(origin);
         timer.removeCallbacks(checkStep);
         timer.removeCallbacks(harvestTick);
+        timer.removeCallbacks(applyTick);
         closePopup();
         if (web != null) {
             web.stopLoading();

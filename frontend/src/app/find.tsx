@@ -7,8 +7,11 @@ import type { LiveActivity } from '../api'
 import { categories, categoryTone } from '../categories'
 import { programKind, range, when1365 } from '../explore'
 import type { Program } from '../explore'
-import { AskSheet, MarkSheet } from './record'
-import { useExtMode } from './lab'
+import { Capacitor } from '@capacitor/core'
+import { showToast } from '../App'
+import { AskSheet, MarkSheet, recordToCalendar } from './record'
+import type { ExternalRecord } from './record'
+import { applyIn1365, findApplied, useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
@@ -379,9 +382,40 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
   const [asking, setAsking] = useState<Program | null>(null)
   const extMode = useExtMode()
   const afterApply = (p: Program) => { setOpen(false); if (extMode === 'IMPORT') setAsking(p); else setMarking(p) }
+  // 신청 반자동 (2026-11-08): with 1365 가져오기 on, the app opens the program in its 1365 window; the person applies there and
+  // the app puts it in 내 활동 by itself. Otherwise (web, 직접 남기기) the 1365 page opens in the browser as before.
+  const semi = Capacitor.isNativePlatform() && extMode === 'IMPORT' && program.link.startsWith('https://www.1365.go.kr/')
+  const [consent, setConsent] = useState(false)
+  const [done, setDone] = useState<ExternalRecord | null>(null)
+  async function applyHere() {
+    setConsent(false); setOpen(false)
+    const out = await applyIn1365(program.link)
+    if (!out) { setAsking(program); return }
+    const first = program.periodStart ? program.periodStart.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const last = program.periodEnd ? program.periodEnd.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const row = findApplied(out.texts, program.title, first, last)
+    const date = row?.date || (first && first === last ? first : '')
+    if (!row || !date) {
+      showToast(out.applied ? '1365 신청을 확인했어요' : '신청 현황을 읽었어요', row ? '참여하는 날을 골라 주세요' : '이 봉사를 찾지 못했어요. 날짜를 직접 넣어 주세요')
+      setMarking(program); return
+    }
+    try {
+      const saved = await api<{ added: number; items: ExternalRecord[] }>('/api/me/external/import', 'POST', { items: [{ programNo: program.programNo || undefined, title: row.title,
+        organization: program.organization, place: program.place, date, startTime: row.startTime ?? program.beginTime ?? undefined, endTime: row.endTime ?? program.endTime ?? undefined, labStatus: row.labStatus }] })
+      const record = saved.items.find(r => r.date === date && (r.title === row.title || (program.programNo && r.programNo === program.programNo))) ?? null
+      if (record) setDone(record); else { showToast('내 활동에 넣었어요'); onClose() }
+    } catch { showToast('내 활동에 넣지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program) }
+  }
+  async function finish(calendar: boolean) {
+    const record = done!
+    onClose()
+    if (calendar) await recordToCalendar(record).catch(() => showToast('내 활동에 넣었어요'))
+    else showToast('내 활동에 넣었어요', '하루 전과 다녀온 뒤에 알려 드릴게요')
+  }
   return <>
     {open && <Sheet title="1365 활동" onClose={onClose} footer={<>
-      <a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer" onClick={() => { window.setTimeout(() => afterApply(program), 400) }}>1365에서 신청하기 <MIcon name="outward" size={18} /></a>
+      {semi ? <button type="button" className="m-btn" onClick={() => setConsent(true)}>1365에서 신청하기 <MIcon name="outward" size={18} /></button>
+        : <a className="m-btn" href={program.link} target="_blank" rel="noopener noreferrer" onClick={() => { window.setTimeout(() => afterApply(program), 400) }}>1365에서 신청하기 <MIcon name="outward" size={18} /></a>}
       <button type="button" className="m-text-btn" onClick={() => afterApply(program)}>이미 신청했어요 · 내 활동에 넣기</button></>}>
       <h3 className="m-h3">{program.title}</h3>
       <dl className="m-dl">
@@ -390,6 +424,19 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
           .filter(([, value]) => value).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
       </dl>
       <p className="m-help">봉사시간 인정과 보험은 1365 기준이에요. Volink는 신청을 대신하지 않아요. 신청한 뒤 표시하면 내 활동에서 챙겨 드려요.</p>
+    </Sheet>}
+    {consent && <Sheet title="1365에서 신청할게요" onClose={() => setConsent(false)}
+      footer={<><button type="button" className="m-btn" onClick={applyHere}>확인하고 1365 열기</button><button type="button" className="m-btn line" onClick={() => setConsent(false)}>다음에 할게요</button></>}>
+      <ul className="lab-consent">
+        <li><MIcon name="lock" size={18} /><span><b>1365에서 직접 로그인·신청해요</b><small>날짜 선택·동의·[신청]은 직접 눌러 주세요. Volink가 대신 누르지 않아요</small></span></li>
+        <li><MIcon name="record" size={18} /><span><b>신청이 끝나면 신청 내역만 가져와요</b><small>활동명·날짜·시간·상태만 내 활동에 넣어요</small></span></li>
+        <li><MIcon name="checkCircle" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>창을 닫으면 1365에서 로그아웃돼요</small></span></li>
+      </ul>
+    </Sheet>}
+    {done && <Sheet title="신청 완료! 내 활동에 넣었어요" onClose={() => finish(false)}
+      footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
+      <div className="m-summary"><strong>{done.title}</strong><span>{`${done.date.slice(5).replace('-', '/')} ${done.startTime}~${done.endTime}`}{done.labStatus ? ' · 1365 ' + done.labStatus : ''}</span></div>
+      <p className="m-help">내 캘린더에도 추가할까요? 승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</p>
     </Sheet>}
     {asking && <AskSheet program={asking} onClose={onClose} onManual={() => { setMarking(asking); setAsking(null) }} />}
     {marking && <MarkSheet program={marking} onClose={onClose} />}

@@ -11,7 +11,7 @@ import { DateField } from './host'
 import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A'; url?: string }): Promise<{ text: string; texts?: string[]; host?: string }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
@@ -149,6 +149,29 @@ export function parseLabSummary(text: string): LabSummary | null {
     if (m && !/^(총|봉사시간|봉사분야)/.test(m[1]) && !fields.some(f => f.name === m[1].trim())) fields.push({ name: m[1].trim(), minutes: Number(m[2]) * 60 + Number(m[3] ?? 0) })
   }
   return { totalMinutes: Number(total[1]) * 60 + Number(total[2] ?? 0), count: count ? Number(count[1]) : undefined, fields: fields.slice(0, 20) }
+}
+
+/**
+ * 1365 신청 반자동 (2026-11-08, app only): the 1365 program page opens in the in-app window; the person applies there
+ * themselves. When 1365 says it went through, the window reads 신청 현황 and comes back. Null = closed without applying
+ * (or not the app). The app never presses 신청 or ticks a consent box.
+ */
+export async function applyIn1365(url: string): Promise<{ applied: boolean; texts: string[] } | null> {
+  if (!Capacitor.isNativePlatform() || !url.startsWith('https://www.1365.go.kr/')) return null
+  try {
+    const out = await lab.open({ guide: '', target: 'P', url, next: PAGE_1365.A })
+    const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
+    return out.applied || texts.length ? { applied: Boolean(out.applied), texts } : null
+  } catch { return null }
+}
+
+/** The row of the 신청 현황 text that is this program (same name, ignoring spaces and signs), on a day in its period. */
+export function findApplied(texts: string[], title: string, first?: string | null, last?: string | null): LabRow | null {
+  const key = (s: string) => s.replace(/[\s·\-_()[\]「」『』<>〈〉"'.,!?~]/g, '')
+  const want = key(title)
+  const rows = texts.flatMap(parseLabText).filter(r => { const got = key(r.title); return got && (got === want || got.includes(want) || want.includes(got)) })
+  const inside = rows.find(r => !r.date || ((!first || r.date >= first) && (!last || r.date <= last)))
+  return inside ?? rows[0] ?? null
 }
 
 export const hoursText = (minutes: number) => `${Math.floor(minutes / 60)}시간${minutes % 60 ? ' ' + (minutes % 60) + '분' : ''}`
