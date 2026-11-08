@@ -27,7 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class CheckInService {
-    /** Check-in is open from 30 minutes before to 30 minutes after the start. */
+    /**
+     * The organizer can open attendance ([출석 시작]) from WINDOW before the start to WINDOW before the end (2026-11-08);
+     * QR / code check-in works from that moment until WINDOW before the end.
+     */
     public static final Duration WINDOW = Duration.ofMinutes(30);
     /** The organizer's screen shows a new QR this often, so a scanned code always has at least half its 60 seconds left. */
     public static final Duration ROTATE = Duration.ofSeconds(30);
@@ -48,7 +51,7 @@ public class CheckInService {
         this.clock = clock;
     }
 
-    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, LocalDateTime endsAt) {
+    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, LocalDateTime endsAt, LocalDateTime openedAt) {
         String link() { return "#/activity/" + id; }
     }
 
@@ -59,8 +62,11 @@ public class CheckInService {
         LocalDateTime now = now();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("opensAt", activity.startsAt().minus(WINDOW).toString());
-        result.put("closesAt", activity.startsAt().plus(WINDOW).toString());
+        result.put("closesAt", activity.endsAt().minus(WINDOW).toString());
         boolean open = inWindow(activity, now);
+        result.put("opened", activity.openedAt() != null);
+        result.put("openedAt", activity.openedAt() == null ? null : activity.openedAt().toString());
+        result.put("canStart", canStart(activity, now));
         result.put("open", open);
         result.put("token", open ? qr.issue(activityId) : null);
         result.put("code", open ? qr.code(activityId, qr.slot()) : null);
@@ -101,8 +107,10 @@ public class CheckInService {
         if ("CHECKED_IN".equals(status) || "COMPLETED".equals(status)) throw new ApiException(HttpStatus.CONFLICT, "INVALID_STATE", "이미 체크인했습니다.");
         if (!"CONFIRMED".equals(status)) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "참가가 확정된 사람만 체크인할 수 있습니다.");
         LocalDateTime now = now();
+        if (activity.openedAt() == null && List.of("RECRUITING", "IN_PROGRESS").contains(activity.status()) && !now.isAfter(activity.endsAt().minus(WINDOW)))
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_NOT_STARTED", "모집자가 아직 출석을 시작하지 않았어요. 시작하면 알림으로 알려 드려요.");
         if (!inWindow(activity, now))
-            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_OUT_OF_TIME", "체크인은 시작 30분 전부터 시작 후 30분까지 할 수 있습니다.");
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_OUT_OF_TIME", "체크인은 모집자가 출석을 시작한 뒤 종료 30분 전까지 할 수 있습니다.");
         long participationId = ((Number) participation.get("id")).longValue();
         boolean byCode = (token == null || token.isBlank()) && code != null;
         if (byCode) {
@@ -139,6 +147,27 @@ public class CheckInService {
         jdbc.update("UPDATE participations SET status = 'CHECKED_IN', updated_at = ? WHERE id = ?", now, id);
         log(activityId, id, userId, "CONFIRMED", "CHECKED_IN", (byCode ? "출석 코드" : "QR") + "·시간·위치 확인");
         return Map.of("participationId", id, "status", "CHECKED_IN", "method", method, "checkedInAt", now.toString().substring(0, 16));
+    }
+
+    /**
+     * Organizer, on site: [출석 시작]. Opens QR / code check-in and tells every confirmed participant once ("출석이 시작됐어요",
+     * the link opens the camera). Pressing it again changes nothing.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> start(long organizerId, long activityId) {
+        Activity activity = load(activityId, true);
+        if (activity.organizerId() != organizerId) throw notFound("활동을 찾을 수 없습니다.");
+        LocalDateTime now = now();
+        if (activity.openedAt() != null) return Map.of("opened", true, "openedAt", activity.openedAt().toString(), "notified", 0);
+        if (!canStart(activity, now))
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "CHECKIN_OUT_OF_TIME", "출석은 시작 30분 전부터 종료 30분 전까지 시작할 수 있습니다.");
+        jdbc.update("UPDATE activities SET checkin_opened_at = ? WHERE id = ?", now, activityId);
+        log(activityId, null, organizerId, null, "CHECKIN_STARTED", "모집자가 출석 시작");
+        List<Long> people = jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, activityId);
+        for (long user : people)
+            notifications.send(user, "CHECKIN_OPEN", "출석이 시작됐어요", activity.title() + " · 모집자 화면의 QR을 찍어 주세요. 누르면 카메라가 바로 열려요.",
+                    "#/activity/" + activityId + "?scan=1", activityId, "CHECKIN_OPEN:" + activityId);
+        return Map.of("opened", true, "openedAt", now.toString(), "notified", people.size());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -264,23 +293,25 @@ public class CheckInService {
                         + ". 출발 전에 준비물을 한 번 더 확인해 주세요.", "#/activity/" + id);
             log(id, null, activity.organizerId(), null, "DAY_OF", "당일 아침 안내");
         }
-        // Once, when check-in opens (30 min before): the confirmed people and the organizer.
+        // Once, 30 min before the start: only the organizer ("출석을 시작할 수 있어요"); participants hear when it is opened (start()).
         for (Map<String, Object> row : jdbc.queryForList("""
                 SELECT a.id, a.organizer_id, a.title FROM activities a
-                WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at <= ?
+                WHERE a.status = 'RECRUITING' AND a.starts_at > ? AND a.starts_at <= ? AND a.checkin_opened_at IS NULL
                   AND NOT EXISTS (SELECT 1 FROM activity_logs l WHERE l.activity_id = a.id AND l.to_status = 'CHECKIN_OPENED' AND l.id > COALESCE((SELECT MAX(r.id) FROM activity_logs r WHERE r.activity_id = a.id AND r.to_status = 'RESCHEDULED'), 0))""", now, now.plus(WINDOW))) {
             long id = ((Number) row.get("id")).longValue(), organizer = ((Number) row.get("organizer_id")).longValue();
-            String link = "#/activity/" + id;
-            for (long user : jdbc.queryForList("SELECT user_id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Long.class, id))
-                notifications.send(user, "CHECKIN_OPEN", "체크인이 열렸어요", row.get("title") + " · 현장에서 모집자가 보여 주는 QR을 휴대폰 카메라로 찍어 주세요.", link);
-            notifications.send(organizer, "QR_TIME", "출석 QR을 띄울 시간이에요", row.get("title") + " · 활동 상세에서 '출석 체크'를 열어 참가자에게 QR을 보여 주세요.", link);
-            log(id, null, organizer, null, "CHECKIN_OPENED", "체크인 시작 안내");
+            notifications.send(organizer, "QR_TIME", "출석을 시작할 수 있어요", row.get("title")
+                    + " · 현장에 도착하면 모집 관리 › 출석에서 [출석 시작]을 눌러 주세요. 종료 30분 전까지 열 수 있어요.", "#/manage/" + id + "?tab=attendance");
+            log(id, null, organizer, null, "CHECKIN_OPENED", "출석 시작 안내(모집자)");
         }
         for (long id : jdbc.queryForList("SELECT id FROM activities WHERE status = 'RECRUITING' AND starts_at <= ? ORDER BY id", Long.class, now)) {
             Activity activity = load(id, true);
             if (!"RECRUITING".equals(activity.status())) continue;
             jdbc.update("UPDATE activities SET status = 'IN_PROGRESS' WHERE id = ?", id);
             log(id, null, activity.organizerId(), "RECRUITING", "IN_PROGRESS", "시작 시각");
+            // Not opened yet at the start: remind the organizer once (attendance is not opened by itself).
+            if (activity.openedAt() == null && jdbc.queryForObject("SELECT COUNT(*) FROM participations WHERE activity_id = ? AND status = 'CONFIRMED'", Integer.class, id) > 0)
+                notifications.send(activity.organizerId(), "QR_TIME", "아직 출석을 시작하지 않았어요", activity.title()
+                        + " · [출석 시작]을 눌러야 참가자가 체크인할 수 있어요. 종료 30분 전까지 열 수 있어요.", "#/manage/" + id + "?tab=attendance", id, "QR_REMIND:" + id);
             for (Map<String, Object> row : jdbc.queryForList("SELECT id, status FROM participations WHERE activity_id = ? AND status IN ('APPLIED', 'WAITLISTED', 'OFFERED') ORDER BY id FOR UPDATE", id)) {
                 long pid = ((Number) row.get("id")).longValue();
                 jdbc.update("UPDATE participations SET status = 'EXPIRED', wait_order = NULL, offer_expires_at = NULL, updated_at = ? WHERE id = ?", now, pid);
@@ -295,11 +326,16 @@ public class CheckInService {
             Activity activity = load(id, true);
             jdbc.update("UPDATE activities SET status = 'FINISHED' WHERE id = ?", id);
             log(id, null, activity.organizerId(), activity.status(), "FINISHED", "종료 시각");
+            // NO_SHOW only when attendance was opened; never opened → they stay confirmed ('출석 미확인'), not the participant's fault.
+            int unchecked = 0;
             for (long pid : jdbc.queryForList("SELECT id FROM participations WHERE activity_id = ? AND status = 'CONFIRMED' FOR UPDATE", Long.class, id)) {
+                if (activity.openedAt() == null) { unchecked++; log(id, pid, activity.organizerId(), "CONFIRMED", "UNCHECKED", "출석을 열지 않고 종료(불참 처리 안 함)"); continue; }
                 jdbc.update("UPDATE participations SET status = 'NO_SHOW', updated_at = ? WHERE id = ?", now, pid);
                 log(id, pid, activity.organizerId(), "CONFIRMED", "NO_SHOW", "체크인 없이 종료");
             }
-            notifications.send(activity.organizerId(), "FINISHED", "활동이 끝났습니다", activity.title() + " · 체크인한 참가자의 완료를 확인해 주세요.", activity.link());
+            notifications.send(activity.organizerId(), "FINISHED", "활동이 끝났습니다", activity.title() + (unchecked > 0
+                    ? " · 출석을 열지 않아 " + unchecked + "명은 출석 미확인으로 남았어요. 체크인한 참가자의 완료를 확인해 주세요."
+                    : " · 체크인한 참가자의 완료를 확인해 주세요."), activity.link());
             changed++;
         }
         return changed;
@@ -307,15 +343,23 @@ public class CheckInService {
 
     // ---- internals ----
 
+    /** QR / code check-in: opened by the organizer, and not later than WINDOW before the end. */
     private static boolean inWindow(Activity activity, LocalDateTime now) {
-        return !now.isBefore(activity.startsAt().minus(WINDOW)) && !now.isAfter(activity.startsAt().plus(WINDOW))
+        return activity.openedAt() != null && !now.isAfter(activity.endsAt().minus(WINDOW))
+                && List.of("RECRUITING", "IN_PROGRESS").contains(activity.status());
+    }
+
+    /** [출석 시작]: from WINDOW before the start to WINDOW before the end, once. */
+    private static boolean canStart(Activity activity, LocalDateTime now) {
+        return activity.openedAt() == null && !now.isBefore(activity.startsAt().minus(WINDOW)) && !now.isAfter(activity.endsAt().minus(WINDOW))
                 && List.of("RECRUITING", "IN_PROGRESS").contains(activity.status());
     }
 
     private Activity load(long activityId, boolean lock) {
-        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, ends_at FROM activities WHERE id = ?" + (lock ? " FOR UPDATE" : ""), activityId)
+        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, ends_at, checkin_opened_at FROM activities WHERE id = ?" + (lock ? " FOR UPDATE" : ""), activityId)
                 .stream().findFirst().map(row -> new Activity(((Number) row.get("id")).longValue(), ((Number) row.get("organizer_id")).longValue(),
-                        (String) row.get("title"), (String) row.get("status"), (LocalDateTime) row.get("starts_at"), (LocalDateTime) row.get("ends_at")))
+                        (String) row.get("title"), (String) row.get("status"), (LocalDateTime) row.get("starts_at"), (LocalDateTime) row.get("ends_at"),
+                        (LocalDateTime) row.get("checkin_opened_at")))
                 .orElseThrow(() -> notFound("활동을 찾을 수 없습니다."));
     }
 

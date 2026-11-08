@@ -10,16 +10,21 @@ import type { LiveActivity, User } from './api'
 import { dateLabel, Icon, LoginRequired, Notice, showToast } from './App'
 import { Glyph } from './icons'
 
-export type QrInfo = { open: boolean; token: string | null; code?: string | null; codeSecondsLeft?: number; opensAt: string; closesAt: string; validSeconds: number; rotateSeconds: number; expected: number; checkedIn: number; toComplete: number; status: string }
-export type Phase = 'later' | 'soon' | 'open' | 'late' | 'ended'
+export type QrInfo = { opened?: boolean; canStart?: boolean; openedAt?: string | null; open: boolean; token: string | null; code?: string | null; codeSecondsLeft?: number; opensAt: string; closesAt: string; validSeconds: number; rotateSeconds: number; expected: number; checkedIn: number; toComplete: number; status: string }
+/** wait = the organizer can open attendance now but has not yet (2026-11-08: [출석 시작]); open = QR / code check-in works. */
+export type Phase = 'later' | 'soon' | 'wait' | 'open' | 'late' | 'ended'
 
 const WINDOW_MS = 30 * 60_000
-/** Where the activity is in its day, from its own date and time (Korean time) — the same rule the server applies. */
-export function phaseOf(date: string, startTime: string, durationMinutes: number, now = Date.now()): { phase: Phase; opens: number; closes: number; start: number; end: number } {
+/**
+ * Where the activity is in its day, from its own date and time (Korean time) — the same rule the server applies.
+ * Attendance can be opened by the organizer from 30 minutes before the start to 30 minutes before the end (closes);
+ * `opened` = the organizer pressed [출석 시작] (LiveActivity.checkinOpenedAt / Participation checkinOpen).
+ */
+export function phaseOf(date: string, startTime: string, durationMinutes: number, now = Date.now(), opened = false): { phase: Phase; opens: number; closes: number; start: number; end: number } {
   const start = new Date(`${date}T${startTime}:00+09:00`).getTime()
   const end = start + durationMinutes * 60_000
-  const opens = start - WINDOW_MS, closes = start + WINDOW_MS
-  const phase: Phase = now >= end ? 'ended' : now > closes ? 'late' : now >= opens ? 'open' : opens - now <= 12 * 3_600_000 ? 'soon' : 'later'
+  const opens = start - WINDOW_MS, closes = end - WINDOW_MS
+  const phase: Phase = now >= end ? 'ended' : now > closes ? 'late' : now >= opens ? (opened ? 'open' : 'wait') : opens - now <= 12 * 3_600_000 ? 'soon' : 'later'
   return { phase, opens, closes, start, end }
 }
 
@@ -64,6 +69,21 @@ export function AttendancePanel({ activity, phase, onChanged }: { activity: Live
   }, [big])
   if (!info) return null
 
+  async function startNow() {
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api<{ notified: number }>('/api/activities/' + activity.id + '/checkin/start', 'POST', {})
+      showToast('출석을 시작했어요', `참가자 ${result.notified}명에게 알렸어요`)
+      load()
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '처리하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function completeAll() {
     setBusy(true)
     setError('')
@@ -96,13 +116,17 @@ export function AttendancePanel({ activity, phase, onChanged }: { activity: Live
         <button className="pill-button dark small" onClick={() => setBig(true)}>QR 크게 보기</button>
       </div>
     </div>
+      : info.canStart ? <div className="attend-end">
+        <p><b>아직 출석을 시작하지 않았어요.</b> 현장에 도착하면 출석을 시작해 주세요. 시작하면 QR이 나타나고 참가자에게 알림이 가요. ({hhmm(closes)}까지 시작할 수 있어요)</p>
+        <button className="pill-button green" disabled={busy} onClick={startNow}>{busy ? '처리 중…' : '출석 시작'}</button>
+      </div>
       : phase === 'ended' ? <div className="attend-end">
-        <p>활동이 끝났어요. 체크인한 참가자의 완료를 확인하면 활동 기록이 만들어져요.{info.expected - info.checkedIn > 0 ? ` 체크인하지 않은 ${info.expected - info.checkedIn}명은 불참으로 처리돼요.` : ''}</p>
+        <p>활동이 끝났어요. 체크인한 참가자의 완료를 확인하면 활동 기록이 만들어져요.{info.expected - info.checkedIn > 0 ? (info.opened ? ` 체크인하지 않은 ${info.expected - info.checkedIn}명은 불참으로 처리돼요.` : ` 출석을 열지 않아 ${info.expected - info.checkedIn}명은 출석 미확인으로 남아요.`) : ''}</p>
         {info.toComplete > 0 ? <button className="pill-button green" disabled={busy} onClick={completeAll}>{busy ? '처리 중…' : `체크인한 ${info.toComplete}명 모두 완료`}</button>
           : <span className="status-chip ok">완료 확인을 마쳤어요</span>}
       </div>
         : Date.now() > closes ? <p className="attend-note">QR 체크인 시간이 지났어요 ({hhmm(closes)}까지). 늦게 온 참가자는 아래 신청자 목록에서 ‘수동 확인’을 눌러 주세요.</p>
-          : <p className="attend-note">QR 체크인은 <b>{hhmm(opens)} ~ {hhmm(closes)}</b>에 열려요. 그때 이 자리에 QR이 나타나요. 위치를 쓸 수 없는 참가자는 수동으로 확인할 수 있어요.</p>}
+          : <p className="attend-note">출석은 <b>{hhmm(opens)} ~ {hhmm(closes)}</b>에 현장에서 [출석 시작]을 눌러 열어요. 그때 이 자리에 QR이 나타나요. 위치를 쓸 수 없는 참가자는 수동으로 확인할 수 있어요.</p>}
     {error && <Notice text={error} tone="error" />}
     {big && image && createPortal(<div className="qr-fullscreen" role="dialog" aria-modal="true" aria-label="출석 QR 크게 보기" onClick={() => setBig(false)}>
       <div className="qr-big" onClick={event => event.stopPropagation()}>
@@ -125,7 +149,8 @@ export function CheckInHint({ phase, opens, closes }: { phase: Phase; opens: num
     <ol><li>현장에서 모집자 화면의 QR을 휴대폰 카메라로 찍어요</li><li>열린 화면에서 위치를 허용하고 체크인해요</li></ol>
     <small>위치는 이번 확인에만 쓰고 저장하지 않아요. 안 되면 모집자에게 수동 확인을 요청하세요.</small>
   </div>
-  if (phase === 'soon') return <div className="checkin-hint" role="note"><strong><Glyph name="clock" size={17} />체크인은 {hhmm(opens)}부터 열려요</strong><small>현장에서 모집자가 보여 주는 QR을 휴대폰 카메라로 찍으면 돼요.</small></div>
+  if (phase === 'wait') return <div className="checkin-hint" role="note"><strong><Glyph name="clock" size={17} />모집자가 출석을 시작하면 알려 드려요</strong><small>현장에서 모집자가 [출석 시작]을 누르면 QR을 찍을 수 있어요.</small></div>
+  if (phase === 'soon') return <div className="checkin-hint" role="note"><strong><Glyph name="clock" size={17} />출석은 {hhmm(opens)}부터 시작돼요</strong><small>현장에서 모집자가 출석을 시작하면 보여 주는 QR을 휴대폰 카메라로 찍으면 돼요.</small></div>
   if (phase === 'late') return <div className="checkin-hint" role="note"><strong>QR 체크인 시간이 지났어요</strong><small>현장에 있다면 모집자에게 수동 확인을 요청하세요.</small></div>
   return null
 }

@@ -56,11 +56,12 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const todos: Todo[] = []
   for (const p of joined) {
     if (p.status === 'OFFERED') todos.push({ key: 'o' + p.id, icon: 'bolt', tone: 'hot', text: `빈자리 제안이 왔어요 · ${p.title}`, href: '#/activity/' + p.activityId })
-    if (p.status === 'CONFIRMED' && phaseOf(p.date, p.startTime, p.durationMinutes ?? 90, now).phase === 'open') todos.push({ key: 'c' + p.id, icon: 'qr', tone: 'hot', text: `체크인이 열렸어요 · ${p.title}`, href: '#/activity/' + p.activityId })
+    if (p.status === 'CONFIRMED' && phaseOf(p.date, p.startTime, p.durationMinutes ?? 90, now, Boolean(p.checkinOpen)).phase === 'open') todos.push({ key: 'c' + p.id, icon: 'qr', tone: 'hot', text: `출석이 시작됐어요 · ${p.title}`, href: '#/activity/' + p.activityId + '?scan=1' })
   }
   for (const a of running) {
-    const phase = phaseOf(a.date, a.startTime, a.durationMinutes, now).phase
-    if (phase === 'open' || phase === 'late') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석 QR을 띄울 시간이에요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
+    const phase = phaseOf(a.date, a.startTime, a.durationMinutes, now, Boolean(a.checkinOpenedAt)).phase
+    if (phase === 'wait') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석을 시작할 수 있어요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
+    else if (phase === 'open' || phase === 'late') todos.push({ key: 'q' + a.id, icon: 'qr', tone: 'hot', text: `출석 QR을 띄울 시간이에요 · ${a.title}`, href: '#/manage/' + a.id + '?tab=attendance' })
     if ((a.pending ?? 0) > 0) todos.push({ key: 'p' + a.id, icon: 'users', text: `승인할 신청 ${a.pending}건 · ${a.title}`, href: '#/manage/' + a.id })
     if ((a.unanswered ?? 0) > 0) todos.push({ key: 'u' + a.id, icon: 'chat', text: `답변할 질문 ${a.unanswered}개 · ${a.title}`, href: '#/news/' + a.id })
   }

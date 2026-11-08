@@ -619,6 +619,10 @@ textarea.n-input { min-height: 46px; max-height: 120px; padding: 12px 16px; bord
 .m-title:has(.m-title-sub) { font-size: 17px; line-height: 1.25; }
 
 /* 출석부 */
+.r-start { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; background: #fff; border: 1px solid var(--m-mint-2); border-radius: 18px; padding: 22px 16px; margin-bottom: 14px; }
+.r-start-ico { width: 58px; height: 58px; border-radius: 50%; background: var(--m-mint); color: var(--m-green); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.r-start strong { font-size: 16px; }
+.r-start small { color: #6b746f; font-size: 13px; line-height: 1.5; }
 .r-qr { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
 .r-qr-img { width: 112px; height: 112px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; flex: none; }
 .r-qr-img img { width: 100%; height: 100%; display: block; }

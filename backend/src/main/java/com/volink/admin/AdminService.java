@@ -63,7 +63,7 @@ public class AdminService {
     @Transactional
     public void reviewActivity(long adminId, long id, boolean approve, String rawReason) {
         String reason = clean(rawReason, approve ? "관리자 검토 후 공개" : null);
-        Map<String, Object> row = jdbc.queryForList("SELECT status, risk_level FROM activities WHERE id = ? FOR UPDATE", id)
+        Map<String, Object> row = jdbc.queryForList("SELECT status, risk_level, organizer_id, title FROM activities WHERE id = ? FOR UPDATE", id)
                 .stream().findFirst().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "NOT_FOUND", "활동을 찾을 수 없습니다."));
         if (!"DRAFT".equals(row.get("status")) || !"REVIEW".equals(row.get("risk_level")))
             throw invalidState("검토 대기 중인 활동만 처리할 수 있습니다.");
@@ -71,6 +71,11 @@ public class AdminService {
         jdbc.update("UPDATE activities SET status = ?, review_note = ? WHERE id = ?", to, reason, id);
         activities.log(id, adminId, "DRAFT", to, reason);
         record(adminId, "ACTIVITY", id, approve ? "APPROVE" : "REJECT", "DRAFT", to, reason);
+        // 2026-11-08: the organizer hears the result (phone push too) instead of finding it in 내 모집.
+        long organizer = ((Number) row.get("organizer_id")).longValue();
+        String title = (String) row.get("title");
+        if (approve) notifications.send(organizer, "ACTIVITY_REVIEW", "모집글이 승인됐어요", title + " · 관리자 검토를 마쳐 이제 신청을 받을 수 있어요.", "#/manage/" + id, id, "ACTIVITY_REVIEW:" + id);
+        else notifications.send(organizer, "ACTIVITY_REVIEW", "모집글이 반려됐어요", title + " · 반려 사유: " + reason, "#/activity/" + id, id, "ACTIVITY_REVIEW:" + id);
     }
 
     private void record(long adminId, String type, long id, String action, String from, String to, String reason) {

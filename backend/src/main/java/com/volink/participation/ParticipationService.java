@@ -181,7 +181,7 @@ public class ParticipationService {
                        DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                        p.status, p.wait_order AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
                        TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.status AS activityStatus, a.cancel_reason AS cancelReason,
-                       a.organizer_id AS organizerId, p.late_minutes AS lateMinutes
+                       a.organizer_id AS organizerId, p.late_minutes AS lateMinutes, a.checkin_opened_at IS NOT NULL AS checkinOpen
                 FROM participations p JOIN activities a ON a.id = p.activity_id LEFT JOIN demo_places pl ON pl.id = a.place_id
                 WHERE p.user_id = ?""" + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
                 status == null || status.isBlank() ? new Object[]{userId} : new Object[]{userId, status.trim()});

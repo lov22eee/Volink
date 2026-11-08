@@ -432,9 +432,28 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   }
   moveActivity(id, 10)
 
+  // Before the organizer opens attendance, the participant waits ("출석 시작 전이에요").
+  const early = await browser.newContext({ baseURL: 'http://127.0.0.1:5174', viewport: { width: 390, height: 844 } })
+  const waiting = await early.newPage()
+  await login(waiting, members[0].email)
+  await waiting.goto('/#/activity/' + id)
+  await expect(waiting.getByRole('button', { name: '출석 시작 전이에요' })).toBeDisabled()
+  await expect(waiting.getByText('모집자가 출석을 시작하면 알림으로 알려 드려요', { exact: false })).toBeVisible()
+
   await login(page, organizer)
   await page.goto('/#/manage/' + id + '?tab=attendance')
+  await expect(page.getByText('아직 출석을 시작하지 않았어요')).toBeVisible()
+  await page.getByRole('button', { name: '출석 시작' }).click()
+  await expect(page.getByText('참가자 3명에게 알렸어요')).toBeVisible()
   await expect(page.getByText('출석 코드')).toBeVisible()
+
+  // The participant hears it, and the push opens the camera straight away (here: the QR sheet).
+  const told = await (await page.request.get('/api/me/notifications', { headers: { Authorization: members[0].token } })).json()
+  expect(told.items[0].title).toBe('출석이 시작됐어요')
+  expect(told.items[0].link).toBe('#/activity/' + id + '?scan=1')
+  await waiting.goto('/#/activity/' + id + '?scan=1')
+  await expect(waiting.getByRole('dialog', { name: '출석 QR 찍기' })).toBeVisible()
+  await early.close()
   const code = (await page.locator('.r-code').textContent())!.trim()
   expect(code).toMatch(/^\d{4}$/)
 

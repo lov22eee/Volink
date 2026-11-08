@@ -231,7 +231,12 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("reason"));
         perform(post("/api/admin/activities/" + id + "/approve"), Map.of(), admin).andExpect(status().isNoContent());
         mvc.perform(get("/api/activities/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("RECRUITING"));
+        // The organizer is told (2026-11-08), once.
+        mvc.perform(get("/api/me/notifications").header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.items[0].type").value("ACTIVITY_REVIEW")).andExpect(jsonPath("$.items[0].title").value("모집글이 승인됐어요"))
+                .andExpect(jsonPath("$.items[0].link").value("#/manage/" + id));
         perform(post("/api/admin/activities/" + id + "/approve"), Map.of(), admin).andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE type = 'ACTIVITY_REVIEW' AND activity_id = ?", Integer.class, id)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM admin_actions WHERE target_type = 'ACTIVITY' AND target_id = ?", Integer.class, id)).isEqualTo(1);
     }
 
