@@ -22,7 +22,7 @@ import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
-import { BellLink, Loading, MIcon, TabBar, TopBar, useKeyboardAware } from './ui'
+import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, useKeyboardAware } from './ui'
 import type { Tab } from './ui'
 
 setupNative()
@@ -124,6 +124,7 @@ export default function MobileApp() {
   return <div className={'m-shell' + (tab ? ' has-tabs' : '')}>
     {screen}
     {tab && <TabBar active={tab} />}
+    <PushBanner onArrive={pollUnread} />
     <ToastHost />
   </div>
 }

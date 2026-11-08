@@ -1569,3 +1569,17 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .r-alldone strong { font-size: 18px; }
 .r-alldone small { color: var(--ink-3); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .r-count, .r-alldone, .r-alldone-ico { animation: none; } }
+/* 소식 실시간 (2026-11-08) */
+.n-count { display: inline-block; margin: 0 1px; animation: r-count .4s cubic-bezier(.34, 1.56, .64, 1); }
+.n-read.all { color: var(--m-green); }
+/* 앱 안 알림 띠 (2026-11-08) */
+.m-pushbar { position: fixed; z-index: 90; left: 10px; right: 10px; top: calc(var(--m-safe-top) + 8px); background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 28px rgba(0, 0, 0, .18); overflow: hidden; animation: m-pushbar-in .32s cubic-bezier(.22, 1, .36, 1) both; }
+.m-pushbar button { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 12px 14px 14px; border: 0; background: none; font: inherit; color: inherit; text-align: left; }
+.m-pushbar-ico { width: 36px; height: 36px; flex: none; border-radius: 12px; background: var(--m-mint); color: var(--m-green-ink); display: grid; place-items: center; }
+.m-pushbar-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.m-pushbar-txt b { font-size: 14.5px; font-weight: 750; }
+.m-pushbar-txt small { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.m-pushbar > i { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 2px; border-radius: 2px; background: var(--m-green); transform-origin: left; animation: m-pushbar-time 4s linear both; opacity: .5; }
+@keyframes m-pushbar-in { from { transform: translateY(-120%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes m-pushbar-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .m-pushbar, .m-pushbar > i, .n-count { animation: none; } }

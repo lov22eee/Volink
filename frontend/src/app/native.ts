@@ -76,6 +76,10 @@ export async function startPush() {
         try { localStorage.setItem(PUSH_TOKEN, value) } catch { /* storage blocked */ }
         void api('/api/me/push-token', 'PUT', { token: value, platform: 'ANDROID' }).catch(() => {})
       })
+      // 앱 안 알림 띠 (2026-11-08): Android shows nothing for a push while Volink is open; the app shows its own banner.
+      void PushNotifications.addListener('pushNotificationReceived', notification => {
+        window.dispatchEvent(new CustomEvent('volink:push', { detail: { title: notification.title ?? '', body: notification.body ?? '', link: String(notification.data?.link ?? '') } }))
+      })
       void PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
         const link = String(notification.data?.link ?? '')
         if (/^#\/[a-z-]+/.test(link)) window.location.hash = link
