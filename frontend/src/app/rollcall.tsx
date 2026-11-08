@@ -1,7 +1,8 @@
 // 출석부 (organizer, app): QR + 4-digit code on top, then who is here and who is not yet (before check-in opens: only who is confirmed).
 // Anyone not yet here can be checked in by hand with a reason, one at a time or several at once with one reason
 // (e.g. people who applied on a PC and have no phone with them). Every manual check-in keeps its reason.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
@@ -11,6 +12,10 @@ import { showToast } from '../App'
 import { hhmm } from '../checkin'
 import type { Phase, QrInfo } from '../checkin'
 import { ActionBar, MIcon, Sheet, TextInput } from './ui'
+
+/** Keeps the phone screen on while the QR is shown (app only; ScreenPlugin). */
+const screen = registerPlugin<{ keepOn(options: { on: boolean }): Promise<void> }>('VolinkScreen')
+const keepOn = (on: boolean) => { if (Capacitor.isNativePlatform()) void screen.keepOn({ on }).catch(() => {}) }
 
 const reasons = ['휴대폰 없음', '앱·로그인 안 됨', '위치 안 잡힘', '얼굴로 확인함']
 const methodTag: Record<string, { text: string; tone: string }> = { QR: { text: 'QR', tone: '' }, CODE: { text: '코드', tone: '' }, MANUAL: { text: '수동', tone: 'man' } }
@@ -66,6 +71,37 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
   const notYet = people.filter(p => p.status === 'CONFIRMED')
   const expected = here.length + notYet.length + people.filter(p => p.status === 'NO_SHOW').length
 
+  // 실시간 (2026-11-08): while the QR is open the list is read every 5 s; a new arrival shows a toast and '방금' for a minute.
+  useEffect(() => {
+    if (!open) return
+    const poll = window.setInterval(onChanged, 5000)
+    return () => window.clearInterval(poll)
+  }, [open, onChanged])
+  const seen = useRef<Set<number> | null>(null)
+  const [just, setJust] = useState<Record<number, number>>({})
+  useEffect(() => {
+    const ids = new Set(here.map(p => p.id))
+    if (seen.current && open) {
+      const fresh = here.filter(p => !seen.current!.has(p.id))
+      if (fresh.length) {
+        showToast(fresh.length === 1 ? `${fresh[0].name} 님이 출석했어요 · ${here.length}/${expected}` : `${fresh.length}명이 출석했어요 · ${here.length}/${expected}`)
+        const at = Date.now()
+        setJust(prev => ({ ...prev, ...Object.fromEntries(fresh.map(p => [p.id, at])) }))
+      }
+    }
+    seen.current = ids
+  }, [here.map(p => p.id).join(','), open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!Object.keys(just).length) return
+    const t = window.setTimeout(() => setJust(prev => Object.fromEntries(Object.entries(prev).filter(([, at]) => Date.now() - at < 60_000))), 5000)
+    return () => window.clearTimeout(t)
+  }, [just])
+  // Everyone confirmed is here: a ✓ instead of the QR (it can be shown again for someone late).
+  const allIn = open && expected > 0 && notYet.length === 0
+  const [showAgain, setShowAgain] = useState(false)
+  const showQr = open && (!allIn || showAgain)
+  useEffect(() => { keepOn(showQr || big); return () => keepOn(false) }, [showQr, big])
+
   async function confirm() {
     if (!target) return
     const text = (own.trim() || reason).trim()
@@ -85,7 +121,12 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
 
   const timer = <span className="r-timer" aria-hidden="true"><i key={until} style={{ '--from': Math.min(1, span / 30), animationDuration: span + 's' } as CSSProperties} /></span>
   return <>
-    {open && info?.code ? <section className="r-qr" aria-label="출석 QR과 코드">
+    {allIn && !showAgain ? <section className="r-alldone" aria-label="모두 출석">
+      <span className="r-alldone-ico"><MIcon name="check" size={30} /></span>
+      <strong>모두 출석했어요</strong><small>{here.length}/{expected}명</small>
+      <button type="button" className="m-text-btn" onClick={() => setShowAgain(true)}>QR 다시 띄우기</button>
+    </section>
+    : open && info?.code ? <section className="r-qr" aria-label="출석 QR과 코드">
       <button type="button" className="r-qr-img" aria-label="QR 크게 보기" onClick={() => setBig(true)}>{image && <img src={image} alt="체크인 QR" data-url={url} />}</button>
       <div className="r-qr-info"><small>출석 코드</small><b className="r-code">{info.code}</b>{timer}<small>{left}초</small></div>
     </section>
@@ -105,10 +146,12 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
         <span className="r-nm"><b>{p.name}</b>{p.lateMinutes ? <small className="late">약 {p.lateMinutes}분 늦어요</small> : null}</span>
       </li>)}</ul> : <p className="r-empty">아직 확정된 참가자가 없어요.</p>}
     </> : <>
-    <div className="r-sec"><h3><MIcon name="checkCircle" size={18} />출석 <b>{here.length}</b>/{expected}</h3></div>
+    <div className="r-sec"><h3><MIcon name="checkCircle" size={18} />출석 <b key={here.length} className="r-count">{here.length}</b>/{expected}</h3>
+      {showQr && <small className="r-awake"><MIcon name="moon" size={13} />화면 꺼짐 방지 중</small>}</div>
+    {open && expected > 0 && <i className="r-bar" aria-hidden="true"><span style={{ width: (here.length / expected * 100) + '%' }} /></i>}
     {here.length ? <ul className="r-roll">{here.map(p => <li key={p.id}>
       <span className="r-ok"><MIcon name="check" size={15} /></span>
-      <span className="r-nm"><b>{p.name}</b><small>{p.checkedInAt ?? ''}{p.checkInReason ? ' · ' + p.checkInReason : ''}{p.status === 'COMPLETED' ? ' · 완료 확인' : ''}</small></span>
+      <span className="r-nm"><b>{p.name}{just[p.id] && <em className="r-just">방금</em>}</b><small>{p.checkedInAt ?? ''}{p.checkInReason ? ' · ' + p.checkInReason : ''}{p.status === 'COMPLETED' ? ' · 완료 확인' : ''}</small></span>
       {p.checkInMethod && <span className={'r-tag ' + (methodTag[p.checkInMethod]?.tone ?? '')}>{methodTag[p.checkInMethod]?.text ?? p.checkInMethod}</span>}
     </li>)}</ul> : <p className="r-empty">아직 출석한 사람이 없어요.</p>}
 
@@ -122,14 +165,14 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
           <span className="r-nm"><b>{p.name}</b>{p.lateMinutes ? <small className="late">약 {p.lateMinutes}분 늦어요</small> : null}</span>
           {!selecting && canManual && <button type="button" className="m-btn xs line" onClick={() => { setTarget([p]); setReason(reasons[0]); setOwn('') }}>출석 체크</button>}
         </li>
-      })}</ul> : <p className="r-empty">모두 출석했어요</p>}
+      })}</ul> : <p className="r-empty">{allIn && !showAgain ? '남은 사람이 없어요' : '모두 출석했어요'}</p>}
     </>}
     </>}
     {phase === 'ended' && notYet.length > 0 && <p className="m-help">{activity.checkinOpenedAt ? `체크인하지 않은 ${notYet.length}명은 불참으로 처리돼요.` : `출석을 열지 않아 ${notYet.length}명은 출석 미확인으로 남아요 (불참 처리 안 함).`}</p>}
 
     {selecting ? <ActionBar><button className="m-btn" disabled={!picked.length} onClick={() => { setTarget(notYet.filter(p => picked.includes(p.id))); setReason(reasons[0]); setOwn('') }}>{picked.length ? `${picked.length}명 출석 처리` : '출석 처리할 사람을 골라요'}</button></ActionBar>
       : phase === 'wait' ? <ActionBar><button className="m-btn" disabled={starting} onClick={startNow}><MIcon name="qr" size={19} />{starting ? '시작하는 중…' : '출석 시작'}</button></ActionBar>
-      : open && info?.code && <ActionBar><button className="m-btn" onClick={() => setBig(true)}><MIcon name="qr" size={19} />QR·코드 크게 띄우기</button></ActionBar>}
+      : showQr && info?.code && <ActionBar><button className="m-btn" onClick={() => setBig(true)}><MIcon name="qr" size={19} />QR·코드 크게 띄우기</button></ActionBar>}
 
     {target && <Sheet title={target.length === 1 ? target[0].name + ' 님 출석 확인' : target.length + '명 출석 확인'} onClose={() => setTarget(null)}
       footer={<button type="button" className="m-btn" disabled={busy || !(own.trim() || reason)} onClick={confirm}>{busy ? '처리 중…' : '출석 확인'}</button>}>
