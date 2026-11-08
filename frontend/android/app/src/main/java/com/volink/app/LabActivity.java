@@ -286,6 +286,12 @@ public class LabActivity extends AppCompatActivity {
         FrameLayout.LayoutParams cardPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
         cardPlace.setMargins(dp(12), 0, dp(12), dp(12));
         frame.addView(progressCard, cardPlace);
+        slim = text("", 13.5f, Color.parseColor("#1E3A8A"), true);
+        slim.setPadding(dp(14), dp(11), dp(14), dp(11));
+        slim.setVisibility(View.GONE);
+        FrameLayout.LayoutParams slimPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        slimPlace.setMargins(dp(12), 0, dp(12), dp(12));
+        frame.addView(slim, slimPlace);
         root.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottom, wide);
         setContentView(root);
@@ -299,7 +305,9 @@ public class LabActivity extends AppCompatActivity {
             // Login first (the 신청 현황 page asks for it), then the program page (2026-11-08, user decision).
             String program = getIntent().getStringExtra("program");
             targetUrl = program != null && program.startsWith(LabPlugin.HOME + "/") ? program : "";
-            Toast.makeText(this, "먼저 1365에 로그인해 주세요. 로그인하면 이 봉사 페이지로 바로 이동해요.", Toast.LENGTH_LONG).show();
+            progressMain.setOnClickListener(v -> done());
+            progressAgain.setOnClickListener(v -> retryRead());
+            showSlim("① 1365에 로그인해 주세요", 1, false);
             timer.postDelayed(applyTick, 1500);
         }
     }
@@ -352,7 +360,60 @@ public class LabActivity extends AppCompatActivity {
         loggedIn = true; jumped = true;
         web.loadUrl(targetUrl);
         updateTake();
-        Toast.makeText(this, "이 봉사 페이지예요. 날짜를 고르고 [신청]을 직접 눌러 주세요.", Toast.LENGTH_LONG).show();
+        applyCard("1365 신청을 도와드릴게요", 1, 30, "");
+        // The person's turn again: fold the card to one line so the 신청 page is not covered.
+        timer.postDelayed(() -> { if (!applied) showSlim("③ 신청 진행하기", 3, true); }, 2500);
+    }
+
+    /** One line at the bottom (the person's turn): ① login (blue) or ③ 신청 진행하기 (orange), with "n / 4". */
+    private void showSlim(String line, int step, boolean warm) {
+        progressCard.setVisibility(View.GONE);
+        slim.setText(line + "      " + step + " / 4");
+        slim.setTextColor(Color.parseColor(warm ? "#9A4F00" : "#1E3A8A"));
+        GradientDrawable bg = round(Color.parseColor(warm ? "#FFF8EF" : "#EEF3FB"), 14);
+        bg.setStroke(dp(1), Color.parseColor(warm ? "#F1C99A" : "#B9CBE8"));
+        slim.setBackground(bg);
+        slim.setVisibility(View.VISIBLE);
+    }
+
+    /** The step card (the app's turn): done steps ✓, the current one ●, the rest ○. */
+    private void applyCard(String title, int current, int percent, String note) {
+        String[] steps = { "로그인", "신청 페이지로 이동", "신청 진행하기", "신청 내역 확인 · 내 활동에 넣기" };
+        String[] doing = { "1365에 로그인해 주세요", "신청 페이지로 이동하는 중…", "신청 진행하기", "신청 내역 확인하는 중…" };
+        String[] done = { "로그인 확인됐어요", "신청 페이지", "신청 완료 (1365)", "신청 내역을 읽었어요" };
+        TextView[] lines = { progressPeriod, progressTime, progressActivity, progressExtra };
+        for (int i = 0; i < 4; i++) {
+            lines[i].setVisibility(View.VISIBLE);
+            lines[i].setText(i < current ? "✓ " + done[i] : i == current ? "● " + doing[i] : "○ " + steps[i]);
+            lines[i].setTextColor(i < current ? GREEN : i == current ? INK : Color.parseColor("#9AA3A0"));
+            lines[i].setTypeface(Typeface.DEFAULT, i == current ? Typeface.BOLD : Typeface.NORMAL);
+        }
+        progressTitle.setText(title);
+        progressBar.setIndeterminate(false);
+        progressBar.setProgress(percent);
+        progressNote.setText(note);
+        progressNote.setVisibility(note.isEmpty() ? View.GONE : View.VISIBLE);
+        progressButtons.setVisibility(View.GONE);
+        slim.setVisibility(View.GONE);
+        progressCard.setVisibility(View.VISIBLE);
+    }
+
+    /** 신청 내역 not read in 20 s: [다시 시도] reads the 신청 현황 page again, [닫기] goes back with what there is. */
+    private void retryRead() {
+        applyRead = false;
+        applyCard("신청됐어요!", 3, 80, "신청 현황에서 이 봉사만 읽어요");
+        if (web != null && !listUrl.isEmpty()) web.loadUrl(listUrl);
+        timer.postDelayed(applyTick, 1500);
+        timer.postDelayed(this::readStuck, 20000);
+    }
+
+    private void readStuck() {
+        if (applyRead || isFinishing()) return;
+        applyRead = true;
+        timer.removeCallbacks(applyTick);
+        applyCard("신청 내역을 읽지 못했어요", 3, 80, "1365 화면이 달라졌을 수 있어요. 닫으면 날짜를 직접 골라 넣을 수 있어요");
+        progressMain.setText("닫기");
+        progressButtons.setVisibility(View.VISIBLE);
     }
 
     private boolean onApplicationsPage() {
@@ -367,14 +428,9 @@ public class LabActivity extends AppCompatActivity {
         if (applied) return;
         applied = true;
         bottom.setVisibility(View.GONE);
-        progressTitle.setText("✓ 신청됐어요 · 신청 내역을 확인하고 있어요");
-        progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
-        progressBar.setIndeterminate(true);
-        progressNote.setText("1365 신청 현황에서 이 봉사를 찾아 내 활동에 넣어요");
-        progressButtons.setVisibility(View.GONE);
-        progressCard.setVisibility(View.VISIBLE);
+        applyCard("신청됐어요!", 3, 80, "신청 현황에서 이 봉사만 읽어요");
         timer.postDelayed(() -> { if (web != null && !listUrl.isEmpty() && !onApplicationsPage()) web.loadUrl(listUrl); }, 1200);
-        timer.postDelayed(() -> { if (!applyRead) { applyRead = true; done(); } }, 20000);
+        timer.postDelayed(this::readStuck, 20000);
     }
 
     private void readApplications() {
@@ -386,9 +442,8 @@ public class LabActivity extends AppCompatActivity {
             if (!text.trim().isEmpty()) { pages.add(text); applicationsAt = pages.size() - 1; }
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
-            progressBar.setIndeterminate(false); progressBar.setProgress(100);
-            progressTitle.setText("✓ 신청 내역을 읽었어요");
-            timer.postDelayed(this::done, 700);
+            applyCard("✓ 다 됐어요", 4, 100, "Volink로 돌아가요…");
+            timer.postDelayed(this::done, 1000);
         }), 1200);
     }
 
@@ -430,7 +485,9 @@ public class LabActivity extends AppCompatActivity {
     private final java.util.LinkedHashMap<String, String> harvestTexts = new java.util.LinkedHashMap<>();
     private int harvestSearched = 0, harvestIdle = 0, harvestCool = 0, harvestTries = 0, harvestTicks = 0, harvestRows = 0;
     private LinearLayout progressCard, progressButtons;
-    private TextView progressTitle, progressNote, progressPeriod, progressTime, progressActivity;
+    private TextView progressTitle, progressNote, progressPeriod, progressTime, progressActivity, progressExtra;
+    /** 신청 반자동: the one-line note at the bottom while it is the person's turn (login, then 신청). */
+    private TextView slim;
     private android.widget.ProgressBar progressBar;
     private Button progressMain, progressAgain;
 
@@ -595,6 +652,9 @@ public class LabActivity extends AppCompatActivity {
         progressButtons.addView(progressAgain, tall2);
         box.addView(progressTitle);
         box.addView(progressPeriod); box.addView(progressTime); box.addView(progressActivity);
+        progressExtra = progressLine();
+        progressExtra.setVisibility(View.GONE);
+        box.addView(progressExtra);
         LinearLayout.LayoutParams barAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
         barAt.topMargin = dp(10);
         box.addView(progressBar, barAt);
@@ -629,8 +689,8 @@ public class LabActivity extends AppCompatActivity {
         if (bottom == null) return;
         // 실적 (S): no button — the list is read by itself (maybeStartHarvest).
         // 신청 반자동 before the program page: a button that goes there (if the login was not noticed by itself).
-        boolean toProgram = "P".equals(target) && !jumped && !applied && !targetUrl.isEmpty();
-        boolean show = toProgram || (onAllowedPage() && !"S".equals(target) && !applied);
+        boolean toProgram = false; // 2026-11-08: no button while logging in (it got in the way); the login is noticed by itself
+        boolean show = toProgram || (onAllowedPage() && !"S".equals(target) && !applied && (!"P".equals(target) || jumped));
         if (take != null && take.isEnabled()) take.setText(toProgram ? "로그인했어요 · 이 봉사로 가기" : takeLabel());
         if (show && bottom.getVisibility() != View.VISIBLE)
             take.animate().scaleX(1.04f).scaleY(1.04f).setDuration(160).withEndAction(() -> take.animate().scaleX(1f).scaleY(1f).setDuration(160).start()).start();
