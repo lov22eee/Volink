@@ -43,6 +43,7 @@ public class ActivityService {
     private static final String TODO = """
             (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'APPLIED') AS pending,
             (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'CHECKED_IN') AS checkedIn,
+            (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'COMPLETED') AS completed,
             (SELECT COUNT(*) FROM activity_posts q WHERE q.activity_id = a.id AND q.kind = 'QUESTION' AND q.deleted_at IS NULL
                 AND NOT EXISTS (SELECT 1 FROM activity_posts r WHERE r.parent_id = q.id AND r.deleted_at IS NULL)) AS unanswered""";
     static final List<String> PUBLIC_STATUSES = List.of("RECRUITING", "IN_PROGRESS", "FINISHED");

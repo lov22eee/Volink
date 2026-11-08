@@ -132,12 +132,24 @@ public class LabActivity extends AppCompatActivity {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
     }
 
-    private TextView text(String value, float size, int color, boolean bold) {
+    /** Pretendard like the app's screens (2026-11-08): res/font, a 500 and a 700 cut of the bundled variable font. */
+    private Typeface regular, bold;
+    private Typeface face(boolean strong) {
+        if (regular == null) {
+            try { regular = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.pretendard_medium); } catch (Exception e) { regular = Typeface.DEFAULT; }
+            try { bold = androidx.core.content.res.ResourcesCompat.getFont(this, R.font.pretendard_bold); } catch (Exception e) { bold = Typeface.DEFAULT_BOLD; }
+            if (regular == null) regular = Typeface.DEFAULT;
+            if (bold == null) bold = Typeface.DEFAULT_BOLD;
+        }
+        return strong ? bold : regular;
+    }
+
+    private TextView text(String value, float size, int color, boolean strong) {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(size);
         view.setTextColor(color);
-        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setTypeface(face(strong));
         return view;
     }
 
@@ -269,7 +281,7 @@ public class LabActivity extends AppCompatActivity {
         // 2026-11-06 (A안): the button says what it takes; one page per visit, so no 완료 button.
         take.setText(takeLabel());
         take.setTextSize(16);
-        take.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        take.setTypeface(face(true));
         take.setAllCaps(false);
         take.setStateListAnimator(null);
         take.setBackground(round(GREEN, 14));
@@ -303,6 +315,10 @@ public class LabActivity extends AppCompatActivity {
         timer.postDelayed(checkStep, 1200);
         String other = getIntent().getStringExtra("other");
         otherUrl = other != null && other.startsWith(LabPlugin.HOME + "/") ? other : "";
+        // 2026-11-08 (user decision): 1365 가져오기 always takes both — 실적 first, then 신청 현황, with no question between.
+        both = "S".equals(target) && !otherUrl.isEmpty();
+        try { motion = android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f; } catch (Exception ignored) { }
+        if (both) showSlim("① 1365에 로그인해 주세요 · 로그인하면 실적부터 가져와요", 1, false);
         if ("P".equals(target)) {
             String next = getIntent().getStringExtra("next");
             listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
@@ -372,12 +388,75 @@ public class LabActivity extends AppCompatActivity {
     /** One line at the bottom (the person's turn): ① login (blue) or ③ 신청 진행하기 (orange), with "n / 4". */
     private void showSlim(String line, int step, boolean warm) {
         progressCard.setVisibility(View.GONE);
-        slim.setText(line + "      " + step + " / 4");
+        slim.setText(both ? line : line + "      " + step + " / 4");
         slim.setTextColor(Color.parseColor(warm ? "#9A4F00" : "#1E3A8A"));
         GradientDrawable bg = round(Color.parseColor(warm ? "#FFF8EF" : "#EEF3FB"), 14);
         bg.setStroke(dp(1), Color.parseColor(warm ? "#F1C99A" : "#B9CBE8"));
         slim.setBackground(bg);
         slim.setVisibility(View.VISIBLE);
+    }
+
+    // ---- 1365 가져오기 = 실적 + 신청 현황 (2026-11-08): one card, four steps, gentle motion -------------------------------
+    private boolean both = false;
+    private int bothStep = -1;
+    private final String[] bothSteps = { "로그인", "봉사참여 실적", "신청 현황", "내 활동에 정리하기" };
+    private final String[] bothDoing = { "1365에 로그인해 주세요", "봉사참여 실적 읽는 중", "신청 현황 읽는 중", "내 활동에 정리하는 중" };
+    private final String[] bothDone = { "로그인했어요", "봉사참여 실적", "신청 현황", "내 활동에 정리했어요" };
+    private final String[] bothNote = { "", "", "", "" };
+    private android.animation.ObjectAnimator breathing;
+    private boolean motion = true;
+
+    /** Steps before {@code current} done (✓ green), {@code current} going (● bold, breathing), the rest waiting (○ grey). */
+    private void bothCard(String title, int current, int percent) {
+        TextView[] lines = { progressPeriod, progressTime, progressActivity, progressExtra };
+        boolean first = progressCard.getVisibility() != View.VISIBLE;
+        for (int i = 0; i < 4; i++) {
+            TextView line = lines[i];
+            boolean ok = i < current, now = i == current;
+            String note = bothNote[i].isEmpty() ? "" : "   " + bothNote[i];
+            line.setVisibility(View.VISIBLE);
+            line.setText((ok ? "✓  " + bothDone[i] : now ? "●  " + bothDoing[i] : "○  " + bothSteps[i]) + note);
+            line.setTextColor(ok ? GREEN : now ? INK : Color.parseColor("#A3ACA7"));
+            line.setTypeface(face(now));
+            line.setAlpha(1f);
+            // A step that has just finished: a small pop.
+            if (ok && i >= bothStep && bothStep >= 0 && i < current && motion) {
+                line.setScaleX(1.06f); line.setScaleY(1.06f);
+                line.setPivotX(0); line.animate().scaleX(1f).scaleY(1f).setDuration(220).start();
+            }
+        }
+        if (breathing != null) breathing.cancel();
+        if (current < 4 && motion) {
+            breathing = android.animation.ObjectAnimator.ofFloat(lines[current], "alpha", 1f, 0.55f);
+            breathing.setDuration(700);
+            breathing.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            breathing.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            breathing.start();
+        }
+        bothStep = current;
+        progressTitle.setText(title);
+        progressNote.setText(current < 4 ? "화면을 닫지 말고 잠깐만 기다려 주세요" : "Volink로 돌아가요");
+        progressNote.setVisibility(View.VISIBLE);
+        progressButtons.setVisibility(View.GONE);
+        progressBar.setVisibility(View.VISIBLE);
+        progressBar.setIndeterminate(false);
+        moveBar(percent);
+        slim.setVisibility(View.GONE);
+        progressCard.setVisibility(View.VISIBLE);
+        if (first && motion) {
+            progressCard.setAlpha(0f);
+            progressCard.setTranslationY(dp(24));
+            progressCard.animate().alpha(1f).translationY(0).setDuration(260).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        }
+    }
+
+    /** The bar fills smoothly instead of jumping. */
+    private void moveBar(int percent) {
+        if (!motion) { progressBar.setProgress(percent); return; }
+        android.animation.ObjectAnimator fill = android.animation.ObjectAnimator.ofInt(progressBar, "progress", progressBar.getProgress(), percent);
+        fill.setDuration(450);
+        fill.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        fill.start();
     }
 
     /** The step card (the app's turn): done steps ✓, the current one ●, the rest ○. */
@@ -390,7 +469,7 @@ public class LabActivity extends AppCompatActivity {
             lines[i].setVisibility(View.VISIBLE);
             lines[i].setText(i < current ? "✓ " + done[i] : i == current ? "● " + doing[i] : "○ " + steps[i]);
             lines[i].setTextColor(i < current ? GREEN : i == current ? INK : Color.parseColor("#9AA3A0"));
-            lines[i].setTypeface(Typeface.DEFAULT, i == current ? Typeface.BOLD : Typeface.NORMAL);
+            lines[i].setTypeface(face(i == current));
         }
         progressTitle.setText(title);
         progressBar.setIndeterminate(false);
@@ -528,7 +607,7 @@ public class LabActivity extends AppCompatActivity {
                 break;
             case "search":
                 harvestIdle = 0; harvestCool = 2; harvestSearched++;
-                progressPeriod.setText("✓ 기간을 전체로 맞췄어요");
+                if (!both) progressPeriod.setText("✓ 기간을 전체로 맞췄어요");
                 break;
             case "read":
                 harvestIdle = 0; harvestTries = 0;
@@ -539,6 +618,12 @@ public class LabActivity extends AppCompatActivity {
                     harvestRows += out.optInt("rows", 0);
                 }
                 int cur = out.optInt("cur", 1), last = Math.max(1, out.optInt("last", 1));
+                if (both) {
+                    bothNote[1] = harvestSeen.size() + "쪽 · " + harvestRows + "건";
+                    bothCard("1365에서 가져오는 중", 1, "time".equals(harvestPhase) ? 10 + (int) (35.0 * cur / last) : 45 + (int) (15.0 * cur / last));
+                    if (harvestSeen.size() >= MAX_PAGES) harvestFinish();
+                    break;
+                }
                 if (harvestSearched == 0) progressPeriod.setText("✓ 기간을 전체로 맞췄어요");
                 if ("time".equals(harvestPhase)) {
                     progressTime.setText("● 시간인증형 " + last + "쪽 중 " + cur + "쪽");
@@ -551,11 +636,13 @@ public class LabActivity extends AppCompatActivity {
                 break;
             case "phase":
                 harvestPhase = "activity"; harvestSearched = 0; harvestTries = 0; harvestIdle = 0;
-                progressTime.setText("✓ 시간인증형을 읽었어요");
-                progressActivity.setText("● 활동인증형 읽는 중");
+                if (!both) {
+                    progressTime.setText("✓ 시간인증형을 읽었어요");
+                    progressActivity.setText("● 활동인증형 읽는 중");
+                }
                 break;
             case "done":
-                progressActivity.setText("✓ 활동인증형을 읽었어요");
+                if (!both) progressActivity.setText("✓ 활동인증형을 읽었어요");
                 harvestFinish();
                 break;
             default:
@@ -583,6 +670,13 @@ public class LabActivity extends AppCompatActivity {
         harvestSeen.clear(); harvestTexts.clear();
         harvestSearched = 0; harvestIdle = 0; harvestCool = 0; harvestTries = 0; harvestTicks = 0; harvestRows = 0;
         bottom.setVisibility(View.GONE);
+        if (both) {
+            bothNote[1] = ""; bothNote[2] = "";
+            progressBar.setProgress(0);
+            bothCard("1365에서 가져오는 중", 1, 8);
+            timer.postDelayed(harvestTick, 600);
+            return;
+        }
         progressTitle.setText("1365 실적을 읽고 있어요");
         progressNote.setText("화면을 닫지 말고 잠깐만 기다려 주세요");
         progressPeriod.setText("● 기간을 전체로 맞추는 중");
@@ -607,6 +701,13 @@ public class LabActivity extends AppCompatActivity {
         pages.addAll(harvestTexts.values());
         Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
         host = page.getHost() == null ? "" : page.getHost();
+        // Both (2026-11-08): straight on to 신청 현황 in this same window, no question.
+        if (both && !otherAsked) {
+            otherAsked = true;
+            bothNote[1] = harvestRows + "건";
+            readOther();
+            return;
+        }
         // A안 (2026-11-08): while still logged in, offer the other page (신청 현황) in this same window.
         if (!otherAsked && !otherUrl.isEmpty() && carried.isEmpty()) {
             askOther("신청 현황도 가져올까요?", "신청 현황도 가져오기", () -> readOther());
@@ -636,6 +737,13 @@ public class LabActivity extends AppCompatActivity {
 
     /** 실적 done → the 신청 현황 page in the same window, read once its list is there (20 s at most). */
     private void readOther() {
+        if (both) {
+            bothCard("1365에서 가져오는 중", 2, 70);
+            otherTicks = 0;
+            web.loadUrl(otherUrl);
+            timer.postDelayed(otherTick, 1500);
+            return;
+        }
         progressButtons.setVisibility(View.GONE);
         progressTitle.setText("신청 현황을 읽고 있어요");
         progressPeriod.setText("✓ 실적 " + harvestRows + "건");
@@ -661,6 +769,12 @@ public class LabActivity extends AppCompatActivity {
                 otherRead = true;
                 if (text.length() > MAX) text = text.substring(0, MAX);
                 pages.add(text);
+                if (both) {
+                    bothCard("1365에서 가져오는 중", 3, 90);
+                    timer.postDelayed(() -> bothCard("다 됐어요", 4, 100), 500);
+                    timer.postDelayed(LabActivity.this::done, 1300);
+                    return;
+                }
                 progressTime.setText("✓ 신청 현황을 읽었어요");
                 progressBar.setProgress(100);
                 progressTitle.setText("✓ 다 읽었어요");
@@ -834,6 +948,7 @@ public class LabActivity extends AppCompatActivity {
 
     /** 닫기 / 완료: the pages taken so far go back to the app; none taken = cancelled. */
     private void done() {
+        if (breathing != null) breathing.cancel();
         if (pages.isEmpty() && !applied) { setResult(RESULT_CANCELED); finish(); return; }
         int total = 0;
         ArrayList<String> out = new ArrayList<>();

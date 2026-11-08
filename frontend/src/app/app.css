@@ -1264,7 +1264,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-guide span { display: flex; flex-direction: column; gap: 2px; }
 .lab-guide strong { font-size: 15px; }
 .lab-guide small { font-size: 12.5px; color: var(--ink-3); }
-.my-total { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); }
+.my-total { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 18px; background: #fff; border: 1px solid var(--line); }
 .my-total > small { font-size: 12.5px; color: var(--ink-3); }
 .my-total > b { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; color: var(--ink); }
 .my-total > b em { font-style: normal; font-size: 15px; font-weight: 600; color: var(--ink-3); margin: 0 2px; }
@@ -1289,8 +1289,8 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 /* V29 (2026-11-06): 함께한 시간 = 1365 + Volink, then the two parts side by side; welcome 1365 step; blue state. */
 .my-sum { font-size: 13px; color: var(--ink-2); }
 .my-parts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
-.my-parts > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: #eef6f0; min-width: 0; }
-.my-parts > div.ext { background: #eef3fb; }
+.my-parts > div, .my-parts > a { color: inherit; text-decoration: none; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: #eef6f0; min-width: 0; }
+.my-parts > .ext { background: #eef3fb; }
 .my-parts small { font-size: 12px; color: var(--ink-3); }
 .my-parts b { font-size: 17px; font-weight: 800; color: var(--m-green-ink); letter-spacing: -0.02em; }
 .my-parts .ext b { color: #3b67ad; }
@@ -1420,3 +1420,139 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .lab-sec { display: flex; align-items: center; justify-content: space-between; margin: 18px 2px 8px; }
 .lab-sec h2 { font-size: 15px; font-weight: 800; }
 .lab-more { display: inline-flex; align-items: center; gap: 2px; border: 0; background: none; color: var(--m-green); font-size: 13.5px; font-weight: 700; padding: 6px 0; }
+
+/* 내 활동 › 일정 (2026-11-08): month calendar · dots 초록 참여 / 파랑 1365 / 주황 나의 모집 / 회색 지난 */
+.sc { display: flex; flex-direction: column; gap: 12px; }
+.sc-chips { padding-top: 2px; }
+.sc-cal { background: #fff; border: 1px solid var(--line-2, #e6e9e6); border-radius: 20px; padding: 12px 10px 10px; }
+.sc-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 6px; }
+.sc-head strong { font-size: 16.5px; font-weight: 750; letter-spacing: -0.02em; }
+.sc-head button { width: 36px; height: 36px; border: 0; border-radius: 12px; background: none; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
+.sc-head button.next svg { transform: scaleX(-1); }
+.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; }
+.sc-w { font-size: 12px; color: var(--ink-3); font-weight: 600; padding: 4px 0 6px; }
+.sc-w.sun, .sc-day.sun > span { color: #c0533f; }
+.sc-w.sat, .sc-day.sat > span { color: #2f62a8; }
+.sc-day { height: 42px; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 4px; gap: 3px; font: inherit; color: var(--ink); }
+.sc-day > span { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; transition: background .18s, color .18s; }
+.sc-day.today > span { box-shadow: inset 0 0 0 1.5px var(--m-green); }
+.sc-day.on > span { background: var(--m-green); color: #fff !important; box-shadow: none; }
+.sc-day i { display: flex; gap: 3px; height: 5px; }
+.sc-day i b, .sc-legend b { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.sc .g { background: var(--m-green); }
+.sc .b { background: #3b5fa0; }
+.sc .o { background: #d9822b; }
+.sc .x { background: #c3cac6; }
+.sc-legend { display: flex; justify-content: flex-end; gap: 12px; padding: 8px 6px 0; font-size: 11.5px; color: var(--ink-3); }
+.sc-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.sc-date { font-size: 15.5px; font-weight: 750; margin: 6px 2px 0; }
+.sc-date small { font-size: 14px; color: var(--ink-3); font-weight: 600; }
+.sc-next { font-size: 14px; color: var(--ink-3); font-weight: 700; margin: 4px 2px 0; }
+.sc-list { display: flex; flex-direction: column; gap: 8px; animation: sc-in .2s ease-out; }
+@keyframes sc-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sc-list { animation: none; } }
+.sc-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff; border: 1px solid var(--line-2, #e6e9e6); border-radius: 16px; color: inherit; text-decoration: none; }
+.sc-bar { width: 4px; align-self: stretch; border-radius: 2px; background: var(--m-green); flex: none; }
+.sc-card.ext .sc-bar { background: #3b5fa0; }
+.sc-card.host { background: #fffaf4; border-color: #f3d9bf; }
+.sc-card.host .sc-bar { background: #d9822b; }
+.sc-card.past { background: #fafbfa; }
+.sc-card.past .sc-bar { background: #c3cac6; }
+.sc-card.past strong { color: var(--ink-2); }
+.sc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sc-main em { font-style: normal; font-size: 11.5px; font-weight: 750; color: #a3541b; }
+.sc-main strong { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-main small { font-size: 12.5px; color: var(--ink-3); }
+.sc-main .sc-alert { color: var(--m-hot); font-weight: 650; }
+.m-badge.host { background: #fbeee2; color: #a3541b; }
+.sc-empty { padding-top: 4px; }
+.sc-empty .m-empty.bare { min-height: 0; padding: 18px 12px 8px; gap: 6px; }
+.sc-empty .m-empty.bare .m-empty-ico { width: 52px; height: 52px; border-radius: 16px; }
+.sc-check { margin-top: 0; }
+.sc-none { margin: 4px 2px 0; }
+.m-newbtns a:only-child { grid-column: 1 / -1; min-height: 64px; }
+.sc-empty .m-empty-ico { display: none; }
+
+/* 함께한 시간 +N 칩 (2026-11-08): shows for about 2 s after a total grew. */
+.my-gain { position: absolute; top: 14px; right: 14px; padding: 4px 10px; border-radius: 99px; background: var(--m-mint); color: var(--m-green-ink); font-size: 12.5px; font-weight: 800; animation: my-gain 2.6s ease both; }
+.my-gain.ext { background: #e8eef9; color: #2f4f8f; }
+@keyframes my-gain { 0% { opacity: 0; transform: translateY(6px) scale(.9); } 10%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .my-gain { animation: none; } }
+.rec-group { margin-top: 2px; }
+.rec-kv { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 4px 14px; }
+.rec-kv > div { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid #eff1ee; font-size: 14.5px; }
+.rec-kv > div:last-child { border-bottom: 0; }
+.rec-kv span { color: var(--ink-3); }
+.rec-kv b { font-weight: 650; text-align: right; }
+.m-row-ico.host { background: #fbeee2; color: #a3541b; }
+/* 1365 연결 화면 in the app (2026-11-08): one button for both pages, a quiet link under it. */
+.lab-one { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; margin-top: 6px; }
+.lab-one .m-btn { justify-content: center; }
+/* 1365 가져오기 결과 (2026-11-08): title → sections → rows → button fade in one after another. */
+@keyframes lab-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.m-body.lab:not(.pick) > * { animation: lab-in .38s ease-out both; }
+.m-body.lab:not(.pick) > :nth-child(2) { animation-delay: .08s; }
+.m-body.lab:not(.pick) > :nth-child(3) { animation-delay: .16s; }
+.m-body.lab:not(.pick) > :nth-child(4) { animation-delay: .24s; }
+.m-body.lab:not(.pick) > :nth-child(5) { animation-delay: .32s; }
+.m-body.lab:not(.pick) > :nth-child(6) { animation-delay: .40s; }
+.m-body.lab:not(.pick) > :nth-child(7) { animation-delay: .48s; }
+.m-body.lab:not(.pick) > :nth-child(n+8) { animation-delay: .56s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item { animation: lab-in .34s ease-out both; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(1) { animation-delay: .30s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(2) { animation-delay: .38s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(3) { animation-delay: .46s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(n+4) { animation-delay: .54s; }
+.m-body.lab:not(.pick) ~ .m-action { animation: lab-in .38s .7s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .m-body.lab > *, .m-body.lab .lab-item, .m-body.lab ~ .m-action { animation: none !important; } }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(1) { animation-delay: .62s; }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(2) { animation-delay: .70s; }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(n+3) { animation-delay: .78s; }
+.m-body.lab:not(.pick) ~ .m-action { animation-delay: .9s; }
+
+/* 1365 결과 (2026-11-08, D+B): ✓ in the middle (circle pops with a little spring, the tick draws), the title fades in under
+   it, then both slide up while the two cards rise into place; everything sits in the middle of the free height. */
+.m-body.lab.done-view { justify-content: center; min-height: calc(100dvh - var(--m-top) - var(--m-safe-top) - 96px); }
+.m-body.lab.done-view > * { animation: none; }
+.lab-done { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.lab-done-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; animation: lab-rise .5s cubic-bezier(.22, 1, .36, 1) .95s both; }
+.lab-done-head .m-h2 { margin-top: 8px; animation: lab-in .4s ease-out .6s both; }
+.lab-done-head .lab-sub { animation: lab-in .4s ease-out .7s both; }
+.lab-check { width: 76px; height: 76px; border-radius: 50%; background: var(--m-mint); display: grid; place-items: center; animation: lab-pop .55s cubic-bezier(.34, 1.56, .64, 1) both; }
+.lab-check svg { width: 46px; height: 46px; fill: none; stroke: var(--m-green); stroke-width: 4.4; stroke-linecap: round; stroke-linejoin: round; }
+.lab-check path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lab-draw .42s cubic-bezier(.65, 0, .35, 1) .3s forwards; }
+@keyframes lab-pop { 0% { transform: scale(.3); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes lab-draw { to { stroke-dashoffset: 0; } }
+/* starts lower (where the middle of the screen is before the cards come), then slides to its place */
+@keyframes lab-rise { from { transform: translateY(92px); } to { transform: none; } }
+.lab-cards { display: flex; flex-direction: column; gap: 10px; }
+.lab-card { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border-radius: 20px; background: #fff; border: 1px solid var(--line); font: inherit; color: inherit; text-align: left; animation: lab-in .45s cubic-bezier(.22, 1, .36, 1) 1.05s both; }
+.lab-card + .lab-card { animation-delay: 1.15s; }
+.lab-card:disabled { opacity: 1; }
+.lab-card-ico { width: 50px; height: 50px; flex: none; border-radius: 16px; display: grid; place-items: center; }
+.lab-card-ico.s { background: #eef3fb; color: #3b67ad; }
+.lab-card-ico.a { background: var(--m-mint); color: var(--m-green-ink); }
+.lab-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lab-card-main small { font-size: 12.5px; color: var(--ink-3); }
+.lab-card-main b { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.lab-card-main b.plus { color: var(--m-hot); }
+.lab-card-main .lab-card-warn { color: var(--m-hot); font-weight: 650; }
+.lab-card em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--m-green-ink); display: inline-flex; align-items: center; white-space: nowrap; }
+.lab-done-note { text-align: center; animation: lab-in .4s ease-out 1.25s both; }
+.m-body.lab.done-view ~ .m-action { animation: lab-in .4s ease-out 1.3s both; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-done-head, .lab-done-head .m-h2, .lab-done-head .lab-sub, .lab-check, .lab-card, .lab-done-note, .m-body.lab.done-view ~ .m-action { animation: none !important; }
+  .lab-check path { animation: none; stroke-dashoffset: 0; }
+}
+.lab-done-head .m-h2 { margin-bottom: 0; }
+.lab-done-head .lab-sub { margin: 0; }
+/* 마이 A안 (2026-11-08): profile + 함께한 시간 + 1365 line in one mint card. */
+.my-card { gap: 12px; }
+.my-rule { border: 0; height: 1px; background: #d3e3d8; margin: 2px 0; }
+.my-total.in { padding: 0; border: 0; background: none; border-radius: 0; }
+.my-total.in .my-split { background: #d6e5db; }
+.my-total.in .my-gain { top: 0; right: 0; }
+.my-card .my-parts > a, .my-card .my-parts > .ext { background: #fff; }
+.my-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 2px 0 0; border: 0; background: none; font: inherit; color: var(--ink-3); font-size: 12.5px; text-align: left; }
+.my-line b { color: var(--ink-2); font-weight: 650; }
+.my-line em { font-style: normal; font-weight: 700; color: #3b67ad; display: inline-flex; align-items: center; white-space: nowrap; }

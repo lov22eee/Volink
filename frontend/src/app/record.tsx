@@ -126,7 +126,7 @@ const hoursOf = (minutes: number) => `${Math.floor(minutes / 60)}시간${minutes
 export function RecordRow({ r }: { r: ExternalRecord }) {
   const tag = recordTag(r)
   const wait = waiting(r, useExtMode())
-  const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
+  const word = wait ? '실적 확인 대기' : r.reflected ? '반영됨' : r.extKind ? '1365 실적' : r.status === 'ATTENDED' ? '다녀옴' : r.status === 'MISSED' ? '못 감' : r.started ? '다녀왔어요?' : dDay(r.date) ?? '예정'
   return <a className="m-row" href={'#/record/' + r.id}>
     <span className="m-row-ico ext"><b>1365</b></span>
     <span className="m-row-main"><strong>{r.title}</strong><small>{r.extKind
@@ -135,7 +135,7 @@ export function RecordRow({ r }: { r: ExternalRecord }) {
       // A certificate (2026-11-07: it may be years ago and sum a period): its day with the year when it is not this year, and its hours.
       ? `${r.certDate.slice(0, 4) === String(new Date().getFullYear()) ? r.certDate.slice(5).replace('-', '/') : r.certDate.replaceAll('-', '.')} · ${tag.text} · ${hoursOf(r.certMinutes ?? 0)}`
       : `${recordWhen(r)} · ${tag.text}${r.certMinutes ? ` · 인정 ${Math.round(r.certMinutes / 6) / 10}시간` : ''}`}</small></span>
-    <span className={'m-badge ' + (wait ? 'amber' : r.reflected ? 'blue' : r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
+    <span className={'m-badge ' + (wait ? 'amber' : r.reflected || r.extKind ? 'blue' : r.status === 'PLANNED' && r.started ? 'hot' : r.status === 'ATTENDED' ? 'mint' : 'gray')}>{word}</span>
   </a>
 }
 
@@ -183,11 +183,19 @@ export function RecordScreen({ id }: { id: number }) {
       {wait && <div className="m-state amber"><strong>실적 확인 대기</strong><span>1365에 실적이 올라오기까지 며칠 걸려요. 새로고침하면 늘어난 건수만큼 맞춰 봐요.</span></div>}
       {record.reflected && <div className="m-state blue"><strong>실적 반영됨(추정)</strong><span>1365 실적 건수가 늘어서 이 활동이 반영된 걸로 봤어요. 정확한 내역은 1365에서 확인해 주세요.</span></div>}
       {!wait && record.status === 'PLANNED' && record.started && <div className="m-state hot"><strong>다녀왔어요?</strong><span>남기면 내 발자취에 쌓이고 후기를 쓸 수 있어요.</span></div>}
-      {record.status === 'ATTENDED' && !record.reflected && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요.'}</span></div>}
+      {/* A row of the 1365 봉사참여 실적 list (V32, 2026-11-08 상세): what that list showed, as it was on the day it was read. */}
+      {record.extKind && <section className="rec-kv" aria-label="1365 실적 내용">
+        <div><span>봉사일</span><b>{record.date.replaceAll('-', '.')}</b></div>
+        <div><span>봉사 시간</span><b>{record.extKind === 'TIME' ? (record.extMinutes != null ? hoursOf(record.extMinutes) : '시간 미정') : '활동 1회'}</b></div>
+        <div><span>인증 방식</span><b>{record.extKind === 'TIME' ? '시간인증' : '활동인증'}</b></div>
+        {record.organization && <div><span>모집기관</span><b>{record.organization}</b></div>}
+      </section>}
+      {record.extKind && <div className="m-state blue"><strong>1365 봉사참여 실적에서 가져온 기록이에요</strong><span>가져온 날 기준이에요. 실적확인서·공식 내역은 1365에서 확인해 주세요.</span></div>}
+      {record.status === 'ATTENDED' && !record.reflected && !record.extKind && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요.'}</span></div>}
       {record.status === 'MISSED' && <div className="m-state gray"><strong>못 갔다고 남겼어요</strong><span>1365 신청은 1365에서 취소해 주세요.</span></div>}
       <nav className="mg-ops">
         {record.status === 'PLANNED' && !record.started && <button type="button" onClick={() => void recordToCalendar(record)}><MIcon name="calendar" size={20} /><span>내 캘린더에 추가<small>{record.timeKnown ? '갤럭시 기본 캘린더에 바로 넣어요' : '시간이 없어 9시로 넣어요 · 캘린더에서 고쳐 주세요'}</small></span><MIcon name="chevron" size={18} /></button>}
-        <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>1365에서 신청 상태 보기<small>신청·승인·취소는 1365에서 해요</small></span><MIcon name="chevron" size={18} /></a>
+        <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>{record.extKind ? '1365에서 실적 보기' : '1365에서 신청 상태 보기'}<small>{record.extKind ? '실적확인서 발급도 1365에서 해요' : '신청·승인·취소는 1365에서 해요'}</small></span><MIcon name="chevron" size={18} /></a>
       </nav>
       <p className="m-help">Volink가 1365 신청이나 실적을 확인한 건 아니에요. 공식 봉사실적과 보험은 1365 기준이에요.</p>
     </div>
