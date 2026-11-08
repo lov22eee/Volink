@@ -184,6 +184,10 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   const [vmsCode, setVmsCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // The account exists already (this flow's own signup went through but logging in failed, or the e-mail was used before):
+  // a second tap only logs in (2026-11-08: it used to sign up again, get "이미 가입" and jump back to the e-mail step).
+  const [created, setCreated] = useState(false)
+  const [taken, setTaken] = useState(false)
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && email.trim().length <= 254
   const rules = [
@@ -202,27 +206,43 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   const index = order.indexOf(step)
   const last = index === order.length - 1
 
+  async function enter() {
+    onSession(await login(email.trim(), password, institution ? 'INSTITUTION' : 'GENERAL'))
+    window.location.hash = institution ? '#/home' : '#/welcome'
+  }
   async function finish() {
     setBusy(true)
     setError('')
+    if (created) {
+      try { await enter() } catch (cause) { setError(cause instanceof Error ? cause.message : '로그인하지 못했어요. 잠시 뒤 다시 눌러 주세요.') } finally { setBusy(false) }
+      return
+    }
     try {
       await api('/api/auth/signup', 'POST', institution
         ? { memberType: 'INSTITUTION', name: name.trim(), email: email.trim(), password, interests: [], agreedNotice: true,
           organizationName: org.trim(), organizationContact: contact.trim(), organizationType: orgType, organizationAddress: address.trim(), vmsRegistered: vms, vmsCode: vms ? vmsCode.trim() : '' }
         : { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate: birthIso(birth), interests, agreedNotice: true })
       if (institution) try { sessionStorage.setItem('volink.orgAsk', '1') } catch { /* private mode */ }
-      onSession(await login(email.trim(), password, institution ? 'INSTITUTION' : 'GENERAL'))
-      window.location.hash = institution ? '#/home' : '#/welcome'
+      setCreated(true)
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') { setStep('email'); setError('이미 가입한 이메일이에요. 로그인하거나 다른 이메일을 써 주세요.') }
+      if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') {
+        // Same e-mail and the same password: it is this person's account (for example a signup that went through before) → just log in.
+        try { await enter(); return } catch { /* another account or another password */ }
+        setTaken(true); setStep('email'); setError('')
+      }
       else if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setError(Object.values(cause.fieldErrors)[0])
       else setError(cause instanceof Error ? cause.message : '가입하지 못했어요.')
+      setBusy(false)
+      return
+    }
+    try { await enter() } catch (cause) {
+      setError((cause instanceof Error ? cause.message : '로그인하지 못했어요.') + ' 가입은 됐어요. 다시 누르면 로그인해요.')
     } finally {
       setBusy(false)
     }
   }
   function next() {
-    if (!ok[step] || busy) return
+    if (!ok[step] || busy || (step === 'email' && taken)) return
     setError('')
     if (last) void finish()
     else setStep(order[index + 1])
@@ -238,12 +258,14 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   const label = busy ? (institution ? '제출하는 중…' : '가입하는 중…') : last ? (institution ? '제출하기' : interests.length ? '가입하고 시작하기' : '나중에 고르고 가입하기') : '다음'
 
   return <Flow title={institution ? '기관회원 가입' : '회원가입'} index={index} total={order.length} heading={headings[step]} sub={subs[step]} onBack={back} onSubmit={next}
-    footer={<>{error && <p className="m-err m-flow-err" role="alert">{error}</p>}<button className="m-btn" disabled={!ok[step] || busy}>{label}</button></>}>
+    footer={<>{error && <p className="m-err m-flow-err" role="alert">{error}</p>}<button className="m-btn" disabled={!ok[step] || busy || (step === 'email' && taken)}>{label}</button></>}>
     {step === 'terms' && <Terms items={items} value={agreed} onChange={setAgreed} />}
     {step === 'email' && <>
       <TextInput className="m-input big" type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" aria-label="이메일" autoFocus value={email}
-        onChange={event => { setEmail(event.target.value); setError('') }} enterKeyHint="next" />
+        onChange={event => { const next = event.target.value; if (next.trim() !== email.trim()) { setTaken(false); setCreated(false) } setEmail(next); setError('') }} enterKeyHint="next" />
       {email && !emailOk && <span className="m-err">이메일 형식을 확인해 주세요.</span>}
+      {taken && <div className="m-note warm" role="alert"><strong>이미 가입한 이메일이에요</strong><span>다른 이메일을 쓰거나, 이 이메일로 로그인해 주세요.</span>
+        <a className="m-btn line sm" href={institution ? '#/login?type=institution' : '#/login'}>로그인하러 가기</a></div>}
     </>}
     {step === 'password' && <>
       <span className="m-input big with-peek">

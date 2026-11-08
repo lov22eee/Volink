@@ -184,6 +184,32 @@ test('nothing is shown before signing in, and the personal tab signs up a person
   await expect(page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link')).toHaveCount(5)
 })
 
+test('signing up again with the same e-mail: the same password just logs in, another password stays on the e-mail step with a clear note', async ({ page }) => {
+  const email = await signupByApi(page, '다시 가입')
+  const go = async (pw: string) => {
+    await page.goto('/#/login')
+    await page.getByRole('link', { name: '회원가입' }).click()
+    await page.getByText('모두 동의').click()
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByPlaceholder('example@email.com').fill(email)
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByLabel('비밀번호', { exact: true }).fill(pw)
+    await page.getByLabel('비밀번호 확인').fill(pw)
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByPlaceholder('이름').fill('다시 가입')
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByRole('button', { name: '다음' }).click()
+    await page.getByRole('button', { name: /가입하기|가입하고 시작하기/ }).click()
+  }
+  await go('other12345')
+  await expect(page.getByRole('heading', { name: '이메일을 알려 주세요' })).toBeVisible()
+  await expect(page.getByText('이미 가입한 이메일이에요')).toBeVisible()
+  await expect(page.getByRole('button', { name: '다음' })).toBeDisabled()
+  await expect(page.getByRole('link', { name: '로그인하러 가기' })).toBeVisible()
+  await go(password)
+  await expect(page).not.toHaveURL(/#\/signup/)
+})
+
 test('an organizer creates in three steps, a member applies, the organizer approves, and moves the date, and the member is told', async ({ page, browser }) => {
   const organizer = await signupByApi(page, '앱 모집자')
   await login(page, organizer)
