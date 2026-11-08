@@ -502,7 +502,7 @@ public class LabActivity extends AppCompatActivity {
     private boolean onApplicationsPage() {
         String url = web == null ? null : web.getUrl();
         if (url == null || !url.startsWith(LabPlugin.HOME + "/")) return false;
-        String path = Uri.parse(url).getPath();
+        String path = pathOf(url);
         return path != null && path.endsWith(APPLICATIONS_PAGE);
     }
 
@@ -740,8 +740,9 @@ public class LabActivity extends AppCompatActivity {
         if (both) {
             bothCard("1365에서 가져오는 중", 2, 70);
             otherTicks = 0;
-            web.loadUrl(otherUrl);
-            timer.postDelayed(otherTick, 1500);
+            // 2026-11-08 (Galaxy Note10): a 실적 page step still going on could swallow the jump; stop it first, then go.
+            timer.postDelayed(() -> { if (web != null && !otherRead) { web.stopLoading(); web.loadUrl(otherUrl); } }, 700);
+            timer.postDelayed(otherTick, 2000);
             return;
         }
         progressButtons.setVisibility(View.GONE);
@@ -757,11 +758,32 @@ public class LabActivity extends AppCompatActivity {
         timer.postDelayed(otherTick, 1500);
     }
 
+    /** The page path without a ;jsessionid=… part (1365 adds one on some first visits, so the page was not recognised). */
+    private static String pathOf(String url) {
+        String path = Uri.parse(url).getPath();
+        if (path == null) return null;
+        int semi = path.indexOf(';');
+        return semi >= 0 ? path.substring(0, semi) : path;
+    }
+
+    private void nudgeOther() {
+        if (web == null) return;
+        String js = "(function(){var as=document.querySelectorAll('a[href*=\\'reqstDtls\\']');for(var i=0;i<as.length;i++){as[i].click();return true;}"
+                + "var all=document.querySelectorAll('a');for(var j=0;j<all.length;j++){var t=String(all[j].textContent||'').replace(/\\s+/g,'');if(t==='신청현황'||t==='신청내역'){all[j].click();return true;}}return false;})()";
+        web.evaluateJavascript(js, value -> { if (!"true".equals(value) && web != null && !otherRead) { web.stopLoading(); web.loadUrl(otherUrl); } });
+    }
+
     private final Runnable otherTick = new Runnable() {
         @Override public void run() {
             if (web == null || otherRead) return;
-            if (++otherTicks > 14) { otherRead = true; Toast.makeText(LabActivity.this, "신청 현황은 읽지 못했어요", Toast.LENGTH_SHORT).show(); done(); return; }
-            if (!onApplicationsPage()) { timer.postDelayed(this, 1500); return; }
+            if (++otherTicks > 20) { otherRead = true; Toast.makeText(LabActivity.this, "신청 현황은 읽지 못했어요", Toast.LENGTH_SHORT).show(); done(); return; }
+            if (!onApplicationsPage()) {
+                // Not there yet (the jump was lost or 1365 sent us elsewhere): every 3 tries, tap the page's own 신청 현황 link
+                // like a person would, or load the page again when there is no such link.
+                if (otherTicks % 3 == 0) nudgeOther();
+                timer.postDelayed(this, 1500);
+                return;
+            }
             web.evaluateJavascript("(function(){return document.body?document.body.innerText:'';})()", value -> {
                 String text = "";
                 try { Object parsed = new JSONTokener(value).nextValue(); text = parsed == null ? "" : parsed.toString(); } catch (Exception ignored) { }
@@ -870,7 +892,7 @@ public class LabActivity extends AppCompatActivity {
     private boolean onAllowedPage() {
         String url = web == null ? null : web.getUrl();
         if (url == null || !url.startsWith(LabPlugin.HOME + "/")) return false;
-        String path = Uri.parse(url).getPath();
+        String path = pathOf(url);
         if (path == null) return false;
         if ("S".equals(target)) return path.endsWith(SUMMARY_PAGE);
         if ("A".equals(target) || "P".equals(target)) return path.endsWith(APPLICATIONS_PAGE);
