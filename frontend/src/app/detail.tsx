@@ -1,5 +1,6 @@
 // Activity detail for a participant, shown by state: 신청 전 / 대기 중 / 확정 후 / 활동 당일 / 완료 후.
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
+import { checkInRoute } from './native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
 import { Capacitor, registerPlugin } from '@capacitor/core'
@@ -304,8 +305,8 @@ function ScanSheet({ onClose, codeHref }: { onClose: () => void; codeHref: strin
       const tick = async () => {
         if (stopped || !video.current) return
         try {
-          const link = (await read(video.current)).find(value => /#\/checkin\/\d+\?t=/.test(value))
-          if (link) { go(link.slice(link.indexOf('#'))); return }
+          const found = (await read(video.current)).map(checkInRoute).find(Boolean)
+          if (found) { go(found); return }
         } catch { /* next frame */ }
         timer = window.setTimeout(tick, 300)
       }

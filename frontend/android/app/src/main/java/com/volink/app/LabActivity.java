@@ -155,7 +155,9 @@ public class LabActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // The 1365 login is typed here: no screenshots, screen recording or recent-apps preview of this screen.
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+        // No screenshots or screen recording of the 1365 window (password, own record). Only the 녹화용 test APK
+        // (-PvolinkRecord=true, for a backup demo video) leaves it off.
+        if (!BuildConfig.ALLOW_CAPTURE) getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         LinearLayout root = new LinearLayout(this);

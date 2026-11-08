@@ -1,7 +1,10 @@
 apply plugin: 'com.android.application'
 
+def record = project.hasProperty("volinkRecord") && project.property("volinkRecord") == "true"
+
 android {
     namespace = "com.volink.app"
+    buildFeatures { buildConfig = true }
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.volink.app"
@@ -12,6 +15,11 @@ android {
         // Shown in Android 설정 > 애플리케이션 > Volink: 0.6-<commit> (the same commit as the bottom of the app's 설정).
         versionName "0.6-" + (System.getenv("VOLINK_COMMIT") ?: "local")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // QR links open this app (App Links): the public site's host, the same server as VITE_API_BASE.
+        manifestPlaceholders = [appLinkHost: (System.getenv("VOLINK_APP_LINK_HOST") ?: "3-104-31-169.sslip.io"),
+                                appLabel: record ? "Volink 녹화용" : "@string/title_activity_main"]
+        // 녹화용 APK only (-PvolinkRecord=true, 2026-11-08): the 1365 window allows screen capture for a backup demo video.
+        buildConfigField "boolean", "ALLOW_CAPTURE", record ? "true" : "false"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61

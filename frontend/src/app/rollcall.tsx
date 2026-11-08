@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
-import { api, ApiError, siteUrl } from '../api'
+import { api, ApiError, checkInLink } from '../api'
 import type { Applicant, LiveActivity } from '../api'
 import { showToast } from '../App'
 import { hhmm } from '../checkin'
@@ -59,7 +59,7 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
     }, 200)
     return () => window.clearInterval(tick)
   }, [info?.open, until, load, onChanged])
-  const url = info?.token ? siteUrl() + '#/checkin/' + activity.id + '?t=' + encodeURIComponent(info.token) : ''
+  const url = info?.token ? checkInLink(activity.id, info.token) : ''
   useEffect(() => { if (url) QRCode.toDataURL(url, { width: 560, margin: 1 }).then(setImage).catch(() => setImage('')); else setImage('') }, [url])
 
   const here = people.filter(p => p.status === 'CHECKED_IN' || p.status === 'COMPLETED')

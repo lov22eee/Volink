@@ -55,6 +55,11 @@ export function setServer(base: string) { server = base.replace(/\/+$/, '') }
 export function serverBase() { return server }
 /** The public site address, for links people open outside the app (the check-in QR). */
 export function siteUrl() { return server ? server + '/' : window.location.origin + window.location.pathname }
+/**
+ * The organizer's QR (2026-11-08): https://site/c/{id}?t=… — a real path, so a phone with the Volink app opens the app
+ * (Android App Links, /.well-known/assetlinks.json) and any other phone gets the web check-in page (main.tsx).
+ */
+export function checkInLink(id: number, token: string) { return siteUrl() + 'c/' + id + '?t=' + encodeURIComponent(token) }
 function kept() { try { return localStorage.getItem(KEEP) } catch { return null } }
 function keep(token: string | null | undefined) { try { if (token) localStorage.setItem(KEEP, token); else localStorage.removeItem(KEEP) } catch { /* storage blocked */ } }
 
