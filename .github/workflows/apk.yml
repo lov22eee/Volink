@@ -69,7 +69,11 @@ jobs:
         env:
           VOLINK_VERSION_CODE: ${{ github.run_number }}
           VOLINK_COMMIT: ${{ github.sha }}
-        run: VOLINK_COMMIT="${VOLINK_COMMIT:0:7}" VOLINK_DEBUG_KEYSTORE="$HOME/volink-keys/debug.keystore" ./gradlew assembleDebug --no-daemon
+          # QR links open the app (App Links) for this site's host.
+          VOLINK_SITE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
+        run: |
+          export VOLINK_APP_LINK_HOST="$(printf '%s' "$VOLINK_SITE" | sed -E 's#^https?://##; s#[/:].*$##')"
+          VOLINK_COMMIT="${VOLINK_COMMIT:0:7}" VOLINK_DEBUG_KEYSTORE="$HOME/volink-keys/debug.keystore" ./gradlew assembleDebug --no-daemon
       - if: github.ref == 'refs/heads/main' && steps.key.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
@@ -86,4 +90,21 @@ jobs:
         with:
           name: volink-apk
           path: volink-0.6-*.apk
+          retention-days: 14
+      # 녹화용 APK (2026-11-08): the same app, but the 1365 window allows screen recording (for a backup demo video only).
+      # Same package and key, so it installs over the normal one; install the normal APK again afterwards.
+      - name: Build the 녹화용 APK
+        working-directory: frontend/android
+        env:
+          VOLINK_VERSION_CODE: ${{ github.run_number }}
+          VOLINK_COMMIT: ${{ github.sha }}
+          VOLINK_SITE: ${{ vars.VOLINK_SITE || 'https://3-104-31-169.sslip.io' }}
+        run: |
+          export VOLINK_APP_LINK_HOST="$(printf '%s' "$VOLINK_SITE" | sed -E 's#^https?://##; s#[/:].*$##')"
+          VOLINK_COMMIT="${VOLINK_COMMIT:0:7}" VOLINK_DEBUG_KEYSTORE="$HOME/volink-keys/debug.keystore" ./gradlew assembleDebug -PvolinkRecord=true --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/volink-record-0.6-${{ github.run_number }}-${GITHUB_SHA:0:7}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: volink-apk-record
+          path: volink-record-0.6-*.apk
           retention-days: 14

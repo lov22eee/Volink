@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.volink.app",
+    "sha256_cert_fingerprints": ["16:66:74:5C:C4:2D:95:F5:1C:44:93:88:63:5E:7E:82:49:67:D4:1B:E8:65:B8:85:9C:1E:5B:40:19:E3:20:66"]
+  }
+}]

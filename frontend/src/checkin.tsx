@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
-import { api, siteUrl } from './api'
+import { api, checkInLink } from './api'
 import type { LiveActivity, User } from './api'
 import { dateLabel, Icon, LoginRequired, Notice, showToast } from './App'
 import { Glyph } from './icons'
@@ -59,7 +59,7 @@ export function AttendancePanel({ activity, phase, onChanged }: { activity: Live
     const tick = window.setInterval(() => setLeft(value => Math.max(0, value - 1)), 1000)
     return () => { window.clearInterval(refresh); window.clearInterval(tick) }
   }, [open, rotate, load, onChanged])
-  const url = info?.token ? siteUrl() + '#/checkin/' + activity.id + '?t=' + encodeURIComponent(info.token) : ''
+  const url = info?.token ? checkInLink(activity.id, info.token) : ''
   useEffect(() => { if (url) QRCode.toDataURL(url, { width: 560, margin: 1 }).then(setImage).catch(() => setImage('')); else setImage('') }, [url])
   useEffect(() => {
     if (!big) return

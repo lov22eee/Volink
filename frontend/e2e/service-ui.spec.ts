@@ -843,7 +843,7 @@ test('a confirmed participant checks in with the organizer QR on site and gets a
   await expect(attendance).toContainText('0 / 1명 출석')
   await expect(attendance).toContainText('초 뒤 새 QR로 바뀌어요')
   const url = (await qr.getAttribute('data-url'))!
-  expect(url).toContain('#/checkin/' + activityId + '?t=')
+  expect(url).toContain('/c/' + activityId + '?t=')
   await attendance.screenshot({ path: shot6('attendance') })
   await page.screenshot({ path: shot6('organizer'), fullPage: true })
   await attendance.getByRole('button', { name: 'QR 크게 보기' }).first().click()

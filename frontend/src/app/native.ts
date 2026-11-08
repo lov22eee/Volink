@@ -18,6 +18,17 @@ export function appRoute(url: string) {
   return match ? '#/' + match[1] + (match[2] ?? '') : null
 }
 
+/**
+ * The organizer's check-in QR → the app's check-in screen (2026-11-08). The phone camera opens https://site/c/{id}?t=…
+ * in this app (App Links); older QRs (…/#/checkin/{id}?t=…) still work from the in-app scanner.
+ */
+export function checkInRoute(url: string) {
+  const link = /^https?:\/\/[^/?#]+\/c\/(\d+)\/?(\?t=[^#\s]+)$/.exec(url.trim())
+  if (link) return '#/checkin/' + link[1] + link[2]
+  const old = /#\/checkin\/(\d+)(\?t=[^#\s]+)$/.exec(url.trim())
+  return old ? '#/checkin/' + old[1] + old[2] : null
+}
+
 export function setupNative() {
   const native = Capacitor.isNativePlatform()
   if (!SERVER || !(native || import.meta.env.VITE_FORCE_NATIVE === '1')) return
@@ -25,11 +36,15 @@ export function setupNative() {
   if (!native) return
   setSocialOpener(path => { void Browser.open({ url: SERVER + path + '?app=1' }) })
   void App.addListener('appUrlOpen', ({ url }) => {
+    const qr = checkInRoute(url)
+    if (qr) { window.location.hash = qr; return }
     const route = appRoute(url)
     if (!route) return
     void Browser.close().catch(() => {})
     window.location.hash = route
   })
+  // The app was closed and the QR link started it: the check-in screen (login first if needed, then back there).
+  void App.getLaunchUrl().then(launch => { const qr = launch?.url ? checkInRoute(launch.url) : null; if (qr) window.location.hash = qr }).catch(() => {})
   // Android back key: an open sheet closes first (like Escape), a sub-screen goes back, the home screen puts the app
   // in the background instead of closing it.
   void App.addListener('backButton', () => {

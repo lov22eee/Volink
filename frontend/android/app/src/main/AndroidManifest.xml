@@ -12,7 +12,7 @@
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
-            android:label="@string/title_activity_main"
+            android:label="${appLabel}"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
@@ -29,6 +29,15 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="volink" />
+            </intent-filter>
+
+            <!-- The organizer's check-in QR (2026-11-08): the phone camera opens https://{site}/c/{id}?t=… straight in this
+                 app (Android App Links, verified by https://{site}/.well-known/assetlinks.json); no app = the web page. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${appLinkHost}" android:pathPrefix="/c/" />
             </intent-filter>
 
         </activity>
