@@ -1509,3 +1509,40 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(2) { animation-delay: .70s; }
 .m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(n+3) { animation-delay: .78s; }
 .m-body.lab:not(.pick) ~ .m-action { animation-delay: .9s; }
+
+/* 1365 결과 (2026-11-08, D+B): ✓ in the middle (circle pops with a little spring, the tick draws), the title fades in under
+   it, then both slide up while the two cards rise into place; everything sits in the middle of the free height. */
+.m-body.lab.done-view { justify-content: center; min-height: calc(100dvh - var(--m-top) - var(--m-safe-top) - 96px); }
+.m-body.lab.done-view > * { animation: none; }
+.lab-done { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.lab-done-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; animation: lab-rise .5s cubic-bezier(.22, 1, .36, 1) .95s both; }
+.lab-done-head .m-h2 { margin-top: 8px; animation: lab-in .4s ease-out .6s both; }
+.lab-done-head .lab-sub { animation: lab-in .4s ease-out .7s both; }
+.lab-check { width: 76px; height: 76px; border-radius: 50%; background: var(--m-mint); display: grid; place-items: center; animation: lab-pop .55s cubic-bezier(.34, 1.56, .64, 1) both; }
+.lab-check svg { width: 46px; height: 46px; fill: none; stroke: var(--m-green); stroke-width: 4.4; stroke-linecap: round; stroke-linejoin: round; }
+.lab-check path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: lab-draw .42s cubic-bezier(.65, 0, .35, 1) .3s forwards; }
+@keyframes lab-pop { 0% { transform: scale(.3); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes lab-draw { to { stroke-dashoffset: 0; } }
+/* starts lower (where the middle of the screen is before the cards come), then slides to its place */
+@keyframes lab-rise { from { transform: translateY(92px); } to { transform: none; } }
+.lab-cards { display: flex; flex-direction: column; gap: 10px; }
+.lab-card { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border-radius: 20px; background: #fff; border: 1px solid var(--line); font: inherit; color: inherit; text-align: left; animation: lab-in .45s cubic-bezier(.22, 1, .36, 1) 1.05s both; }
+.lab-card + .lab-card { animation-delay: 1.15s; }
+.lab-card:disabled { opacity: 1; }
+.lab-card-ico { width: 50px; height: 50px; flex: none; border-radius: 16px; display: grid; place-items: center; }
+.lab-card-ico.s { background: #eef3fb; color: #3b67ad; }
+.lab-card-ico.a { background: var(--m-mint); color: var(--m-green-ink); }
+.lab-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lab-card-main small { font-size: 12.5px; color: var(--ink-3); }
+.lab-card-main b { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.lab-card-main b.plus { color: var(--m-hot); }
+.lab-card-main .lab-card-warn { color: var(--m-hot); font-weight: 650; }
+.lab-card em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--m-green-ink); display: inline-flex; align-items: center; white-space: nowrap; }
+.lab-done-note { text-align: center; animation: lab-in .4s ease-out 1.25s both; }
+.m-body.lab.done-view ~ .m-action { animation: lab-in .4s ease-out 1.3s both; }
+@media (prefers-reduced-motion: reduce) {
+  .lab-done-head, .lab-done-head .m-h2, .lab-done-head .lab-sub, .lab-check, .lab-card, .lab-done-note, .m-body.lab.done-view ~ .m-action { animation: none !important; }
+  .lab-check path { animation: none; stroke-dashoffset: 0; }
+}
+.lab-done-head .m-h2 { margin-bottom: 0; }
+.lab-done-head .lab-sub { margin: 0; }

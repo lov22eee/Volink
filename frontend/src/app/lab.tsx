@@ -284,7 +284,6 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [allDone, setAllDone] = useState(false)
-  const [allRows, setAllRows] = useState(false)
   /** One or more pages taken in one visit: the 실적 page gives the total, the 신청 현황 page the rows. */
   function read(input: string | string[]) {
     const pages = (Array.isArray(input) ? input : [input]).filter(Boolean)
@@ -307,9 +306,11 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
     finished.sort((a, b) => b.date.localeCompare(a.date))
     setDone(finished)
     setActivityCount(acts)
-    if (finished.length) api<{ title: string; date: string; status: string; extKind: string | null }[]>('/api/me/external').then(list => {
+    if (finished.length || found.length) api<{ title: string; date: string; status: string; extKind: string | null }[]>('/api/me/external').then(list => {
       setMine(list)
       setDonePicked(finished.map(r => !list.some(m => m.title === r.title && m.date === r.date && m.extKind)))
+      // 2026-11-08: an application already in 내 활동 is not offered again (갱신 = only what is new).
+      if (found.length) setPicked(found.map(r => !list.some(m => m.title === r.title && !!r.date && m.date === r.date && !m.extKind)))
     }).catch(() => setDonePicked(finished.map(() => true)))
     else setDonePicked([])
     setRows(found)
@@ -342,14 +343,15 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   }
   /** 실적 and 신청 현황 from one visit (A안): finished activities, the total, and the picked applications in one go. */
   async function saveBoth() {
-    const finished = done.filter((_, i) => donePicked[i])
-    const applied = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i])
+    const finished = done.filter((r, i) => donePicked[i] && !had(r))
+    const applied = (rows ?? []).map((r, i) => ({ ...r, date: days[i] })).filter((_, i) => picked[i] && !rowHad((rows ?? [])[i]))
     setBusy(true)
     try {
       const got = finished.length ? await api<{ added: number; matched: number }>('/api/me/external/import', 'POST', { items: finished }) : { added: 0, matched: 0 }
       if (summary) await api('/api/me/external/summary', 'PUT', { ...summary, listed: true })
       const planned = applied.length ? await api<{ added: number }>('/api/me/external/import', 'POST', { items: applied }) : { added: 0 }
-      showToast(`1365에서 ${got.added + got.matched + planned.added}건을 넣었어요`, `실적 ${got.added + got.matched}건 · 신청 ${planned.added}건 · 내 활동에서 볼 수 있어요`)
+      const n = got.added + got.matched + planned.added
+      showToast(n ? `1365에서 ${n}건을 넣었어요` : '1365 기록을 확인했어요', n ? `실적 ${got.added + got.matched}건 · 신청 ${planned.added}건 · 내 활동에서 볼 수 있어요` : '마지막으로 가져온 날만 새로 바꿨어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
       window.location.hash = '#/mine'
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
@@ -382,10 +384,24 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   const count = picked.filter(Boolean).length
   const undated = (rows ?? []).filter((_, i) => picked[i] && !days[i]).length
   const md = (d?: string) => d ? d.slice(5).replace('-', '/') : ''
+  // 결과 (2026-11-08, D+B): a ✓ in the middle, then two cards (시계 = 실적, 목록 = 신청). After a first import the totals;
+  // on 갱신 only what is new (+시간, +건). [자세히 ›] opens that kind's list in a sheet.
+  const [detail, setDetail] = useState<'' | 'S' | 'A'>('')
+  const refresh = last !== null
+  const rowHad = (r: LabRow) => mine.some(m => m.title === r.title && !!r.date && m.date === r.date && !m.extKind)
+  const newDone = done.map((r, i) => ({ r, i })).filter(x => !had(x.r))
+  const newRows = (rows ?? []).map((r, i) => ({ r, i })).filter(x => !rowHad(x.r))
+  const shownDone = refresh ? newDone : done.map((r, i) => ({ r, i }))
+  const shownRows = refresh ? newRows : (rows ?? []).map((r, i) => ({ r, i }))
+  const gained = summary && last ? Math.max(0, summary.totalMinutes - last.totalMinutes) : 0
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date())
+  const ahead = (rows ?? []).filter(r => r.date && r.date >= today).length
+  const newCount = newDone.length + newRows.length
+  const picksNow = donePicked.filter((v, i) => v && !had(done[i])).length + picked.filter((v, i) => v && rows && !rowHad(rows[i])).length
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
-    <div className={'m-body lab' + (!rows || failed ? ' pick' : '')}>
-      {rows && !failed && <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>}
+    <div className={'m-body lab' + (!rows || failed ? ' pick' : both ? ' done-view' : '')}>
+      {rows && !failed && !both && <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>}
       {!rows ? <div className="lab-pick">
         {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. 2026-11-07: in the middle of the screen. */}
         <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
@@ -410,7 +426,32 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
       </div> : <>
-        {listed ? <>
+        {both ? <div className="lab-done" aria-live="polite">
+          <div className="lab-done-head">
+            <span className="lab-check" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M15 27.5l7.5 7.5L38 19" pathLength={1} /></svg></span>
+            <h1 className="m-h2">{refresh ? (newCount ? `새 기록 ${newCount}건을 가져왔어요` : '새로 늘어난 기록이 없어요') : '1365에서 가져왔어요'}</h1>
+            <p className="lab-sub">{refresh ? (newCount ? `${last!.fetchedAt.slice(5, 10).replace('-', '/')} 이후 늘어난 것만 보여요` : '마지막으로 가져온 뒤 그대로예요') : '오늘 기준 · 공식 실적은 1365에서 확인'}</p>
+          </div>
+          <div className="lab-cards">
+            <button type="button" className="lab-card" disabled={!shownDone.length} onClick={() => setDetail('S')}>
+              <span className="lab-card-ico s"><MIcon name="timer" size={24} /></span>
+              <span className="lab-card-main"><small>봉사참여 실적</small>
+                {refresh ? <><b className={gained || newDone.length ? 'plus' : ''}>{gained ? '+' + hoursText(gained) : newDone.length ? `+${newDone.length}건` : '변동 없음'}</b>
+                  <small>{newDone.length ? `새로 ${newDone.length}건 · ` : ''}합계 {hoursText(summary?.totalMinutes ?? 0)}</small></>
+                : <><b>{summary ? hoursText(summary.totalMinutes) : hoursText(timeRows.reduce((t, r) => t + (r.minutes ?? 0), 0))}</b>
+                  <small>{done.length}건 · 시간인증 {timeRows.length}{actRows.length || activityCount ? ` · 활동인증 ${actRows.length || activityCount}` : ''}</small></>}</span>
+              {shownDone.length > 0 && <em>자세히<MIcon name="chevron" size={15} /></em>}</button>
+            <button type="button" className="lab-card" disabled={!shownRows.length} onClick={() => setDetail('A')}>
+              <span className="lab-card-ico a"><MIcon name="list" size={24} /></span>
+              <span className="lab-card-main"><small>신청 현황</small>
+                {refresh ? <><b className={newRows.length ? 'plus' : ''}>{newRows.length ? `+${newRows.length}건` : '변동 없음'}</b><small>{newRows.length ? '다가오는 일정에 추가' : '새 신청은 1365에서 신청하면 와요'}</small></>
+                : <><b>{rows.length}건</b><small>다가오는 일정 {ahead}</small></>}
+                {undated > 0 && <small className="lab-card-warn">참여하는 날을 골라 주세요 ({undated}개)</small>}</span>
+              {shownRows.length > 0 && <em>자세히<MIcon name="chevron" size={15} /></em>}</button>
+          </div>
+          {!refresh && summary?.count != null && summary.count !== timeRows.length && <p className="m-help lab-done-note">1365에는 시간인증 {summary.count}건인데 {timeRows.length}건만 읽었어요. 다시 가져오면 맞춰질 수 있어요.</p>}
+        </div>
+        : listed ? <>
           {/* 2026-11-07 (V32): the whole 1365 실적 list, both tabs, every period. */}
           <h1 className="m-h2">{both ? '1365에서 가져왔어요' : `1365 실적 ${done.length}건을 찾았어요`}</h1>
           {both && <div className="lab-sec"><h2>봉사참여 실적 · {done.length}건</h2>{done.length > 3 && <button type="button" className="lab-more" onClick={() => setAllDone(!allDone)}>{allDone ? '접기' : '전체보기'}<MIcon name="chevron" size={15} /></button>}</div>}
@@ -438,26 +479,38 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
         {summary && !listed && <label className="m-check lab-sum"><input type="checkbox" checked={keepSummary} onChange={event => setKeepSummary(event.target.checked)} /><span className="m-box" />
           <span className="lab-row"><b>봉사 실적 총 {hoursText(summary.totalMinutes)}{summary.count != null ? ` · ${summary.count}건` : ''}</b>
             <small>{summary.fields.length ? summary.fields.map(f => `${f.name} ${hoursText(f.minutes)}`).join(' · ') + ' · ' : ''}1365 공식 실적 · 오늘 기준</small></span></label>}
-        {both ? <div className="lab-sec"><h2>신청 현황 · {rows.length}건</h2>{rows.length > 3 && <button type="button" className="lab-more" onClick={() => setAllRows(!allRows)}>{allRows || undated > 0 ? '접기' : '전체보기'}<MIcon name="chevron" size={15} /></button>}</div>
-          : rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
-        <div className="lab-rows">{(both && !allRows && !undated ? rows.slice(0, 3) : rows).map((r, i) => <div key={r.title + r.periodStart} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
+        {!both && rows.length > 0 && <p className="m-help">넣을 것만 골라 주세요.</p>}
+        {!both && <div className="lab-rows">{rows.map((r, i) => <div key={r.title + r.periodStart} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
           <label className="m-check">
             <input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
             <span className="lab-row"><b>{r.title}</b>
               <small>{r.date ? md(r.date) : `기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)}`}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>
           {!r.date && picked[i] && <div className="lab-day"><DateField label={r.title + ' · 참여하는 날'} value={days[i] ?? ''} first={r.periodStart ?? ''} last={r.periodEnd ?? ''}
             note={`1365 기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)} 안에서 골라 주세요`} onChange={date => setDays(days.map((v, k) => k === i ? date : v))} /></div>}
-        </div>)}</div>
+        </div>)}</div>}
       </>}
       {error && <p className="m-err" role="alert">{error}</p>}
     </div>
+    {detail && rows && <Sheet title={detail === 'S' ? `봉사참여 실적 · ${refresh ? '새로 ' : ''}${shownDone.length}건` : `신청 현황 · ${refresh ? '새로 ' : ''}${shownRows.length}건`} onClose={() => setDetail('')}
+      footer={<button type="button" className="m-btn" onClick={() => setDetail('')}>완료</button>}>
+      <div className="lab-rows">{detail === 'S' ? shownDone.map(({ r, i }) => <div key={r.kind + r.title + r.date + i} className="lab-item">
+        <label className="m-check"><input type="checkbox" checked={Boolean(donePicked[i])} onChange={event => setDonePicked(donePicked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
+          <span className="lab-row"><b>{r.title}<em className={'lab-kind' + (r.kind === 'ACTIVITY' ? ' act' : '')}>{r.kind === 'TIME' ? '시간인증' : '활동인증'}</em></b>
+            <small>{dots(r.date)} · {r.kind === 'TIME' ? (r.minutes != null ? hoursText(r.minutes) : '시간 미정') : '활동 1회'}{waits(r) ? ' · 신청했던 활동 → 실적 반영됨' : ''}</small></span></label></div>)
+      : shownRows.map(({ r, i }) => <div key={r.title + r.periodStart + i} className={'lab-item' + (picked[i] && !days[i] ? ' need' : '')}>
+        <label className="m-check"><input type="checkbox" checked={picked[i]} onChange={event => setPicked(picked.map((v, k) => k === i ? event.target.checked : v))} /><span className="m-box" />
+          <span className="lab-row"><b>{r.title}</b><small>{r.date ? md(r.date) : `기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)}`}{r.startTime ? ' ' + r.startTime : ''}{r.labStatus ? ' · 1365 ' + r.labStatus : ''}</small></span></label>
+        {!r.date && picked[i] && <div className="lab-day"><DateField label={r.title + ' · 참여하는 날'} value={days[i] ?? ''} first={r.periodStart ?? ''} last={r.periodEnd ?? ''}
+          note={`1365 기간 ${md(r.periodStart)} ~ ${md(r.periodEnd)} 안에서 골라 주세요`} onChange={date => setDays(days.map((v, k) => k === i ? date : v))} /></div>}</div>)}</div>
+      <p className="m-help">빼고 싶은 기록은 체크를 풀어 주세요.</p>
+    </Sheet>}
     {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); go1365(t) }} />}
     {choosing && <WaysSheet target={choosing} note={last ? `마지막 연동 ${last.fetchedAt.slice(5, 10).replace('-', '/')}` : undefined} onClose={() => setChoosing('')}
       on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
     {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} />}
     {(rows || (!native && webFor)) && <ActionBar>{!rows
       ? (native ? null : webFor ? <button className="m-btn" disabled={!paste.trim()} onClick={() => read(paste)}>붙여 넣은 글자 읽기</button> : null)
-      : both ? <button className="m-btn" disabled={busy || undated > 0 || (!doneCount && !count && !summary)} onClick={saveBoth}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : `${doneCount + count}건 내 활동에 넣기`}</button>
+      : both ? <button className={'m-btn' + (picksNow ? '' : ' line')} disabled={busy || undated > 0} onClick={() => undated ? setDetail('A') : saveBoth()}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : picksNow ? `${picksNow}건 내 활동에 넣기` : '확인'}</button>
       : listed ? <button className="m-btn" disabled={busy || (!doneCount && !summary)} onClick={saveDone}>{doneCount ? `${doneCount}건 완료 기록에 넣기` : '새로 넣을 실적이 없어요 · 합계만 갱신'}</button>
       : rows.length || summary ? <button className="m-btn" disabled={busy || undated > 0 || (!count && !(summary && keepSummary))} onClick={save}>{undated ? `참여하는 날을 골라 주세요 (${undated}개)` : rows.length ? `${count}개 내 활동에 넣기` : '실적 가져오기'}</button>
       : <div className="lab-actions">
