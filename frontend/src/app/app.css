@@ -1488,3 +1488,24 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 /* 1365 연결 화면 in the app (2026-11-08): one button for both pages, a quiet link under it. */
 .lab-one { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; margin-top: 6px; }
 .lab-one .m-btn { justify-content: center; }
+/* 1365 가져오기 결과 (2026-11-08): title → sections → rows → button fade in one after another. */
+@keyframes lab-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.m-body.lab:not(.pick) > * { animation: lab-in .38s ease-out both; }
+.m-body.lab:not(.pick) > :nth-child(2) { animation-delay: .08s; }
+.m-body.lab:not(.pick) > :nth-child(3) { animation-delay: .16s; }
+.m-body.lab:not(.pick) > :nth-child(4) { animation-delay: .24s; }
+.m-body.lab:not(.pick) > :nth-child(5) { animation-delay: .32s; }
+.m-body.lab:not(.pick) > :nth-child(6) { animation-delay: .40s; }
+.m-body.lab:not(.pick) > :nth-child(7) { animation-delay: .48s; }
+.m-body.lab:not(.pick) > :nth-child(n+8) { animation-delay: .56s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item { animation: lab-in .34s ease-out both; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(1) { animation-delay: .30s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(2) { animation-delay: .38s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(3) { animation-delay: .46s; }
+.m-body.lab:not(.pick) .lab-rows > .lab-item:nth-child(n+4) { animation-delay: .54s; }
+.m-body.lab:not(.pick) ~ .m-action { animation: lab-in .38s .7s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .m-body.lab > *, .m-body.lab .lab-item, .m-body.lab ~ .m-action { animation: none !important; } }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(1) { animation-delay: .62s; }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(2) { animation-delay: .70s; }
+.m-body.lab:not(.pick) > .lab-rows ~ .lab-rows > .lab-item:nth-child(n+3) { animation-delay: .78s; }
+.m-body.lab:not(.pick) ~ .m-action { animation-delay: .9s; }
