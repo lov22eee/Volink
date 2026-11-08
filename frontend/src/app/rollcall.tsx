@@ -124,7 +124,7 @@ export function RollCall({ activity, people, phase, opens, closes, onChanged }: 
     {allIn && !showAgain ? <section className="r-alldone" aria-label="모두 출석">
       <span className="r-alldone-ico"><MIcon name="check" size={30} /></span>
       <strong>모두 출석했어요</strong><small>{here.length}/{expected}명</small>
-      <button type="button" className="m-text-btn" onClick={() => setShowAgain(true)}>늦게 온 사람이 있으면 QR 다시 띄우기</button>
+      <button type="button" className="m-text-btn" onClick={() => setShowAgain(true)}>QR 다시 띄우기</button>
     </section>
     : open && info?.code ? <section className="r-qr" aria-label="출석 QR과 코드">
       <button type="button" className="r-qr-img" aria-label="QR 크게 보기" onClick={() => setBig(true)}>{image && <img src={image} alt="체크인 QR" data-url={url} />}</button>
