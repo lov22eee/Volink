@@ -734,13 +734,14 @@ test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, the
   // 참여 예정 [가져오기] → 1365에서 가져오기 / 1365 활동 찾기 → consent → that 1365 page (on the web: the paste box).
   await page.goto('/#/mine')
   await page.getByRole('tab', { name: '일정' }).click()
+  // 2026-11-08: every 1365 가져오기 = consent → 실적 first, then 신청 현황 (on the web: the 실적 paste box).
   await page.getByRole('button', { name: '1365 가져오기', exact: true }).click()
-  await page.getByRole('dialog', { name: '신청 현황' }).getByRole('button', { name: /^1365에서 가져오기/ }).click()
   const sheet = page.getByRole('dialog', { name: '연결 전에 확인해 주세요' })
+  await expect(sheet).toContainText('봉사참여 실적·신청 현황을 함께 가져와요')
   await expect(sheet).toContainText('비밀번호는 Volink로 오지 않아요')
   await sheet.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365$/)
-  await expect(page.getByText(/신청 현황 화면 글자를 붙여 넣기/)).toBeVisible()
+  await expect(page.getByText(/봉사참여 실적 화면 글자를 붙여 넣기/)).toBeVisible()
   // Before any 1365 total, 마이 offers the connection; after one, the total adds both.
   await page.goto('/#/my')
   await expect(page.getByRole('button', { name: /1365 연결하기/ })).toBeVisible()
@@ -774,6 +775,7 @@ test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larg
   await page.goto('/#/record/' + id)
   await expect(page.getByText('실적 확인 대기').first()).toBeVisible()
   await page.getByRole('button', { name: '실적 새로고침' }).click()
+  await page.getByRole('dialog', { name: '연결 전에 확인해 주세요' }).getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
   await labCard(page, /^신청 현황/)
   await page.getByPlaceholder(/1365 신청 현황/).fill('봉사참여 실적\n시간인증형\n총 59시간 30분\n총 15건')

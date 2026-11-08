@@ -1485,3 +1485,6 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .rec-kv span { color: var(--ink-3); }
 .rec-kv b { font-weight: 650; text-align: right; }
 .m-row-ico.host { background: #fbeee2; color: #a3541b; }
+/* 1365 연결 화면 in the app (2026-11-08): one button for both pages, a quiet link under it. */
+.lab-one { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; margin-top: 6px; }
+.lab-one .m-btn { justify-content: center; }

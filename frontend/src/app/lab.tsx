@@ -55,6 +55,7 @@ export function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClos
     footer={<><button type="button" className="m-btn blue" onClick={onAgree}>동의하고 계속하기</button>
       <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
     <ul className="lab-consent">
+      <li><MIcon name="refresh" size={18} /><span><b>봉사참여 실적·신청 현황을 함께 가져와요</b><small>로그인 한 번이면 돼요</small></span></li>
       <li><MIcon name="lock" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>1365에 직접 로그인하고, 창을 닫으면 로그아웃돼요</small></span></li>
       <li><MIcon name="record" size={18} /><span><b>필요한 것만 가져와요</b><small>봉사시간·건수와 내가 체크한 활동만 저장해요. 이름은 저장하지 않아요</small></span></li>
       <li><MIcon name="checkCircle" size={18} /><span><b>가져온 날 기준이에요</b><small>이후에 늘어난 실적은 다시 가져오면 돼요</small></span></li>
@@ -77,30 +78,20 @@ function WaysSheet({ target, note, onClose, on1365, onAdd }: { target: 'S' | 'A'
 }
 
 /**
- * 내 활동의 빈 화면 [가져오기] (2026-11-07): the same 1365에서 가져오기 / 직접 추가하기 sheet as on the 1365 screen, here.
- * 1365에서 가져오기 → consent → the 1365 screen opens that page right away (#/lab1365?go=S|A). {@code onSaved} after 직접 추가.
+ * Every [1365 가져오기] / [갱신하기] / [1365 연결하기] (2026-11-08, user decision): the consent sheet, then the 1365 window
+ * reads 봉사참여 실적 first and 신청 현황 right after, in one login (#/lab1365?go=S). No '무엇을 가져올까요?' step.
+ * The target argument is kept for callers; both pages always come.
  */
-export function useImport1365(onSaved?: () => void): [ReactNode, (target: 'S' | 'A') => void] {
-  const [choosing, setChoosing] = useState<'' | 'S' | 'A'>('')
-  const [asking, setAsking] = useState<'' | 'S' | 'A'>('')
-  const [adding, setAdding] = useState<'' | 'S' | 'A'>('')
-  const node = <>
-    {choosing && <WaysSheet target={choosing} onClose={() => setChoosing('')} on1365={() => { const t = choosing; setChoosing(''); setAsking(t) }} onAdd={() => { const t = choosing; setChoosing(''); setAdding(t) }} />}
-    {asking && <ConsentSheet onClose={() => setAsking('')} onAgree={() => { const t = asking; setAsking(''); setLabOn(true); window.location.hash = '#/lab1365?go=' + t }} />}
-    {adding === 'A' && <AddApplicationSheet onClose={() => setAdding('')} onSaved={onSaved} />}
-  </>
-  // 완료 기록 [가져오기]: 실적 is 1365에서 가져오기 only (2026-11-07; 확인서 PDF·사진 again in week 7) → consent right away.
-  // 참여 예정 keeps 1365에서 가져오기 / 1365 활동 찾기.
-  return [node, (target: 'S' | 'A') => target === 'S' ? setAsking('S') : setChoosing(target)]
+export function useImport1365(_onSaved?: () => void): [ReactNode, (target?: 'S' | 'A') => void] {
+  const [asking, setAsking] = useState(false)
+  const node = asking && <ConsentSheet onClose={() => setAsking(false)} onAgree={() => { setAsking(false); setLabOn(true); window.location.hash = '#/lab1365?go=S' }} />
+  return [node, () => setAsking(true)]
 }
 
-/**
- * "1365 봉사실적 연결하기" from anywhere (마이, 완료 기록, 설정, 시작 안내): the lab turns on and its screen opens. The consent
- * sheet comes when a card there is tapped (2026-11-07). Returns nothing to render (kept for callers) and the function to start.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+/** "1365 연결하기" / "갱신하기" from anywhere (마이, 기록, 설정): the same as useImport1365. */
 export function useConnect1365(_onCancel?: () => void): [ReactNode, () => void] {
-  return [null, () => { setLabOn(true); window.location.hash = '#/lab1365' }]
+  const [node, start] = useImport1365()
+  return [node, () => start('S')]
 }
 
 /**
@@ -254,7 +245,7 @@ export function parseLabRecords(text: string): LabDone[] {
   return out.slice(0, 300)
 }
 
-export function LabScreen({ go, both: signup }: { go?: string; both?: boolean }) {
+export function LabScreen({ go }: { go?: string; both?: boolean }) {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
@@ -268,12 +259,12 @@ export function LabScreen({ go, both: signup }: { go?: string; both?: boolean })
   const used = () => { try { return localStorage.getItem(USED) === '1' } catch { return false } }
   // 실적: 1365에서 가져오기 only (2026-11-07; 확인서 PDF·사진 in week 7). 신청: after a first connection also 1365 활동 찾기.
   const tap = (target: 'S' | 'A') => target === 'A' && (last || used()) ? setChoosing(target) : setAsking(target)
-  const go1365 = (target: 'S' | 'A', offerOther = false) => { setLastTarget(target); if (native) open(target, offerOther); else setWebFor(target) }
+  const go1365 = (target: 'S' | 'A', offerOther = true) => { setLastTarget(target); if (native) open(target, offerOther); else setWebFor(target) }
   // From 내 활동 [가져오기] (consent already given there): straight to that 1365 page, once.
   useEffect(() => {
     if (go !== 'S' && go !== 'A') return
     window.history.replaceState(null, '', '#/lab1365')
-    go1365(go, !!signup)
+    go1365('S', true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
@@ -398,17 +389,20 @@ export function LabScreen({ go, both: signup }: { go?: string; both?: boolean })
       {!rows ? <div className="lab-pick">
         {/* 2026-11-06 (A): two cards; each opens its own 1365 page. The app's own line icons only. 2026-11-07: in the middle of the screen. */}
         <span className="lab-tag"><MIcon name="flask" size={13} />실험 기능</span>
-        <h1 className="m-h2">무엇을 가져올까요?</h1>
-        <p className="lab-sub">1365에 있는 내 기록을 바로 가져와요</p>
+        <h1 className="m-h2">{native ? '1365에서 가져올까요?' : '무엇을 가져올까요?'}</h1>
+        <p className="lab-sub">{native ? '봉사참여 실적과 신청 현황을 한 번에 가져와요' : '1365에 있는 내 기록을 바로 가져와요'}</p>
         {last && <p className="lab-last"><MIcon name="checkCircle" size={16} />마지막으로 가져온 실적 <b>{hoursText(last.totalMinutes)}{last.count != null ? ` · ${last.count}건` : ''}</b> · {last.fetchedAt.slice(5, 10).replace('-', '/')}</p>}
-        <div className="lab-choices">
+        {/* 2026-11-08: in the app one button takes both pages; the two cards stay for the web (paste the page text). */}
+        {native ? <div className="lab-one"><button type="button" className="m-btn blue" onClick={() => setAsking('S')}><MIcon name="refresh" size={19} />{last ? '다시 가져오기' : '1365에서 가져오기'}</button>
+          <button type="button" className="m-text-btn" onClick={() => setAdding('A')}>1365에서 신청한 활동 직접 찾아 넣기</button></div>
+        : <div className="lab-choices">
           <button type="button" className="lab-choice" onClick={() => tap('S')}>
             <span className="lab-choice-ico"><MIcon name="timer" size={24} /></span>
             <span><b>봉사참여 실적</b><small>총 봉사시간·건수</small></span><MIcon name="chevron" size={18} /></button>
           <button type="button" className="lab-choice" onClick={() => tap('A')}>
             <span className="lab-choice-ico g"><MIcon name="list" size={24} /></span>
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
-        </div>
+        </div>}
         <ul className="lab-safe">
           <li><MIcon name="lock" size={14} />비밀번호는 Volink로 오지 않아요</li>
           <li><MIcon name="user" size={14} />이름은 저장하지 않아요</li>
