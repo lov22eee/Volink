@@ -404,8 +404,8 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
             <span><b>신청 현황</b><small>신청한 활동</small></span><MIcon name="chevron" size={18} /></button>
         </div>}
         <ul className="lab-safe">
-          <li><MIcon name="lock" size={14} />비밀번호는 Volink로 오지 않아요</li>
-          <li><MIcon name="user" size={14} />이름은 저장하지 않아요</li>
+          {/* 2026-11-08: one line. Only the 봉사 rows (활동명·날짜·시간·기관) are kept; the 1365 password and name never are. */}
+          <li><MIcon name="lock" size={14} />1365 비밀번호·이름은 저장하지 않고 봉사 기록만 가져와요</li>
         </ul>
         {!native && webFor && <label className="m-field"><span className="m-label">앱이 아니면: 1365 {webFor === 'S' ? '봉사참여 실적' : '신청 현황'} 화면 글자를 붙여 넣기</span>
           <TextArea className="m-input" rows={5} value={paste} onChange={event => setPaste(event.target.value)} placeholder="1365 신청 현황 화면에서 전체 선택 → 복사한 글자" /></label>}
