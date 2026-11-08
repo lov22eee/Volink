@@ -11,7 +11,7 @@ import { DateField } from './host'
 import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
@@ -152,14 +152,15 @@ export function parseLabSummary(text: string): LabSummary | null {
 }
 
 /**
- * 1365 신청 반자동 (2026-11-08, app only): the 1365 program page opens in the in-app window; the person applies there
+ * 1365 신청 반자동 (2026-11-08, app only): 1365 login first, then the program page in the in-app window; the person applies there
  * themselves. When 1365 says it went through, the window reads 신청 현황 and comes back. Null = closed without applying
  * (or not the app). The app never presses 신청 or ticks a consent box.
  */
 export async function applyIn1365(url: string): Promise<{ applied: boolean; texts: string[] } | null> {
   if (!Capacitor.isNativePlatform() || !url.startsWith('https://www.1365.go.kr/')) return null
   try {
-    const out = await lab.open({ guide: '', target: 'P', url, next: PAGE_1365.A })
+    // Login first: the 신청 현황 page asks for it; once logged in the window goes to the program page by itself.
+    const out = await lab.open({ guide: '', target: 'P', url: PAGE_1365.A, next: PAGE_1365.A, program: url })
     const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
     return out.applied || texts.length ? { applied: Boolean(out.applied), texts } : null
   } catch { return null }

@@ -296,7 +296,10 @@ public class LabActivity extends AppCompatActivity {
         if ("P".equals(target)) {
             String next = getIntent().getStringExtra("next");
             listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
-            Toast.makeText(this, "날짜를 고르고 [신청]을 직접 눌러 주세요. 신청이 끝나면 내 활동에 넣어 드려요.", Toast.LENGTH_LONG).show();
+            // Login first (the 신청 현황 page asks for it), then the program page (2026-11-08, user decision).
+            String program = getIntent().getStringExtra("program");
+            targetUrl = program != null && program.startsWith(LabPlugin.HOME + "/") ? program : "";
+            Toast.makeText(this, "먼저 1365에 로그인해 주세요. 로그인하면 이 봉사 페이지로 바로 이동해요.", Toast.LENGTH_LONG).show();
             timer.postDelayed(applyTick, 1500);
         }
     }
@@ -305,6 +308,8 @@ public class LabActivity extends AppCompatActivity {
     // application is done (an alert or the page's words), the app opens the 신청 현황 page, reads it and returns to Volink.
     // The app never presses 신청 or ticks a consent box.
     private boolean applied = false, applyRead = false;
+    /** Ticks in a row without a password box: the login is taken as finished after two (so its redirects can end first). */
+    private int clearTicks = 0;
     private String listUrl = "";
     private static final java.util.regex.Pattern APPLIED_WORDS = java.util.regex.Pattern.compile(
             "신청이완료|신청완료되었|신청되었습니다|신청이되었습니다|정상적으로신청|신청이접수|접수되었습니다|이미신청");
@@ -316,19 +321,24 @@ public class LabActivity extends AppCompatActivity {
             if (web == null || !"P".equals(target)) return;
             String js = "(function(){var pw=Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;});"
                     + "var t=document.body?String(document.body.innerText||'').slice(0,20000):'';"
-                    + "return JSON.stringify({pw:pw,len:t.length,done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
+                    + "return JSON.stringify({pw:pw,len:t.length,out:/로그아웃/.test(t),done:/(신청이\\s*완료|신청\\s*되었습니다|정상적으로\\s*신청|신청이\\s*접수)/.test(t)});})()";
             web.evaluateJavascript(js, value -> {
                 try {
                     Object parsed = new JSONTokener(value).nextValue();
                     JSONObject page = new JSONObject(parsed == null ? "{}" : parsed.toString());
                     boolean pw = page.optBoolean("pw"), done = page.optBoolean("done");
-                    if (pw) { sawLogin = true; jumped = false; }
-                    else if (sawLogin && !loggedIn) {
-                        loggedIn = true;
-                        // After logging in, 1365 often lands on its main page: back to the program once.
-                        if (!applied && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
+                    if (pw) { sawLogin = true; jumped = false; clearTicks = 0; } else clearTicks++;
+                    // Logged in = the page offers 로그아웃 (or the 신청 현황 list opened), no password box for two ticks, no 간편인증 window open.
+                    String at = web.getUrl() == null ? "" : web.getUrl().toLowerCase();
+                    if (!pw && popup == null && !applied && !jumped && !targetUrl.isEmpty() && clearTicks >= 2 && !at.contains("login")
+                            && (page.optBoolean("out") || (onApplicationsPage() && page.optInt("len") > 300))) {
+                        // to the program page.
+                        loggedIn = true; jumped = true;
+                        web.loadUrl(targetUrl);
+                        Toast.makeText(LabActivity.this, "로그인됐어요. 날짜를 고르고 [신청]을 직접 눌러 주세요.", Toast.LENGTH_LONG).show();
                     }
-                    if (done && !applied) applyDetected();
+                    // Only on the program (after the login step), so nothing on the 신청 현황 page is taken for a new application.
+                    if (done && !applied && jumped && !onApplicationsPage()) applyDetected();
                     if (applied && !applyRead && onApplicationsPage() && page.optInt("len") > 100) readApplications();
                 } catch (Exception ignored) { }
             });
@@ -700,7 +710,7 @@ public class LabActivity extends AppCompatActivity {
     private boolean quietAlert(String message, JsResult result) {
         if (message != null && message.replace(" ", "").contains("로그인정보가없")) { result.confirm(); return true; }
         // 신청 반자동: 1365's "신청이 완료되었습니다" (or "이미 신청한 …") is confirmed for the person and shown as a short note.
-        if ("P".equals(target) && appliedText(message)) {
+        if ("P".equals(target) && jumped && appliedText(message)) {
             result.confirm();
             Toast.makeText(this, message.trim(), Toast.LENGTH_SHORT).show();
             applyDetected();

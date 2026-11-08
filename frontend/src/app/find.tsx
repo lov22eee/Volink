@@ -428,7 +428,7 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
     {consent && <Sheet title="1365에서 신청할게요" onClose={() => setConsent(false)}
       footer={<><button type="button" className="m-btn" onClick={applyHere}>확인하고 1365 열기</button><button type="button" className="m-btn line" onClick={() => setConsent(false)}>다음에 할게요</button></>}>
       <ul className="lab-consent">
-        <li><MIcon name="lock" size={18} /><span><b>1365에서 직접 로그인·신청해요</b><small>날짜 선택·동의·[신청]은 직접 눌러 주세요. Volink가 대신 누르지 않아요</small></span></li>
+        <li><MIcon name="lock" size={18} /><span><b>먼저 1365에 로그인해요</b><small>로그인하면 이 봉사 페이지로 바로 이동해요. 날짜·동의·[신청]은 직접 눌러 주세요</small></span></li>
         <li><MIcon name="record" size={18} /><span><b>신청이 끝나면 신청 내역만 가져와요</b><small>활동명·날짜·시간·상태만 내 활동에 넣어요</small></span></li>
         <li><MIcon name="checkCircle" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>창을 닫으면 1365에서 로그아웃돼요</small></span></li>
       </ul>

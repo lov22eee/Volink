@@ -32,6 +32,7 @@ public class LabPlugin extends Plugin {
         intent.putExtra("target", call.getString("target", ""));
         // 신청 반자동 (target P): the 신청 현황 page to read after 1365 says the application went through.
         intent.putExtra("next", call.getString("next", ""));
+        intent.putExtra("program", call.getString("program", ""));
         startActivityForResult(call, intent, "labResult");
     }
 
