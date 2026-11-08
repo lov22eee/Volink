@@ -50,7 +50,7 @@ export function labStep(text: string, password: boolean, tookSummary = false, to
 }
 
 /** What happens when connecting (2026-11-07: shown every time a card is tapped, before 1365 opens). */
-function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () => void }) {
+export function ConsentSheet({ onAgree, onClose }: { onAgree: () => void; onClose: () => void }) {
   return <Sheet title="연결 전에 확인해 주세요" onClose={onClose}
     footer={<><button type="button" className="m-btn blue" onClick={onAgree}>동의하고 계속하기</button>
       <button type="button" className="m-btn line" onClick={onClose}>다음에 할게요</button></>}>
@@ -254,7 +254,7 @@ export function parseLabRecords(text: string): LabDone[] {
   return out.slice(0, 300)
 }
 
-export function LabScreen({ go }: { go?: string }) {
+export function LabScreen({ go, both: signup }: { go?: string; both?: boolean }) {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
@@ -268,12 +268,12 @@ export function LabScreen({ go }: { go?: string }) {
   const used = () => { try { return localStorage.getItem(USED) === '1' } catch { return false } }
   // 실적: 1365에서 가져오기 only (2026-11-07; 확인서 PDF·사진 in week 7). 신청: after a first connection also 1365 활동 찾기.
   const tap = (target: 'S' | 'A') => target === 'A' && (last || used()) ? setChoosing(target) : setAsking(target)
-  const go1365 = (target: 'S' | 'A') => { setLastTarget(target); if (native) open(target); else setWebFor(target) }
+  const go1365 = (target: 'S' | 'A', offerOther = false) => { setLastTarget(target); if (native) open(target, offerOther); else setWebFor(target) }
   // From 내 활동 [가져오기] (consent already given there): straight to that 1365 page, once.
   useEffect(() => {
     if (go !== 'S' && go !== 'A') return
     window.history.replaceState(null, '', '#/lab1365')
-    go1365(go)
+    go1365(go, !!signup)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [last, setLast] = useState<(LabSummary & { fetchedAt: string }) | null>(null)
@@ -328,16 +328,13 @@ export function LabScreen({ go }: { go?: string }) {
     setError('')
   }
   /** One page per visit (2026-11-06: going on to the second page in the same visit confused the guide): 실적 or 신청 현황. */
-  async function open(target: 'S' | 'A') {
+  async function open(target: 'S' | 'A', offerOther = false) {
     setError('')
     setLastTarget(target)
     const guide = target === 'S' ? '로그인하면 ‘봉사참여 실적’ 화면으로 바로 가요' : '로그인하면 ‘신청 현황’ 화면으로 바로 가요'
-    // A안 (2026-11-08): after the first page the 1365 window offers the other one (one login), so both may come back.
-    // Only the first time (nothing brought in from 1365 yet, e.g. right after signup) the window offers the other page too;
-    // later visits take just the one page asked for (2026-11-08 user decision).
-    let first = true
-    try { first = localStorage.getItem(USED) !== '1' } catch { /* private mode: treated as the first time */ }
-    try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: first ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
+    // A안 (2026-11-08): only from the signup guide (#/lab1365?go=S&both=1) the 1365 window offers the other page too
+    // after the first one (one login), so both may come back. 내 활동·마이 take just the one page asked for (user decision).
+    try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: offerOther ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
   }
   /** The 실적 list: picked rows → finished 1365 activities (waiting ones of the same name and day become 실적 반영됨), then the total. */
   async function saveDone() {

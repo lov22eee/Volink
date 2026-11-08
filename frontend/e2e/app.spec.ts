@@ -756,7 +756,10 @@ test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larg
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await page.getByRole('button', { name: '나중에 할게요' }).click()
   await page.getByRole('button', { name: '1365 연결하기' }).click()
+  await page.getByRole('button', { name: '동의하고 계속하기' }).click()
   await expect(page).toHaveURL(/#\/lab1365/)
+  // Straight to the 실적 page (on the web: its paste box), no '무엇을 가져올까요?' step.
+  await expect(page.getByText('앱이 아니면: 1365 봉사참여 실적 화면 글자를 붙여 넣기')).toBeVisible()
   const auth = await tokenFor(page, member)
   await page.request.put('/api/me/external/summary', { headers: { Authorization: auth }, data: { totalMinutes: 3450, count: 14 } })
   const created = await page.request.post('/api/me/external', { headers: { Authorization: auth }, data: { title: '노인복지관 배식 지원', date: inDays(-4), startTime: '11:00', endTime: '13:00' } })
