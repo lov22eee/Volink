@@ -104,7 +104,7 @@ export default function MobileApp() {
     case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
-    case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break
+    case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} activity={Number(route.query.get('activity')) || undefined} />; break
     case 'post': screen = route.id ? <PostScreen key={route.id} id={route.id} onChange={pollUnread} /> : null; break
     case 'write': screen = <WriteScreen key={'w' + (route.query.get('edit') ?? '')} initial={route.query.get('category') ?? undefined} activity={Number(route.query.get('activity')) || undefined} external={Number(route.query.get('external')) || undefined} editId={Number(route.query.get('edit')) || undefined} />; break
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break

@@ -16,7 +16,7 @@ import { currentPosition, declined, decline, remember, remembered } from '../loc
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
-import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
+import { ActivityRow, fieldIcon, isNewcomer, seatsLeft, waitOpen } from './cards'
 import { DateField } from './host'
 import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar, TextInput } from './ui'
 
@@ -24,10 +24,11 @@ type Area = { kind: 'all' } | { kind: 'near'; km: 2 | 5 | 10 } | { kind: 'region
 type When = { kind: 'all' | 'today' | 'tomorrow' | 'weekend' } | { kind: 'range'; from: string; to: string }
 type Status = 'OPEN' | 'WAITLIST' | 'ALL'
 type Source = 'ALL' | 'VOLINK' | '1365'
-export type Filters = { area: Area; when: When; categories: string[]; status: Status; source: Source; newcomer: boolean }
-export const defaults: Filters = { area: { kind: 'all' }, when: { kind: 'all' }, categories: [], status: 'OPEN', source: 'ALL', newcomer: false }
+export type Filters = { area: Area; when: When; categories: string[]; status: Status; source: Source; newcomer: boolean; waitOnly?: boolean }
+// Week 7 (2026-11-09): full activities whose waiting list is open are shown by default, in date order, with a 대기 가능 badge.
+export const defaults: Filters = { area: { kind: 'all' }, when: { kind: 'all' }, categories: [], status: 'WAITLIST', source: 'ALL', newcomer: false, waitOnly: false }
 
-const statusLabel: Record<Status, string> = { OPEN: '모집 중인 활동만', WAITLIST: '대기 신청 가능한 활동 포함', ALL: '마감된 활동도 보기' }
+const statusLabel: Record<Status, string> = { OPEN: '빈자리 있는 활동만', WAITLIST: '대기 신청 가능한 활동 포함', ALL: '마감된 활동도 보기' }
 const sourceLabel: Record<Source, string> = { ALL: '전체', VOLINK: 'Volink', '1365': '1365' }
 const whenLabel: Record<'today' | 'tomorrow' | 'weekend', string> = { today: '오늘', tomorrow: '내일', weekend: '이번 주말' }
 
@@ -50,7 +51,7 @@ function chipsOf(f: Filters): { key: string; label: string; clear: (f: Filters) 
   if (f.area.kind !== 'all') out.push({ key: 'area', label: f.area.kind === 'region' ? (f.area.sigungu || shortProvince(f.area.sido) + ' 전체') : areaText(f.area), clear: x => ({ ...x, area: { kind: 'all' } }) })
   if (f.when.kind !== 'all') out.push({ key: 'when', label: whenText(f.when), clear: x => ({ ...x, when: { kind: 'all' } }) })
   for (const c of f.categories) out.push({ key: 'c-' + c, label: c, clear: x => ({ ...x, categories: x.categories.filter(y => y !== c) }) })
-  if (f.status !== 'OPEN') out.push({ key: 'status', label: f.status === 'WAITLIST' ? '대기 가능 포함' : '마감 포함', clear: x => ({ ...x, status: 'OPEN' }) })
+  if (f.status !== 'WAITLIST') out.push({ key: 'status', label: f.status === 'OPEN' ? '빈자리만' : '마감 포함', clear: x => ({ ...x, status: 'WAITLIST' }) })
   if (f.source !== 'ALL') out.push({ key: 'source', label: f.source === 'VOLINK' ? 'Volink만' : '1365만', clear: x => ({ ...x, source: 'ALL' }) })
   if (f.newcomer) out.push({ key: 'newcomer', label: '처음 환영', clear: x => ({ ...x, newcomer: false }) })
   return out
@@ -191,8 +192,10 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     })
   }
 
-  // Full activities go to the end (the waitlist may still be open).
-  const shown = useMemo(() => (items ?? []).filter(a => !filters.newcomer || isNewcomer(a)).sort((a, b) => Number(seatsLeft(a) === 0) - Number(seatsLeft(b) === 0)), [items, filters.newcomer])
+  // Week 7: in date order (full ones with an open waiting list too); only closed ones go to the end. 대기 가능 = only those.
+  const closed = (a: LiveActivity) => seatsLeft(a) === 0 && !waitOpen(a)
+  const shown = useMemo(() => (items ?? []).filter(a => (!filters.newcomer || isNewcomer(a)) && (!filters.waitOnly || waitOpen(a)))
+    .sort((a, b) => Number(closed(a)) - Number(closed(b))), [items, filters.newcomer, filters.waitOnly]) // eslint-disable-line react-hooks/exhaustive-deps
   const programList = programs ?? []
   const mapPrograms = useMemo(() => programList.filter(p => p.latitude != null && p.longitude != null), [programList])
   const mapPlaces = useMemo(() => [
@@ -210,6 +213,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const quick: { key: string; label: string; on: boolean; toggle: () => void; icon?: 'pin' }[] = [
     { key: 'near', label: '내 주변', icon: 'pin', on: near, toggle: () => setFilters(f => ({ ...f, area: near ? { kind: 'all' } : { kind: 'near', km: 5 } })) },
     { key: 'weekend', label: '이번 주말', on: filters.when.kind === 'weekend', toggle: () => setFilters(f => ({ ...f, when: f.when.kind === 'weekend' ? { kind: 'all' } : { kind: 'weekend' } })) },
+    { key: 'waitOnly', label: '대기 가능', on: Boolean(filters.waitOnly), toggle: () => setFilters(f => ({ ...f, waitOnly: !f.waitOnly, status: 'WAITLIST' })) },
     { key: 'newcomer', label: '처음 환영', on: filters.newcomer, toggle: () => setFilters(f => ({ ...f, newcomer: !f.newcomer })) },
     { key: '1365', label: '1365', on: filters.source === '1365', toggle: () => setFilters(f => ({ ...f, source: f.source === '1365' ? 'ALL' : '1365' })) },
   ]

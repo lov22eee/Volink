@@ -2,6 +2,7 @@
 // The create form has three steps: 기본 정보 → 참여 안내 → 운영 설정. The server checks every rule again.
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { NicknameGate } from './community'
 import { api, ApiError } from '../api'
 import type { LiveActivity, User } from '../api'
 import { categories, showToast } from '../App'
@@ -22,6 +23,7 @@ export function HostScreen({ user, actions }: { user: User; actions: ReactNode }
   const past = (mine ?? []).filter(a => !live.includes(a)).slice(0, 5)
   return <div className="m-screen">
     <TopBar title="봉사 만들기" back="history" actions={actions} />
+    {user.memberType !== 'INSTITUTION' && <NicknameGate />}
     <div className="m-body">
       <section className="m-hero">
         <span className="m-hero-ico"><MIcon name="plus" size={26} /></span>

@@ -30,7 +30,10 @@ public class ActivityService {
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity,
                    a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
-                   a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId, u.display_name AS organizerName,
+                   (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'WAITLISTED') AS waiting,
+                   a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId,
+                   COALESCE(u.community_nickname, CONCAT(LEFT(u.display_name, 1), '*', IF(CHAR_LENGTH(u.display_name) > 2, RIGHT(u.display_name, 1), ''))) AS organizerName,
+                   u.community_nickname IS NOT NULL AS organizerNicknamed,
                    ST_Latitude(l.location) AS latitude, ST_Longitude(l.location) AS longitude
             FROM activities a
             JOIN categories c ON c.id = a.category_id
@@ -402,6 +405,16 @@ public class ActivityService {
         boolean visible = PUBLIC_STATUSES.contains(activity.get("status")) || applied
                 || viewerId != null && !"DELETED".equals(activity.get("status")) && (organizer || auth.findById(viewerId).admin());
         if (!visible) throw notFound();
+        // Week 7 (공개 이름 통일): everyone sees the organizer's community nickname (or a partly hidden name); the real
+        // name only reaches the organizer, admins and people confirmed for this activity (they meet in person).
+        if (viewerId != null && (organizer || auth.findById(viewerId).admin() || jdbc.queryForObject(
+                "SELECT COUNT(*) FROM participations WHERE activity_id = ? AND user_id = ? AND status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')", Integer.class, id, viewerId) > 0))
+            activity.put("organizerRealName", jdbc.queryForObject("SELECT display_name FROM users WHERE id = ?", String.class, activity.get("organizerId")));
+        // Instead of a name: what this organizer has done on Volink (activities opened and finished).
+        activity.put("organizerStats", jdbc.queryForMap("""
+                SELECT COALESCE(SUM(status IN ('RECRUITING', 'IN_PROGRESS', 'FINISHED')), 0) AS hosted, COALESCE(SUM(status = 'FINISHED'), 0) AS finished
+                FROM activities WHERE organizer_id = ?""", activity.get("organizerId")));
+        if (activity.get("organizerNicknamed") instanceof Number n) activity.put("organizerNicknamed", n.intValue() == 1);
         // The organizer sees how many applications lock the full edit (week 5 adds applying).
         if (organizer) activity.put("applicants", activeApplications(id));
         // Cancelled by the organizer: reason, message, time and who was affected (shown to the organizer and applicants).

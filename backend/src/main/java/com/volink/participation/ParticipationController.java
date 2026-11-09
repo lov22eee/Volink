@@ -44,6 +44,14 @@ public class ParticipationController {
         return participations.autoApprove(user(jwt), id, body == null ? null : body.on());
     }
 
+    public record Capacity(Integer capacity) {}
+
+    /** 모집 인원 바꾸기 (organizer, week 7): new seats go to the waiting list in order. */
+    @PutMapping("/api/activities/{id}/capacity")
+    public Map<String, Object> capacity(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody Capacity body) {
+        return participations.capacity(user(jwt), id, body == null ? null : body.capacity());
+    }
+
     @PostMapping("/api/participations/{id}/approve")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void approve(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {

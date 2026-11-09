@@ -1621,3 +1621,50 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .pf-target em { font-style: normal; font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; background: var(--m-mint); color: var(--m-green-ink); white-space: nowrap; }
 .apply-res.done .apply-res-ico { background: #e8eef9; color: #2f4f8f; }
 .r-reading small { font-weight: 500; }
+
+/* Week 7 (2026-11-09): 대기 신청 · 모집자 표시 */
+.m-btn.amber { background: #d9822b; border-color: #d9822b; color: #fff; }
+.m-rules { list-style: none; margin: 4px 0 10px; padding: 0; display: flex; flex-direction: column; }
+.m-rules li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; }
+.m-rules li + li { border-top: 1px solid var(--line); }
+.m-rules li > b { width: 26px; height: 26px; border-radius: 8px; background: #fbeee2; color: #c4561f; display: grid; place-items: center; flex: none; font-size: 13px; }
+.m-rules span { display: flex; flex-direction: column; gap: 2px; }
+.m-rules strong { font-size: 14px; }
+.m-rules small { font-size: 12.5px; color: var(--ink-3); }
+.m-waitline .wl-row { display: flex; align-items: center; margin: 10px 0 8px; }
+.m-waitline .wl-row > span { display: flex; align-items: center; flex: 1; }
+.m-waitline .wl-row i { width: 26px; height: 26px; border-radius: 50%; background: #ece6da; color: #6b766f; font-style: normal; font-size: 12px; font-weight: 800; display: grid; place-items: center; flex: none; }
+.m-waitline .wl-row > span > b { flex: 1; height: 2px; background: #ece6da; }
+.m-waitline .wl-row em { width: 34px; height: 34px; border-radius: 50%; background: #d9822b; color: #fff; font-style: normal; font-weight: 800; font-size: 13px; display: grid; place-items: center; flex: none; }
+.m-org { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: #fff; border: 1px solid var(--line); flex-wrap: wrap; }
+.m-org-ava { width: 34px; height: 34px; border-radius: 50%; background: var(--m-mint); color: var(--m-green-ink); display: grid; place-items: center; flex: none; }
+.m-org-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.m-org-main b { font-size: 14px; }
+.m-org-main small { font-size: 12px; color: var(--ink-3); }
+.m-org-trust { display: flex; gap: 6px; width: 100%; padding-left: 44px; }
+.m-org-trust em { font-style: normal; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: var(--m-mint); color: var(--m-green-ink); }
+/* Week 7: 홍보 카드 상태별 버튼 · 후기 출처 */
+.c-promo-foot button.line { background: #fff; color: var(--m-green-ink); border: 1.5px solid #bcd8c6; }
+.c-promo-foot button.amber { background: #d9822b; color: #fff; }
+.c-promo-foot button.mine { background: #fff; color: var(--ink-2); border: 1px solid var(--line); }
+.c-promo-foot button.hot { background: var(--m-hot); color: #fff; }
+.c-promo .c-promo-note { font-size: 12px; font-weight: 700; color: #a3541b; }
+.c-promo-reviews { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #fff; color: var(--ink); font-weight: 700; font-size: 13.5px; text-decoration: none; }
+.c-promo-reviews svg:last-child { margin-left: auto; }
+.c-src { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 9px; }
+.c-src.join { background: var(--m-mint); color: var(--m-green-ink); }
+.c-src.host { background: #fbeee2; color: #a3541b; }
+.c-src.ext { background: #e8eef9; color: #2f4f8f; }
+.c-pick em.c-src { margin-left: auto; flex: none; }
+.c-rtabs { margin-bottom: 8px; }
+.mg-cap { margin-left: 8px; padding: 3px 10px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink); }
+.cap-step { display: flex; align-items: center; justify-content: center; gap: 28px; margin: 14px 0 16px; }
+.cap-step button { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--line); background: #fff; font: inherit; font-size: 24px; color: var(--ink-2); }
+.cap-step button.on { background: var(--m-green); border-color: var(--m-green); color: #fff; }
+.cap-step button:disabled { opacity: .35; }
+.cap-step b { font-size: 34px; font-weight: 800; min-width: 70px; text-align: center; }
+.cap-step b small { font-size: 14px; color: var(--ink-3); margin-left: 2px; }
+.cap-kv { margin: 0; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.cap-kv div { display: flex; justify-content: space-between; padding: 10px 13px; font-size: 13.5px; }
+.cap-kv div + div { border-top: 1px solid var(--line); }
+.cap-kv dt { color: var(--ink-3); } .cap-kv dd { margin: 0; font-weight: 700; }

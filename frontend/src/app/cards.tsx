@@ -14,10 +14,13 @@ export const seatsLeft = (a: Pick<LiveActivity, 'capacity' | 'confirmed'>) => Ma
 export const startsAt = (a: Pick<LiveActivity, 'date' | 'startTime'>) => new Date(`${a.date}T${a.startTime}:00+09:00`).getTime()
 export const isNewcomer = (a: Pick<LiveActivity, 'newcomerOk'>) => a.newcomerOk === undefined || Boolean(a.newcomerOk)
 
-/** The single most useful badge for a card: 마감 임박 > 처음 환영 > N자리 남음. */
-export function badgeOf(a: LiveActivity): { text: string; tone: 'hot' | 'mint' | 'gray' } {
+/** Full, but its waiting list still open (it closes 2 h before the start). */
+export const waitOpen = (a: Pick<LiveActivity, 'capacity' | 'confirmed' | 'date' | 'startTime'>) => seatsLeft(a) === 0 && startsAt(a) - Date.now() > 2 * 3_600_000
+/** The single most useful badge for a card: 대기 가능 / 모집 마감 > 마감 임박 > 처음 환영 > N자리 남음. */
+export function badgeOf(a: LiveActivity): { text: string; tone: 'hot' | 'mint' | 'gray' | 'amber' } {
   const left = seatsLeft(a)
-  if (left === 0) return { text: '정원 마감', tone: 'gray' }
+  // Week 7: a full activity still takes the waiting list — say so instead of 정원 마감.
+  if (left === 0) return waitOpen(a) ? { text: `대기 ${a.waiting ?? 0}명 · 대기 가능`, tone: 'amber' } : { text: '모집 마감', tone: 'gray' }
   if (startsAt(a) - Date.now() < 48 * 3_600_000) return { text: left + '자리 남음', tone: 'hot' }
   if (isNewcomer(a)) return { text: '처음 환영', tone: 'mint' }
   return { text: left + '자리 남음', tone: 'gray' }

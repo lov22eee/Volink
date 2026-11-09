@@ -16,6 +16,8 @@ export type LiveActivity = {
   date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
+  /** Week 7: people on the waiting list; the organizer's real name only for the organizer, admins and confirmed people; what they have run. */
+  waiting?: number; organizerRealName?: string | null; organizerNicknamed?: boolean; organizerStats?: { hosted: number; finished: number }
   latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number; supplies?: { name: string; provided: boolean }[]
   /** Only for the organizer: applications that lock the full edit. */
   applicants?: number

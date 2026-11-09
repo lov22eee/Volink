@@ -41,13 +41,19 @@ public class CommunityController {
 
     @GetMapping("/api/community/posts")
     public List<Map<String, Object>> list(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String category, @RequestParam(required = false) String sort,
-                                          @RequestParam(required = false) String q) {
-        return community.list(user(jwt), category, sort, q);
+                                          @RequestParam(required = false) String q, @RequestParam(required = false) Long activity) {
+        return community.list(user(jwt), category, sort, q, activity);
     }
 
     @GetMapping("/api/community/posts/{id}")
     public Map<String, Object> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
         return community.detail(user(jwt), id);
+    }
+
+    /** 봉사 홍보 (week 7): my recruiting activities and whether each already has its introduction post. */
+    @GetMapping("/api/community/promotable")
+    public List<Map<String, Object>> promotable(@AuthenticationPrincipal Jwt jwt) {
+        return community.promotable(user(jwt));
     }
 
     @GetMapping("/api/community/reviewable")

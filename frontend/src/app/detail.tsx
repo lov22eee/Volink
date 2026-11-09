@@ -33,6 +33,30 @@ async function cameraAllowed() {
 
 const message = (cause: unknown) => cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : cause instanceof Error ? cause.message : '처리하지 못했어요.'
 
+/**
+ * Who runs it (week 7, 공개 이름 통일): the community nickname (or a partly hidden name) for everyone; confirmed people,
+ * the organizer and admins also get the real name (they meet in person). Instead of a name: activities run and finished.
+ */
+function OrganizerLine({ activity }: { activity: LiveActivity }) {
+  if (activity.activityType === 'INSTITUTION') return <p className="m-by">{activity.organizationName}이 모집해요</p>
+  const stats = activity.organizerStats
+  return <div className="m-org">
+    <span className="m-org-ava" aria-hidden="true"><MIcon name="user" size={18} /></span>
+    <span className="m-org-main"><b>{activity.organizerRealName ? `${activity.organizerRealName} · ${activity.organizerName}` : activity.organizerName} 님이 모집해요</b>
+      <small>{activity.organizerRealName ? '실명은 확정된 사람에게만 보여요' : '개인 모집'}</small></span>
+    {stats && <span className="m-org-trust"><em>모집 {stats.hosted}회</em><em>완료 {stats.finished}회</em></span>}
+  </div>
+}
+
+/** 대기 n번 (week 7): the people ahead as a short line ending in 나, and when the waiting list closes. */
+function WaitLine({ order, closes }: { order: number; closes: string }) {
+  const ahead = Math.max(0, order - 1)
+  const dots = Array.from({ length: Math.min(ahead, 3) }, (_, i) => i + 1)
+  return <div className="m-state amber m-waitline"><strong>{ahead ? `내 앞에 ${ahead}명` : '다음 자리는 내 차례예요'}</strong>
+    <div className="wl-row" aria-hidden="true">{dots.map(n => <span key={n}><i>{ahead > 3 && n === 3 ? '…' : n}</i><b /></span>)}<em>나</em></div>
+    <span>자리가 나면 순서대로 알림으로 제안해요 · {closes.slice(5, 10).replace('-', '/')} {closes.slice(11, 16)} 대기 마감</span></div>
+}
+
 function Facts({ activity }: { activity: LiveActivity }) {
   const end = new Date(new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime() + activity.durationMinutes * 60_000)
   return <dl className="m-facts">
@@ -168,16 +192,18 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     : stage === 'offer' ? ['자리 제안', 'hot'] : stage === 'confirmed' ? ['참가 확정', 'mint'] : stage === 'today' ? ['오늘 활동', 'mint']
     : stage === 'checkedin' ? ['출석 완료', 'mint'] : stage === 'done' ? ['활동 완료', 'mint'] : [statusWord[mine?.status ?? '']?.text ?? '마감', 'gray']
   const dday = dDay(activity.date)
+  // The waiting list closes 2 hours before the start (Korean time, "yyyy-MM-ddTHH:mm").
+  const waitCloses = new Date(new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime() - 2 * 3_600_000 + 9 * 3_600_000).toISOString().slice(0, 16)
   const head = applied ? <section className="mg-head">
     <div className="mg-state"><span className={'m-badge ' + badge[1]}>{badge[0]}</span>
       {dday && !['checkedin', 'done'].includes(stage) && stage !== 'closed' && <small>{dday === 'D-DAY' ? '오늘' : '활동까지 ' + dday.slice(2) + '일'}</small>}</div>
     <h1>{activity.title}</h1>
-    <p className="m-by">{activity.activityType === 'INSTITUTION' ? activity.organizationName : activity.organizerName + ' 님'}이 모집해요</p>
+    <OrganizerLine activity={activity} />
   </section> : <section className="m-detail-head">
     <span className={'m-cover f' + categoryTone(activity.category)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
     <Labels activity={activity} />
     <h1>{activity.title}</h1>
-    <p className="m-by">{activity.activityType === 'INSTITUTION' ? activity.organizationName : activity.organizerName + ' 님'}이 모집해요</p>
+    <OrganizerLine activity={activity} />
   </section>
 
   // One card at the top that says where I am now and what happens next.
@@ -187,8 +213,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       case 'before': return !recruiting ? <div className="m-state gray"><strong>{activity.status === 'FINISHED' ? '끝난 활동이에요' : '신청이 마감됐어요'}</strong></div>
         : <div className="m-state"><strong>{full ? (waitClosed ? '정원이 찼어요' : `정원이 찼어요 · 대기 ${viewer.waiting}명`) : `${seatsLeft(activity)}자리 남았어요`}</strong>
           <span>{full ? (waitClosed ? '시작 2시간 전부터는 대기 신청을 받지 않아요.' : '대기 신청하면 빈자리가 생길 때 순서대로 알려 드려요.') : '신청하면 모집자가 확인한 뒤 알림으로 알려 드려요.'}</span></div>
-      case 'waiting': return <div className="m-state amber"><strong>{mine!.status === 'APPLIED' ? '모집자 확인을 기다리고 있어요' : `대기 ${mine!.waitOrder ?? ''}번이에요`}</strong>
-        <span>{mine!.status === 'APPLIED' ? '승인되면 알림으로 알려 드려요.' : '빈자리가 생기면 순서대로 자리를 제안해요.'}</span></div>
+      case 'waiting': return mine!.status === 'APPLIED' ? <div className="m-state amber"><strong>모집자 확인을 기다리고 있어요</strong><span>승인되면 알림으로 알려 드려요.</span></div>
+        : <WaitLine order={mine!.waitOrder ?? 1} closes={waitCloses} />
       case 'offer': return <div className="m-state hot"><strong>빈자리 제안이 왔어요!</strong><span>{mine!.offerExpiresAt ? dayWord(mine!.offerExpiresAt.slice(0, 10)) + ' ' + mine!.offerExpiresAt.slice(11, 16) : ''}까지 수락하면 참가가 확정돼요.</span></div>
       case 'confirmed': return <div className="m-state mint"><span className="m-state-dday">{dDay(activity.date)}</span><strong>참가가 확정됐어요</strong>
         <span>하루 전에 알림을 보내 드려요. 못 가게 되면 미리 알려 주세요.</span></div>
@@ -206,8 +232,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   const action = (() => {
     if (cancelled) return <a className="m-btn line" href="#/find">다른 활동 찾기</a>
     switch (stage) {
-      case 'before': return <button className="m-btn" disabled={!recruiting || busy || (full && waitClosed)} onClick={() => setSheet('safety')}>
-        {!recruiting ? '신청 마감' : full ? (waitClosed ? '모집 마감' : '대기 신청하기') : '신청하기'}</button>
+      case 'before': return <button className={'m-btn' + (full && !waitClosed && recruiting ? ' amber' : '')} disabled={!recruiting || busy || (full && waitClosed)} onClick={() => setSheet('safety')}>
+        {!recruiting ? '신청 마감' : full ? (waitClosed ? '모집 마감' : `대기 신청하기 · ${(viewer.waiting ?? 0) + 1}번째`) : '신청하기'}</button>
       case 'waiting': return <button className="m-btn line" disabled={busy} onClick={() => setSheet('cancel')}>신청 취소</button>
       case 'offer': return <><button className="m-btn line" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/decline-offer', undefined, '제안을 거절했어요')}>거절</button>
         <button className="m-btn" disabled={busy} onClick={() => act('/api/participations/' + mine!.id + '/accept-offer', undefined, '참가가 확정됐어요!')}>수락하기</button></>
@@ -245,6 +271,11 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     {sheet === 'safety' && <Sheet title={full ? '대기 신청할까요?' : '신청할까요?'} onClose={() => setSheet(null)}
       footer={<button className="m-btn" disabled={busy} onClick={() => act('/api/activities/' + id + '/participations', undefined, full ? '대기 신청했어요' : '신청했어요')}>{full ? '대기 신청하기' : '신청하기'}</button>}>
       <div className="m-summary"><strong>{activity.title}</strong><span>{dayWord(activity.date)} {activity.startTime} · {activity.meetingPoint ?? activity.placeName}</span></div>
+      {full && <ul className="m-rules">
+        <li><b>{(viewer.waiting ?? 0) + 1}</b><span><strong>{(viewer.waiting ?? 0) + 1}번째로 기다려요</strong><small>지금 대기 {viewer.waiting ?? 0}명</small></span></li>
+        <li><b>!</b><span><strong>자리가 나면 제안이 와요</strong><small>알림을 받고 정해진 시간 안에 수락하면 확정</small></span></li>
+        <li><b><MIcon name="clock" size={14} /></b><span><strong>{dayWord(waitCloses.slice(0, 10))} {waitCloses.slice(11, 16)}에 대기가 끝나요</strong><small>시작 2시간 전</small></span></li>
+      </ul>}
       <ul className="m-bullets"><li>공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않아요.</li><li>연락처는 공개하지 않아요. 궁금한 건 확정 뒤 ‘활동 소식’에서 물어봐요.</li><li>못 가게 되면 꼭 미리 알려 주세요. 다음 사람에게 자리가 넘어가요.</li></ul>
     </Sheet>}
     {sheet === 'cancel' && mine && <CancelSheet confirmed={mine.status === 'CONFIRMED'} busy={busy} onClose={() => setSheet(null)} onSend={reason => act('/api/participations/' + mine.id + '/cancel', reason ? { reason } : {}, mine.status === 'CONFIRMED' ? '모집자에게 못 간다고 알렸어요' : '신청을 취소했어요')} />}
@@ -336,7 +367,9 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const unanswered = thread?.unanswered ?? 0
   const [tab, setTab] = useState<ManageTab>(initial === 'attendance' || initial === 'news' || initial === 'ops' ? initial : 'people')
   const [filter, setFilter] = useState<PeopleFilter>('ALL')
-  const [sheet, setSheet] = useState<'menu' | 'cancel' | 'move' | 'delete' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'cancel' | 'move' | 'delete' | 'capacity' | null>(null)
+  // 인원 바꾸기 (week 7): the number chosen in the sheet.
+  const [capValue, setCapValue] = useState(0)
   const [manual, setManual] = useState<Applicant | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
@@ -422,7 +455,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {activity.status === 'CANCELLED' && (activity.cancellation ? <CancelledCard activity={activity} organizer /> : <div className="m-state bad"><strong>취소된 활동이에요</strong><span>{activity.cancelReason ?? activity.reviewNote}</span></div>)}
         {activity.status === 'DRAFT' && <div className="m-state amber"><strong>{activity.reviewNote ? '관리자가 반려했어요' : '관리자 확인 후 공개돼요'}</strong><span>{activity.reviewNote ?? activity.riskReasons ?? ''}</span></div>}
         <div className="mg-prog" aria-label={`확정 ${confirmedNow}명, 정원 ${activity.capacity}명`}>
-          <div><b>확정 {confirmedNow}<small> / {activity.capacity}명</small></b><span>{Math.max(0, activity.capacity - confirmedNow) ? `${Math.max(0, activity.capacity - confirmedNow)}자리 남음` : '정원 마감'} · 대기 {waitingCount}명</span></div>
+          <div><b>확정 {confirmedNow}<small> / {activity.capacity}명</small></b><span>{Math.max(0, activity.capacity - confirmedNow) ? `${Math.max(0, activity.capacity - confirmedNow)}자리 남음` : '정원 마감'} · 대기 {waitingCount}명
+            {activity.status === 'RECRUITING' && now < start && <button type="button" className="mg-cap" onClick={() => { setCapValue(activity.capacity); setSheet('capacity') }}>인원 바꾸기</button>}</span></div>
           <i><em style={{ width: Math.min(100, confirmedNow / Math.max(1, activity.capacity) * 100) + '%' }} /></i>
         </div>
       </section>
@@ -476,6 +510,29 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {open && checked === 0 && (activity.applicants ?? 0) > 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소</span><small>참가자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
       </nav>
     </Sheet>}
+    {sheet === 'capacity' && (() => {
+      const held = count('CONFIRMED') + count('OFFERED') + count('CHECKED_IN') + count('COMPLETED')
+      const low = Math.max(1, held), more = capValue - activity.capacity, waitingNow = count('WAITLISTED')
+      return <Sheet title="모집 인원" onClose={() => setSheet(null)} footer={<button type="button" className="m-btn" disabled={busy || capValue === activity.capacity}
+        onClick={async () => {
+          setBusy(true)
+          try {
+            const out = await api<{ capacity: number; offered: number; confirmed: number }>('/api/activities/' + id + '/capacity', 'PUT', { capacity: capValue })
+            showToast(`${out.capacity}명으로 바꿨어요`, out.offered ? `대기 ${out.offered}명에게 자리를 제안했어요` : out.confirmed ? `${out.confirmed}명을 바로 확정했어요` : '')
+            setSheet(null); load(); onChange()
+          } catch (cause) { showToast(message(cause)) } finally { setBusy(false) }
+        }}>{capValue === activity.capacity ? '바꿀 인원을 골라 주세요' : `${capValue}명으로 바꾸기`}</button>}>
+        <p className="m-help">나를 빼고 최대 9명이에요.</p>
+        <div className="cap-step">
+          <button type="button" aria-label="한 명 줄이기" disabled={capValue <= low} onClick={() => setCapValue(v => Math.max(low, v - 1))}>−</button>
+          <b>{capValue}<small>명</small></b>
+          <button type="button" className="on" aria-label="한 명 늘리기" disabled={capValue >= 9} onClick={() => setCapValue(v => Math.min(9, v + 1))}>+</button>
+        </div>
+        <dl className="cap-kv"><div><dt>지금</dt><dd>{activity.capacity}명</dd></div>
+          {more > 0 && waitingNow > 0 && <div><dt>대기 중</dt><dd>{Math.min(more, waitingNow)}명에게 자리 제안</dd></div>}
+          {held > 1 && <div><dt>확정·제안</dt><dd>{held}명 아래로는 못 줄여요</dd></div>}</dl>
+      </Sheet>
+    })()}
     {sheet === 'cancel' && <ActivityCancelSheet activity={activity} counts={{ confirmed: count('CONFIRMED'), waiting: count('WAITLISTED') + count('OFFERED'), applied: count('APPLIED') }} busy={busy}
       onClose={() => setSheet(null)} onSend={async body => {
         setBusy(true)

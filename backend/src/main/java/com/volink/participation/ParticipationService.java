@@ -263,6 +263,36 @@ public class ParticipationService {
         return Map.of("autoApprove", on, "confirmed", confirmed);
     }
 
+    /**
+     * 모집 인원 바꾸기 (week 7, 2026-11-09): while recruiting and before the start, even with applicants. Never below the seats
+     * already held (confirmed, checked in, completed or offered). New seats go to the waiting list in order (offers), then —
+     * with 자동 승인 on — to applications waiting for approval. People already confirmed get a notice.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> capacity(long organizerId, long activityId, Integer value) {
+        Activity activity = lock(activityId);
+        if (activity.organizerId() != organizerId) throw activityNotFound();
+        if (value == null || value < 1 || value > 9) throw ApiException.validation(Map.of("capacity", "모집 인원은 나를 빼고 1~9명이에요."));
+        if (!"RECRUITING".equals(activity.status()) || !now().isBefore(activity.startsAt()))
+            throw conflict("NOT_RECRUITING", "시작 전, 모집 중인 활동만 인원을 바꿀 수 있어요.");
+        int taken = seatsTaken(activityId);
+        if (value < taken) throw conflict("BELOW_TAKEN", "확정·제안 중인 " + taken + "명보다 적게 줄일 수 없어요.");
+        if (value == activity.capacity()) return Map.of("capacity", value, "offered", 0, "confirmed", 0);
+        jdbc.update("UPDATE activities SET capacity = ? WHERE id = ?", value, activityId);
+        Activity changed = new Activity(activity.id(), activity.organizerId(), activity.title(), activity.status(), activity.startsAt(), value, activity.autoApprove());
+        int offered = value > activity.capacity() ? offerNext(changed, organizerId) : 0;
+        int confirmed = 0;
+        if (value > activity.capacity() && activity.autoApprove())
+            for (Long id : jdbc.queryForList("SELECT id FROM participations WHERE activity_id = ? AND status = 'APPLIED' ORDER BY created_at, id", Long.class, activityId)) {
+                if (seatsTaken(activityId) >= value) break;
+                jdbc.update("UPDATE participations SET status = 'CONFIRMED', updated_at = ? WHERE id = ?", now(), id);
+                log(activityId, id, organizerId, "APPLIED", "CONFIRMED", "인원 늘리기 · 자동 승인");
+                notifications.send(applicant(id), "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+                confirmed++;
+            }
+        return Map.of("capacity", value, "offered", offered, "confirmed", confirmed);
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void reject(long organizerId, long participationId, String rawReason) {
         Activity activity = organizerLock(organizerId, participationId);
