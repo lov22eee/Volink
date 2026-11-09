@@ -11,7 +11,7 @@ import { Capacitor } from '@capacitor/core'
 import { showToast } from '../App'
 import { AskSheet, MarkSheet, recordToCalendar } from './record'
 import type { ExternalRecord } from './record'
-import { applyIn1365, findApplied, useExtMode } from './lab'
+import { applyIn1365, findApplied, read1365Applications, useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
@@ -387,22 +387,42 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
   const semi = Capacitor.isNativePlatform() && extMode === 'IMPORT' && program.link.startsWith('https://www.1365.go.kr/')
   const [consent, setConsent] = useState(false)
   const [done, setDone] = useState<ExternalRecord | null>(null)
+  const [result, setResult] = useState<{ tone: 'unread' | 'missed'; program: Program } | null>(null)
+  const period = (p: Program) => when1365(p) || p.organization
   async function applyHere() {
     setConsent(false); setOpen(false)
     const out = await applyIn1365(program.link)
-    if (!out) { setAsking(program); return }
+    // Week 7 (2026-11-09): three results. 주황 = no sign of an application (closed before 신청), 노랑 = applied but its
+    // row not read, 초록 = applied and put in 내 활동.
+    if (!out) { setResult({ tone: 'missed', program }); return }
     const first = program.periodStart ? program.periodStart.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
     const last = program.periodEnd ? program.periodEnd.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
     const row = findApplied(out.texts, program.title, first, last)
     const date = row?.date || (first && first === last ? first : '')
     if (!row || !date) {
-      showToast(out.applied ? '1365 신청을 확인했어요' : '신청 현황을 읽었어요', row ? '참여하는 날을 골라 주세요' : '이 봉사를 찾지 못했어요. 날짜를 직접 넣어 주세요')
-      setMarking(program); return
+      if (row) { showToast('1365 신청을 확인했어요', '참여하는 날을 골라 주세요'); setMarking(program); return }
+      setResult({ tone: out.applied ? 'unread' : 'missed', program }); return
     }
     try {
       const saved = await api<{ added: number; items: ExternalRecord[] }>('/api/me/external/import', 'POST', { items: [{ programNo: program.programNo || undefined, title: row.title,
         organization: program.organization, place: program.place, date, startTime: row.startTime ?? program.beginTime ?? undefined, endTime: row.endTime ?? program.endTime ?? undefined, labStatus: row.labStatus }] })
       const record = saved.items.find(r => r.date === date && (r.title === row.title || (program.programNo && r.programNo === program.programNo))) ?? null
+      if (record) setDone(record); else { showToast('내 활동에 넣었어요'); onClose() }
+    } catch { showToast('내 활동에 넣지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program) }
+  }
+  /** 노랑 → 신청 현황 다시 가져오기: the 1365 신청 현황 page only (the login is kept, so usually no login). */
+  async function againList(program: Program) {
+    const texts = await read1365Applications()
+    if (!texts) { setResult({ tone: 'unread', program }); return }
+    const first = program.periodStart ? program.periodStart.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const last = program.periodEnd ? program.periodEnd.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const row = findApplied(texts, program.title, first, last)
+    const date = row?.date || (first && first === last ? first : '')
+    if (!row || !date) { showToast('이 봉사를 찾지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program); return }
+    try {
+      const saved = await api<{ added: number; items: ExternalRecord[] }>('/api/me/external/import', 'POST', { items: [{ programNo: program.programNo || undefined, title: row.title,
+        organization: program.organization, place: program.place, date, startTime: row.startTime ?? program.beginTime ?? undefined, endTime: row.endTime ?? program.endTime ?? undefined, labStatus: row.labStatus }] })
+      const record = saved.items.find(r => r.date === date) ?? null
       if (record) setDone(record); else { showToast('내 활동에 넣었어요'); onClose() }
     } catch { showToast('내 활동에 넣지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program) }
   }
@@ -437,6 +457,18 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
       footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
       <div className="m-summary"><strong>{done.title}</strong><span>{`${done.date.slice(5).replace('-', '/')} ${done.startTime}~${done.endTime}`}{done.labStatus ? ' · 1365 ' + done.labStatus : ''}</span></div>
       <p className="m-help">내 캘린더에도 추가할까요? 승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</p>
+    </Sheet>}
+    {result && <Sheet title="" onClose={onClose} footer={result.tone === 'unread'
+      ? <><button type="button" className="m-btn" onClick={() => { const p = result.program; setResult(null); void againList(p) }}>신청 현황 다시 가져오기</button>
+        <button type="button" className="m-btn line" onClick={() => { const p = result.program; setResult(null); setMarking(p) }}>날짜 직접 넣기</button></>
+      : <><button type="button" className="m-btn" onClick={() => { setResult(null); setConsent(true) }}>다시 신청하러 가기</button>
+        <button type="button" className="m-btn line" onClick={() => { const p = result.program; setResult(null); setAsking(p) }}>직접 등록하기</button></>}>
+      <div className={'apply-res ' + result.tone}>
+        <span className="apply-res-ico" aria-hidden="true"><MIcon name={result.tone === 'unread' ? 'check' : 'alert'} size={28} /></span>
+        <h3 className="m-h3">{result.tone === 'unread' ? '신청은 됐는데 내역을 못 읽었어요' : '신청을 확인하지 못했어요'}</h3>
+        <p className="m-help center">{result.tone === 'unread' ? '1365가 늦게 열렸을 수 있어요' : '신청이 끝나지 않았을 수 있어요'}</p>
+        <div className="m-summary"><strong>{result.program.title}</strong><span>{period(result.program)}</span></div>
+      </div>
     </Sheet>}
     {asking && <AskSheet program={asking} onClose={onClose} onManual={() => { setMarking(asking); setAsking(null) }} />}
     {marking && <MarkSheet program={marking} onClose={onClose} />}

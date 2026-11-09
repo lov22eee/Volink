@@ -13,7 +13,7 @@ import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
 import { SearchScreen } from './search'
 import { RecordScreen } from './record'
-import { LabScreen } from './lab'
+import { LabScreen, logout1365 } from './lab'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
@@ -69,7 +69,7 @@ export default function MobileApp() {
     return () => window.clearInterval(timer)
   }, [user, pollUnread, route.page])
 
-  const signOut = useCallback(async () => { await stopPush(); await logout(); setUser(null); window.location.hash = '#/login' }, [])
+  const signOut = useCallback(async () => { await stopPush(); await logout1365(); await logout(); setUser(null); window.location.hash = '#/login' }, [])
   // Signed in on the phone: hand this phone's push token to the server (only when notifications are allowed).
   useEffect(() => { if (user) void startPush() }, [user?.id])
   const onSession = (signed: User) => { setUser(signed); if (['login', 'signup', ''].includes(parse(window.location.hash).page)) window.location.hash = '#/home' }

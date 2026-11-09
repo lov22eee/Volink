@@ -11,7 +11,15 @@ import { DateField } from './host'
 import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean }> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
+
+// 1365 로그인 유지 (2026-11-09, week 7): the 1365 login stays on this phone only (cookies in the app's 1365 window),
+// so the next 신청·가져오기 skips the login until 1365 itself ends it. On by default; 설정 › 실험실 turns it off or logs out.
+const KEEP = 'volink.1365.keep'
+export function keep1365() { try { return localStorage.getItem(KEEP) !== '0' } catch { return true } }
+export function setKeep1365(on: boolean) { try { localStorage.setItem(KEEP, on ? '1' : '0') } catch { /* stays on */ } if (!on) void logout1365() }
+/** 1365 로그아웃 on this phone (설정, Volink 로그아웃·탈퇴). */
+export async function logout1365() { if (Capacitor.isNativePlatform()) { try { await lab.logout() } catch { /* an older app without it */ } } }
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
 export const PAGE_1365 = { S: 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do', A: 'https://www.1365.go.kr/vols/1472178171182/mypage/reqstDtls.do' } as const
 const KEY = 'volink.lab1365'
@@ -151,9 +159,19 @@ export async function applyIn1365(url: string): Promise<{ applied: boolean; text
   if (!Capacitor.isNativePlatform() || !url.startsWith('https://www.1365.go.kr/')) return null
   try {
     // Login first: the 신청 현황 page asks for it; once logged in the window goes to the program page by itself.
-    const out = await lab.open({ guide: '', target: 'P', url: PAGE_1365.A, next: PAGE_1365.A, program: url })
+    const out = await lab.open({ guide: '', target: 'P', url: PAGE_1365.A, next: PAGE_1365.A, program: url, keep: keep1365() })
     const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
     return out.applied || texts.length ? { applied: Boolean(out.applied), texts } : null
+  } catch { return null }
+}
+
+/** The 1365 신청 현황 page only (노랑 → 다시 가져오기): its text, or null when closed. */
+export async function read1365Applications(): Promise<string[] | null> {
+  if (!Capacitor.isNativePlatform()) return null
+  try {
+    const out = await lab.open({ guide: '로그인하면 ‘신청 현황’ 화면으로 바로 가요', step: LAB_STEP_BODY, target: 'A', url: PAGE_1365.A, keep: keep1365() })
+    const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
+    return texts.length ? texts : null
   } catch { return null }
 }
 
@@ -284,6 +302,11 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [allDone, setAllDone] = useState(false)
+  // Week 7: one visit for both pages; 신청 현황 not read (partial) → 일부만 가져왔어요 + 신청 현황만 다시; a 1365 page read
+  // with no rows → 가져올 기록이 없어요 (not a failure).
+  const [visitBoth, setVisitBoth] = useState(false)
+  const [partial, setPartial] = useState(false)
+  const [recognized, setRecognized] = useState(false)
   /** One or more pages taken in one visit: the 실적 page gives the total, the 신청 현황 page the rows. */
   function read(input: string | string[]) {
     const pages = (Array.isArray(input) ? input : [input]).filter(Boolean)
@@ -304,6 +327,7 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
       for (const row of parseLabText(page)) if (!found.some(r => r.title === row.title && r.date === row.date) && found.length < 20) found.push(row)
     }
     finished.sort((a, b) => b.date.localeCompare(a.date))
+    setRecognized(pages.some(p => isRecordPage(p) || parseLabSummary(p) !== null || /신청(현황|내역)/.test(compact(p))))
     setDone(finished)
     setActivityCount(acts)
     if (finished.length || found.length) api<{ title: string; date: string; status: string; extKind: string | null }[]>('/api/me/external').then(list => {
@@ -319,6 +343,14 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
     setDays(found.map(r => r.date))
     setError('')
   }
+  /** 신청 현황만 다시: the rows of the 신청 현황 page added to the 실적 already on screen. */
+  function readMore(pages: string[]) {
+    const found: LabRow[] = []
+    for (const page of pages.filter(Boolean)) for (const row of parseLabText(page)) if (!found.some(r => r.title === row.title && r.date === row.date) && found.length < 20) found.push(row)
+    if (!found.length) { showToast('신청 현황을 읽지 못했어요', '잠시 뒤 다시 해 주세요'); return }
+    setPartial(false)
+    setRows(found); setPicked(found.map(r => !mine.some(m => m.title === r.title && !!r.date && m.date === r.date && !m.extKind))); setDays(found.map(r => r.date))
+  }
   /** One page per visit (2026-11-06: going on to the second page in the same visit confused the guide): 실적 or 신청 현황. */
   async function open(target: 'S' | 'A', offerOther = false) {
     setError('')
@@ -326,7 +358,13 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
     const guide = target === 'S' ? '로그인하면 ‘봉사참여 실적’ 화면으로 바로 가요' : '로그인하면 ‘신청 현황’ 화면으로 바로 가요'
     // A안 (2026-11-08): only from the signup guide (#/lab1365?go=S&both=1) the 1365 window offers the other page too
     // after the first one (one login), so both may come back. 내 활동·마이 take just the one page asked for (user decision).
-    try { const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: offerOther ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined }); read(got.texts?.length ? got.texts : got.text ?? '') } catch { /* closed without taking the page */ }
+    try {
+      const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: offerOther ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined, keep: keep1365() })
+      // 신청 현황만 다시 (after a partial visit): the 실적 already read stays; only the 신청 rows are added.
+      if (target === 'A' && partial) { readMore(got.texts?.length ? got.texts : [got.text ?? '']); return }
+      setVisitBoth(offerOther && target === 'S'); setPartial(Boolean(got.partial))
+      read(got.texts?.length ? got.texts : got.text ?? '')
+    } catch { /* closed without taking the page */ }
   }
   /** The 실적 list: picked rows → finished 1365 activities (waiting ones of the same name and day become 실적 반영됨), then the total. */
   async function saveDone() {
@@ -374,7 +412,9 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   }
   const failed = rows !== null && !rows.length && !summary && !done.length
   const listed = done.length > 0
-  const both = listed && (rows?.length ?? 0) > 0
+  const both = (listed && (rows?.length ?? 0) > 0) || (visitBoth && (listed || (rows?.length ?? 0) > 0))
+  // 1365 pages read but nothing on them (no 실적, no 신청): 0건, told apart from a failure.
+  const zero = rows !== null && !rows.length && !done.length && recognized && !summary?.totalMinutes
   // Both pages in one visit: three rows each, [전체보기] shows the rest (2026-11-08).
   const had = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && m.extKind)
   const waits = (r: LabDone) => mine.some(m => m.title === r.title && m.date === r.date && !m.extKind)
@@ -398,6 +438,17 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
   const ahead = (rows ?? []).filter(r => r.date && r.date >= today).length
   const newCount = newDone.length + newRows.length
   const picksNow = donePicked.filter((v, i) => v && !had(done[i])).length + picked.filter((v, i) => v && rows && !rowHad(rows[i])).length
+  if (zero) return <div className="m-screen">
+    <TopBar title="1365 연결" back="history" />
+    <div className="m-body lab done-view">
+      <div className="lab-done"><div className="lab-done-head">
+        <span className="lab-check grey" aria-hidden="true"><b>0</b></span>
+        <h1 className="m-h2">1365에 가져올 기록이 없어요</h1>
+        <p className="lab-sub">아직 1365 실적·신청 내역이 없어요</p>
+      </div></div>
+    </div>
+    <ActionBar><button type="button" className="m-btn" onClick={() => { window.location.hash = '#/find?chip=1365' }}>1365 봉사 찾아보기</button></ActionBar>
+  </div>
   return <div className="m-screen">
     <TopBar title="1365 연결" back="history" />
     <div className={'m-body lab' + (!rows || failed ? ' pick' : both ? ' done-view' : '')}>
@@ -428,8 +479,8 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
       </div> : <>
         {both ? <div className="lab-done" aria-live="polite">
           <div className="lab-done-head">
-            <span className="lab-check" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M15 27.5l7.5 7.5L38 19" pathLength={1} /></svg></span>
-            <h1 className="m-h2">{refresh ? (newCount ? `새 기록 ${newCount}건을 가져왔어요` : '새로 늘어난 기록이 없어요') : '1365에서 가져왔어요'}</h1>
+            <span className={'lab-check' + (partial ? ' half' : '')} aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M15 27.5l7.5 7.5L38 19" pathLength={1} /></svg></span>
+            <h1 className="m-h2">{partial ? '일부만 가져왔어요' : refresh ? (newCount ? `새 기록 ${newCount}건을 가져왔어요` : '새로 늘어난 기록이 없어요') : '1365에서 가져왔어요'}</h1>
             <p className="lab-sub">{refresh ? (newCount ? `${last!.fetchedAt.slice(5, 10).replace('-', '/')} 이후 늘어난 것만 보여요` : '마지막으로 가져온 뒤 그대로예요') : '오늘 기준 · 공식 실적은 1365에서 확인'}</p>
           </div>
           <div className="lab-cards">
@@ -441,13 +492,17 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
                 : <><b>{summary ? hoursText(summary.totalMinutes) : hoursText(timeRows.reduce((t, r) => t + (r.minutes ?? 0), 0))}</b>
                   <small>{done.length}건 · 시간인증 {timeRows.length}{actRows.length || activityCount ? ` · 활동인증 ${actRows.length || activityCount}` : ''}</small></>}</span>
               {shownDone.length > 0 && <em>자세히<MIcon name="chevron" size={15} /></em>}</button>
-            <button type="button" className="lab-card" disabled={!shownRows.length} onClick={() => setDetail('A')}>
+            {partial ? <button type="button" className="lab-card warn" onClick={() => open('A')}>
+              <span className="lab-card-ico w"><MIcon name="refresh" size={24} /></span>
+              <span className="lab-card-main"><small>신청 현황</small><b>못 가져왔어요</b><small>신청 현황만 다시 가져오기</small></span>
+              <em>다시<MIcon name="chevron" size={15} /></em></button>
+            : <button type="button" className="lab-card" disabled={!shownRows.length} onClick={() => setDetail('A')}>
               <span className="lab-card-ico a"><MIcon name="list" size={24} /></span>
               <span className="lab-card-main"><small>신청 현황</small>
                 {refresh ? <><b className={newRows.length ? 'plus' : ''}>{newRows.length ? `+${newRows.length}건` : '변동 없음'}</b><small>{newRows.length ? '다가오는 일정에 추가' : '새 신청은 1365에서 신청하면 와요'}</small></>
                 : <><b>{rows.length}건</b><small>다가오는 일정 {ahead}</small></>}
                 {undated > 0 && <small className="lab-card-warn">참여하는 날을 골라 주세요 ({undated}개)</small>}</span>
-              {shownRows.length > 0 && <em>자세히<MIcon name="chevron" size={15} /></em>}</button>
+              {shownRows.length > 0 && <em>자세히<MIcon name="chevron" size={15} /></em>}</button>}
           </div>
           {!refresh && summary?.count != null && summary.count !== timeRows.length && <p className="m-help lab-done-note">1365에는 시간인증 {summary.count}건인데 {timeRows.length}건만 읽었어요. 다시 가져오면 맞춰질 수 있어요.</p>}
         </div>
