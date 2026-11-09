@@ -115,5 +115,6 @@ public class PenaltyService {
         return out;
     }
 
-    private LocalDateTime now() { return LocalDateTime.now(clock); }
+    /** Whole seconds: DATETIME rounds fractions, and a limit starting a second "later" would not apply at once. */
+    private LocalDateTime now() { return LocalDateTime.now(clock).truncatedTo(java.time.temporal.ChronoUnit.SECONDS); }
 }

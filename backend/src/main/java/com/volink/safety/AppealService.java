@@ -48,7 +48,7 @@ public class AppealService {
         String text = request == null || request.reason() == null ? "" : request.reason().trim();
         if (text.length() < 5 || text.length() > 1000) errors.put("reason", "설명을 5자 이상 적어 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         Long participation = null, record = null, sanction = null, activity = null, host = null;
         LocalDateTime from;
         switch (kind) {

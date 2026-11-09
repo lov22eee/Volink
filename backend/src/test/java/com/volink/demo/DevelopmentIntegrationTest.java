@@ -24,7 +24,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
     @Test
     void migrationsAndDemoDataAreAppliedOnce() {
         assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success = 1 ORDER BY installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33");
+                .containsExactly("1", "2", "3", "4", "5", "5.1", "5.2", "5.3", "5.4", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35");
         // 7 active (V17) + the merged 생활 지원 row kept as inactive history.
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM categories", Integer.class)).isEqualTo(8);
         // The test profile never creates demo login accounts (dev profile + DEMO_ACCOUNT_PASSWORD only).
@@ -114,7 +114,7 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
                 "users", "categories", "activities", "activity_locations", "participations", "check_ins", "activity_records",
                 "activity_logs", "organizations", "user_interests", "admin_actions", "notifications", "reports",
                 "report_evidences", "appeals", "sanctions", "risk_keywords", "refresh_tokens",
-                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts", "notification_settings", "category_changes_v17", "risk_keywords_removed_v17", "activity_cancellations", "account_withdrawals", "push_tokens", "external_records", "external_summaries");
+                "demo_places", "demo_personas", "demo_activity_templates", "volunteer_programs", "activity_posts", "saved_activities", "community_posts", "community_comments", "community_likes", "activity_post_seen", "social_accounts", "notification_settings", "category_changes_v17", "risk_keywords_removed_v17", "activity_cancellations", "account_withdrawals", "push_tokens", "external_records", "external_summaries", "post_photos");
         assertThat(jdbc.queryForList("SELECT risk_level, COUNT(*) AS n FROM risk_keywords GROUP BY risk_level"))
                 .extracting(row -> Map.entry(row.get("risk_level"), ((Number) row.get("n")).intValue()))
                 .containsExactlyInAnyOrder(Map.entry("BLOCKED", 19), Map.entry("REVIEW", 17));
@@ -177,7 +177,9 @@ class DevelopmentIntegrationTest extends IntegrationTestBase {
         long admin = admin();
         insertActivity(user, 6, "2026-10-10 10:00:00", "2026-10-10 11:00:00");
         long activity = jdbc.queryForObject("SELECT MAX(id) FROM activities", Long.class);
-        assertCheckViolation(() -> jdbc.update("INSERT INTO reports(reporter_id, activity_id, reason_type, description) VALUES (?, ?, 'SAFETY', '짧음')", user, activity));
+        // V35 (week 7): the description is optional now; an unknown reason or target is still refused.
+        assertCheckViolation(() -> jdbc.update("INSERT INTO reports(reporter_id, activity_id, reason_type, description) VALUES (?, ?, 'WHATEVER', '현장에서 위험한 도구를 사용했습니다.')", user, activity));
+        assertCheckViolation(() -> jdbc.update("INSERT INTO reports(reporter_id, target_type, target_id, reason_type) VALUES (?, 'SHOP', 1, 'SPAM')", user));
         assertCheckViolation(() -> jdbc.update("INSERT INTO reports(reporter_id, activity_id, reason_type, description, status) VALUES (?, ?, 'SAFETY', '현장에서 위험한 도구를 사용했습니다.', 'DISMISSED')", user, activity));
         jdbc.update("INSERT INTO reports(reporter_id, activity_id, reason_type, description) VALUES (?, ?, 'SAFETY', '현장에서 위험한 도구를 사용했습니다.')", user, activity);
         long report = jdbc.queryForObject("SELECT MAX(id) FROM reports", Long.class);
