@@ -2,7 +2,11 @@
 // Names are partly hidden; contact details are refused by the server. No example posts: an empty board says so.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { api, ApiError } from '../api'
+import { api, ApiError, serverUrl } from '../api'
+import { PhotoField, PhotoStrip } from './photos'
+import type { Shot } from './photos'
+import { ReportSheet } from './report'
+import type { ReportTarget } from './report'
 import { friendlyTime, showToast } from '../App'
 import type { ExternalRecord } from './record'
 import { ActionBar, dayWord, Empty, go, goBack, Loading, MIcon, Sheet, TopBar, TextArea, TextInput } from './ui'
@@ -17,10 +21,12 @@ export type PostSummary = { id: number; category: Category; title: string; previ
   myStatus?: string | null; myWaitOrder?: number | null
   /** 봉사후기 (week 7): where it comes from — a completed participation, the organizer's own activity or a 1365 record. */
   reviewSource?: 'JOIN' | 'HOST' | 'EXTERNAL' | null
+  /** Week 7: photos on the post (count and the first one for the list). */
+  photoCount?: number; photo?: string | null
   /** 1365 review (V27): the person's own record — 본인 기록, or 실적확인서 있음. */
   externalId?: number | null; externalTitle?: string | null; externalDate?: string | null; externalCertified?: boolean | null }
 type Comment = { id: number; body: string; author: string; mine: boolean; organizer: boolean; postAuthor: boolean; createdAt: string; edited?: boolean }
-type Post = Omit<PostSummary, 'preview'> & { body: string; comments: Comment[] }
+type Post = Omit<PostSummary, 'preview'> & { body: string; comments: Comment[]; photos?: { id: number; url: string; width: number; height: number }[]; authorId?: number }
 type Reviewable = { id: number; title: string; date: string; durationMinutes: number; hosted?: boolean; people?: number }
 type Promotable = { id: number; title: string; status: string; date: string; startTime: string; capacity: number; confirmed: number; promoPostId: number | null; promoTitle: string | null }
 
@@ -37,8 +43,8 @@ export function PostCard({ post }: { post: PostSummary }) {
     <div className="c-card-top"><span className={'m-badge ' + badgeTone(post.category)}>{categoryLabel[post.category]}</span>
       {post.category === 'REVIEW' && post.reviewSource ? <SourceBadge post={post} /> : post.verified && <span className="c-verified"><MIcon name="check" size={14} />참여 확인</span>}
       <small>{ago(post.createdAt)} · {post.author}{post.mine ? ' (나)' : ''}</small></div>
-    <strong>{post.title}</strong>
-    <p>{post.preview}</p>
+    <div className="c-card-main"><div><strong>{post.title}</strong>
+    <p>{post.preview}</p></div>{post.photo && <span className="c-thumb"><img src={serverUrl(post.photo)} alt="" />{(post.photoCount ?? 0) > 1 && <em>{post.photoCount}</em>}</span>}</div>
     {post.category === 'PROMO' && post.activityId ? <PromoCard post={post} />
       : post.externalTitle ? <span className="c-act ext"><b>1365</b>{post.externalTitle}<em>{post.externalCertified ? '실적확인서 있음' : '본인 기록'}</em></span>
       : post.activityTitle && <span className="c-act"><MIcon name="leaf" size={15} />{post.activityTitle}</span>}
@@ -264,6 +270,7 @@ export function PostScreen({ id, onChange }: { id: number; onChange: () => void 
   const [editing, setEditing] = useState<Comment | null>(null)
   const [busy, setBusy] = useState(false)
   const [menu, setMenu] = useState<Menu | null>(null)
+  const [reporting, setReporting] = useState<ReportTarget | null>(null)
   const [confirm, setConfirm] = useState<{ path: string; title: string; done: string; after: () => void } | null>(null)
   const [newest, setNewest] = useState(false)
   const [error, setError] = useState('')
@@ -317,6 +324,7 @@ export function PostScreen({ id, onChange }: { id: number; onChange: () => void 
         <div className="c-author"><span className="m-avatar sm"><MIcon name="user" size={17} /></span>
           <span><b>{post.author}{post.mine && <em> (나)</em>}</b><small>{ago(post.createdAt)}{post.edited ? ' · 수정됨' : ''}</small></span></div>
         <p className="c-body">{post.body}</p>
+        <PhotoStrip photos={post.photos ?? []} onReport={pid => setReporting({ type: 'PHOTO', id: pid, label: '사진 · ' + post.title })} />
         {post.externalTitle && <div className="c-linked ext">
           <span><MIcon name="calendar" size={18} /><b>함께한 1365 봉사</b></span>
           <strong>{post.externalTitle}</strong>
@@ -355,13 +363,14 @@ export function PostScreen({ id, onChange }: { id: number; onChange: () => void 
         ? post.mine ? <>
           <button type="button" onClick={() => { setMenu(null); go('#/write?edit=' + id) }}><MIcon name="edit" size={20} /><span>글 수정</span><MIcon name="chevron" size={18} /></button>
           <button type="button" className="danger" onClick={() => { setMenu(null); setConfirm({ path: '/api/community/posts/' + id, title: '글을 지울까요?', done: '글을 지웠어요', after: () => go('#/community') }) }}><MIcon name="trash" size={20} /><span>글 삭제</span><MIcon name="chevron" size={18} /></button></>
-          : <button type="button" className="danger" onClick={() => { setMenu(null); showToast('신고 기능은 곧 열려요') }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>
+          : <button type="button" className="danger" onClick={() => { setMenu(null); setReporting({ type: 'POST', id, label: '게시글 · ' + post.title }) }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>
         : menu.comment.mine ? <>
           <button type="button" onClick={() => { const c = menu.comment; setMenu(null); setEditing(c); setText(c.body); window.setTimeout(() => reply.current?.focus(), 50) }}><MIcon name="edit" size={20} /><span>댓글 수정</span><MIcon name="chevron" size={18} /></button>
           <button type="button" className="danger" onClick={() => { const c = menu.comment; setMenu(null); setConfirm({ path: '/api/community/comments/' + c.id, title: '댓글을 지울까요?', done: '댓글을 지웠어요', after: load }) }}><MIcon name="trash" size={20} /><span>댓글 삭제</span><MIcon name="chevron" size={18} /></button></>
-          : <button type="button" className="danger" onClick={() => { setMenu(null); showToast('신고 기능은 곧 열려요') }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>}
+          : <button type="button" className="danger" onClick={() => { const c = menu.comment; setMenu(null); setReporting({ type: 'COMMENT', id: c.id, label: '댓글 · ' + c.body.slice(0, 30) }) }}><MIcon name="alert" size={20} /><span>신고하기</span><MIcon name="chevron" size={18} /></button>}
       </nav>
     </Sheet>}
+    {reporting && <ReportSheet target={reporting} onClose={() => setReporting(null)} />}
     {confirm && <Sheet title={confirm.title} onClose={() => setConfirm(null)} footer={<div className="m-two"><button type="button" className="m-btn line" onClick={() => setConfirm(null)}>취소</button><button type="button" className="m-btn danger" onClick={remove}>지우기</button></div>}>
       <p className="m-help">지운 뒤에는 되돌릴 수 없어요.</p></Sheet>}
   </div>
@@ -410,6 +419,11 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  // Week 7: up to 5 photos (shrunk, location removed); people's faces need their consent. A running 글쓰기 limit shows here.
+  const [shots, setShots] = useState<Shot[]>([])
+  const [faceOk, setFaceOk] = useState(false)
+  const [limit, setLimit] = useState<{ until: string | null; reason: string } | null>(null)
+  useEffect(() => { if (!editId) api<{ write: { until: string | null; reason: string } | null }>('/api/me/status').then(s => setLimit(s.write)).catch(() => {}) }, [editId])
   // ••• (2026-11-06): 임시 저장 / 미리보기 / 처음부터 다시 쓰기 / 글쓰기 규칙 instead of a second 등록 button at the top.
   const [menu, setMenu] = useState<null | 'menu' | 'preview' | 'reset' | 'rules'>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
@@ -437,7 +451,8 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
     setBusy(true)
     try {
       const post = editId ? await api<Post>('/api/community/posts/' + editId, 'PUT', { title, body })
-        : await api<Post>('/api/community/posts', 'POST', { category, title, body, activityId: category === 'REVIEW' ? (pickedExt ? null : picked) : category === 'PROMO' ? promoPick : null, externalId: category === 'REVIEW' && pickedExt ? pickedExt : null })
+        : await api<Post>('/api/community/posts', 'POST', { category, title, body, activityId: category === 'REVIEW' ? (pickedExt ? null : picked) : category === 'PROMO' ? promoPick : null, externalId: category === 'REVIEW' && pickedExt ? pickedExt : null,
+          photoIds: shots.filter(s => s.id).map(s => s.id) })
       if (!editId) writeDraft(null)
       showToast(editId ? '글을 고쳤어요' : '글을 올렸어요')
       window.location.replace('#/post/' + post.id)
@@ -502,10 +517,14 @@ export function WriteScreen({ initial, activity, external, editId }: { initial?:
       <label className="m-field"><span className="m-label">내용</span>
         <TextArea name="body" className={'m-input' + (errors.body ? ' bad' : '')} rows={8} maxLength={2000} placeholder={bodyHint[category]} value={body} onChange={event => setBody(event.target.value)} />
         <span className="m-count">{body.trim().length.toLocaleString()} / 2,000</span>{errors.body && <span className="m-err">{errors.body}</span>}</label>
+      {!editId && <div className="m-field"><span className="m-label">사진 <small>최대 5장 · 위치 정보는 지우고 올려요</small></span>
+        <PhotoField shots={shots} onChange={setShots} max={5} />
+        {shots.length > 0 && <label className="m-check c-face"><input type="checkbox" checked={faceOk} onChange={e => setFaceOk(e.target.checked)} /><span className="m-box" /><span>얼굴이 나온 사람에게 올려도 된다고 물어봤어요</span></label>}</div>}
       {looksLikeMeetup && <div className="m-note warm"><strong>같이 할 사람을 찾고 있나요?</strong>모집으로 열면 안전 검토와 출석 확인을 받을 수 있고, 연락처를 주고받지 않아도 돼요. <a className="c-inline-link" href="#/host">모집하러 가기 →</a></div>}
       <p className="c-safe"><MIcon name="alert" size={17} />개인 연락처와 민감한 정보는 공유하지 마세요.</p>
       {errors.form && <div className="m-note bad">{errors.form}</div>}
-      <ActionBar><button className="m-btn" disabled={busy || (!editId && category === 'REVIEW' && !canReview)}>{busy ? '올리는 중…' : editId ? '수정 저장하기' : '게시글 등록하기'}</button></ActionBar>
+      {limit && <div className="m-note bad"><strong>{limit.until ? `${Number(limit.until.slice(5, 7))}월 ${Number(limit.until.slice(8, 10))}일까지 글과 댓글을 쓸 수 없어요` : '지금은 글을 쓸 수 없어요'}</strong>{limit.reason} · 읽기·좋아요는 그대로 할 수 있어요. <a className="c-inline-link" href="#/my?view=status">내 이용 상태 →</a></div>}
+      <ActionBar><button className="m-btn" disabled={busy || Boolean(limit) || shots.some(s => !s.id && !s.failed) || (shots.length > 0 && !faceOk) || (!editId && category === 'REVIEW' && !canReview)}>{busy ? '올리는 중…' : editId ? '수정 저장하기' : '게시글 등록하기'}</button></ActionBar>
     </form>
     {menu === 'menu' && <Sheet title="글쓰기 메뉴" onClose={() => setMenu(null)}><nav className="c-menu">
       {!editId && <button type="button" disabled={!dirty} onClick={saveDraft}><MIcon name="bookmark" size={20} /><span>임시 저장<small>{savedAt ? `마지막 저장 ${savedAt} · 쓰는 동안에도 자동으로 저장돼요` : '쓰는 동안에도 자동으로 저장돼요'}</small></span></button>}

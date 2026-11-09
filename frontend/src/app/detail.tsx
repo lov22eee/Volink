@@ -1,5 +1,8 @@
 // Activity detail for a participant, shown by state: 신청 전 / 대기 중 / 확정 후 / 활동 당일 / 완료 후.
 // The organizer gets a dashboard instead (ManageScreen): 신청자 / 소식 / 출석, with schedule change and cancel.
+import { AppealSheet, HostAppeals, useStatus } from './status'
+import type { AppealTarget } from './status'
+import { ReportSheet } from './report'
 import { checkInRoute } from './native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
@@ -154,7 +157,10 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   const [saved, setSaved] = useState(false)
   const [failed, setFailed] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sheet, setSheet] = useState<'cancel' | 'late' | 'scan' | 'camera' | 'safety' | null>(null)
+  const [sheet, setSheet] = useState<'cancel' | 'late' | 'scan' | 'camera' | 'safety' | 'report' | 'appeal' | null>(null)
+  // Week 7: 불참·신고 누적 (warn on the 2nd no-show, block while limited) and the target of an appeal.
+  const status = useStatus()
+  const [appeal, setAppeal] = useState<AppealTarget | null>(null)
   const load = useCallback(() => {
     api<LiveActivity>('/api/activities/' + id).then(a => {
       if (a.organizerId === user.id) { window.location.replace('#/manage/' + id); return }
@@ -287,6 +293,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
         <button className="m-btn" onClick={() => { void addToCalendar(activity).then(way => { if (way === 'file') showToast('캘린더 파일을 받았어요', '열면 휴대폰 캘린더에 추가돼요') }) }}><MIcon name="calendar" size={19} />캘린더에 추가</button></>
       case 'today': return <><button className="m-btn line" onClick={() => setSheet(phase === 'later' || phase === 'soon' ? 'late' : 'late')} disabled={phase === 'ended'}>늦어요</button>
         <button className="m-btn" disabled={phase !== 'open'} onClick={async () => setSheet(await cameraAllowed() ? 'scan' : 'camera')}><MIcon name="qr" size={19} />{phase === 'open' ? 'QR 찍고 체크인' : phase === 'late' || phase === 'ended' ? '체크인 마감' : '출석 시작 전이에요'}</button></>
+      case 'closed': return mine?.status === 'NO_SHOW' && status?.noShowList.some(n => n.participationId === mine.id && n.appealable && !n.appeal)
+        ? <button className="m-btn line" onClick={() => { setAppeal({ kind: 'NO_SHOW', participationId: mine.id, label: `${activity.title} · 불참` }); setSheet('appeal') }}>이의 신청하기</button> : null
       case 'done': return <><a className="m-btn line" href="#/records">내 기록</a><a className="m-btn" href={'#/write?activity=' + id}><MIcon name="edit" size={19} />후기 쓰기</a></>
       default: return null
     }
@@ -295,7 +303,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   // Which blocks to show depends on the stage: before applying the full description; once confirmed, what to bring and the news.
   const member = ['confirmed', 'today', 'checkedin', 'done'].includes(stage)
   return <div className={'m-screen m-detail' + (applied ? ' applied' : '')}>
-    <TopBar title="" back="history" actions={<button type="button" className="m-icon-btn" aria-label={saved ? '저장 취소' : '저장하기'} aria-pressed={saved} onClick={toggleSave}><MIcon name={saved ? 'bookmarked' : 'bookmark'} /></button>} />
+    <TopBar title="" back="history" actions={<><button type="button" className="m-icon-btn" aria-label={saved ? '저장 취소' : '저장하기'} aria-pressed={saved} onClick={toggleSave}><MIcon name={saved ? 'bookmarked' : 'bookmark'} /></button>
+      <button type="button" className="m-icon-btn" aria-label="이 활동 신고하기" onClick={() => setSheet('report')}><MIcon name="more" /></button></>} />
     <div className="m-body">
       {head}
       {statusCard}
@@ -322,6 +331,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
         <li><b>!</b><span><strong>자리가 나면 제안이 와요</strong><small>알림을 받고 정해진 시간 안에 수락하면 확정</small></span></li>
         <li><b><MIcon name="clock" size={14} /></b><span><strong>{dayWord(waitCloses.slice(0, 10))} {waitCloses.slice(11, 16)}에 대기가 끝나요</strong><small>시작 2시간 전</small></span></li>
       </ul>}
+      {status && status.noShows >= 2 && !status.apply && <div className="m-note warm"><strong>최근 90일 불참 {status.noShows}번이에요</strong>한 번 더 불참하면 14일 동안 신청할 수 없어요. 못 가게 되면 시작 전에 [못 가요]를 눌러 주세요.</div>}
+      {status?.apply && <div className="m-note bad"><strong>{status.apply.until ? `${Number(status.apply.until.slice(5, 7))}월 ${Number(status.apply.until.slice(8, 10))}일까지 신청할 수 없어요` : '지금은 신청할 수 없어요'}</strong>{status.apply.reason}</div>}
       <ul className="m-bullets"><li>공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않아요.</li><li>연락처는 공개하지 않아요. 궁금한 건 확정 뒤 ‘활동 소식’에서 물어봐요.</li><li>못 가게 되면 꼭 미리 알려 주세요. 다음 사람에게 자리가 넘어가요.</li></ul>
     </Sheet>}
     {sheet === 'cancel' && mine && <CancelSheet confirmed={mine.status === 'CONFIRMED'} busy={busy} onClose={() => setSheet(null)} onSend={reason => act('/api/participations/' + mine.id + '/cancel', reason ? { reason } : {}, mine.status === 'CONFIRMED' ? '모집자에게 못 간다고 알렸어요' : '신청을 취소했어요')} />}
@@ -330,6 +341,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       <div className="m-choice">{[10, 20, 30].map(m => <button key={m} type="button" className="m-btn line" disabled={busy} onClick={() => act('/api/participations/' + mine.id + '/late', { minutes: m }, `약 ${m}분 늦는다고 알렸어요`)}>약 {m}분</button>)}</div>
       <button type="button" className="m-text-btn danger" onClick={() => setSheet('cancel')}>아예 못 가요</button>
     </Sheet>}
+    {sheet === 'report' && <ReportSheet target={{ type: 'ACTIVITY', id, label: '활동 · ' + activity.title }} onClose={() => setSheet(null)} />}
+    {sheet === 'appeal' && appeal && <AppealSheet target={appeal} onClose={() => setSheet(null)} onSent={() => { setSheet(null); showToast('이의 신청을 보냈어요', '결과를 알림으로 알려 드릴게요') }} />}
     {sheet === 'scan' && <ScanSheet codeHref={'#/checkin/' + id} onClose={() => setSheet(null)} />}
     {sheet === 'camera' && <Sheet title="카메라 권한이 꺼져 있어요" onClose={() => setSheet(null)}
       footer={<><button type="button" className="m-btn" onClick={() => { void camera.openSettings().catch(() => {}); setSheet(null) }}>설정에서 카메라 켜기</button><a className="m-btn line" href={'#/checkin/' + id}>출석 코드 4자리로 체크인</a></>}>
@@ -536,6 +549,7 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         </>}
       </section>}
 
+      {tab === 'attendance' && <HostAppeals activityId={id} onChanged={load} />}
       {tab === 'attendance' && <section className="mg-panel" aria-label="출석">{people ? <RollCall activity={activity} people={items} phase={phase as Phase} opens={opens} closes={closes} onChanged={load} /> : <Loading />}</section>}
 
       {tab === 'news' && (activity.status === 'DRAFT' ? <p className="mg-none mg-panel">관리자 확인 뒤 공개되면 소식을 올릴 수 있어요.</p>

@@ -37,6 +37,12 @@ public class ParticipationService {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private com.volink.safety.PenaltyService penalties;
+
+    /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
     public ParticipationService(JdbcTemplate jdbc, AuthService auth, NotificationService notifications, Clock clock) {
         this.jdbc = jdbc;
         this.auth = auth;
@@ -56,6 +62,7 @@ public class ParticipationService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw forbidden("FORBIDDEN", "관리자 계정은 활동에 신청할 수 없습니다.");
         if (!user.canWrite()) throw forbidden("ACCOUNT_RESTRICTED", "이용이 제한된 계정은 신청할 수 없습니다.");
+        if (penalties != null) penalties.check(userId, "APPLY");
         Activity activity = lock(activityId);
         if (!"RECRUITING".equals(activity.status())) {
             if ("DRAFT".equals(activity.status())) throw activityNotFound();

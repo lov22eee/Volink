@@ -1,6 +1,11 @@
 spring:
   application:
     name: volink-api
+  servlet:
+    multipart:
+      # Week 7: community / report photos (shrunk on the phone; the server re-encodes and keeps them under 5MB).
+      max-file-size: 15MB
+      max-request-size: 16MB
   profiles:
     default: dev
   datasource:
@@ -29,6 +34,8 @@ logging:
   level:
     org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration: ERROR
 volink:
+  # Week 7: community and report photos on the server's own disk (not in git; back it up with the database).
+  upload-dir: ${UPLOAD_DIR:uploads}
   auth:
     # Base64 HS256 key of 32+ bytes. Empty = random per process (local development only).
     jwt-secret: ${JWT_SECRET:}

@@ -405,3 +405,14 @@ button.map-pin { cursor: pointer; padding: 0; }
 .intro-points li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
 .intro-points svg { color: var(--green); }
 .empty-text { margin: 0; padding: 18px 20px; color: var(--ink-3); font-size: 14px; }
+
+/* Week 7: 관리자 신고함 · 이의함 */
+.safety-item { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+.safety-item > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.safety-item small { color: var(--muted, #5f6a64); }
+.safety-form { display: flex; flex-direction: column; gap: 8px; }
+.seg-tabs.small button { padding: 6px 12px; }
+.ev-row { display: flex; gap: 6px; margin-top: 4px; }
+.ev-thumb { width: 72px; height: 72px; border-radius: 8px; object-fit: cover; background: #e3e8e5; display: inline-block; }
+.check-line { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+@media (max-width: 800px) { .safety-item { grid-template-columns: 1fr; } }

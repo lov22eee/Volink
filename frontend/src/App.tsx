@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from 'react'
 import type { DisplayCatalog as Catalog } from './data'
 import { signupRules, validateSignup } from './rules'
 import type { Errors } from './rules'
+import { AdminAppeals, AdminReports } from './adminSafety'
 import { api, ApiError, completeSocial, finishSocial, login, logout, mayHaveSession, preview, refresh } from './api'
 import { GoogleMark, KakaoMark, providerName, socialError, startSocial, useProviders } from './social'
 import type { Provider } from './social'
@@ -62,7 +63,7 @@ export function ParkArt({ variant = 0 }: { variant?: number }) {
 
 
 type Page = 'home' | 'explore' | 'detail' | 'live' | 'edit' | 'create' | 'mine' | 'login' | 'signup' | 'admin' | 'notifications' | 'checkin' | 'oauth' | 'social-signup'
-type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places'
+type AdminSection = 'dashboard' | 'organizations' | 'activities' | 'places' | 'reports' | 'appeals'
 type Route = { page: Page; activityId?: number; section?: AdminSection; token?: string }
 type MemberType = 'general' | 'institution'
 const embeddedCatalog = window.__VOLINK_UI_DEMO__?.catalog
@@ -78,7 +79,7 @@ function getRoute(): Route {
   if (example) return { page: 'detail', activityId: Number(example[1]) }
   const live = /^activity\/(\d+)$/.exec(path)
   if (live) return { page: 'live', activityId: Number(live[1]) }
-  const admin = /^admin(?:\/(organizations|activities|places))?$/.exec(path)
+  const admin = /^admin(?:\/(organizations|activities|places|reports|appeals))?$/.exec(path)
   if (admin) return { page: 'admin', section: (admin[1] ?? 'dashboard') as AdminSection }
   const edit = /^activity\/(\d+)\/edit$/.exec(path)
   if (edit) return { page: 'edit', activityId: Number(edit[1]) }
@@ -160,6 +161,8 @@ export default function App() {
     { id: 'admin/organizations', title: '기관 확인', hint: '기관 회원가입 승인·반려', icon: 'building', active: route.section === 'organizations' },
     { id: 'admin/activities', title: '활동 검토', hint: '검토가 필요한 모집글', icon: 'list', active: route.section === 'activities' || route.page === 'live' },
     { id: 'admin/places', title: '장소 관리', hint: '장소 좌표·만남 지점', icon: 'pin', active: route.section === 'places' },
+    { id: 'admin/reports', title: '신고함', hint: '신고 확인·숨김·누적 제재', icon: 'shield', active: route.section === 'reports' },
+    { id: 'admin/appeals', title: '이의함', hint: '불참·기록·제재 이의 판단', icon: 'list', active: route.section === 'appeals' },
   ] : [
     { id: 'home', title: '홈', hint: '우리 동네 소식', icon: 'home', active: route.page === 'home' },
     { id: 'explore', title: '활동 찾기', hint: '내 주변 봉사활동 찾기', icon: 'compass', active: route.page === 'explore' || route.page === 'detail' || route.page === 'live' },
@@ -818,6 +821,9 @@ function AdminPage({ section, user, ready, places, onPlacesChanged }: { section:
   const pending = organizations.PENDING
   const noCoordinate = places.filter(place => place.latitude == null)
   const status = <>{notice && <Notice text={notice} tone={noticeTone} />}{failed && <div className="error-banner" role="alert">일부 관리 정보를 불러오지 못했습니다.<button className="text-button" onClick={load}>다시 시도</button></div>}</>
+
+  if (section === 'reports') return <AdminReports />
+  if (section === 'appeals') return <AdminAppeals />
 
   if (section === 'organizations') return <>
     {head('기관 확인', '반려할 때는 사유를 꼭 적어 주세요. 사유는 신청한 기관에 보여요.')}

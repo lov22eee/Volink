@@ -72,6 +72,7 @@ public class SecurityConfig {
                     if (development) {
                         auth.requestMatchers(HttpMethod.GET, "/api/demo/catalog", "/api/project/status").permitAll();
                     }
+                    auth.requestMatchers(HttpMethod.GET, "/api/photos/*").permitAll();
                     auth.requestMatchers("/api/admin/**").hasRole("ADMIN");
                     auth.requestMatchers("/api/**").authenticated();
                     auth.anyRequest().denyAll();

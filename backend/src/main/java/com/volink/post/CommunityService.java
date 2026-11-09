@@ -30,6 +30,17 @@ public class CommunityService {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private com.volink.safety.PenaltyService penalties;
+
+    /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
+    private com.volink.safety.PhotoService photos;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhotos(com.volink.safety.PhotoService photos) { this.photos = photos; }
+
     public CommunityService(JdbcTemplate jdbc, AuthService auth, NotificationService notifications, Clock clock) {
         this.jdbc = jdbc;
         this.auth = auth;
@@ -56,6 +67,8 @@ public class CommunityService {
             (SELECT e.cert_at IS NOT NULL FROM external_records e WHERE e.id = p.external_id) AS externalCertified,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
+            (SELECT COUNT(*) FROM post_photos ph WHERE ph.post_id = p.id AND ph.hidden = FALSE) AS photoCount,
+            (SELECT CONCAT('/api/photos/', ph.storage_key) FROM post_photos ph WHERE ph.post_id = p.id AND ph.hidden = FALSE ORDER BY ph.position, ph.id LIMIT 1) AS photo,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
             EXISTS (SELECT 1 FROM community_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
             FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id AND a.status <> 'DELETED'
@@ -77,7 +90,7 @@ public class CommunityService {
         if (filter) args.add(category);
         if (!words.isEmpty()) { args.add(like); args.add(like); }
         if (activity != null) args.add(activity);
-        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL" + (filter ? " AND p.category = ?" : "")
+        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL AND p.hidden_at IS NULL" + (filter ? " AND p.category = ?" : "")
                 + (words.isEmpty() ? "" : " AND (p.title LIKE ? OR p.body LIKE ?)") + (activity == null ? "" : " AND p.activity_id = ?") + " ORDER BY " + order + " LIMIT 50"), args.toArray());
         rows.forEach(row -> {
             String body = (String) row.remove("body");
@@ -88,14 +101,14 @@ public class CommunityService {
     }
 
     public Map<String, Object> detail(long viewerId, long id) {
-        Map<String, Object> post = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.id = ? AND p.deleted_at IS NULL"), viewerId, viewerId, id)
+        Map<String, Object> post = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.id = ? AND p.deleted_at IS NULL AND p.hidden_at IS NULL"), viewerId, viewerId, id)
                 .stream().findFirst().orElseThrow(CommunityService::notFound);
         shape(post, viewerId);
         Long organizer = post.get("activityId") == null ? null
                 : jdbc.queryForObject("SELECT organizer_id FROM activities WHERE id = ?", Long.class, post.get("activityId"));
         List<Map<String, Object>> comments = jdbc.queryForList(Sql.kst("""
                 SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt, c.edited_at IS NOT NULL AS edited
-                FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL ORDER BY c.created_at, c.id
+                FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL AND c.hidden_at IS NULL ORDER BY c.created_at, c.id
                 """), id);
         comments.forEach(comment -> {
             long author = ((Number) comment.remove("authorId")).longValue();
@@ -107,6 +120,7 @@ public class CommunityService {
         });
         post.remove("authorIdRaw");
         post.put("comments", comments);
+        post.put("photos", photos == null ? List.of() : photos.ofPost(id));
         return post;
     }
 
@@ -145,7 +159,9 @@ public class CommunityService {
                 """, userId, java.time.LocalDateTime.now(clock));
     }
 
-    public record PostRequest(String category, String title, String body, Long activityId, Long externalId) {}
+    public record PostRequest(String category, String title, String body, Long activityId, Long externalId, List<Long> photoIds) {
+        public PostRequest(String category, String title, String body, Long activityId, Long externalId) { this(category, title, body, activityId, externalId, null); }
+    }
 
     @Transactional
     public Map<String, Object> create(long userId, PostRequest request) {
@@ -184,8 +200,12 @@ public class CommunityService {
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         int today = jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE author_id = ? AND created_at > NOW() - INTERVAL 1 DAY", Integer.class, userId);
         if (today >= POSTS_PER_DAY) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_POSTS", "글은 하루에 " + POSTS_PER_DAY + "개까지 쓸 수 있어요.");
+        if (photos != null) photos.loose(userId, request.photoIds(), com.volink.safety.PhotoService.PER_POST);
         jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id, external_id) VALUES (?, ?, ?, ?, ?, ?)", userId, category, title, body, activityId, externalId);
-        return detail(userId, jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
+        long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        // Week 7: up to 5 photos the person uploaded just before (re-encoded without location metadata).
+        if (photos != null && request.photoIds() != null) photos.attach(userId, id, request.photoIds());
+        return detail(userId, id);
     }
 
     public record EditRequest(String title, String body) {}
@@ -222,6 +242,7 @@ public class CommunityService {
         long author = authorOf("community_posts", id);
         if (author != userId && !auth.findById(userId).admin()) throw notFound();
         jdbc.update("UPDATE community_posts SET deleted_at = ? WHERE id = ?", now(), id);
+        if (photos != null) photos.deleteOfPost(id); // the photos go with the post
     }
 
     @Transactional
@@ -299,6 +320,7 @@ public class CommunityService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 글을 쓸 수 없습니다.");
         if (!user.canWrite()) throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_RESTRICTED", "이용이 제한된 계정은 글을 쓸 수 없습니다.");
+        if (penalties != null) penalties.check(userId, "WRITE");
         if (!Boolean.TRUE.equals(profile(userId).get("ready")))
             throw new ApiException(HttpStatus.FORBIDDEN, "COMMUNITY_SETUP_REQUIRED", "커뮤니티 닉네임을 정하고 이용 규칙에 동의해 주세요.");
     }

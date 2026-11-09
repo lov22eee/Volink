@@ -90,6 +90,30 @@ async function parse(response: Response) {
 }
 
 /** Calls the server; an expired access token is renewed once through the refresh cookie. */
+/** Week 7: a server path as a full address (the app calls the server by its own origin; images need the full URL). */
+export const serverUrl = (path: string) => server + path
+
+/** Week 7: a file the admin opens with their token (report photos have no public address). */
+export async function apiBlob(path: string): Promise<Blob> {
+  const go = () => fetch(server + path, { headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {}, credentials: server ? 'omit' : 'same-origin' })
+  let response = await go()
+  if (response.status === 401 && accessToken && await refresh()) response = await go()
+  if (!response.ok) throw new Error('불러오지 못했어요')
+  return response.blob()
+}
+
+/** Week 7: one photo upload (multipart); the server re-encodes it and returns its id and address. */
+export async function uploadPhoto(file: Blob): Promise<{ id: number; url: string; width: number; height: number }> {
+  const go = () => {
+    const form = new FormData()
+    form.append('file', file, 'photo.jpg')
+    return fetch(server + '/api/photos', { method: 'POST', body: form, headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {}, credentials: server ? 'omit' : 'same-origin' })
+  }
+  let response = await go()
+  if (response.status === 401 && accessToken && await refresh()) response = await go()
+  return parse(response)
+}
+
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response = await send(path, method, body, true)
   if (response.status === 401 && accessToken && !path.startsWith('/api/auth/')) {

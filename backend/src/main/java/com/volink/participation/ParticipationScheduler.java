@@ -19,8 +19,10 @@ public class ParticipationScheduler {
     private final ParticipationService participations;
     private final CheckInService checkIns;
     private final ExternalRecordService external;
+    private final com.volink.safety.AppealService appeals;
 
-    public ParticipationScheduler(ParticipationService participations, CheckInService checkIns, ExternalRecordService external) {
+    public ParticipationScheduler(ParticipationService participations, CheckInService checkIns, ExternalRecordService external, com.volink.safety.AppealService appeals) {
+        this.appeals = appeals;
         this.participations = participations;
         this.checkIns = checkIns;
         this.external = external;
@@ -31,5 +33,6 @@ public class ParticipationScheduler {
         participations.expireDue();
         checkIns.advance();
         external.remind();
+        appeals.escalateDue();
     }
 }

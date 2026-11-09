@@ -44,6 +44,11 @@ public class CheckInService {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private com.volink.safety.PenaltyService penalties;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
     public CheckInService(JdbcTemplate jdbc, QrService qr, NotificationService notifications, Clock clock) {
         this.jdbc = jdbc;
         this.qr = qr;
@@ -378,6 +383,7 @@ public class CheckInService {
                 if (activity.openedAt() == null) { unchecked++; log(id, pid, activity.organizerId(), "CONFIRMED", "UNCHECKED", "출석을 열지 않고 종료(불참 처리 안 함)"); continue; }
                 jdbc.update("UPDATE participations SET status = 'NO_SHOW', updated_at = ? WHERE id = ?", now, pid);
                 log(id, pid, activity.organizerId(), "CONFIRMED", "NO_SHOW", "체크인 없이 종료");
+                if (penalties != null) penalties.afterNoShow(jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, pid), id, activity.title());
             }
             notifications.send(activity.organizerId(), "FINISHED", "활동이 끝났습니다", activity.title() + (unchecked > 0
                     ? " · 출석을 열지 않아 " + unchecked + "명은 출석 미확인으로 남았어요. 체크인한 참가자의 완료를 확인해 주세요."

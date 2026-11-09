@@ -14,6 +14,7 @@ import { FindScreen } from './find'
 import { SearchScreen } from './search'
 import { RecordScreen } from './record'
 import { LabScreen, logout1365 } from './lab'
+import { StatusScreen } from './status'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
@@ -110,7 +111,7 @@ export default function MobileApp() {
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen key={route.query.get('all') ?? 'tabs'} actions={bell} initial={route.query.get('tab') ?? undefined} all={route.query.get('all') ?? undefined} />; break
-    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : <MyScreen user={user} actions={bell} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : route.query.get('view') === 'status' ? <StatusScreen /> : <MyScreen user={user} actions={bell} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break

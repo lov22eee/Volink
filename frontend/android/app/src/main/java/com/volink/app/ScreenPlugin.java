@@ -18,4 +18,18 @@ public class ScreenPlugin extends Plugin {
             call.resolve();
         });
     }
+
+    /**
+     * 사진 크게 보기 (week 7): no screenshots, screen recording or mirroring of this screen while a community photo is
+     * open. The 녹화용 APK (ALLOW_CAPTURE) leaves it off for the demo video.
+     */
+    @PluginMethod
+    public void secure(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false)) && !BuildConfig.ALLOW_CAPTURE;
+        getActivity().runOnUiThread(() -> {
+            if (on) getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            else getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            call.resolve();
+        });
+    }
 }
