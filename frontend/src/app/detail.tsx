@@ -57,6 +57,52 @@ function WaitLine({ order, closes }: { order: number; closes: string }) {
     <span>자리가 나면 순서대로 알림으로 제안해요 · {closes.slice(5, 10).replace('-', '/')} {closes.slice(11, 16)} 대기 마감</span></div>
 }
 
+const extraReasons: Record<string, string> = { CLEANUP: '정리가 길어졌어요', LATE_START: '시작이 늦었어요', MORE_WORK: '할 일이 많았어요', OTHER: '기타' }
+
+/**
+ * 시간 추가 (week 7): how much longer it took (+30분 / +1시간 / 직접, at most 2 hours) and why, then whose record grows —
+ * the organizer and everyone who checked in by default; someone who left early is unticked. Volink records only.
+ */
+function ExtraTimeSheet({ activity, people, endAt, onClose, onDone }: { activity: LiveActivity; people: { id: number; name: string; status: string; checkInMethod?: string | null; checkedInAt?: string | null }[]; endAt: number; onClose: () => void; onDone: () => void }) {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [minutes, setMinutes] = useState(30)
+  const [reason, setReason] = useState('CLEANUP')
+  const [me, setMe] = useState(true)
+  const [picked, setPicked] = useState<number[]>(people.map(p => p.id))
+  const [busy, setBusy] = useState(false)
+  const end = (m: number) => new Date(endAt + m * 60_000 + 9 * 3_600_000).toISOString().slice(11, 16)
+  async function save() {
+    setBusy(true)
+    try {
+      await api('/api/activities/' + activity.id + '/extra-time', 'PUT', { minutes, reason, participationIds: picked, includeMe: me })
+      showToast(`${minutes}분을 더했어요`, picked.length ? `${picked.length}명에게 알렸어요` : '')
+      onDone()
+    } catch (cause) { showToast(message(cause)) } finally { setBusy(false) }
+  }
+  if (step === 1) return <Sheet title="실제로 언제 끝났나요?" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => setStep(2)}>다음</button>}>
+    <div className="m-chips wrap">{[30, 60, 90, 120].map(m => <button key={m} type="button" className={'m-chip' + (minutes === m ? ' on' : '')} onClick={() => setMinutes(m)}>+{m < 60 ? m + '분' : m / 60 + '시간'}{m % 60 && m > 60 ? ' 30분' : ''}</button>)}</div>
+    <div className="cap-step">
+      <button type="button" aria-label="10분 줄이기" disabled={minutes <= 10} onClick={() => setMinutes(v => Math.max(10, v - 10))}>−</button>
+      <b>{end(minutes)}</b>
+      <button type="button" className="on" aria-label="10분 늘리기" disabled={minutes >= 120} onClick={() => setMinutes(v => Math.min(120, v + 10))}>+</button>
+    </div>
+    <p className="m-help center">{end(0)} → {end(minutes)} · <b>{minutes}분 추가</b></p>
+    <span className="m-label">이유</span>
+    <div className="m-chips wrap">{Object.entries(extraReasons).map(([k, label]) => <button key={k} type="button" className={'m-chip' + (reason === k ? ' on' : '')} onClick={() => setReason(k)}>{label}</button>)}</div>
+  </Sheet>
+  const toggle = (id: number) => setPicked(list => list.includes(id) ? list.filter(x => x !== id) : [...list, id])
+  return <Sheet title="누구의 기록을 늘릴까요?" onClose={onClose} footer={<button type="button" className="m-btn" disabled={busy || (!me && !picked.length)} onClick={save}>{busy ? '저장하는 중…' : `${picked.length + (me ? 1 : 0)}명 ${minutes}분 추가하기`}</button>}>
+    <p className="m-help">{minutes}분 추가 · {end(0)} → {end(minutes)} · 먼저 간 사람은 체크를 빼 주세요</p>
+    <div className="x-list">
+      <label className="m-check"><input type="checkbox" checked={me} onChange={() => setMe(!me)} /><span className="m-box" /><span className="lab-row"><b>나 (모집자)</b><small>+{minutes}분</small></span></label>
+      {people.map(p => <label key={p.id} className="m-check"><input type="checkbox" checked={picked.includes(p.id)} onChange={() => toggle(p.id)} /><span className="m-box" />
+        <span className="lab-row"><b>{p.name}</b><small>{picked.includes(p.id) ? `+${minutes}분` : '먼저 감'}</small></span></label>)}
+    </div>
+    <p className="m-help">Volink 기록이에요 · 1365 공식 실적과는 별개예요. 끝나고 24시간 안에 한 번만 할 수 있어요.</p>
+    <button type="button" className="m-text-btn" onClick={() => setStep(1)}>시간 다시 고르기</button>
+  </Sheet>
+}
+
 function Facts({ activity }: { activity: LiveActivity }) {
   const end = new Date(new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime() + activity.durationMinutes * 60_000)
   return <dl className="m-facts">
@@ -367,7 +413,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const unanswered = thread?.unanswered ?? 0
   const [tab, setTab] = useState<ManageTab>(initial === 'attendance' || initial === 'news' || initial === 'ops' ? initial : 'people')
   const [filter, setFilter] = useState<PeopleFilter>('ALL')
-  const [sheet, setSheet] = useState<'menu' | 'cancel' | 'move' | 'delete' | 'capacity' | null>(null)
+  const [sheet, setSheet] = useState<'menu' | 'cancel' | 'move' | 'delete' | 'capacity' | 'extra' | null>(null)
+  const [extraSkipped, setExtraSkipped] = useState(() => { try { return localStorage.getItem('volink.extra.skip.' + id) === '1' } catch { return false } })
   // 인원 바꾸기 (week 7): the number chosen in the sheet.
   const [capValue, setCapValue] = useState(0)
   const [manual, setManual] = useState<Applicant | null>(null)
@@ -395,6 +442,10 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
   const items = people?.items ?? []
   const count = (s: string) => items.filter(p => p.status === s).length
   const checked = count('CHECKED_IN')
+  // 시간 추가 (week 7): after the planned end, within 24 hours, once.
+  const endAt = start + activity.durationMinutes * 60_000
+  const extraOpen = !activity.extraAt && now >= endAt && now < endAt + 24 * 3_600_000 && ['IN_PROGRESS', 'FINISHED', 'RECRUITING'].includes(activity.status)
+  const endText = new Date(endAt + 9 * 3_600_000).toISOString().slice(11, 16)
   const open = ['RECRUITING', 'DRAFT'].includes(activity.status) && now < start
   const canMove = activity.status === 'RECRUITING' && (activity.rescheduleCount ?? 0) === 0 && start - now >= 24 * 3_600_000
   const statusText = activity.status === 'DRAFT' ? (activity.reviewNote ? '반려됨' : '관리자 검토 중') : activity.status === 'RECRUITING' ? (phase === 'open' || phase === 'late' ? '체크인 중' : phase === 'wait' ? '출석 시작 전' : '모집 중') : activity.status === 'IN_PROGRESS' ? '진행 중' : activity.status === 'FINISHED' ? '종료' : '취소됨'
@@ -490,7 +541,12 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
       {tab === 'news' && (activity.status === 'DRAFT' ? <p className="mg-none mg-panel">관리자 확인 뒤 공개되면 소식을 올릴 수 있어요.</p>
         : <div className="mg-panel"><NewsScreen id={id} user={user} embedded onChanged={() => api<Thread>('/api/activities/' + id + '/posts').then(setThread).catch(() => {})} /></div>)}
 
-      {tab === 'ops' && <section className="mg-panel" aria-label="운영"><nav className="mg-ops">
+      {tab === 'ops' && <section className="mg-panel" aria-label="운영">
+        {extraOpen && !extraSkipped && <div className="mg-extra"><b>예정대로 끝났나요?</b><small>예정 {endText} 종료 · 더 걸렸다면 끝나고 24시간 안에 한 번 늘릴 수 있어요</small>
+          <div className="m-two"><button type="button" className="m-btn sm" onClick={() => { try { localStorage.setItem('volink.extra.skip.' + id, '1') } catch { /* shown again */ } setExtraSkipped(true) }}>예정대로 끝났어요</button>
+            <button type="button" className="m-btn line sm" onClick={() => setSheet('extra')}>더 걸렸어요</button></div></div>}
+        {activity.extraAt && <div className="mg-extra done"><b>시간 추가 · +{activity.extraMinutes || '참가자만'}{activity.extraMinutes ? '분' : ''}</b><small>{extraReasons[activity.extraReason ?? ''] ?? ''} · 실제 끝난 시각으로 기록했어요</small></div>}
+        <nav className="mg-ops">
         {open && <a href={'#/edit/' + id}><MIcon name="edit" size={20} /><span>활동 정보 수정<small>{(activity.applicants ?? 0) > 0 ? '신청자가 있어 소개·만나는 곳만 바꿀 수 있어요' : '모든 정보를 바꿀 수 있어요'}</small></span><MIcon name="chevron" size={18} /></a>}
         {open && <button type="button" disabled={!canMove} onClick={() => setSheet('move')}><MIcon name="calendar" size={20} /><span>일정 변경<small>{(activity.rescheduleCount ?? 0) > 0 ? '이미 한 번 바꿨어요' : !canMove ? '시작 24시간 전까지만 바꿀 수 있어요' : '한 번만, 시작 24시간 전까지 · 신청자에게 알려요'}</small></span><MIcon name="chevron" size={18} /></button>}
         {activity.status === 'RECRUITING' && now < start && <a href={'#/write?category=PROMO&activity=' + id}><MIcon name="megaphone" size={20} /><span>커뮤니티에 홍보하기<small>이 모집글을 커뮤니티에 소개해요 · [바로 신청하기] 카드</small></span><MIcon name="chevron" size={18} /></a>}
@@ -510,6 +566,8 @@ export function ManageScreen({ id, user, onChange, initial }: { id: number; user
         {open && checked === 0 && (activity.applicants ?? 0) > 0 && <button type="button" className="danger" onClick={() => setSheet('cancel')}><MIcon name="alert" size={20} /><span>활동 취소</span><small>참가자 모두에게 알려요</small><MIcon name="chevron" size={18} /></button>}
       </nav>
     </Sheet>}
+    {sheet === 'extra' && <ExtraTimeSheet activity={activity} people={items.filter(p => p.status === 'CHECKED_IN' || p.status === 'COMPLETED')} endAt={endAt}
+      onClose={() => setSheet(null)} onDone={() => { setSheet(null); load(); onChange() }} />}
     {sheet === 'capacity' && (() => {
       const held = count('CONFIRMED') + count('OFFERED') + count('CHECKED_IN') + count('COMPLETED')
       const low = Math.max(1, held), more = capValue - activity.capacity, waitingNow = count('WAITLISTED')

@@ -84,7 +84,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const valid = (records ?? []).filter(x => x.status === 'VALID')
   // 2026-11-08 (user decision): a personal member who ran an activity volunteered too — finished ones count as Volink time.
   const led = user.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted ?? [])
-  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0) + led.reduce((sum, a) => sum + a.durationMinutes, 0)
+  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0) + led.reduce((sum, a) => sum + a.durationMinutes + (a.extraMinutes ?? 0), 0)
   // 1365 part: the imported official total; without one (직접 남기기), the hours on the certificates entered.
   const extRecords = useRecords()
   const certs = (extRecords ?? []).filter(r => r.certified)

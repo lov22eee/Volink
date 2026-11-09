@@ -1668,3 +1668,9 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .cap-kv div { display: flex; justify-content: space-between; padding: 10px 13px; font-size: 13.5px; }
 .cap-kv div + div { border-top: 1px solid var(--line); }
 .cap-kv dt { color: var(--ink-3); } .cap-kv dd { margin: 0; font-weight: 700; }
+.mg-extra { display: flex; flex-direction: column; gap: 4px; padding: 14px; margin-bottom: 12px; border-radius: 16px; background: #fff; border: 1px solid #bcd8c6; }
+.mg-extra b { font-size: 15px; } .mg-extra small { font-size: 12.5px; color: var(--ink-3); }
+.mg-extra .m-two { margin-top: 8px; }
+.mg-extra.done { border-color: var(--line); background: #f4faf6; }
+.x-list { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.x-list .m-check { padding: 10px 4px; border-bottom: 1px solid var(--line); }

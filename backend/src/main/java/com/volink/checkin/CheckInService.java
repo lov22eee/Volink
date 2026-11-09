@@ -233,10 +233,56 @@ public class CheckInService {
         notifications.send(user, "REVIEW_INVITE", "활동 후기를 남겨 보세요", activity.title() + " · 커뮤니티 봉사후기에 경험을 나눠 주세요.", "#/activity/" + activity.id(), activity.id(), "REVIEW:" + participationId);
     }
 
+    public static final Duration EXTRA_WINDOW = Duration.ofHours(24);
+    public static final int EXTRA_MAX = 120;
+    static final Map<String, String> EXTRA_REASONS = Map.of("CLEANUP", "정리가 길어졌어요", "LATE_START", "시작이 늦었어요", "MORE_WORK", "할 일이 많았어요", "OTHER", "기타");
+
+    public record ExtraRequest(Integer minutes, String reason, List<Long> participationIds, Boolean includeMe) {}
+
+    /**
+     * 모집자 시간 추가 (week 7): the activity took longer than planned. Once, within 24 hours after the planned end, 1~120
+     * minutes: added to the organizer's own hosted time (includeMe) and to the chosen participants who checked in (not to
+     * someone who left early). Each of them gets a notice. Volink records only — never an official 1365 record.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> extraTime(long organizerId, long activityId, ExtraRequest request) {
+        Activity activity = load(activityId, true);
+        if (activity.organizerId() != organizerId) throw notFound("활동을 찾을 수 없습니다.");
+        LocalDateTime now = now();
+        Map<String, String> errors = new java.util.LinkedHashMap<>();
+        Integer minutes = request == null ? null : request.minutes();
+        if (minutes == null || minutes < 1 || minutes > EXTRA_MAX) errors.put("minutes", "추가 시간은 1분~2시간이에요.");
+        String reason = request == null || request.reason() == null ? "" : request.reason().trim();
+        if (!EXTRA_REASONS.containsKey(reason)) errors.put("reason", "이유를 골라 주세요.");
+        List<Long> ids = request == null || request.participationIds() == null ? List.of() : request.participationIds().stream().distinct().toList();
+        if (ids.isEmpty() && !Boolean.TRUE.equals(request == null ? null : request.includeMe())) errors.put("participationIds", "시간을 늘릴 사람을 골라 주세요.");
+        if (!errors.isEmpty()) throw ApiException.validation(errors);
+        if (now.isBefore(activity.endsAt())) throw new ApiException(HttpStatus.CONFLICT, "NOT_ENDED", "활동이 끝난 뒤에 시간을 추가할 수 있어요.");
+        if (now.isAfter(activity.endsAt().plus(EXTRA_WINDOW))) throw new ApiException(HttpStatus.CONFLICT, "EXTRA_CLOSED", "끝나고 24시간 안에만 시간을 추가할 수 있어요.");
+        if (jdbc.queryForObject("SELECT extra_at IS NOT NULL FROM activities WHERE id = ?", Boolean.class, activityId))
+            throw new ApiException(HttpStatus.CONFLICT, "EXTRA_DONE", "시간 추가는 한 번만 할 수 있어요.");
+        for (long id : ids) {
+            Map<String, Object> row = jdbc.queryForList("SELECT activity_id, status FROM participations WHERE id = ? FOR UPDATE", id).stream().findFirst().orElse(null);
+            if (row == null || ((Number) row.get("activity_id")).longValue() != activityId || !List.of("CHECKED_IN", "COMPLETED").contains(row.get("status")))
+                throw ApiException.validation(Map.of("participationIds", "출석한 참가자만 고를 수 있어요."));
+        }
+        boolean me = Boolean.TRUE.equals(request.includeMe());
+        jdbc.update("UPDATE activities SET extra_minutes = ?, extra_reason = ?, extra_at = ? WHERE id = ?", me ? minutes : 0, reason, now, activityId);
+        for (long id : ids) {
+            jdbc.update("UPDATE participations SET extra_minutes = ?, updated_at = ? WHERE id = ?", minutes, now, id);
+            log(activityId, id, organizerId, "EXTRA", "EXTRA", "시간 추가 " + minutes + "분 · " + EXTRA_REASONS.get(reason));
+            long user = jdbc.queryForObject("SELECT user_id FROM participations WHERE id = ?", Long.class, id);
+            notifications.send(user, "RECORD_CONFIRMED", "기록 시간이 " + minutes + "분 늘었어요", activity.title() + " · 모집자가 실제 끝난 시각을 입력했어요 (" + EXTRA_REASONS.get(reason) + ")",
+                    "#/activity/" + activityId, activityId, "EXTRA:" + id);
+        }
+        return Map.of("minutes", minutes, "people", ids.size(), "me", me);
+    }
+
     public List<Map<String, Object>> records(long userId) {
         return jdbc.queryForList("""
                 SELECT r.id, a.id AS activityId, a.title, pl.name AS placeName, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date,
-                       DATE_FORMAT(a.starts_at, '%H:%i') AS startTime, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes,
+                       DATE_FORMAT(a.starts_at, '%H:%i') AS startTime, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) + p.extra_minutes AS durationMinutes,
+                       p.extra_minutes AS extraMinutes, a.extra_reason AS extraReason,
                        c.method AS checkInMethod, DATE_FORMAT(r.confirmed_at, '%Y-%m-%dT%H:%i') AS confirmedAt,
                        DATE_FORMAT(DATE_ADD(r.confirmed_at, INTERVAL 7 DAY), '%Y-%m-%dT%H:%i') AS appealDeadline, r.status
                 FROM activity_records r JOIN participations p ON p.id = r.participation_id JOIN activities a ON a.id = p.activity_id
