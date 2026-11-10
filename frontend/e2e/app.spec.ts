@@ -215,6 +215,8 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await login(page, organizer)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '찾기' }).click()
   await page.getByRole('link', { name: '모집하기' }).click()
+  // Week 7 (공개 이름 통일): without a community nickname, one is chosen first; it is shown instead of the name.
+  await page.getByRole('button', { name: '동의하고 이 닉네임으로 시작' }).click()
   await page.getByRole('link', { name: '새 활동 만들기' }).click()
   await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText(/활동 이름은 5~100자/)).toBeVisible()
@@ -341,8 +343,10 @@ test('community: a question, a like and a comment, and a review only after compl
   await page.getByRole('radio', { name: '인기순' }).click()
   await expect(page.getByRole('radio', { name: '인기순' })).toHaveAttribute('aria-checked', 'true')
   await page.getByRole('link', { name: '글쓰기' }).first().click()
+  // Week 7 (칩 안내): 봉사후기 without a finished activity opens a sheet saying why and what to do.
   await page.getByRole('button', { name: '봉사후기' }).click()
-  await expect(page.getByText('아직 후기를 쓸 수 있는 활동이 없어요')).toBeVisible()
+  await expect(page.getByText('끝낸 봉사가 있어야 후기를 쓸 수 있어요')).toBeVisible()
+  await page.getByRole('button', { name: '자유 글로 쓸게요' }).click()
   await page.getByRole('button', { name: '질문' }).click()
   await page.locator('input[name=title]').fill('주말에 같이 하실 분 구해요')
   await expect(page.getByText('같이 할 사람을 찾고 있나요?')).toBeVisible()
@@ -366,11 +370,20 @@ test('community: a question, a like and a comment, and a review only after compl
   await reader.getByLabel('댓글 내용').fill('장갑이랑 물 챙기세요!')
   await reader.getByRole('button', { name: '댓글 보내기' }).click()
   await expect(reader.getByText('장갑이랑 물 챙기세요!')).toBeVisible()
-  // Someone else's post: the menu offers 신고 (week 7: the button only), not edit or delete.
+  // Someone else's post: the menu offers 신고, not edit or delete. Week 7: a reason, then 신고를 받았어요; a second report is refused.
   await reader.getByRole('button', { name: '글 메뉴', exact: true }).click()
   await expect(reader.getByRole('button', { name: '글 수정' })).toHaveCount(0)
   await reader.getByRole('button', { name: '신고하기' }).click()
-  await expect(reader.getByText('신고 기능은 곧 열려요')).toBeVisible()
+  await expect(reader.getByRole('button', { name: '신고 보내기' })).toBeDisabled()
+  await reader.getByRole('button', { name: '광고·도배' }).click()
+  await reader.getByRole('button', { name: '신고 보내기' }).click()
+  await expect(reader.getByText('신고를 받았어요')).toBeVisible()
+  await reader.getByRole('button', { name: '확인' }).click()
+  await reader.getByRole('button', { name: '글 메뉴', exact: true }).click()
+  await reader.getByRole('button', { name: '신고하기' }).click()
+  await reader.getByRole('button', { name: '광고·도배' }).click()
+  await reader.getByRole('button', { name: '신고 보내기' }).click()
+  await expect(reader.getByText(/이미 신고했어요/)).toBeVisible()
   await reader.close()
 
   // The writer fixes the title; the post says 수정됨.
@@ -679,7 +692,7 @@ test('1365: a marked activity → went → review; the lab reads a pasted 1365 l
   // Review about it: the 1365 record is picked, the post says 본인 기록 (never 참여 확인).
   await page.request.put('/api/community/me', { headers: { Authorization: auth }, data: { nickname: '배식' + Math.floor(Math.random() * 9000 + 1000), agree: true } })
   await page.getByRole('link', { name: /사진과 함께 후기 쓰기/ }).click()
-  await expect(page.getByRole('button', { name: /1365 노인복지관 배식 지원/ })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: /노인복지관 배식 지원/ })).toHaveAttribute('aria-pressed', 'true')
   await page.locator('input[name=title]').fill('배식 봉사 다녀왔어요')
   await page.locator('textarea[name=body]').fill('어르신들이 반겨 주셔서 좋았어요.')
   await page.getByRole('button', { name: '게시글 등록하기' }).click()
