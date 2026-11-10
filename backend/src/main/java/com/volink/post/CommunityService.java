@@ -60,7 +60,7 @@ public class CommunityService {
             (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status = 'APPLIED') AS activityPending,
             a.organizer_id AS activityOrganizerId,
             (SELECT COUNT(*) FROM community_posts rv WHERE rv.category = 'REVIEW' AND rv.activity_id = a.id AND rv.deleted_at IS NULL) AS activityReviews,
-            (SELECT CONCAT(x.status, ':', COALESCE(x.wait_order, '')) FROM participations x WHERE x.activity_id = a.id AND x.user_id = ?
+            (SELECT CONCAT(x.status, ':', COALESCE(WAIT_PLACE_X, '')) FROM participations x WHERE x.activity_id = a.id AND x.user_id = ?
                 AND x.status IN ('APPLIED', 'WAITLISTED', 'OFFERED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED') ORDER BY x.id DESC LIMIT 1) AS myParticipation,
             p.external_id AS externalId, (SELECT e.title FROM external_records e WHERE e.id = p.external_id) AS externalTitle,
             (SELECT DATE_FORMAT(e.starts_at, '%Y-%m-%d') FROM external_records e WHERE e.id = p.external_id) AS externalDate,
@@ -72,7 +72,7 @@ public class CommunityService {
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
             EXISTS (SELECT 1 FROM community_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
             FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id AND a.status <> 'DELETED'
-            """;
+            """.replace("WAIT_PLACE_X", com.volink.participation.ParticipationService.waitPlace("x"));
 
     public List<Map<String, Object>> list(long viewerId, String category, String sort) { return list(viewerId, category, sort, null); }
 

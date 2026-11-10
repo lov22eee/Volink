@@ -59,13 +59,18 @@ class Week7IntegrationTest extends ApiTestSupport {
         long first = apply(activity, token(member("GENERAL")));
         perform(post("/api/participations/" + first + "/approve"), Map.of(), organizer).andExpect(status().isNoContent());
         long second = apply(activity, token(member("GENERAL")));
-        long third = apply(activity, token(member("GENERAL")));
+        String thirdToken = token(member("GENERAL"));
+        long third = apply(activity, thirdToken);
         assertThat(stateOf(second)).isEqualTo("WAITLISTED");
         perform(put("/api/activities/" + activity + "/capacity"), Map.of("capacity", 2), token(member("GENERAL"))).andExpect(status().isNotFound());
         perform(put("/api/activities/" + activity + "/capacity"), Map.of("capacity", 10), organizer).andExpect(status().isBadRequest());
         perform(put("/api/activities/" + activity + "/capacity"), Map.of("capacity", 2), organizer).andExpect(status().isOk()).andExpect(jsonPath("$.offered").value(1));
         assertThat(stateOf(second)).isEqualTo("OFFERED");
         assertThat(stateOf(third)).isEqualTo("WAITLISTED");
+        // The one ahead got the seat offer, so the place shown moves up from 2 to 1 (2026-11-10).
+        perform(get("/api/activities/" + activity + "/my-participation"), null, thirdToken).andExpect(status().isOk())
+                .andExpect(jsonPath("$.participation.waitOrder").value(1));
+        perform(get("/api/me/participations"), null, thirdToken).andExpect(jsonPath("$[0].waitOrder").value(1));
         // Two seats are held now (one confirmed, one offered): 1 is refused.
         perform(put("/api/activities/" + activity + "/capacity"), Map.of("capacity", 1), organizer).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("BELOW_TAKEN"));
     }

@@ -182,15 +182,25 @@ public class ParticipationService {
         return viewer(activity.id(), userId);
     }
 
+    /**
+     * The place in line shown to people (2026-11-10): 1 + the waiting people ahead, so the number moves up when someone
+     * ahead is offered a seat, confirmed or leaves. The stored wait_order only keeps the order.
+     */
+    public static String waitPlace(String a) {
+        return "CASE WHEN " + a + ".status = 'WAITLISTED' THEN (SELECT COUNT(*) FROM participations w WHERE w.activity_id = " + a + ".activity_id"
+                + " AND w.status = 'WAITLISTED' AND (w.wait_order < " + a + ".wait_order OR w.wait_order = " + a + ".wait_order AND w.id <= " + a + ".id))"
+                + " ELSE " + a + ".wait_order END";
+    }
+
     public List<Map<String, Object>> mine(long userId, String status) {
         return jdbc.queryForList("""
                 SELECT p.id, p.activity_id AS activityId, a.title, pl.name AS placeName,
                        DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
-                       p.status, p.wait_order AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
+                       p.status, WAIT_PLACE_P AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
                        TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.status AS activityStatus, a.cancel_reason AS cancelReason,
                        a.organizer_id AS organizerId, p.late_minutes AS lateMinutes, a.checkin_opened_at IS NOT NULL AS checkinOpen
                 FROM participations p JOIN activities a ON a.id = p.activity_id LEFT JOIN demo_places pl ON pl.id = a.place_id
-                WHERE p.user_id = ?""" + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
+                WHERE p.user_id = ?""".replace("WAIT_PLACE_P", waitPlace("p")) + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
                 status == null || status.isBlank() ? new Object[]{userId} : new Object[]{userId, status.trim()});
     }
 
@@ -198,8 +208,9 @@ public class ParticipationService {
     public Map<String, Object> viewer(long activityId, Long userId) {
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
         Map<String, Object> mine = userId == null ? null : jdbc.queryForList("""
-                SELECT id, status, wait_order AS waitOrder, DATE_FORMAT(offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, cancel_count AS cancelCount, late_minutes AS lateMinutes
-                FROM participations WHERE activity_id = ? AND user_id = ?""", activityId, userId).stream().findFirst().orElse(null);
+                SELECT p.id, p.status, WAIT_PLACE_P AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
+                       p.cancel_count AS cancelCount, p.late_minutes AS lateMinutes
+                FROM participations p WHERE p.activity_id = ? AND p.user_id = ?""".replace("WAIT_PLACE_P", waitPlace("p")), activityId, userId).stream().findFirst().orElse(null);
         result.put("participation", mine);
         return result;
     }
@@ -220,14 +231,14 @@ public class ParticipationService {
                 .stream().findFirst().orElseThrow(ParticipationService::activityNotFound);
         if (((Number) activity.get("organizer_id")).longValue() != organizerId) throw activityNotFound();
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
-                SELECT p.id, u.display_name AS name, p.status, p.wait_order AS waitOrder,
+                SELECT p.id, u.display_name AS name, p.status, WAIT_PLACE_P AS waitOrder,
                        DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt,
                        c.method AS checkInMethod, c.reason AS checkInReason, DATE_FORMAT(c.checked_at, '%H:%i') AS checkedInAt,
                        p.late_minutes AS lateMinutes
                 FROM participations p JOIN users u ON u.id = p.user_id LEFT JOIN check_ins c ON c.participation_id = p.id WHERE p.activity_id = ?
                 ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED') = 0,
                          FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
-                """), activityId);
+                """.replace("WAIT_PLACE_P", waitPlace("p"))), activityId);
         rows.forEach(row -> row.put("name", mask((String) row.get("name"))));
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
         result.put("capacity", activity.get("capacity"));
