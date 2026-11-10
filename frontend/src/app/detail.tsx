@@ -83,7 +83,7 @@ function ExtraTimeSheet({ activity, people, endAt, onClose, onDone }: { activity
     } catch (cause) { showToast(message(cause)) } finally { setBusy(false) }
   }
   if (step === 1) return <Sheet title="실제로 언제 끝났나요?" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => setStep(2)}>다음</button>}>
-    <div className="m-chips wrap">{[30, 60, 90, 120].map(m => <button key={m} type="button" className={'m-chip' + (minutes === m ? ' on' : '')} onClick={() => setMinutes(m)}>+{m < 60 ? m + '분' : m / 60 + '시간'}{m % 60 && m > 60 ? ' 30분' : ''}</button>)}</div>
+    <div className="m-chips wrap">{[30, 60, 90, 120].map(m => <button key={m} type="button" className={'m-chip' + (minutes === m ? ' on' : '')} onClick={() => setMinutes(m)}>+{m < 60 ? m + '분' : Math.floor(m / 60) + '시간'}{m > 60 && m % 60 ? ` ${m % 60}분` : ''}</button>)}</div>
     <div className="cap-step">
       <button type="button" aria-label="10분 줄이기" disabled={minutes <= 10} onClick={() => setMinutes(v => Math.max(10, v - 10))}>−</button>
       <b>{end(minutes)}</b>
