@@ -115,6 +115,31 @@ function Facts({ activity }: { activity: LiveActivity }) {
   </dl>
 }
 
+/**
+ * 홈 추천 요약 시트 (2026-11-11, 가안): a recruiting post opened over 홈 — labels, title, when and where, seats, who runs it and
+ * the first lines of the text. [자세히 보기] = the detail screen; [신청하기] = the detail screen's own 신청할까요? sheet.
+ */
+export function ActivitySheet({ activity: first, onClose }: { activity: LiveActivity; onClose: () => void }) {
+  const [activity, setActivity] = useState(first)
+  useEffect(() => { api<LiveActivity>('/api/activities/' + first.id).then(setActivity).catch(() => {}) }, [first.id])
+  const left = seatsLeft(activity), full = left === 0
+  const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
+  const open = activity.status === 'RECRUITING' && Date.now() < start && !(full && start - Date.now() < 2 * 3_600_000)
+  return <Sheet title="" onClose={onClose} className="as-sheet" footer={<div className="m-two">
+    <a className="m-btn line" href={'#/activity/' + activity.id}>자세히 보기</a>
+    {open ? <a className={'m-btn' + (full ? ' amber' : '')} href={'#/activity/' + activity.id + '?apply=1'}>{full ? '대기 신청하기' : '신청하기'}</a>
+      : <button type="button" className="m-btn" disabled>신청 마감</button>}</div>}>
+    <Labels activity={activity} />
+    <h3 className="m-h3">{activity.title}</h3>
+    <p className="as-fact"><MIcon name="calendar" size={17} />{dayWord(activity.date)} {activity.startTime} · {durationLabel(activity.durationMinutes)}</p>
+    <p className="as-fact"><MIcon name="pin" size={17} />{[activity.placeName, activity.meetingPoint].filter(Boolean).join(' · ')}</p>
+    <div className="as-seats"><span><b>확정 {activity.confirmed} / {activity.capacity}명</b><em className={full ? 'hot' : ''}>{full ? `정원 마감 · 대기 ${activity.waiting ?? 0}명` : left + '자리 남음'}</em></span>
+      <i><em style={{ width: Math.min(100, activity.confirmed / Math.max(1, activity.capacity) * 100) + '%' }} /></i></div>
+    <OrganizerLine activity={activity} />
+    {activity.description && <p className="as-desc">{activity.description}</p>}
+  </Sheet>
+}
+
 function Labels({ activity }: { activity: LiveActivity }) {
   return <div className="m-labels">
     <span className="m-badge gray"><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={14} />{activity.category}</span>
@@ -196,6 +221,16 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     window.addEventListener('hashchange', scan)
     return () => window.removeEventListener('hashchange', scan)
   }, [id, user.id])
+  // From the 홈 summary sheet (2026-11-11, #/activity/12?apply=1): straight to the same 신청할까요? sheet when it can be applied for.
+  useEffect(() => {
+    if (!activity || !viewer || !/[?&]apply=1/.test(window.location.hash)) return
+    try { window.history.replaceState(null, '', '#/activity/' + id) } catch { /* keeps the address */ }
+    const mine = viewer.participation
+    const fresh = !mine || ((mine.status === 'CANCELLED' || mine.status === 'EXPIRED') && (mine.cancelCount ?? 0) < 2)
+    const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
+    const waitClosed = seatsLeft(activity) === 0 && start - Date.now() < 2 * 3_600_000
+    if (fresh && activity.status === 'RECRUITING' && Date.now() < start && !waitClosed) setSheet('safety')
+  }, [activity, viewer, id])
   useEffect(() => { api<LiveActivity[]>('/api/me/saved').then(list => setSaved(list.some(a => a.id === id))).catch(() => {}) }, [id])
 
   if (failed) return <div className="m-screen"><TopBar title="활동" back="history" /><div className="m-body"><div className="m-note bad">{failed}</div><a className="m-btn line" href="#/find">다른 활동 찾기</a></div></div>

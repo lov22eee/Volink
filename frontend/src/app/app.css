@@ -1718,3 +1718,14 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .ha-head { display: flex; justify-content: space-between; align-items: center; }
 .ha-card p { margin: 0; font-size: 13px; color: var(--ink-2); }
 .ha-card small { font-size: 12px; color: var(--ink-3); }
+
+/* 홈 추천 요약 시트 (2026-11-11) */
+.as-sheet .m-labels { margin-bottom: 2px; }
+.as-fact { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 15px; color: var(--ink-2); }
+.as-seats { margin: 14px 0 12px; }
+.as-seats span { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; margin-bottom: 7px; }
+.as-seats em { font-style: normal; font-weight: 700; color: var(--m-green-ink); }
+.as-seats em.hot { color: var(--m-hot); }
+.as-seats i { display: block; height: 8px; border-radius: 99px; background: #eef0ec; overflow: hidden; }
+.as-seats i em { display: block; height: 100%; background: var(--m-green); border-radius: 99px; }
+.as-desc { margin: 12px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

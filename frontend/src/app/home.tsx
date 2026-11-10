@@ -1,7 +1,7 @@
 // 홈 (2026-11-06, B안): date and greeting, the latest review over its field photo, my next activity in one line (+ things
 // to do now), urgent, this weekend, suits me, categories, 봉사 앨범 (reviews), my record. Space and lines, few boxes.
 import { hostedRecords } from './mine'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity, MyParticipation, MyRecord, User } from '../api'
@@ -14,6 +14,8 @@ import type { PostSummary } from './community'
 import { phaseOf, useNow } from '../checkin'
 import { fieldIcon, isNewcomer, seatsLeft, startsAt } from './cards'
 import { dayWord, Loading, MIcon, TopBar } from './ui'
+import { ActivitySheet } from './detail'
+import { ProgramSheet } from './find'
 import type { MIconName } from './ui'
 
 type Todo = { key: string; icon: MIconName; text: string; href: string; tone?: 'hot' | 'ok' }
@@ -27,6 +29,10 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [allReviews, setAllReviews] = useState<PostSummary[]>([])
   const [programs, setPrograms] = useState<Program[] | null>(null)
+  // 2026-11-11: a recommended post opens over 홈 (Volink → summary sheet, 1365 → the 1365 sheet), not the 찾기 list.
+  const [peek, setPeek] = useState<{ activity?: LiveActivity; program?: Program } | null>(null)
+  const closePeek = useCallback(() => setPeek(null), [])
+  const peekActivity = (a: LiveActivity) => (event: { preventDefault: () => void }) => { event.preventDefault(); setPeek({ activity: a }) }
   // 1365 programs in my 관심 분야 near me (only when the person already allowed location; never asks here).
   useEffect(() => {
     if (!user.interests.length || !remembered()) return
@@ -124,12 +130,12 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       </Sec>
 
       {urgent.length > 0 && <Sec title="지금 도움이 필요해요" note="48시간 안" more={['전체 보기', '#/find']}>
-        <ul className="hb-list">{urgent.map(a => <li key={a.id}><a href={'#/activity/' + a.id}>
+        <ul className="hb-list">{urgent.map(a => <li key={a.id}><a href={'#/activity/' + a.id} onClick={peekActivity(a)}>
           <span><small>{a.category}</small><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · {a.placeName}</small></span><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></a></li>)}</ul>
       </Sec>}
 
       {weekendPicks.length > 0 && <Sec title="이번 주말, 함께해요" more={['더 보기', '#/find?chip=weekend']}>
-        <div className="hb-weekend">{weekendPicks.map(a => <a key={a.id} href={'#/activity/' + a.id}>
+        <div className="hb-weekend">{weekendPicks.map(a => <a key={a.id} href={'#/activity/' + a.id} onClick={peekActivity(a)}>
           <span className="hb-pic"><CategoryPhoto category={a.category} seed={a.id} /></span>
           <b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · {a.category}</small><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></a>)}</div>
       </Sec>}
@@ -137,8 +143,8 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       <Sec title="나에게 맞는 봉사" more={mine3.length ? ['관심 분야', '#/my?view=interests'] : undefined}>
         {!mine3.length ? <a className="hb-line" href="#/my?view=interests"><span>관심 분야를 설정하면 맞는 동네 모집과 1365 봉사를 골라 드려요</span><b>설정하러 가기<MIcon name="chevron" size={15} /></b></a>
           : picks.length || (programs?.length ?? 0) ? <ul className="hb-list">
-            {picks.map(a => <li key={a.id}><a href={'#/activity/' + a.id}><span><small>{a.category}</small><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · {a.placeName}</small></span><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></a></li>)}
-            {(programs ?? []).slice(0, 3).map(p => <li key={p.programNo}><a href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')}>
+            {picks.map(a => <li key={a.id}><a href={'#/activity/' + a.id} onClick={peekActivity(a)}><span><small>{a.category}</small><b>{a.title}</b><small>{dayWord(a.date)} {a.startTime} · {a.placeName}</small></span><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></a></li>)}
+            {(programs ?? []).slice(0, 3).map(p => <li key={p.programNo}><a href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')} onClick={event => { event.preventDefault(); setPeek({ program: p }) }}>
               <span><small>{p.category ?? '1365'} · <i className="hb-1365">1365</i></small><b>{p.title}</b><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.organization].filter(Boolean).join(' · ')}</small></span><MIcon name="chevron" size={16} /></a></li>)}</ul>
           : <a className="hb-line" href="#/my?view=interests"><span>관심 분야({mine3.join(', ')}) 활동이 아직 없어요</span><b>바꾸기<MIcon name="chevron" size={15} /></b></a>}
       </Sec>
@@ -161,6 +167,8 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
             <p className="hb-fine">Volink 활동 기록 기준 · 공식 1365 실적이 아니에요</p></>}
       </Sec>
     </div>
+    {peek?.activity && <ActivitySheet activity={peek.activity} onClose={closePeek} />}
+    {peek?.program && <ProgramSheet program={peek.program} onClose={closePeek} />}
   </div>
 }
 
