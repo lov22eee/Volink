@@ -1,5 +1,5 @@
 // 설정 (마이 → 톱니바퀴): app settings, the linked login account and 회원 탈퇴. 마이 keeps only what is about me.
-import { labOn, saveExtMode, setLabOn, useExtMode } from './lab'
+import { keep1365, labOn, logout1365, saveExtMode, setKeep1365, setLabOn, useExtMode } from './lab'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
@@ -40,6 +40,7 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
   const [big, setBig] = useState(() => document.documentElement.classList.contains('m-big'))
   const [leaving, setLeaving] = useState(false)
   const [lab, setLab] = useState(labOn)
+  const [keep, setKeep] = useState(keep1365)
   const extMode = useExtMode()
   async function switchMode() {
     const next = extMode === 'IMPORT' ? 'MANUAL' : 'IMPORT'
@@ -59,6 +60,8 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
         ...(user.memberType === 'INSTITUTION' ? [] : [{ icon: 'record' as MIconName, label: '1365 기록 방식', note: extMode === 'IMPORT' ? '가져오기' : extMode === 'MANUAL' ? '직접 남기기' : '고르지 않음', onClick: switchMode }]),
         { icon: 'flask', label: '1365 연결 (실험)', note: '내 1365 신청 내역 가져오기', toggle: lab, onClick: () => { setLabOn(!lab); setLab(!lab) } },
         ...(lab ? [{ icon: 'outward' as MIconName, label: '1365 신청 내역 가져오기', href: '#/lab1365' }] : []),
+        ...(lab ? [{ icon: 'lock' as MIconName, label: '1365 로그인 유지', note: '신청할 때 다시 로그인하지 않아요 · 이 휴대폰에만', toggle: keep, onClick: () => { setKeep1365(!keep); setKeep(!keep) } },
+          { icon: 'logout' as MIconName, label: '1365 로그아웃', note: '이 휴대폰의 1365 로그인 기록 지우기', onClick: () => { void logout1365().then(() => showToast('1365에서 로그아웃했어요')) } }] : []),
       ]} />
       <Group title="계정" rows={[
         { icon: 'user', label: '연결된 로그인 계정', href: '#/settings?view=account', note: loginLabel(user) },

@@ -1,7 +1,7 @@
 // 1365 activities in my records (V27, 2026-11-06). Volink cannot see 1365 itself, so:
 // - 본인 표시: after "1365에서 신청하기" the person says they applied (date and time), and it joins 내 활동;
 // - after the day: 다녀왔어요 / 못 갔어요 → 내 발자취 → a review in the community (photo invited);
-// - 실적확인서 values from earlier versions are still shown (reading a certificate is planned again for week 7);
+// - 실적확인서 (week 7): a waiting record → 실적확인서로 확인하기 reads the 1365 확인서 on the phone (proof.tsx), values only;
 // - 실험실 (lab, off by default): rows read from the person's own 1365 page in the app (see lab.tsx).
 // Shown to others as 본인 기록 / 실적확인서 있음 — never as checked by Volink, never as official.
 import { useEffect, useState } from 'react'
@@ -10,6 +10,7 @@ import { showToast } from '../App'
 import type { Program } from '../explore'
 import { addToCalendar } from './cards'
 import { DateField, TimeField } from './host'
+import { ProofSheet } from './proof'
 import { useConnect1365, useExtMode } from './lab'
 import type { ExtMode } from './lab'
 import { ActionBar, dayWord, dDay, Loading, MIcon, Sheet, TextInput, TopBar } from './ui'
@@ -144,7 +145,7 @@ export function RecordScreen({ id }: { id: number }) {
   const [record, setRecord] = useState<ExternalRecord | null>(null)
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [sheet, setSheet] = useState<null | 'delete'>(null)
+  const [sheet, setSheet] = useState<null | 'delete' | 'proof'>(null)
   const mode = useExtMode()
   const [connectSheet, connect] = useConnect1365()
   const load = () => api<ExternalRecord>('/api/me/external/' + id).then(setRecord).catch(() => setFailed(true))
@@ -163,7 +164,7 @@ export function RecordScreen({ id }: { id: number }) {
   const dday = dDay(record.date)
   const wait = waiting(record, mode)
   const action = wait
-    ? <><button className="m-btn line" disabled={busy} onClick={() => mark('MISSED')}>못 갔어요</button><button className="m-btn blue" onClick={connect}><MIcon name="refresh" size={19} />실적 새로고침</button></>
+    ? <button className="m-btn" onClick={() => setSheet('proof')}><MIcon name="record" size={19} />실적확인서로 확인하기</button>
     : record.status === 'PLANNED' && record.started
     ? <><button className="m-btn line" disabled={busy} onClick={() => mark('MISSED')}>못 갔어요</button><button className="m-btn" disabled={busy} onClick={() => mark('ATTENDED')}>다녀왔어요</button></>
     : record.status === 'ATTENDED' ? (record.reviewId ? <a className="m-btn line" href={'#/post/' + record.reviewId}>내 후기 보기</a>
@@ -194,6 +195,10 @@ export function RecordScreen({ id }: { id: number }) {
       {record.status === 'ATTENDED' && !record.reflected && !record.extKind && <div className="m-state mint"><strong>다녀왔다고 남겼어요</strong><span>{record.certified ? `실적확인서 · ${record.certDate} · 인정 ${Math.round((record.certMinutes ?? 0) / 6) / 10}시간` : '본인 기록이에요.'}</span></div>}
       {record.status === 'MISSED' && <div className="m-state gray"><strong>못 갔다고 남겼어요</strong><span>1365 신청은 1365에서 취소해 주세요.</span></div>}
       <nav className="mg-ops">
+        {/* 실적 확인 대기 (week 7): 1365 실적 새로고침 · 못 갔어요 moved here; the bottom button reads the 1365 확인서. */}
+        {wait && <button type="button" onClick={connect}><MIcon name="refresh" size={20} /><span>1365 실적 새로고침<small>1365에 실적이 올라왔는지 확인해요</small></span><MIcon name="chevron" size={18} /></button>}
+        {wait && <button type="button" disabled={busy} onClick={() => mark('MISSED')}><MIcon name="userX" size={20} /><span>못 갔어요<small>기록을 ‘못 감’으로 바꿔요</small></span><MIcon name="chevron" size={18} /></button>}
+        {record.status === 'ATTENDED' && !record.certified && !record.extKind && !record.reflected && <button type="button" onClick={() => setSheet('proof')}><MIcon name="record" size={20} /><span>실적확인서로 확인하기<small>PDF·사진을 휴대폰 안에서 읽어요</small></span><MIcon name="chevron" size={18} /></button>}
         {record.status === 'PLANNED' && !record.started && <button type="button" onClick={() => void recordToCalendar(record)}><MIcon name="calendar" size={20} /><span>내 캘린더에 추가<small>{record.timeKnown ? '갤럭시 기본 캘린더에 바로 넣어요' : '시간이 없어 9시로 넣어요 · 캘린더에서 고쳐 주세요'}</small></span><MIcon name="chevron" size={18} /></button>}
         <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>{record.extKind ? '1365에서 실적 보기' : '1365에서 신청 상태 보기'}<small>{record.extKind ? '실적확인서 발급도 1365에서 해요' : '신청·승인·취소는 1365에서 해요'}</small></span><MIcon name="chevron" size={18} /></a>
       </nav>
@@ -201,6 +206,7 @@ export function RecordScreen({ id }: { id: number }) {
     </div>
     {action && <ActionBar>{action}</ActionBar>}
     {connectSheet}
+    {sheet === 'proof' && <ProofSheet record={record} onClose={() => setSheet(null)} onSaved={saved => { setSheet(null); if (saved.id === record.id) setRecord(saved); else window.location.hash = '#/record/' + saved.id }} />}
     {sheet === 'delete' && <Sheet title="이 기록을 지울까요?" onClose={() => setSheet(null)} footer={<button type="button" className="m-btn danger" onClick={remove}>지우기</button>}>
       <p className="m-help">1365 신청은 그대로예요. 취소하려면 1365에서 해 주세요.</p></Sheet>}
   </div>

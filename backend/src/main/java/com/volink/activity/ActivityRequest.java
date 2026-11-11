@@ -7,7 +7,8 @@ import java.util.List;
 public record ActivityRequest(String activityType, String title, String category, Long placeId, String date, String time,
                               Integer capacity, Integer durationMinutes, String description, Boolean safetyConfirmed,
                               PlaceSearchService.Choice place, String meetingPoint, List<Supply> supplies,
-                              String difficulty, String placeKind, Boolean newcomerOk, Boolean autoApprove) {
+                              String difficulty, String placeKind, Boolean newcomerOk, Boolean autoApprove, String vmsLink,
+                              Boolean youthOk, String applyQuestion) {
     /** Something to bring; provided = the organizer brings it for everyone. */
     public record Supply(String name, Boolean provided) {}
 

@@ -11,12 +11,12 @@ import { Capacitor } from '@capacitor/core'
 import { showToast } from '../App'
 import { AskSheet, MarkSheet, recordToCalendar } from './record'
 import type { ExternalRecord } from './record'
-import { applyIn1365, findApplied, useExtMode } from './lab'
+import { applyIn1365, findApplied, read1365Applications, useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
-import { ActivityRow, fieldIcon, isNewcomer, seatsLeft } from './cards'
+import { ActivityRow, fieldIcon, isNewcomer, seatsLeft, waitOpen } from './cards'
 import { DateField } from './host'
 import { Empty, Loading, MIcon, RecruitFab, Sheet, TopBar, TextInput } from './ui'
 
@@ -24,10 +24,11 @@ type Area = { kind: 'all' } | { kind: 'near'; km: 2 | 5 | 10 } | { kind: 'region
 type When = { kind: 'all' | 'today' | 'tomorrow' | 'weekend' } | { kind: 'range'; from: string; to: string }
 type Status = 'OPEN' | 'WAITLIST' | 'ALL'
 type Source = 'ALL' | 'VOLINK' | '1365'
-export type Filters = { area: Area; when: When; categories: string[]; status: Status; source: Source; newcomer: boolean }
-export const defaults: Filters = { area: { kind: 'all' }, when: { kind: 'all' }, categories: [], status: 'OPEN', source: 'ALL', newcomer: false }
+export type Filters = { area: Area; when: When; categories: string[]; status: Status; source: Source; newcomer: boolean; waitOnly?: boolean }
+// Week 7 (2026-11-09): full activities whose waiting list is open are shown by default, in date order, with a 대기 가능 badge.
+export const defaults: Filters = { area: { kind: 'all' }, when: { kind: 'all' }, categories: [], status: 'WAITLIST', source: 'ALL', newcomer: false, waitOnly: false }
 
-const statusLabel: Record<Status, string> = { OPEN: '모집 중인 활동만', WAITLIST: '대기 신청 가능한 활동 포함', ALL: '마감된 활동도 보기' }
+const statusLabel: Record<Status, string> = { OPEN: '빈자리 있는 활동만', WAITLIST: '대기 신청 가능한 활동 포함', ALL: '마감된 활동도 보기' }
 const sourceLabel: Record<Source, string> = { ALL: '전체', VOLINK: 'Volink', '1365': '1365' }
 const whenLabel: Record<'today' | 'tomorrow' | 'weekend', string> = { today: '오늘', tomorrow: '내일', weekend: '이번 주말' }
 
@@ -50,7 +51,7 @@ function chipsOf(f: Filters): { key: string; label: string; clear: (f: Filters) 
   if (f.area.kind !== 'all') out.push({ key: 'area', label: f.area.kind === 'region' ? (f.area.sigungu || shortProvince(f.area.sido) + ' 전체') : areaText(f.area), clear: x => ({ ...x, area: { kind: 'all' } }) })
   if (f.when.kind !== 'all') out.push({ key: 'when', label: whenText(f.when), clear: x => ({ ...x, when: { kind: 'all' } }) })
   for (const c of f.categories) out.push({ key: 'c-' + c, label: c, clear: x => ({ ...x, categories: x.categories.filter(y => y !== c) }) })
-  if (f.status !== 'OPEN') out.push({ key: 'status', label: f.status === 'WAITLIST' ? '대기 가능 포함' : '마감 포함', clear: x => ({ ...x, status: 'OPEN' }) })
+  if (f.status !== 'WAITLIST') out.push({ key: 'status', label: f.status === 'OPEN' ? '빈자리만' : '마감 포함', clear: x => ({ ...x, status: 'WAITLIST' }) })
   if (f.source !== 'ALL') out.push({ key: 'source', label: f.source === 'VOLINK' ? 'Volink만' : '1365만', clear: x => ({ ...x, source: 'ALL' }) })
   if (f.newcomer) out.push({ key: 'newcomer', label: '처음 환영', clear: x => ({ ...x, newcomer: false }) })
   return out
@@ -191,8 +192,10 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     })
   }
 
-  // Full activities go to the end (the waitlist may still be open).
-  const shown = useMemo(() => (items ?? []).filter(a => !filters.newcomer || isNewcomer(a)).sort((a, b) => Number(seatsLeft(a) === 0) - Number(seatsLeft(b) === 0)), [items, filters.newcomer])
+  // Week 7: in date order (full ones with an open waiting list too); only closed ones go to the end. 대기 가능 = only those.
+  const closed = (a: LiveActivity) => seatsLeft(a) === 0 && !waitOpen(a)
+  const shown = useMemo(() => (items ?? []).filter(a => (!filters.newcomer || isNewcomer(a)) && (!filters.waitOnly || waitOpen(a)))
+    .sort((a, b) => Number(closed(a)) - Number(closed(b))), [items, filters.newcomer, filters.waitOnly]) // eslint-disable-line react-hooks/exhaustive-deps
   const programList = programs ?? []
   const mapPrograms = useMemo(() => programList.filter(p => p.latitude != null && p.longitude != null), [programList])
   const mapPlaces = useMemo(() => [
@@ -210,6 +213,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const quick: { key: string; label: string; on: boolean; toggle: () => void; icon?: 'pin' }[] = [
     { key: 'near', label: '내 주변', icon: 'pin', on: near, toggle: () => setFilters(f => ({ ...f, area: near ? { kind: 'all' } : { kind: 'near', km: 5 } })) },
     { key: 'weekend', label: '이번 주말', on: filters.when.kind === 'weekend', toggle: () => setFilters(f => ({ ...f, when: f.when.kind === 'weekend' ? { kind: 'all' } : { kind: 'weekend' } })) },
+    { key: 'waitOnly', label: '대기 가능', on: Boolean(filters.waitOnly), toggle: () => setFilters(f => ({ ...f, waitOnly: !f.waitOnly, status: 'WAITLIST' })) },
     { key: 'newcomer', label: '처음 환영', on: filters.newcomer, toggle: () => setFilters(f => ({ ...f, newcomer: !f.newcomer })) },
     { key: '1365', label: '1365', on: filters.source === '1365', toggle: () => setFilters(f => ({ ...f, source: f.source === '1365' ? 'ALL' : '1365' })) },
   ]
@@ -387,22 +391,42 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
   const semi = Capacitor.isNativePlatform() && extMode === 'IMPORT' && program.link.startsWith('https://www.1365.go.kr/')
   const [consent, setConsent] = useState(false)
   const [done, setDone] = useState<ExternalRecord | null>(null)
+  const [result, setResult] = useState<{ tone: 'unread' | 'missed'; program: Program } | null>(null)
+  const period = (p: Program) => when1365(p) || p.organization
   async function applyHere() {
     setConsent(false); setOpen(false)
     const out = await applyIn1365(program.link)
-    if (!out) { setAsking(program); return }
+    // Week 7 (2026-11-09): three results. 주황 = no sign of an application (closed before 신청), 노랑 = applied but its
+    // row not read, 초록 = applied and put in 내 활동.
+    if (!out) { setResult({ tone: 'missed', program }); return }
     const first = program.periodStart ? program.periodStart.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
     const last = program.periodEnd ? program.periodEnd.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
     const row = findApplied(out.texts, program.title, first, last)
     const date = row?.date || (first && first === last ? first : '')
     if (!row || !date) {
-      showToast(out.applied ? '1365 신청을 확인했어요' : '신청 현황을 읽었어요', row ? '참여하는 날을 골라 주세요' : '이 봉사를 찾지 못했어요. 날짜를 직접 넣어 주세요')
-      setMarking(program); return
+      if (row) { showToast('1365 신청을 확인했어요', '참여하는 날을 골라 주세요'); setMarking(program); return }
+      setResult({ tone: out.applied ? 'unread' : 'missed', program }); return
     }
     try {
       const saved = await api<{ added: number; items: ExternalRecord[] }>('/api/me/external/import', 'POST', { items: [{ programNo: program.programNo || undefined, title: row.title,
         organization: program.organization, place: program.place, date, startTime: row.startTime ?? program.beginTime ?? undefined, endTime: row.endTime ?? program.endTime ?? undefined, labStatus: row.labStatus }] })
       const record = saved.items.find(r => r.date === date && (r.title === row.title || (program.programNo && r.programNo === program.programNo))) ?? null
+      if (record) setDone(record); else { showToast('내 활동에 넣었어요'); onClose() }
+    } catch { showToast('내 활동에 넣지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program) }
+  }
+  /** 노랑 → 신청 현황 다시 가져오기: the 1365 신청 현황 page only (the login is kept, so usually no login). */
+  async function againList(program: Program) {
+    const texts = await read1365Applications()
+    if (!texts) { setResult({ tone: 'unread', program }); return }
+    const first = program.periodStart ? program.periodStart.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const last = program.periodEnd ? program.periodEnd.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null
+    const row = findApplied(texts, program.title, first, last)
+    const date = row?.date || (first && first === last ? first : '')
+    if (!row || !date) { showToast('이 봉사를 찾지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program); return }
+    try {
+      const saved = await api<{ added: number; items: ExternalRecord[] }>('/api/me/external/import', 'POST', { items: [{ programNo: program.programNo || undefined, title: row.title,
+        organization: program.organization, place: program.place, date, startTime: row.startTime ?? program.beginTime ?? undefined, endTime: row.endTime ?? program.endTime ?? undefined, labStatus: row.labStatus }] })
+      const record = saved.items.find(r => r.date === date) ?? null
       if (record) setDone(record); else { showToast('내 활동에 넣었어요'); onClose() }
     } catch { showToast('내 활동에 넣지 못했어요', '날짜를 직접 넣어 주세요'); setMarking(program) }
   }
@@ -437,6 +461,18 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
       footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
       <div className="m-summary"><strong>{done.title}</strong><span>{`${done.date.slice(5).replace('-', '/')} ${done.startTime}~${done.endTime}`}{done.labStatus ? ' · 1365 ' + done.labStatus : ''}</span></div>
       <p className="m-help">내 캘린더에도 추가할까요? 승인 여부는 1365에서 확인해 주세요. 하루 전에 알려 드릴게요.</p>
+    </Sheet>}
+    {result && <Sheet title="" onClose={onClose} footer={result.tone === 'unread'
+      ? <><button type="button" className="m-btn" onClick={() => { const p = result.program; setResult(null); void againList(p) }}>신청 현황 다시 가져오기</button>
+        <button type="button" className="m-btn line" onClick={() => { const p = result.program; setResult(null); setMarking(p) }}>날짜 직접 넣기</button></>
+      : <><button type="button" className="m-btn" onClick={() => { setResult(null); setConsent(true) }}>다시 신청하러 가기</button>
+        <button type="button" className="m-btn line" onClick={() => { const p = result.program; setResult(null); setAsking(p) }}>직접 등록하기</button></>}>
+      <div className={'apply-res ' + result.tone}>
+        <span className="apply-res-ico" aria-hidden="true"><MIcon name={result.tone === 'unread' ? 'check' : 'alert'} size={28} /></span>
+        <h3 className="m-h3">{result.tone === 'unread' ? '신청은 됐는데 내역을 못 읽었어요' : '신청을 확인하지 못했어요'}</h3>
+        <p className="m-help center">{result.tone === 'unread' ? '1365가 늦게 열렸을 수 있어요' : '신청이 끝나지 않았을 수 있어요'}</p>
+        <div className="m-summary"><strong>{result.program.title}</strong><span>{period(result.program)}</span></div>
+      </div>
     </Sheet>}
     {asking && <AskSheet program={asking} onClose={onClose} onManual={() => { setMarking(asking); setAsking(null) }} />}
     {marking && <MarkSheet program={marking} onClose={onClose} />}

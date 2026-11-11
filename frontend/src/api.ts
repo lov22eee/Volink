@@ -16,11 +16,18 @@ export type LiveActivity = {
   date: string; startTime: string
   durationMinutes: number; capacity: number; confirmed: number; status: string; riskLevel: 'LOW' | 'REVIEW' | 'BLOCKED'
   organizerName: string; riskReasons?: string | null; reviewNote?: string | null
+  /** Week 7: people on the waiting list; the organizer's real name only for the organizer, admins and confirmed people; what they have run. */
+  extraMinutes?: number; extraReason?: string | null; extraAt?: string | null
+  waiting?: number; organizerRealName?: string | null; organizerNicknamed?: boolean; organizerStats?: { hosted: number; finished: number }
   latitude?: number | null; longitude?: number | null; distanceKm?: number; organizerId?: number; supplies?: { name: string; provided: boolean }[]
   /** Only for the organizer: applications that lock the full edit. */
   applicants?: number
   /** Week 6 (V9): labels, one reschedule, the organizer's cancel reason; counts only in the organizer's own list. */
   difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number; autoApprove?: boolean | number
+  /** V36: the 1365 recruitment page an institution also posted (link only). */
+  vmsLink?: string | null
+  /** V37: false = 만 19세 이상만; the one question asked when applying; the institution (for its public page). */
+  youthOk?: boolean | number; applyQuestion?: string | null; organizationId?: number | null
   rescheduleCount?: number; checkinOpenedAt?: string | null; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
   /** V18: the organizer's cancellation (organizer and applicants only). Counts are null for cancellations before V18. */
   cancellation?: { reasonCode: string; reasonLabel: string; message: string; statusBefore: string; confirmedCount: number | null; waitingCount: number | null; appliedCount: number | null; cancelledAt: string }
@@ -29,7 +36,7 @@ export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLI
 export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number; lateMinutes?: number | null }
 export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
 export type ViewerInfo = Seats & { participation: Participation | null }
-export type Applicant = Participation & { name: string; appliedAt: string; checkInMethod?: 'QR' | 'CODE' | 'MANUAL' | null; checkInReason?: string | null; checkedInAt?: string | null }
+export type Applicant = Participation & { name: string; appliedAt: string; answer?: string | null; checkInMethod?: 'QR' | 'CODE' | 'MANUAL' | null; checkInReason?: string | null; checkedInAt?: string | null }
 export type MyRecord = { id: number; activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes: number; checkInMethod: 'QR' | 'MANUAL'; confirmedAt: string; appealDeadline: string; status: 'VALID' | 'HELD' | 'INVALIDATED' }
 export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes?: number; activityStatus?: string; cancelReason?: string | null; organizerId?: number; checkinOpen?: boolean | number }
 export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }
@@ -87,6 +94,30 @@ async function parse(response: Response) {
 }
 
 /** Calls the server; an expired access token is renewed once through the refresh cookie. */
+/** Week 7: a server path as a full address (the app calls the server by its own origin; images need the full URL). */
+export const serverUrl = (path: string) => server + path
+
+/** Week 7: a file the admin opens with their token (report photos have no public address). */
+export async function apiBlob(path: string): Promise<Blob> {
+  const go = () => fetch(server + path, { headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {}, credentials: server ? 'omit' : 'same-origin' })
+  let response = await go()
+  if (response.status === 401 && accessToken && await refresh()) response = await go()
+  if (!response.ok) throw new Error('불러오지 못했어요')
+  return response.blob()
+}
+
+/** Week 7: one photo upload (multipart); the server re-encodes it and returns its id and address. */
+export async function uploadPhoto(file: Blob): Promise<{ id: number; url: string; width: number; height: number }> {
+  const go = () => {
+    const form = new FormData()
+    form.append('file', file, 'photo.jpg')
+    return fetch(server + '/api/photos', { method: 'POST', body: form, headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {}, credentials: server ? 'omit' : 'same-origin' })
+  }
+  let response = await go()
+  if (response.status === 401 && accessToken && await refresh()) response = await go()
+  return parse(response)
+}
+
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response = await send(path, method, body, true)
   if (response.status === 401 && accessToken && !path.startsWith('/api/auth/')) {

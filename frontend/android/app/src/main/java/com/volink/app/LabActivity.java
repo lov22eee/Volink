@@ -64,6 +64,8 @@ public class LabActivity extends AppCompatActivity {
 
     /** A login page (password box) was seen; once it is gone the person is taken as logged in. */
     private boolean sawLogin = false, loggedIn = false;
+    /** 로그인 유지 (week 7): keep the 1365 cookies on close; hadLogin = cookies were there when the window opened. */
+    private boolean keep = false, hadLogin = false;
 
     private String stepCall(String text) {
         // Only a password box the person can see counts (1365 pages keep a hidden login form, 2026-11-06).
@@ -84,10 +86,17 @@ public class LabActivity extends AppCompatActivity {
                         int step = out.charAt(0) - '0';
                         // Left the login page (no password box any more) → logged in, so the guide moves on to ②.
                         // Only the password-box line mentions 간편인증. After it, the first page without the box = logged in.
-                        if (out.contains("간편인증")) sawLogin = true;
+                        if (out.contains("간편인증")) {
+                            sawLogin = true;
+                            // The 1365 login (again): the person's turn, so the 1365 page shows.
+                            if (covered()) {
+                                harvesting = false; harvestStarted = false; jumped = false; loggedIn = false;
+                                uncover(hadLogin ? "1365 로그인 시간이 끝났어요 · 한 번만 다시 로그인해 주세요" : "로그인이 풀렸어요 · 다시 로그인하면 이어서 가져와요");
+                            }
+                        }
                         else if (sawLogin && !loggedIn) { loggedIn = true; lastStep = 0; return; }
                         if (step == 1) jumped = false; // on the login page: once logged in, go to the page again
-                        if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); }
+                        if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); if (both) { coverLoading("1365에서 가져오는 중이에요"); setGoal(10, 30); } }
                         showStep(step, out.substring(3));
                         updateTake();
                         maybeStartHarvest();
@@ -306,6 +315,8 @@ public class LabActivity extends AppCompatActivity {
         FrameLayout.LayoutParams slimPlace = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
         slimPlace.setMargins(dp(12), 0, dp(12), dp(12));
         frame.addView(slim, slimPlace);
+        cover = buildCover();
+        frame.addView(cover, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottom, wide);
         setContentView(root);
@@ -318,7 +329,11 @@ public class LabActivity extends AppCompatActivity {
         // 2026-11-08 (user decision): 1365 가져오기 always takes both — 실적 first, then 신청 현황, with no question between.
         both = "S".equals(target) && !otherUrl.isEmpty();
         try { motion = android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f; } catch (Exception ignored) { }
-        if (both) showSlim("① 1365에 로그인해 주세요 · 로그인하면 실적부터 가져와요", 1, false);
+        keep = getIntent().getBooleanExtra("keep", false);
+        // 로그인 유지: still logged in from last time → straight to Volink's screen (it goes if 1365 asks for the login again).
+        hadLogin = keep && CookieManager.getInstance().hasCookies();
+        if (both && hadLogin) { coverLoading("1365에서 가져오는 중이에요"); setGoal(8, 30); }
+        else if (both) showSlim("① 1365에 로그인해 주세요 · 로그인하면 실적부터 가져와요", 1, false);
         if ("P".equals(target)) {
             String next = getIntent().getStringExtra("next");
             listUrl = next != null && next.startsWith(LabPlugin.HOME + "/") ? next : "";
@@ -380,6 +395,7 @@ public class LabActivity extends AppCompatActivity {
         loggedIn = true; jumped = true;
         web.loadUrl(targetUrl);
         updateTake();
+        uncover(null);
         applyCard("1365 신청을 도와드릴게요", 1, 30, "");
         // The person's turn again: fold the card to one line so the 신청 page is not covered.
         timer.postDelayed(() -> { if (!applied) showSlim("③ 신청 진행하기", 3, true); }, 2500);
@@ -408,6 +424,15 @@ public class LabActivity extends AppCompatActivity {
 
     /** Steps before {@code current} done (✓ green), {@code current} going (● bold, breathing), the rest waiting (○ grey). */
     private void bothCard(String title, int current, int percent) {
+        // Week 7: the 실적+신청 visit uses the cover (Volink's screen over 1365) instead of the card.
+        if (both) {
+            coverLoading("1365에서 가져오는 중이에요");
+            coverStepLines(bothSteps, bothNote, current);
+            float next = current <= 0 ? 30 : current == 1 ? 62 : current == 2 ? 88 : 100;
+            setGoal(percent, next);
+            if (current >= 4) finishing = true;
+            return;
+        }
         TextView[] lines = { progressPeriod, progressTime, progressActivity, progressExtra };
         boolean first = progressCard.getVisibility() != View.VISIBLE;
         for (int i = 0; i < 4; i++) {
@@ -494,9 +519,8 @@ public class LabActivity extends AppCompatActivity {
         if (applyRead || isFinishing()) return;
         applyRead = true;
         timer.removeCallbacks(applyTick);
-        applyCard("신청 내역을 읽지 못했어요", 3, 80, "1365 화면이 달라졌을 수 있어요. 닫으면 날짜를 직접 골라 넣을 수 있어요");
-        progressMain.setText("닫기");
-        progressButtons.setVisibility(View.VISIBLE);
+        // Week 7: back to the app at once; it shows 신청은 됐는데 내역을 못 읽었어요 (노랑) with its own next steps.
+        done();
     }
 
     private boolean onApplicationsPage() {
@@ -511,7 +535,10 @@ public class LabActivity extends AppCompatActivity {
         if (applied) return;
         applied = true;
         bottom.setVisibility(View.GONE);
-        applyCard("신청됐어요!", 3, 80, "신청 현황에서 이 봉사만 읽어요");
+        coverLoading("신청 내역을 확인하고 있어요");
+        coverStepLines(new String[] { "로그인", "신청 페이지", "1365 신청", "신청 내역 확인" }, new String[] { "", "", "", "" }, 3);
+        shown = 0f; goal = 0f; cap = 0f;
+        setGoal(45, 90);
         timer.postDelayed(() -> { if (web != null && !listUrl.isEmpty() && !onApplicationsPage()) web.loadUrl(listUrl); }, 1200);
         timer.postDelayed(this::readStuck, 20000);
     }
@@ -525,9 +552,277 @@ public class LabActivity extends AppCompatActivity {
             if (!text.trim().isEmpty()) { pages.add(text); applicationsAt = pages.size() - 1; }
             Uri page = Uri.parse(web.getUrl() == null ? "" : web.getUrl());
             host = page.getHost() == null ? "" : page.getHost();
-            applyCard("✓ 다 됐어요", 4, 100, "Volink로 돌아가요…");
-            timer.postDelayed(this::done, 1000);
+            finishing = true;
+            timer.postDelayed(this::done, 700);
         }), 1200);
+    }
+
+
+    // ---- 덮개 (2026-11-09, week 7 · 교수님 피드백): after the login only Volink's own screen shows, a smooth gauge and the
+    // steps folded away. Any problem hides the gauge and says what to do. The 1365 page is shown again only when the
+    // person has to act there (login, 간편인증, extra 1365 checks).
+    private FrameLayout cover;
+    private LinearLayout coverSteps, coverButtons, coverLogos;
+    private TextView coverTitle, coverSub, coverPercent, coverFold, coverRing;
+    private TextView[] coverLines = new TextView[4];
+    private android.widget.ProgressBar coverBar, coverSpin;
+    private Button coverMain, coverSecond, coverText;
+    private float shown = 0f, goal = 0f, cap = 0f;
+    private boolean finishing = false;
+    private final Runnable gaugeTick = new Runnable() {
+        @Override public void run() {
+            if (cover == null || cover.getVisibility() != View.VISIBLE) return;
+            // Toward the step's goal by a part of what is left (smooth, slowing), then very slowly on toward the cap just before
+            // the next goal, so a slow 1365 never looks frozen. Never backwards.
+            if (finishing) shown = Math.min(100f, shown + Math.max(1.5f, (100f - shown) * 0.18f));
+            else if (shown < goal) shown += Math.max(0.12f, (goal - shown) * 0.07f);
+            else if (shown < cap) shown += Math.max(0.01f, (cap - shown) * 0.004f);
+            int value = Math.round(shown * 10);
+            coverBar.setProgress(value);
+            coverPercent.setText(Math.min(100, Math.round(shown)) + "%");
+            timer.postDelayed(this, 40);
+        }
+    };
+    /** Goal for a step (0 로그인 → 10, 1 실적 → up to 60, 2 신청 현황 → 85, 3 정리 → 100) and the cap before the next one. */
+    private void setGoal(float to, float next) {
+        goal = Math.max(goal, to);
+        cap = Math.max(cap, Math.max(goal, next - 3f));
+    }
+
+    private boolean foldOpen() {
+        return getSharedPreferences("volink", MODE_PRIVATE).getBoolean("lab.fold", false);
+    }
+
+    private TextView ring(String mark, int fill, int ink) {
+        TextView view = text(mark, 26, ink, true);
+        view.setGravity(Gravity.CENTER);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(fill);
+        view.setBackground(bg);
+        return view;
+    }
+
+    private Button coverButton(boolean filled) {
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setTextSize(15.5f);
+        button.setTypeface(face(true));
+        button.setStateListAnimator(null);
+        if (filled) { button.setTextColor(Color.WHITE); button.setBackground(round(GREEN, 14)); }
+        else {
+            button.setTextColor(INK);
+            GradientDrawable line = round(Color.WHITE, 14);
+            line.setStroke(dp(1), Color.parseColor("#DCDFDC"));
+            button.setBackground(line);
+        }
+        return button;
+    }
+
+    private FrameLayout buildCover() {
+        FrameLayout box = new FrameLayout(this);
+        box.setBackgroundColor(Color.parseColor("#F5F5F2"));
+        box.setClickable(true);
+        LinearLayout middle = new LinearLayout(this);
+        middle.setOrientation(LinearLayout.VERTICAL);
+        middle.setGravity(Gravity.CENTER_HORIZONTAL);
+        middle.setPadding(dp(28), 0, dp(28), 0);
+        coverLogos = new LinearLayout(this);
+        coverLogos.setOrientation(LinearLayout.HORIZONTAL);
+        coverLogos.setGravity(Gravity.CENTER_VERTICAL);
+        TextView a = text("1365", 13, Color.WHITE, true); a.setGravity(Gravity.CENTER); a.setBackground(round(Color.parseColor("#1D4F91"), 16));
+        TextView v = text("V", 17, Color.WHITE, true); v.setGravity(Gravity.CENTER); v.setBackground(round(GREEN, 16));
+        TextView dots = text("· · · ·", 13, Color.parseColor("#9AA3A0"), true); dots.setGravity(Gravity.CENTER);
+        coverLogos.addView(a, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        coverLogos.addView(dots, new LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.WRAP_CONTENT));
+        coverLogos.addView(v, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        coverRing = ring("!", Color.parseColor("#FBEEE2"), Color.parseColor("#C4561F"));
+        coverRing.setVisibility(View.GONE);
+        coverSpin = new android.widget.ProgressBar(this);
+        coverSpin.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#D9822B")));
+        coverSpin.setVisibility(View.GONE);
+        coverTitle = text("", 19, INK, true); coverTitle.setGravity(Gravity.CENTER);
+        coverSub = text("", 13.5f, Color.parseColor("#6B766F"), false); coverSub.setGravity(Gravity.CENTER); coverSub.setLineSpacing(dp(2), 1f);
+        coverBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        coverBar.setMax(1000);
+        coverBar.setProgressTintList(android.content.res.ColorStateList.valueOf(GREEN));
+        coverBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#E2E6E3")));
+        coverPercent = text("0%", 12.5f, Color.parseColor("#6B766F"), true); coverPercent.setGravity(Gravity.CENTER);
+        coverFold = text("", 13, Color.parseColor("#55605A"), true); coverFold.setGravity(Gravity.CENTER); coverFold.setPadding(dp(16), dp(10), dp(16), dp(10));
+        coverSteps = new LinearLayout(this);
+        coverSteps.setOrientation(LinearLayout.VERTICAL);
+        coverSteps.setPadding(dp(14), dp(6), dp(14), dp(6));
+        GradientDrawable stepsBg = round(Color.WHITE, 14);
+        stepsBg.setStroke(dp(1), Color.parseColor("#E6E8E5"));
+        coverSteps.setBackground(stepsBg);
+        for (int i = 0; i < 4; i++) { coverLines[i] = text("", 14, Color.parseColor("#A3ACA7"), false); coverLines[i].setPadding(0, dp(7), 0, dp(7)); coverSteps.addView(coverLines[i]); }
+        coverFold.setOnClickListener(view -> {
+            boolean open = coverSteps.getVisibility() != View.VISIBLE;
+            getSharedPreferences("volink", MODE_PRIVATE).edit().putBoolean("lab.fold", open).apply();
+            coverSteps.setVisibility(open ? View.VISIBLE : View.GONE);
+            coverFold.setText(open ? "접기  ˄" : "자세히  ˅");
+        });
+        LinearLayout.LayoutParams center = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        center.gravity = Gravity.CENTER_HORIZONTAL;
+        middle.addView(coverLogos, center);
+        LinearLayout.LayoutParams ringAt = new LinearLayout.LayoutParams(dp(68), dp(68)); ringAt.gravity = Gravity.CENTER_HORIZONTAL;
+        middle.addView(coverRing, ringAt);
+        LinearLayout.LayoutParams spinAt = new LinearLayout.LayoutParams(dp(60), dp(60)); spinAt.gravity = Gravity.CENTER_HORIZONTAL;
+        middle.addView(coverSpin, spinAt);
+        LinearLayout.LayoutParams titleAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); titleAt.topMargin = dp(18);
+        middle.addView(coverTitle, titleAt);
+        LinearLayout.LayoutParams subAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); subAt.topMargin = dp(6);
+        middle.addView(coverSub, subAt);
+        LinearLayout.LayoutParams barAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8)); barAt.topMargin = dp(22);
+        middle.addView(coverBar, barAt);
+        LinearLayout.LayoutParams pctAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); pctAt.topMargin = dp(8);
+        middle.addView(coverPercent, pctAt);
+        middle.addView(coverFold, center);
+        LinearLayout.LayoutParams stepsAt = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT); stepsAt.topMargin = dp(4);
+        middle.addView(coverSteps, stepsAt);
+        box.addView(middle, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+        coverButtons = new LinearLayout(this);
+        coverButtons.setOrientation(LinearLayout.VERTICAL);
+        coverButtons.setPadding(dp(16), 0, dp(16), dp(16));
+        coverMain = coverButton(true); coverSecond = coverButton(false);
+        coverText = new Button(this); coverText.setAllCaps(false); coverText.setTextSize(14); coverText.setTypeface(face(true));
+        coverText.setTextColor(Color.parseColor("#6B766F")); coverText.setBackgroundColor(Color.TRANSPARENT); coverText.setStateListAnimator(null);
+        LinearLayout.LayoutParams tall = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        LinearLayout.LayoutParams tall2 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)); tall2.topMargin = dp(8);
+        coverButtons.addView(coverMain, tall);
+        coverButtons.addView(coverSecond, tall2);
+        coverButtons.addView(coverText, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
+        box.addView(coverButtons, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        box.setVisibility(View.GONE);
+        return box;
+    }
+
+    /** The loading look: logos, title, gauge, [자세히] and 그만두기. */
+    private void coverLoading(String title) {
+        boolean first = cover.getVisibility() != View.VISIBLE;
+        coverLogos.setVisibility(View.VISIBLE); coverRing.setVisibility(View.GONE); coverSpin.setVisibility(View.GONE);
+        coverTitle.setText(title);
+        coverSub.setText("잠깐만 기다려 주세요");
+        coverBar.setVisibility(View.VISIBLE); coverPercent.setVisibility(View.VISIBLE);
+        boolean steps = both || "P".equals(target);
+        coverFold.setVisibility(steps ? View.VISIBLE : View.GONE);
+        boolean open = steps && foldOpen();
+        coverSteps.setVisibility(open ? View.VISIBLE : View.GONE);
+        coverFold.setText(open ? "접기  ˄" : "자세히  ˅");
+        coverMain.setVisibility(View.GONE); coverSecond.setVisibility(View.GONE);
+        coverText.setVisibility(View.VISIBLE);
+        coverText.setText("그만두기");
+        coverText.setOnClickListener(view -> askStop());
+        slim.setVisibility(View.GONE);
+        progressCard.setVisibility(View.GONE);
+        bottom.setVisibility(View.GONE);
+        if (first) {
+            cover.setVisibility(View.VISIBLE);
+            if (motion) { cover.setAlpha(0f); cover.animate().alpha(1f).setDuration(220).start(); }
+            timer.removeCallbacks(gaugeTick);
+            timer.post(gaugeTick);
+        }
+    }
+
+    /** Steps under [자세히]: before {@code current} ✓, {@code current} ● bold, the rest ○. */
+    private void coverStepLines(String[] names, String[] notes, int current) {
+        for (int i = 0; i < 4; i++) {
+            boolean ok = i < current, now = i == current;
+            coverLines[i].setText((ok ? "✓   " : now ? "●   " : "○   ") + names[i] + (notes[i].isEmpty() ? "" : "   " + notes[i]));
+            coverLines[i].setTextColor(ok ? GREEN : now ? INK : Color.parseColor("#A3ACA7"));
+            coverLines[i].setTypeface(face(now));
+        }
+    }
+
+    /** Something is wrong: no gauge, what happened and what the person can do. */
+    private void coverProblem(String mark, String title, String sub, String main, Runnable onMain, String second, Runnable onSecond, String last, Runnable onLast) {
+        cover.setVisibility(View.VISIBLE);
+        timer.removeCallbacks(gaugeTick);
+        coverLogos.setVisibility(View.GONE); coverSpin.setVisibility(View.GONE);
+        coverRing.setVisibility(View.VISIBLE);
+        boolean grey = "?".equals(mark);
+        GradientDrawable bg = new GradientDrawable(); bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(Color.parseColor(grey ? "#ECEEEC" : "#FBEEE2"));
+        coverRing.setBackground(bg);
+        coverRing.setTextColor(Color.parseColor(grey ? "#5F6A64" : "#C4561F"));
+        coverRing.setText(mark);
+        coverTitle.setText(title); coverSub.setText(sub);
+        coverBar.setVisibility(View.GONE); coverPercent.setVisibility(View.GONE); coverFold.setVisibility(View.GONE); coverSteps.setVisibility(View.GONE);
+        coverMain.setVisibility(main == null ? View.GONE : View.VISIBLE);
+        if (main != null) { coverMain.setText(main); coverMain.setOnClickListener(view -> onMain.run()); }
+        coverSecond.setVisibility(second == null ? View.GONE : View.VISIBLE);
+        if (second != null) { coverSecond.setText(second); coverSecond.setOnClickListener(view -> onSecond.run()); }
+        coverText.setVisibility(last == null ? View.GONE : View.VISIBLE);
+        if (last != null) { coverText.setText(last); coverText.setOnClickListener(view -> onLast.run()); }
+    }
+
+    /** A short drop in the connection: a spinner (no gauge) while the page is tried again (2/3). */
+    private void coverReconnect(int attempt) {
+        cover.setVisibility(View.VISIBLE);
+        timer.removeCallbacks(gaugeTick);
+        coverLogos.setVisibility(View.GONE); coverRing.setVisibility(View.GONE); coverSpin.setVisibility(View.VISIBLE);
+        coverTitle.setText("다시 연결하는 중이에요");
+        coverSub.setText("연결이 잠깐 끊겼어요 (" + attempt + "/3)");
+        coverBar.setVisibility(View.GONE); coverPercent.setVisibility(View.GONE); coverFold.setVisibility(View.GONE); coverSteps.setVisibility(View.GONE);
+        coverMain.setVisibility(View.GONE); coverSecond.setVisibility(View.GONE); coverText.setVisibility(View.GONE);
+    }
+
+    /** The person's turn on the 1365 page again (login, 간편인증, another 1365 check): the cover goes, one line says why. */
+    private void uncover(String line) {
+        if (cover == null || cover.getVisibility() != View.VISIBLE) return;
+        timer.removeCallbacks(gaugeTick);
+        cover.setVisibility(View.GONE);
+        if (line != null) showSlim(line, 1, true);
+    }
+
+    private boolean covered() { return cover != null && cover.getVisibility() == View.VISIBLE; }
+
+    /** 그만두기 / 뒤로가기 while reading: keep what was read, go on, or leave with nothing. */
+    private void askStop() {
+        int got = harvestRows;
+        androidx.appcompat.app.AlertDialog.Builder dialog = new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("그만둘까요?");
+        if (got > 0 && !"P".equals(target)) {
+            dialog.setMessage("지금까지 봉사참여 실적 " + got + "건을 가져왔어요")
+                    .setPositiveButton(got + "건만 넣고 그만두기", (d, w) -> { harvesting = false; partial = true; pages.clear(); pages.addAll(carried); pages.addAll(harvestTexts.values()); done(); })
+                    .setNeutralButton("계속 가져오기", null)
+                    .setNegativeButton("아무것도 안 넣고 나가기", (d, w) -> { pages.clear(); applied = false; done(); });
+        } else {
+            dialog.setMessage("지금 그만두면 아무것도 넣지 않아요")
+                    .setPositiveButton("그만두기", (d, w) -> { if (!"P".equals(target)) { pages.clear(); } done(); })
+                    .setNegativeButton("계속 가져오기", null);
+        }
+        dialog.show();
+    }
+
+    // Connection drops (main page only): tried again three times, then a problem screen.
+    private int dropped = 0;
+    private long lastFinished = 0;
+    private boolean partial = false;
+
+    private void connectionLost() {
+        if (isFinishing()) return;
+        if (++dropped <= 3) {
+            coverReconnect(dropped);
+            timer.postDelayed(() -> { if (web != null && !isFinishing()) web.reload(); }, 2500);
+            return;
+        }
+        coverProblem("!", "인터넷 연결을 확인해 주세요", "와이파이나 모바일 데이터가 꺼져 있어요\n이미 넣은 기록은 그대로예요",
+                "다시 시도", this::tryAgain, null, null, "나중에 할게요", this::done);
+    }
+
+    /** [다시 시도]: the gauge starts again from 0; pages already read are skipped by the reading itself. */
+    private void tryAgain() {
+        dropped = 0;
+        shown = 0f; goal = 0f; cap = 0f; finishing = false;
+        if (cover != null) cover.setVisibility(View.GONE);
+        coverLoading("P".equals(target) ? "신청 내역을 확인하고 있어요" : "1365에서 가져오는 중이에요");
+        setGoal(10, 60);
+        harvesting = false; harvestStarted = false;
+        if (web == null) return;
+        if ("P".equals(target) && !listUrl.isEmpty()) { applyRead = false; web.loadUrl(listUrl); timer.postDelayed(applyTick, 1500); }
+        else if (otherAsked && !otherRead && !otherUrl.isEmpty()) { otherTicks = 0; web.loadUrl(otherUrl); timer.postDelayed(otherTick, 1500); }
+        else if (!targetUrl.isEmpty()) web.loadUrl(targetUrl);
+        else web.reload();
     }
 
     private LinearLayout bottom;
@@ -776,7 +1071,7 @@ public class LabActivity extends AppCompatActivity {
     private final Runnable otherTick = new Runnable() {
         @Override public void run() {
             if (web == null || otherRead) return;
-            if (++otherTicks > 20) { otherRead = true; Toast.makeText(LabActivity.this, "신청 현황은 읽지 못했어요", Toast.LENGTH_SHORT).show(); done(); return; }
+            if (++otherTicks > 20) { otherRead = true; partial = true; done(); return; }
             if (!onApplicationsPage()) {
                 // Not there yet (the jump was lost or 1365 sent us elsewhere): every 3 tries, tap the page's own 신청 현황 link
                 // like a person would, or load the page again when there is no such link.
@@ -809,6 +1104,17 @@ public class LabActivity extends AppCompatActivity {
     private void harvestStuck() {
         harvesting = false;
         timer.removeCallbacks(harvestTick);
+        if (both) {
+            boolean silent = System.currentTimeMillis() - lastFinished > 30000;
+            if (harvestRows > 0) coverProblem("!", "끝까지 읽지 못했어요", "지금까지 실적 " + harvestRows + "건을 읽었어요",
+                    harvestRows + "건만 넣기", () -> { partial = true; pages.clear(); pages.addAll(carried); pages.addAll(harvestTexts.values()); done(); },
+                    "다시 시도", this::tryAgain, null, null);
+            else if (silent) coverProblem("!", "1365가 응답하지 않아요", "1365 점검 중이거나 느려요\n잠시 뒤에 다시 해 주세요",
+                    "다시 시도", this::tryAgain, null, null, "나중에 할게요", () -> { pages.clear(); done(); });
+            else coverProblem("?", "지금은 가져올 수 없어요", "1365 화면이 바뀌어서 읽지 못했어요\n이미 넣은 기록은 그대로예요",
+                    "다시 시도", this::tryAgain, null, null, "닫기", () -> { pages.clear(); done(); });
+            return;
+        }
         progressTitle.setText("끝까지 읽지 못했어요");
         progressNote.setText(harvestRows > 0 ? "지금까지 읽은 " + harvestRows + "건만 가져갈 수 있어요" : "1365 화면이 달라졌을 수 있어요. 다시 읽거나 닫아 주세요");
         progressPeriod.setVisibility(View.GONE); progressTime.setVisibility(View.GONE); progressActivity.setVisibility(View.GONE);
@@ -980,12 +1286,14 @@ public class LabActivity extends AppCompatActivity {
         data.putStringArrayListExtra("texts", out);
         data.putExtra("host", host);
         data.putExtra("applied", applied);
+        data.putExtra("partial", partial);
         setResult(RESULT_OK, data);
         finish();
     }
 
     @Override
     public void onBackPressed() {
+        if (covered() && coverBar.getVisibility() == View.VISIBLE) { askStop(); return; }
         if (popup != null) { if (popup.canGoBack()) popup.goBack(); else closePopup(); }
         else if (web != null && web.canGoBack()) web.goBack();
         else done();
@@ -1061,7 +1369,12 @@ public class LabActivity extends AppCompatActivity {
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
             Uri page = Uri.parse(url);
-            if (url.startsWith("about:") || allowed(page)) { if (page.getHost() != null) visited.add(page.getScheme() + "://" + page.getHost()); return; }
+            if (url.startsWith("about:") || allowed(page)) {
+                if (page.getHost() != null) visited.add(page.getScheme() + "://" + page.getHost());
+                // A sign-in page outside 1365 (간편인증, an extra 1365 check): the person's turn, so the cover goes.
+                if (main && !url.startsWith("about:") && !is1365(page)) uncover("1365에서 확인이 필요해요 · 마치면 이어서 가져와요");
+                return;
+            }
             // A redirect that slipped past the check above: stop before anything is shown or typed, and say which host it was.
             view.stopLoading();
             Toast.makeText(LabActivity.this, "막힌 주소: " + page.getHost(), Toast.LENGTH_LONG).show();
@@ -1070,8 +1383,16 @@ public class LabActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, android.webkit.WebResourceError error) {
+            // No connection while Volink's screen covers 1365: try again, then say so (the gauge goes).
+            if (main && request.isForMainFrame() && covered()) connectionLost();
+        }
+
+        @Override
         public void onPageFinished(WebView view, String url) {
             if (!main) return;
+            lastFinished = System.currentTimeMillis();
+            if (dropped > 0 && covered() && coverSpin.getVisibility() == View.VISIBLE) { dropped = 0; coverLoading(both ? "1365에서 가져오는 중이에요" : "신청 내역을 확인하고 있어요"); timer.post(gaugeTick); }
             Uri page = Uri.parse(url);
             where.setText(page.getHost() == null ? "" : page.getHost());
             updateTake();
@@ -1119,16 +1440,22 @@ public class LabActivity extends AppCompatActivity {
         return false;
     }
 
-    @Override
-    protected void onDestroy() {
-        // Log out of 1365 and leave nothing behind: every cookie (the Volink app itself keeps none: its token is not a cookie),
-        // the 1365 sites' web storage, this screen's cache, form data and history.
+    /** Log out of 1365 on this phone: every cookie (the Volink app keeps none: its token is not a cookie) and web storage. */
+    static void forget1365() {
         CookieManager cookies = CookieManager.getInstance();
         cookies.removeSessionCookies(null);
         cookies.removeAllCookies(null);
         cookies.flush();
-        WebStorage storage = WebStorage.getInstance();
-        for (String origin : visited) storage.deleteOrigin(origin);
+        WebStorage.getInstance().deleteAllData();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // Log out of 1365 and leave nothing behind: every cookie (the Volink app itself keeps none: its token is not a cookie),
+        // the 1365 sites' web storage, this screen's cache, form data and history.
+        if (keep) CookieManager.getInstance().flush(); // 로그인 유지: the 1365 login stays on this phone only (설정 › 1365 로그아웃)
+        else forget1365();
+        timer.removeCallbacks(gaugeTick);
         timer.removeCallbacks(checkStep);
         timer.removeCallbacks(harvestTick);
         timer.removeCallbacks(applyTick);

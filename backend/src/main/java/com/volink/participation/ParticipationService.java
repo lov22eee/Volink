@@ -37,6 +37,12 @@ public class ParticipationService {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private com.volink.safety.PenaltyService penalties;
+
+    /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
     public ParticipationService(JdbcTemplate jdbc, AuthService auth, NotificationService notifications, Clock clock) {
         this.jdbc = jdbc;
         this.auth = auth;
@@ -52,10 +58,13 @@ public class ParticipationService {
     // ---- participant ----
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Map<String, Object> apply(long userId, long activityId) {
+    public Map<String, Object> apply(long userId, long activityId) { return apply(userId, activityId, null); }
+
+    public Map<String, Object> apply(long userId, long activityId, String rawAnswer) {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw forbidden("FORBIDDEN", "관리자 계정은 활동에 신청할 수 없습니다.");
         if (!user.canWrite()) throw forbidden("ACCOUNT_RESTRICTED", "이용이 제한된 계정은 신청할 수 없습니다.");
+        if (penalties != null) penalties.check(userId, "APPLY");
         Activity activity = lock(activityId);
         if (!"RECRUITING".equals(activity.status())) {
             if ("DRAFT".equals(activity.status())) throw activityNotFound();
@@ -64,6 +73,18 @@ public class ParticipationService {
         if (activity.organizerId() == userId) throw forbidden("FORBIDDEN", "내가 만든 활동에는 신청할 수 없습니다.");
         LocalDateTime now = now();
         if (!now.isBefore(activity.startsAt())) throw conflict("INVALID_STATE", "이미 시작한 활동입니다.");
+        // V37: 청소년 참여 가능이 꺼진 글은 만 19세 이상만, 신청 질문이 있으면 답이 있어야 함.
+        Map<String, Object> options = jdbc.queryForMap("SELECT youth_ok, apply_question FROM activities WHERE id = ?", activityId);
+        if (!Boolean.TRUE.equals(options.get("youth_ok"))) {
+            java.time.LocalDate birth = jdbc.queryForObject("SELECT birth_date FROM users WHERE id = ?", java.time.LocalDate.class, userId);
+            if (birth == null || java.time.Period.between(birth, now.toLocalDate()).getYears() < 19)
+                throw forbidden("ADULT_ONLY", "만 19세 이상만 참여할 수 있는 활동이에요.");
+        }
+        String answer = rawAnswer == null ? "" : rawAnswer.trim();
+        if (options.get("apply_question") != null) {
+            if (answer.isEmpty() || answer.length() > 200) throw ApiException.validation(Map.of("answer", "모집자의 질문에 200자 이내로 답해 주세요."));
+            if (com.volink.post.PostService.CONTACT.matcher(answer).find()) throw ApiException.validation(Map.of("answer", "답에는 연락처를 적을 수 없어요."));
+        } else answer = "";
 
         Map<String, Object> existing = jdbc.queryForList("SELECT id, status, cancel_count FROM participations WHERE activity_id = ? AND user_id = ? FOR UPDATE",
                 activityId, userId).stream().findFirst().orElse(null);
@@ -85,13 +106,13 @@ public class ParticipationService {
         long id;
         String from = null;
         if (existing == null) {
-            jdbc.update("INSERT INTO participations(activity_id, user_id, status, wait_order, updated_at) VALUES (?, ?, ?, ?, ?)",
-                    activityId, userId, to, order, now);
+            jdbc.update("INSERT INTO participations(activity_id, user_id, status, wait_order, updated_at, apply_answer) VALUES (?, ?, ?, ?, ?, ?)",
+                    activityId, userId, to, order, now, answer.isEmpty() ? null : answer);
             id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         } else {
             id = ((Number) existing.get("id")).longValue();
             from = (String) existing.get("status");
-            jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ? WHERE id = ?", to, order, now, id);
+            jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ?, apply_answer = ? WHERE id = ?", to, order, now, answer.isEmpty() ? null : answer, id);
         }
         log(activityId, id, userId, from, to, (from == null ? "신청" : "다시 신청") + ("CONFIRMED".equals(to) ? " · 자동 승인" : ""));
         if ("CONFIRMED".equals(to)) {
@@ -175,15 +196,25 @@ public class ParticipationService {
         return viewer(activity.id(), userId);
     }
 
+    /**
+     * The place in line shown to people (2026-11-10): 1 + the waiting people ahead, so the number moves up when someone
+     * ahead is offered a seat, confirmed or leaves. The stored wait_order only keeps the order.
+     */
+    public static String waitPlace(String a) {
+        return "CASE WHEN " + a + ".status = 'WAITLISTED' THEN (SELECT COUNT(*) FROM participations w WHERE w.activity_id = " + a + ".activity_id"
+                + " AND w.status = 'WAITLISTED' AND (w.wait_order < " + a + ".wait_order OR w.wait_order = " + a + ".wait_order AND w.id <= " + a + ".id))"
+                + " ELSE " + a + ".wait_order END";
+    }
+
     public List<Map<String, Object>> mine(long userId, String status) {
         return jdbc.queryForList("""
                 SELECT p.id, p.activity_id AS activityId, a.title, pl.name AS placeName,
                        DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
-                       p.status, p.wait_order AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
+                       p.status, WAIT_PLACE_P AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
                        TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.status AS activityStatus, a.cancel_reason AS cancelReason,
                        a.organizer_id AS organizerId, p.late_minutes AS lateMinutes, a.checkin_opened_at IS NOT NULL AS checkinOpen
                 FROM participations p JOIN activities a ON a.id = p.activity_id LEFT JOIN demo_places pl ON pl.id = a.place_id
-                WHERE p.user_id = ?""" + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
+                WHERE p.user_id = ?""".replace("WAIT_PLACE_P", waitPlace("p")) + (status == null || status.isBlank() ? "" : " AND p.status = ?") + " ORDER BY a.starts_at DESC, p.id DESC",
                 status == null || status.isBlank() ? new Object[]{userId} : new Object[]{userId, status.trim()});
     }
 
@@ -191,8 +222,9 @@ public class ParticipationService {
     public Map<String, Object> viewer(long activityId, Long userId) {
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
         Map<String, Object> mine = userId == null ? null : jdbc.queryForList("""
-                SELECT id, status, wait_order AS waitOrder, DATE_FORMAT(offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, cancel_count AS cancelCount, late_minutes AS lateMinutes
-                FROM participations WHERE activity_id = ? AND user_id = ?""", activityId, userId).stream().findFirst().orElse(null);
+                SELECT p.id, p.status, WAIT_PLACE_P AS waitOrder, DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt,
+                       p.cancel_count AS cancelCount, p.late_minutes AS lateMinutes
+                FROM participations p WHERE p.activity_id = ? AND p.user_id = ?""".replace("WAIT_PLACE_P", waitPlace("p")), activityId, userId).stream().findFirst().orElse(null);
         result.put("participation", mine);
         return result;
     }
@@ -213,14 +245,14 @@ public class ParticipationService {
                 .stream().findFirst().orElseThrow(ParticipationService::activityNotFound);
         if (((Number) activity.get("organizer_id")).longValue() != organizerId) throw activityNotFound();
         List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
-                SELECT p.id, u.display_name AS name, p.status, p.wait_order AS waitOrder,
+                SELECT p.id, u.display_name AS name, p.status, WAIT_PLACE_P AS waitOrder,
                        DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt,
                        c.method AS checkInMethod, c.reason AS checkInReason, DATE_FORMAT(c.checked_at, '%H:%i') AS checkedInAt,
-                       p.late_minutes AS lateMinutes
+                       p.late_minutes AS lateMinutes, p.apply_answer AS answer
                 FROM participations p JOIN users u ON u.id = p.user_id LEFT JOIN check_ins c ON c.participation_id = p.id WHERE p.activity_id = ?
                 ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED') = 0,
                          FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id
-                """), activityId);
+                """.replace("WAIT_PLACE_P", waitPlace("p"))), activityId);
         rows.forEach(row -> row.put("name", mask((String) row.get("name"))));
         Map<String, Object> result = new LinkedHashMap<>(seats(activityId));
         result.put("capacity", activity.get("capacity"));
@@ -261,6 +293,36 @@ public class ParticipationService {
             }
         }
         return Map.of("autoApprove", on, "confirmed", confirmed);
+    }
+
+    /**
+     * 모집 인원 바꾸기 (week 7, 2026-11-09): while recruiting and before the start, even with applicants. Never below the seats
+     * already held (confirmed, checked in, completed or offered). New seats go to the waiting list in order (offers), then —
+     * with 자동 승인 on — to applications waiting for approval. People already confirmed get a notice.
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> capacity(long organizerId, long activityId, Integer value) {
+        Activity activity = lock(activityId);
+        if (activity.organizerId() != organizerId) throw activityNotFound();
+        if (value == null || value < 1 || value > 9) throw ApiException.validation(Map.of("capacity", "모집 인원은 나를 빼고 1~9명이에요."));
+        if (!"RECRUITING".equals(activity.status()) || !now().isBefore(activity.startsAt()))
+            throw conflict("NOT_RECRUITING", "시작 전, 모집 중인 활동만 인원을 바꿀 수 있어요.");
+        int taken = seatsTaken(activityId);
+        if (value < taken) throw conflict("BELOW_TAKEN", "확정·제안 중인 " + taken + "명보다 적게 줄일 수 없어요.");
+        if (value == activity.capacity()) return Map.of("capacity", value, "offered", 0, "confirmed", 0);
+        jdbc.update("UPDATE activities SET capacity = ? WHERE id = ?", value, activityId);
+        Activity changed = new Activity(activity.id(), activity.organizerId(), activity.title(), activity.status(), activity.startsAt(), value, activity.autoApprove());
+        int offered = value > activity.capacity() ? offerNext(changed, organizerId) : 0;
+        int confirmed = 0;
+        if (value > activity.capacity() && activity.autoApprove())
+            for (Long id : jdbc.queryForList("SELECT id FROM participations WHERE activity_id = ? AND status = 'APPLIED' ORDER BY created_at, id", Long.class, activityId)) {
+                if (seatsTaken(activityId) >= value) break;
+                jdbc.update("UPDATE participations SET status = 'CONFIRMED', updated_at = ? WHERE id = ?", now(), id);
+                log(activityId, id, organizerId, "APPLIED", "CONFIRMED", "인원 늘리기 · 자동 승인");
+                notifications.send(applicant(id), "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+                confirmed++;
+            }
+        return Map.of("capacity", value, "offered", offered, "confirmed", confirmed);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)

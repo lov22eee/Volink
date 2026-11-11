@@ -28,7 +28,7 @@ function HostedRow({ a }: { a: LiveActivity }) {
   const n = Number((a as LiveActivity & { completed?: number }).completed ?? 0)
   return <a className="m-row" href={'#/manage/' + a.id}>
     <span className="m-row-ico host"><MIcon name="users" size={20} /></span>
-    <span className="m-row-main"><strong>{a.title}</strong><small>{a.date.slice(5).replace('-', '/')} {a.startTime} · {durationLabel(a.durationMinutes)} · 모집 · {n}명 참여</small></span>
+    <span className="m-row-main"><strong>{a.title}</strong><small>{a.date.slice(5).replace('-', '/')} {a.startTime} · {durationLabel(a.durationMinutes + (a.extraMinutes ?? 0))} · 모집 · {n}명 참여</small></span>
     <span className="m-badge host">모집 완료</span></a>
 }
 

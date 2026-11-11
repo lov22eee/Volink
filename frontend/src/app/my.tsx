@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { api } from '../api'
 import type { LiveActivity, MyRecord, User } from '../api'
 import { hostedRecords } from './mine'
+import { LimitCard, useStatus } from './status'
 import { categories, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
@@ -69,6 +70,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const [records, setRecords] = useState<MyRecord[] | null>(null)
   const [saved, setSaved] = useState<number | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
+  const status = useStatus()
   const [about, setAbout] = useState(false)
   const [nickname, setNickname] = useState<string | null>(null)
   // A (2026-11-06): one total = Volink records + the 1365 total read from the person's own 1365 page (not checked by Volink).
@@ -84,7 +86,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const valid = (records ?? []).filter(x => x.status === 'VALID')
   // 2026-11-08 (user decision): a personal member who ran an activity volunteered too — finished ones count as Volink time.
   const led = user.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted ?? [])
-  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0) + led.reduce((sum, a) => sum + a.durationMinutes, 0)
+  const volinkMinutes = valid.reduce((sum, x) => sum + x.durationMinutes, 0) + led.reduce((sum, a) => sum + a.durationMinutes + (a.extraMinutes ?? 0), 0)
   // 1365 part: the imported official total; without one (직접 남기기), the hours on the certificates entered.
   const extRecords = useRecords()
   const certs = (extRecords ?? []).filter(r => r.certified)
@@ -101,6 +103,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
     { icon: 'record', label: '활동 기록', href: '#/records', note: (() => { const n = valid.length + led.length + (extRecords ?? []).filter(r => r.status === 'ATTENDED').length; return n ? n + '건' : undefined })() },
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') || '선택 안 함' },
+    { icon: 'alert', label: '내 이용 상태', href: '#/my?view=status', note: status ? (status.apply || status.write ? '제한 중' : status.noShows ? `불참 ${status.noShows}` : '정상') : undefined },
   ]
   const more: Item[] = [
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
@@ -112,6 +115,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   return <div className="m-screen">
     <TopBar title="마이페이지" actions={<>{actions}<a className="m-icon-btn" href="#/settings" aria-label="설정"><MIcon name="settings" /></a></>} />
     <div className="m-body">
+      {status && <LimitCard status={status} />}
       {/* 마이 A안 (2026-11-08): one card — profile, then 함께한 시간, then the 1365 line (no separate boxes). */}
       <section className="m-profile my-card">
         <div className="m-profile-top"><span className="m-avatar"><MIcon name="user" size={26} /></span>

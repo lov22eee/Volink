@@ -13,7 +13,8 @@ import { CommunityScreen, PostScreen, WriteScreen } from './community'
 import { FindScreen } from './find'
 import { SearchScreen } from './search'
 import { RecordScreen } from './record'
-import { LabScreen } from './lab'
+import { LabScreen, logout1365 } from './lab'
+import { StatusScreen } from './status'
 import { HomeScreen } from './home'
 import { NewsScreen } from './news'
 import { CreateWizard, HostScreen } from './host'
@@ -69,7 +70,7 @@ export default function MobileApp() {
     return () => window.clearInterval(timer)
   }, [user, pollUnread, route.page])
 
-  const signOut = useCallback(async () => { await stopPush(); await logout(); setUser(null); window.location.hash = '#/login' }, [])
+  const signOut = useCallback(async () => { await stopPush(); await logout1365(); await logout(); setUser(null); window.location.hash = '#/login' }, [])
   // Signed in on the phone: hand this phone's push token to the server (only when notifications are allowed).
   useEffect(() => { if (user) void startPush() }, [user?.id])
   const onSession = (signed: User) => { setUser(signed); if (['login', 'signup', ''].includes(parse(window.location.hash).page)) window.location.hash = '#/home' }
@@ -104,13 +105,13 @@ export default function MobileApp() {
     case 'search': screen = <SearchScreen key={route.query.get('q') ?? ''} initial={route.query.get('q') ?? undefined} />; break
     case 'find': screen = <FindScreen actions={bell} focus={route.query.get('focus') === '1'} initial={route.query.get('chip') ?? undefined} category={route.query.get('category') ?? undefined} />; break
     case 'host': screen = <HostScreen user={user} actions={bell} />; break
-    case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} />; break
+    case 'community': screen = <CommunityScreen actions={<>{search}{bell}</>} activity={Number(route.query.get('activity')) || undefined} />; break
     case 'post': screen = route.id ? <PostScreen key={route.id} id={route.id} onChange={pollUnread} /> : null; break
     case 'write': screen = <WriteScreen key={'w' + (route.query.get('edit') ?? '')} initial={route.query.get('category') ?? undefined} activity={Number(route.query.get('activity')) || undefined} external={Number(route.query.get('external')) || undefined} editId={Number(route.query.get('edit')) || undefined} />; break
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
     case 'mine': screen = <MineScreen key={route.query.get('all') ?? 'tabs'} actions={bell} initial={route.query.get('tab') ?? undefined} all={route.query.get('all') ?? undefined} />; break
-    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : <MyScreen user={user} actions={bell} />; break
+    case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : route.query.get('view') === 'status' ? <StatusScreen /> : <MyScreen user={user} actions={bell} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
     case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break

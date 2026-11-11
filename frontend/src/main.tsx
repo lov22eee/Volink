@@ -14,6 +14,10 @@ if (qrLink) window.history.replaceState(null, '', '/#/checkin/' + qrLink[1] + wi
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 if (import.meta.env.MODE === 'app') {
   import('./app/index').then(({ default: MobileApp }) => root.render(<React.StrictMode><MobileApp /></React.StrictMode>))
-} else {
+} else if (window.__VOLINK_UI_DEMO__) {
+  // The offline one-file export (no server) keeps the old web screens with their sample data.
   root.render(<React.StrictMode><App /></React.StrictMode>)
+} else {
+  // PC (2026-11-11): public pages, 기관센터 and the admin console; personal members use the app.
+  import('./pc/index').then(({ default: PcApp }) => root.render(<React.StrictMode><PcApp /></React.StrictMode>))
 }

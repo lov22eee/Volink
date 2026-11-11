@@ -35,7 +35,16 @@ public class LabPlugin extends Plugin {
         intent.putExtra("program", call.getString("program", ""));
         // 이어서 가져오기 (A안): the other page (실적 ↔ 신청 현황), offered in the same window after the first one.
         intent.putExtra("other", call.getString("other", ""));
+        // 1365 로그인 유지 (2026-11-09, week 7): keep this phone's 1365 login cookies when the window closes.
+        intent.putExtra("keep", Boolean.TRUE.equals(call.getBoolean("keep", false)));
         startActivityForResult(call, intent, "labResult");
+    }
+
+    /** 1365 로그아웃 (설정, Volink 로그아웃·탈퇴): every cookie and the 1365 sites' web storage on this phone. */
+    @PluginMethod
+    public void logout(PluginCall call) {
+        LabActivity.forget1365();
+        call.resolve();
     }
 
     @ActivityCallback
@@ -47,6 +56,8 @@ public class LabPlugin extends Plugin {
             out.put("text", data.getStringExtra("text"));
             out.put("host", data.getStringExtra("host"));
             out.put("applied", data.getBooleanExtra("applied", false));
+            // Only 실적 came back (신청 현황 could not be read) → the app offers 신청 현황만 다시.
+            out.put("partial", data.getBooleanExtra("partial", false));
             java.util.ArrayList<String> texts = data.getStringArrayListExtra("texts");
             if (texts != null) {
                 com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();

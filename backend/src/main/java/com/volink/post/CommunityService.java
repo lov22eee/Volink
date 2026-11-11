@@ -30,6 +30,17 @@ public class CommunityService {
     private final NotificationService notifications;
     private final Clock clock;
 
+    private com.volink.safety.PenaltyService penalties;
+
+    /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
+    private com.volink.safety.PhotoService photos;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhotos(com.volink.safety.PhotoService photos) { this.photos = photos; }
+
     public CommunityService(JdbcTemplate jdbc, AuthService auth, NotificationService notifications, Clock clock) {
         this.jdbc = jdbc;
         this.auth = auth;
@@ -44,30 +55,43 @@ public class CommunityService {
             DATE_FORMAT(a.starts_at, '%H:%i') AS activityTime, a.status AS activityStatus, a.capacity AS activityCapacity, a.starts_at AS activityStartsAt,
             (SELECT dp.name FROM demo_places dp WHERE dp.id = a.place_id) AS activityPlace,
             (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS activityConfirmed,
+            (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'OFFERED')) AS activityTaken,
+            (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status = 'WAITLISTED') AS activityWaiting,
+            (SELECT COUNT(*) FROM participations ap WHERE ap.activity_id = a.id AND ap.status = 'APPLIED') AS activityPending,
+            a.organizer_id AS activityOrganizerId,
+            (SELECT COUNT(*) FROM community_posts rv WHERE rv.category = 'REVIEW' AND rv.activity_id = a.id AND rv.deleted_at IS NULL) AS activityReviews,
+            (SELECT CONCAT(x.status, ':', COALESCE(WAIT_PLACE_X, '')) FROM participations x WHERE x.activity_id = a.id AND x.user_id = ?
+                AND x.status IN ('APPLIED', 'WAITLISTED', 'OFFERED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED') ORDER BY x.id DESC LIMIT 1) AS myParticipation,
             p.external_id AS externalId, (SELECT e.title FROM external_records e WHERE e.id = p.external_id) AS externalTitle,
             (SELECT DATE_FORMAT(e.starts_at, '%Y-%m-%d') FROM external_records e WHERE e.id = p.external_id) AS externalDate,
             (SELECT e.cert_at IS NOT NULL FROM external_records e WHERE e.id = p.external_id) AS externalCertified,
             DATE_FORMAT(KST(p.created_at), '%Y-%m-%dT%H:%i') AS createdAt,
             (SELECT COUNT(*) FROM community_likes l WHERE l.post_id = p.id) AS likes,
+            (SELECT COUNT(*) FROM post_photos ph WHERE ph.post_id = p.id AND ph.hidden = FALSE) AS photoCount,
+            (SELECT CONCAT('/api/photos/', ph.storage_key) FROM post_photos ph WHERE ph.post_id = p.id AND ph.hidden = FALSE ORDER BY ph.position, ph.id LIMIT 1) AS photo,
             (SELECT COUNT(*) FROM community_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
             EXISTS (SELECT 1 FROM community_likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
             FROM community_posts p JOIN users u ON u.id = p.author_id LEFT JOIN activities a ON a.id = p.activity_id AND a.status <> 'DELETED'
-            """;
+            """.replace("WAIT_PLACE_X", com.volink.participation.ParticipationService.waitPlace("x"));
 
     public List<Map<String, Object>> list(long viewerId, String category, String sort) { return list(viewerId, category, sort, null); }
 
     /** sort = latest (default) or popular (likes, then comments, then newest). q = words in the title or text (통합검색). Up to 50. */
-    public List<Map<String, Object>> list(long viewerId, String category, String sort, String q) {
+    public List<Map<String, Object>> list(long viewerId, String category, String sort, String q) { return list(viewerId, category, sort, q, null); }
+
+    /** {@code activity} (week 7): only posts tied to that activity (끝난 홍보 → 이 활동 후기). */
+    public List<Map<String, Object>> list(long viewerId, String category, String sort, String q, Long activity) {
         boolean filter = category != null && CATEGORIES.contains(category);
         String words = q == null ? "" : q.trim();
         if (words.length() > 40) words = words.substring(0, 40);
         String like = "%" + words.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
         String order = "popular".equals(sort) ? "likes DESC, comments DESC, p.created_at DESC, p.id DESC" : "p.created_at DESC, p.id DESC";
-        List<Object> args = new java.util.ArrayList<>(List.of(viewerId));
+        List<Object> args = new java.util.ArrayList<>(List.of(viewerId, viewerId));
         if (filter) args.add(category);
         if (!words.isEmpty()) { args.add(like); args.add(like); }
-        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL" + (filter ? " AND p.category = ?" : "")
-                + (words.isEmpty() ? "" : " AND (p.title LIKE ? OR p.body LIKE ?)") + " ORDER BY " + order + " LIMIT 50"), args.toArray());
+        if (activity != null) args.add(activity);
+        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.deleted_at IS NULL AND p.hidden_at IS NULL" + (filter ? " AND p.category = ?" : "")
+                + (words.isEmpty() ? "" : " AND (p.title LIKE ? OR p.body LIKE ?)") + (activity == null ? "" : " AND p.activity_id = ?") + " ORDER BY " + order + " LIMIT 50"), args.toArray());
         rows.forEach(row -> {
             String body = (String) row.remove("body");
             row.put("preview", body.length() > 80 ? body.substring(0, 80) + "…" : body);
@@ -77,14 +101,14 @@ public class CommunityService {
     }
 
     public Map<String, Object> detail(long viewerId, long id) {
-        Map<String, Object> post = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.id = ? AND p.deleted_at IS NULL"), viewerId, id)
+        Map<String, Object> post = jdbc.queryForList(Sql.kst("SELECT " + COLUMNS + " WHERE p.id = ? AND p.deleted_at IS NULL AND p.hidden_at IS NULL"), viewerId, viewerId, id)
                 .stream().findFirst().orElseThrow(CommunityService::notFound);
         shape(post, viewerId);
         Long organizer = post.get("activityId") == null ? null
                 : jdbc.queryForObject("SELECT organizer_id FROM activities WHERE id = ?", Long.class, post.get("activityId"));
         List<Map<String, Object>> comments = jdbc.queryForList(Sql.kst("""
                 SELECT c.id, c.body, c.author_id AS authorId, u.display_name AS name, u.community_nickname AS nickname, DATE_FORMAT(KST(c.created_at), '%Y-%m-%dT%H:%i') AS createdAt, c.edited_at IS NOT NULL AS edited
-                FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL ORDER BY c.created_at, c.id
+                FROM community_comments c JOIN users u ON u.id = c.author_id WHERE c.post_id = ? AND c.deleted_at IS NULL AND c.hidden_at IS NULL ORDER BY c.created_at, c.id
                 """), id);
         comments.forEach(comment -> {
             long author = ((Number) comment.remove("authorId")).longValue();
@@ -96,19 +120,48 @@ public class CommunityService {
         });
         post.remove("authorIdRaw");
         post.put("comments", comments);
+        post.put("photos", photos == null ? List.of() : photos.ofPost(id));
         return post;
     }
 
-    /** Completed activities the person can write a review about (newest first). */
+    /**
+     * Finished activities the person can write a review about, newest first, each once (week 7): ones they completed
+     * (hosted = false) and ones they organized that ended with at least one completed participant (hosted = true).
+     */
     public List<Map<String, Object>> reviewable(long userId) {
-        return jdbc.queryForList("""
-                SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes
-                FROM activity_records r JOIN participations p ON p.id = r.participation_id JOIN activities a ON a.id = p.activity_id
-                WHERE p.user_id = ? AND r.status = 'VALID' AND a.status <> 'DELETED' ORDER BY a.starts_at DESC
-                """, userId);
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT * FROM (
+                  SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, 0 AS hosted,
+                         (SELECT COUNT(*) FROM participations q WHERE q.activity_id = a.id AND q.status = 'COMPLETED') AS people
+                  FROM activity_records r JOIN participations p ON p.id = r.participation_id JOIN activities a ON a.id = p.activity_id
+                  WHERE p.user_id = ? AND r.status = 'VALID' AND a.status <> 'DELETED'
+                  UNION
+                  SELECT a.id, a.title, DATE_FORMAT(a.starts_at, '%Y-%m-%d'), TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at), 1,
+                         (SELECT COUNT(*) FROM participations q WHERE q.activity_id = a.id AND q.status = 'COMPLETED')
+                  FROM activities a WHERE a.organizer_id = ? AND a.status = 'FINISHED'
+                    AND EXISTS (SELECT 1 FROM participations q JOIN activity_records qr ON qr.participation_id = q.id WHERE q.activity_id = a.id AND qr.status = 'VALID')
+                ) t
+                WHERE NOT EXISTS (SELECT 1 FROM community_posts cp WHERE cp.author_id = ? AND cp.activity_id = t.id AND cp.category = 'REVIEW' AND cp.deleted_at IS NULL)
+                ORDER BY t.date DESC, t.id DESC
+                """, userId, userId, userId);
+        rows.forEach(row -> row.put("hosted", ((Number) row.get("hosted")).intValue() == 1));
+        return rows;
     }
 
-    public record PostRequest(String category, String title, String body, Long activityId, Long externalId) {}
+    /** 봉사 홍보 (week 7): my activities still recruiting and not started, with the post that already introduces each (if any). */
+    public List<Map<String, Object>> promotable(long userId) {
+        return jdbc.queryForList("""
+                SELECT a.id, a.title, a.status, DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime, a.capacity,
+                       (SELECT COUNT(*) FROM participations q WHERE q.activity_id = a.id AND q.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
+                       (SELECT cp.id FROM community_posts cp WHERE cp.category = 'PROMO' AND cp.activity_id = a.id AND cp.deleted_at IS NULL LIMIT 1) AS promoPostId,
+                       (SELECT cp.title FROM community_posts cp WHERE cp.category = 'PROMO' AND cp.activity_id = a.id AND cp.deleted_at IS NULL LIMIT 1) AS promoTitle
+                FROM activities a WHERE a.organizer_id = ? AND a.status IN ('RECRUITING', 'REVIEW') AND a.starts_at > ? ORDER BY a.id DESC
+                """, userId, java.time.LocalDateTime.now(clock));
+    }
+
+    public record PostRequest(String category, String title, String body, Long activityId, Long externalId, List<Long> photoIds) {
+        public PostRequest(String category, String title, String body, Long activityId, Long externalId) { this(category, title, body, activityId, externalId, null); }
+    }
 
     @Transactional
     public Map<String, Object> create(long userId, PostRequest request) {
@@ -126,10 +179,12 @@ public class CommunityService {
             externalId = request.externalId();
             if (jdbc.queryForObject("SELECT COUNT(*) FROM external_records WHERE id = ? AND user_id = ? AND status = 'ATTENDED'", Integer.class, externalId, userId) == 0)
                 errors.put("activityId", "다녀왔다고 남긴 1365 활동에만 후기를 쓸 수 있어요.");
+            else if (jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE external_id = ? AND category = 'REVIEW' AND deleted_at IS NULL", Integer.class, externalId) > 0)
+                errors.put("activityId", "이 기록에는 이미 후기를 썼어요.");
         } else if ("REVIEW".equals(category)) {
             activityId = request.activityId();
             if (activityId == null || reviewable(userId).stream().noneMatch(row -> ((Number) row.get("id")).longValue() == request.activityId()))
-                errors.put("activityId", "후기는 내가 참여를 마친 활동에만 쓸 수 있어요.");
+                errors.put("activityId", "후기는 내가 참여를 마치거나 모집을 마친 활동에 한 번씩 쓸 수 있어요.");
         }
         if ("PROMO".equals(category)) {
             // Only the organizer, only an activity still recruiting and not started, and one introduction per activity.
@@ -145,8 +200,12 @@ public class CommunityService {
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         int today = jdbc.queryForObject("SELECT COUNT(*) FROM community_posts WHERE author_id = ? AND created_at > NOW() - INTERVAL 1 DAY", Integer.class, userId);
         if (today >= POSTS_PER_DAY) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_POSTS", "글은 하루에 " + POSTS_PER_DAY + "개까지 쓸 수 있어요.");
+        if (photos != null) photos.loose(userId, request.photoIds(), com.volink.safety.PhotoService.PER_POST);
         jdbc.update("INSERT INTO community_posts(author_id, category, title, body, activity_id, external_id) VALUES (?, ?, ?, ?, ?, ?)", userId, category, title, body, activityId, externalId);
-        return detail(userId, jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class));
+        long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        // Week 7: up to 5 photos the person uploaded just before (re-encoded without location metadata).
+        if (photos != null && request.photoIds() != null) photos.attach(userId, id, request.photoIds());
+        return detail(userId, id);
     }
 
     public record EditRequest(String title, String body) {}
@@ -183,6 +242,7 @@ public class CommunityService {
         long author = authorOf("community_posts", id);
         if (author != userId && !auth.findById(userId).admin()) throw notFound();
         jdbc.update("UPDATE community_posts SET deleted_at = ? WHERE id = ?", now(), id);
+        if (photos != null) photos.deleteOfPost(id); // the photos go with the post
     }
 
     @Transactional
@@ -234,9 +294,24 @@ public class CommunityService {
         if (row.get("externalCertified") instanceof Number c) row.put("externalCertified", c.intValue() == 1);
         // 봉사 홍보: the live card (open = still taking applications: recruiting, not started, seats or a waiting list).
         if ("PROMO".equals(row.get("category")) && row.get("activityId") != null) {
-            boolean upcoming = row.get("activityStartsAt") instanceof java.time.LocalDateTime at && at.isAfter(java.time.LocalDateTime.now(clock));
+            java.time.LocalDateTime now = java.time.LocalDateTime.now(clock);
+            boolean upcoming = row.get("activityStartsAt") instanceof java.time.LocalDateTime at && at.isAfter(now);
             row.put("activityOpen", "RECRUITING".equals(row.get("activityStatus")) && upcoming);
+            // Week 7: the card's button follows the same rules as the activity page — the waiting list closes 2 h before.
+            row.put("activityWaitOpen", row.get("activityStartsAt") instanceof java.time.LocalDateTime at && at.isAfter(now.plusHours(2)));
         }
+        // Week 7: where a review comes from — 1365 record, the organizer's own activity, or a completed participation.
+        if ("REVIEW".equals(row.get("category")))
+            row.put("reviewSource", row.get("externalId") != null ? "EXTERNAL" : row.get("activityOrganizerId") instanceof Number o && o.longValue() == author ? "HOST" : row.get("activityId") != null ? "JOIN" : null);
+        // The viewer's own place in the linked activity: APPLIED / WAITLISTED:3 / OFFERED / CONFIRMED … (none = null).
+        Object mine = row.remove("myParticipation");
+        if (mine instanceof String text && !text.isEmpty()) {
+            String[] parts = text.split(":", -1);
+            row.put("myStatus", parts[0]);
+            if (parts.length > 1 && !parts[1].isEmpty()) row.put("myWaitOrder", Integer.parseInt(parts[1]));
+        }
+        row.put("activityOrganizer", row.get("activityOrganizerId") instanceof Number o && o.longValue() == viewerId);
+        row.remove("activityOrganizerId");
         row.remove("activityStartsAt");
         if (!row.containsKey("body")) row.remove("authorIdRaw");
     }
@@ -245,6 +320,7 @@ public class CommunityService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 글을 쓸 수 없습니다.");
         if (!user.canWrite()) throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_RESTRICTED", "이용이 제한된 계정은 글을 쓸 수 없습니다.");
+        if (penalties != null) penalties.check(userId, "WRITE");
         if (!Boolean.TRUE.equals(profile(userId).get("ready")))
             throw new ApiException(HttpStatus.FORBIDDEN, "COMMUNITY_SETUP_REQUIRED", "커뮤니티 닉네임을 정하고 이용 규칙에 동의해 주세요.");
     }

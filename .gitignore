@@ -36,3 +36,5 @@ Thumbs.db
 
 # Firebase app config: GitHub secret GOOGLE_SERVICES_JSON writes it during the APK build only
 frontend/android/app/google-services.json
+backend/uploads/
+/uploads/
