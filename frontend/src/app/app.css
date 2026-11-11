@@ -1729,3 +1729,4 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .as-seats i { display: block; height: 8px; border-radius: 99px; background: #eef0ec; overflow: hidden; }
 .as-seats i em { display: block; height: 100%; background: var(--m-green); border-radius: 99px; }
 .as-desc { margin: 12px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+:root.m-app .toast.bad .toast-check { background: var(--m-hot); }

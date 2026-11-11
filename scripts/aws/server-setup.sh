@@ -71,6 +71,7 @@ if [ -s /etc/volink/firebase-service-account.json ]; then
   echo "FIREBASE_SERVICE_ACCOUNT_FILE=/etc/volink/firebase-service-account.json" >> "$keys"
 fi
 if [ -s /etc/volink/oauth_redirect_base ]; then echo "OAUTH_REDIRECT_BASE=$(tr -d '[:space:]' < /etc/volink/oauth_redirect_base)" >> "$keys"; fi
+install -d -o volink -g volink -m 750 /var/lib/volink /var/lib/volink/uploads
 cat > /etc/systemd/system/volink-api.service <<UNIT
 [Unit]
 Description=Volink API
@@ -84,6 +85,9 @@ EnvironmentFile=-$keys
 # dev profile = demo server: creates the 11 demo accounts from DEMO_ACCOUNT_PASSWORD in .env.
 Environment=SPRING_PROFILES_ACTIVE=dev
 Environment=DB_HOST=127.0.0.1
+# Photos (community, report evidence): kept outside the code folder, writable by the service only.
+Environment=UPLOAD_DIR=/var/lib/volink/uploads
+WorkingDirectory=/var/lib/volink
 # 관리자 콘솔 › 현황 › 서버 상태에 보이는 배포 버전(커밋).
 Environment=VOLINK_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo)
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/volink-app/volink-api.jar

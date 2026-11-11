@@ -954,3 +954,5 @@ a.kpi:hover { border-color: var(--green); }
 .social-or { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 12.5px; margin-top: 6px; }
 .social-or::before, .social-or::after { content: ''; flex: 1; height: 1px; background: var(--line-2); }
 .social-signup { grid-template-columns: minmax(0, 560px); justify-content: center; }
+.toast.bad .toast-check { background: #b8321f; color: #fff; }
+.toast-check b { font-size: 13px; font-weight: 900; line-height: 1; }
