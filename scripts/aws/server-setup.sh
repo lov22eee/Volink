@@ -84,6 +84,8 @@ EnvironmentFile=-$keys
 # dev profile = demo server: creates the 11 demo accounts from DEMO_ACCOUNT_PASSWORD in .env.
 Environment=SPRING_PROFILES_ACTIVE=dev
 Environment=DB_HOST=127.0.0.1
+# 관리자 콘솔 › 현황 › 서버 상태에 보이는 배포 버전(커밋).
+Environment=VOLINK_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo)
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/volink-app/volink-api.jar
 Restart=always
 RestartSec=5
@@ -99,6 +101,7 @@ step "frontend build"
 # Kakao Maps JavaScript key (public, domain-restricted). Without it the site shows a simple position sketch.
 if [ -s /etc/volink/kakao_js_key ]; then export VITE_KAKAO_JS_KEY="$(tr -d '[:space:]' < /etc/volink/kakao_js_key)"; fi
 (cd frontend && npm ci --no-audit --no-fund && npm run build)
+mkdir -p /var/www/volink-files
 rm -rf /var/www/volink && mkdir -p /var/www/volink && cp -r frontend/dist/. /var/www/volink/
 
 step "nginx + https"
@@ -106,7 +109,8 @@ site=/etc/nginx/sites-available/volink
 common="
     root /var/www/volink;
     index index.html;
-    client_max_body_size 1m;
+    # Photos: the phone shrinks them, the server accepts up to 15 MB (volink.upload); keep nginx above that.
+    client_max_body_size 16m;
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host \$host;
@@ -114,6 +118,8 @@ common="
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
     location = /actuator/health { proxy_pass http://127.0.0.1:8080; }
+    # PC 첫 화면 [앱 받기]: put the APK at /var/www/volink-files/volink.apk (kept across rebuilds).
+    location = /download/volink.apk { alias /var/www/volink-files/volink.apk; default_type application/vnd.android.package-archive; }
     location / { try_files \$uri /index.html; }"
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
   cat > "$site" <<NGINX

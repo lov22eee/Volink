@@ -34,5 +34,11 @@ public class ParticipationScheduler {
         checkIns.advance();
         external.remind();
         appeals.escalateDue();
+        lastRun = java.time.LocalDateTime.now(java.time.ZoneId.of("Asia/Seoul"));
     }
+
+    private static volatile java.time.LocalDateTime lastRun;
+
+    /** When the last full pass finished (Korean time), for the admin server status; null before the first pass or when off. */
+    public static java.time.LocalDateTime lastRun() { return lastRun; }
 }

@@ -388,7 +388,7 @@ function ExampleDetail({ activity, description }: { activity: CardItem; descript
   return <DetailView item={activity} description={description} badge="예시 활동" note="예시 활동은 참가 신청을 받지 않습니다. 장소와 일정은 예시입니다." action={<button disabled className="pill-button dark">예시 활동은 신청을 받지 않습니다</button>} />
 }
 
-function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean; user: User | null; onChange: () => void }) {
+export function LiveDetail({ id, ready, user, onChange }: { id: number; ready: boolean; user: User | null; onChange: () => void }) {
   const [activity, setActivity] = useState<LiveActivity | null>(null)
   const [missing, setMissing] = useState(false)
   const [viewer, setViewer] = useState<ViewerInfo | null>(null)
@@ -962,7 +962,7 @@ function HBars({ data }: { data: { label: string; value: number }[] }) {
   return <ul className="h-bars">{data.map(item => <li key={item.label}><span>{item.label}</span><span className="bar"><i style={{ width: item.value / max * 100 + '%' }} /></span><strong>{item.value}</strong></li>)}</ul>
 }
 
-function PlaceEditor({ place, onSaved }: { place: PlaceInfo; onSaved: (message: string) => void }) {
+export function PlaceEditor({ place, onSaved }: { place: PlaceInfo; onSaved: (message: string) => void }) {
   const [coordinate, setCoordinate] = useState(place.latitude != null ? place.latitude + ', ' + place.longitude : '')
   const [meetingPoint, setMeetingPoint] = useState(place.meetingPoint ?? '')
   const [error, setError] = useState('')
