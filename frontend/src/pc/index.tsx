@@ -6,7 +6,7 @@ import { logout, mayHaveSession, refresh } from '../api'
 import type { User } from '../api'
 import { AdminConsole } from './admin'
 import { OrgCenter, OrgPending } from './org'
-import { AppOnly, OrgSignup, PcLogin, PublicDetail, PublicHome } from './public'
+import { AppOnly, OrgPage, OrgSignup, PcLogin, PublicDetail, PublicHome } from './public'
 import { Loading } from './ui'
 import './pc.css'
 
@@ -63,6 +63,7 @@ export default function PcApp() {
     else page = <OrgCenter parts={p} query={route.query} user={user} onSignOut={signOut} onChange={restore} />
   } else if (p[0] === 'login') page = <PcLogin onSession={setUser} />
   else if (p[0] === 'app') page = ready && user ? <AppOnly user={user} onSignOut={signOut} /> : ready ? <PublicHome user={null} onSignOut={signOut} /> : <Loading />
+  else if (p[0] === 'o' && p[1]) page = <OrgPage key={p[1]} id={Number(p[1])} user={user} onSignOut={signOut} />
   else if (p[0] === 'activity' && p[1] && !p[2]) page = <PublicDetail key={p[1]} id={Number(p[1])} user={user} onSignOut={signOut} />
   else page = <PublicHome user={user} onSignOut={signOut} />
   return <>{page}<ToastHost /></>

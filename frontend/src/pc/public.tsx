@@ -87,13 +87,13 @@ export function PublicDetail({ id, user, onSignOut }: { id: number; user: User |
     : !a ? <Loading /> : <main className="pc-pub pc-detail">
       <div className="main">
         <p className="mu"><a href="#/">봉사 찾기</a> › {a.category}</p>
-        <div className="pc-chips" style={{ gap: 6 }}><span className="pc-tag g">{a.category}</span>{a.difficulty && <span className="pc-tag">{difficultyWord[a.difficulty]}</span>}{a.placeKind && <span className="pc-tag">{placeWord[a.placeKind]}</span>}{(a.newcomerOk === true || a.newcomerOk === 1) && <span className="pc-tag g">처음 환영</span>}{a.activityType === 'INSTITUTION' && <span className="pc-tag blu">{a.organizationName ?? '기관'} 주관</span>}</div>
+        <div className="pc-chips" style={{ gap: 6 }}><span className="pc-tag g">{a.category}</span>{a.difficulty && <span className="pc-tag">{difficultyWord[a.difficulty]}</span>}{a.placeKind && <span className="pc-tag">{placeWord[a.placeKind]}</span>}{(a.newcomerOk === true || a.newcomerOk === 1) && <span className="pc-tag g">처음 환영</span>}{a.activityType === 'INSTITUTION' && <span className="pc-tag blu">{a.organizationName ?? '기관'} 주관</span>}{(a.youthOk === false || a.youthOk === 0) && <span className="pc-tag">만 19세 이상</span>}</div>
         <h1>{a.title}</h1>
         <div className="pc-pn" style={{ padding: '4px 16px' }}>
           <div className="pc-kv"><span>일시</span><b>{when(a.date, a.startTime)} · {minutesWord(a.durationMinutes)}</b></div>
           <div className="pc-kv"><span>장소</span><b>{[a.placeName ?? '장소 미정', a.meetingPoint].filter(Boolean).join(' · ')}</b></div>
           <div className="pc-kv"><span>모집</span><b>확정 {a.confirmed} / {a.capacity}명{a.waiting ? ` · 대기 ${a.waiting}명` : ''}</b></div>
-          <div className="pc-kv" style={{ borderBottom: 0 }}><span>모집자</span><b>{a.activityType === 'INSTITUTION' ? a.organizationName : a.organizerName}{a.organizerStats ? ` · 모집 ${a.organizerStats.hosted}회 · 완료 ${a.organizerStats.finished}회` : ''}</b></div>
+          <div className="pc-kv" style={{ borderBottom: 0 }}><span>모집자</span><b>{a.activityType === 'INSTITUTION' && a.organizationId ? <a className="pc-link" href={'#/o/' + a.organizationId}>{a.organizationName}</a> : a.activityType === 'INSTITUTION' ? a.organizationName : a.organizerName}{a.organizerStats ? ` · 모집 ${a.organizerStats.hosted}회 · 완료 ${a.organizerStats.finished}회` : ''}</b></div>
         </div>
         <div className="pc-pn" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <h2>어떤 활동인가요?</h2><p style={{ whiteSpace: 'pre-wrap', color: 'var(--pc-ink2)', lineHeight: 1.7 }}>{a.description}</p>
@@ -214,4 +214,47 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
       {message && <p className="pc-err" role="alert" style={{ margin: 0 }}>{message}</p>}
       <button className="pc-btn lg" disabled={busy}>{busy ? '보내는 중…' : '가입 신청하기'}</button>
     </form></div></div>
+}
+
+type OrgPageData = { id: number; name: string; orgType: string | null; address: string | null; intro: string | null; vmsRegistered: boolean | number | null
+  hosted: number; people: number; attendance: number | null
+  recruiting: { id: number; title: string; category: string; date: string; startTime: string; capacity: number; confirmed: number }[]
+  reviews: { id: number; title: string; author: string; activityTitle: string; date: string }[] }
+const orgTypeWord: Record<string, string> = { VOLUNTEER_CENTER: '자원봉사센터', WELFARE: '복지관·복지시설', SCHOOL: '학교·교육기관', NONPROFIT: '비영리단체', PUBLIC: '공공기관', OTHER: '기관' }
+
+/** 기관 공개 페이지 (#/o/{id}): anyone, no login; what the institution does, its open posts and reviews. */
+export function OrgPage({ id, user, onSignOut }: { id: number; user: User | null; onSignOut: () => void }) {
+  const [o, setO] = useState<OrgPageData | null>(null)
+  const [missing, setMissing] = useState(false)
+  const [copied, setCopied] = useState(false)
+  useEffect(() => { api<OrgPageData>('/api/organizations/' + id).then(setO).catch(() => setMissing(true)) }, [id])
+  const body = missing ? <div className="pc-center"><div className="pc-pn pc-card" style={{ textAlign: 'center' }}><h1>기관을 찾을 수 없어요</h1><a className="pc-btn" href="#/">모집 둘러보기</a></div></div>
+    : !o ? <Loading /> : <main className="pc-pub" style={{ maxWidth: 1150 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p className="mu"><a href="#/">봉사 찾기</a> › 기관</p>
+        <section className="pc-pn pc-orghead" aria-label="기관">
+          <span className="mark" aria-hidden="true">{o.name.slice(0, 1)}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="pc-chips" style={{ gap: 6, marginBottom: 6 }}><span className="pc-tag blu">{orgTypeWord[o.orgType ?? ''] ?? '기관'}</span><span className="pc-tag g">확인된 기관</span>{o.vmsRegistered ? <span className="pc-tag">1365 수요처</span> : null}</div>
+            <h1>{o.name}</h1>{o.address && <p className="mu" style={{ marginTop: 2 }}>{o.address}</p>}
+            {o.intro && <p style={{ marginTop: 8, color: 'var(--pc-ink2)', whiteSpace: 'pre-wrap' }}>{o.intro}</p>}
+          </div>
+          <div className="nums"><div><b>{o.hosted}</b><span>모집</span></div><div><b>{o.people}명</b><span>함께한 사람</span></div><div><b>{o.attendance == null ? '–' : o.attendance + '%'}</b><span>출석률</span></div></div>
+        </section>
+        <section className="pc-pn" aria-label="지금 모집 중"><div className="pc-ph"><h2>지금 모집 중</h2><small>{o.recruiting.length}개</small></div>
+          {o.recruiting.length === 0 ? <p className="pc-empty">지금 모집 중인 활동이 없어요.</p> : <table className="pc-tbl"><thead><tr><th>일시</th><th>활동</th><th>확정</th><th>상태</th></tr></thead><tbody>{o.recruiting.map(r =>
+            <tr key={r.id} className="go" onClick={() => { window.location.hash = '#/activity/' + r.id }}><td className="nw">{when(r.date, r.startTime)}</td><td><a className="t" href={'#/activity/' + r.id}>{r.title}</a><small>{r.category}</small></td><td className="nw">{r.confirmed}/{r.capacity}명</td>
+              <td>{r.capacity - r.confirmed > 0 ? <span className="pc-tag g">{r.capacity - r.confirmed}자리 남음</span> : <span className="pc-tag amb">대기 가능</span>}</td></tr>)}</tbody></table>}</section>
+        <section className="pc-pn" aria-label="참여한 사람들의 후기"><div className="pc-ph"><h2>참여한 사람들의 후기</h2><small>{o.reviews.length}개</small></div>
+          {o.reviews.length === 0 ? <p className="pc-empty">아직 후기가 없어요.</p> : o.reviews.map(r => <div key={r.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--pc-line2)' }}><b>{r.title}</b><p className="pc-note">{r.author} · {r.activityTitle} · {r.date}</p></div>)}
+          <p className="pc-note" style={{ padding: '10px 16px' }}>후기 전체는 Volink 앱 커뮤니티에서 볼 수 있어요.</p></section>
+      </div>
+      <aside className="pc-pn" style={{ width: 300, flex: 'none', padding: 20, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 90 }}>
+        <b>이 기관의 모집에 신청하려면</b>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}><AppQr size={92} /><span className="pc-note">Volink 앱을 받고 로그인한 뒤 모집을 찾아 신청해 주세요</span></div>
+        <a className="pc-btn lg wide" href={appUrl()}><PcIcon name="download" size={17} />앱 받기</a>
+        <button type="button" className="pc-btn line wide" onClick={() => { void navigator.clipboard?.writeText(window.location.href).then(() => setCopied(true)).catch(() => {}) }}><PcIcon name="link" />{copied ? '링크를 복사했어요' : '페이지 링크 복사'}</button>
+      </aside>
+    </main>
+  return <div className="pc"><PublicHeader user={user} current="find" onSignOut={onSignOut} />{body}<PublicFooter /></div>
 }

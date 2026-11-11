@@ -207,3 +207,38 @@ test('기관 모집글: copy a post to two new dates at once, the 1365 link show
   await visitor.goto('/#/activity/' + id)
   await expect(visitor.getByRole('link', { name: '1365에서 보기' })).toHaveAttribute('href', link)
 })
+
+test('기관: a 19+ post with a question shows the answers to the institution, and its public page has the introduction and open posts', async ({ page, request, browser }) => {
+  const email = unique('pc-org-page')
+  const orgName = 'PC 공개 페이지 센터 ' + Math.floor(Math.random() * 1e5)
+  expect((await request.post('/api/auth/signup', { data: { memberType: 'INSTITUTION', name: '최담당', email, password, interests: [], organizationName: orgName, organizationContact: '031-444-5555', organizationType: 'WELFARE', agreedNotice: true } })).ok()).toBeTruthy()
+  const adminAuth = await token(request, admin, env.DEMO_ACCOUNT_PASSWORD)
+  const orgs = await (await request.get('/api/admin/organizations?status=PENDING', { headers: { Authorization: adminAuth } })).json() as { id: number; managerEmail: string }[]
+  const orgId = orgs.find(o => o.managerEmail === email)!.id
+  expect((await request.post(`/api/admin/organizations/${orgId}/approve`, { headers: { Authorization: adminAuth }, data: { reason: '확인 완료' } })).ok()).toBeTruthy()
+  const auth = await token(request, email)
+  const title = '성인 질문 확인 정리 ' + Math.floor(Math.random() * 1e5)
+  const created = await request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'INSTITUTION', title, category: '지역사회', placeId: 1, date: inDays(6), time: '10:00', capacity: 5, durationMinutes: 90, description: body, safetyConfirmed: true, youthOk: false, applyQuestion: '앞치마 사이즈를 알려 주세요' } })
+  expect(created.ok()).toBeTruthy()
+  const id = (await created.json()).id
+  const member = await token(request, await person(request, 'PC 답변 회원'))
+  expect((await request.post(`/api/activities/${id}/participations`, { headers: { Authorization: member }, data: { answer: 'L 사이즈요' } })).ok()).toBeTruthy()
+
+  await signIn(page, email)
+  await page.goto('/#/org/activity/' + id)
+  await expect(page.getByRole('columnheader', { name: /앞치마 사이즈/ })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'L 사이즈요' })).toBeVisible()
+  await page.goto('/#/org/profile')
+  await page.getByLabel(/^소개/).fill('복지관 어르신 식사와 나들이를 함께해요.')
+  await page.getByRole('button', { name: '소개 저장' }).click()
+  await expect(page.getByRole('status')).toContainText('소개를 저장했어요')
+
+  const visitor = await (await browser.newContext({ baseURL: 'http://127.0.0.1:5173' })).newPage()
+  await visitor.goto('/#/activity/' + id)
+  await expect(visitor.getByText('만 19세 이상')).toBeVisible()
+  await visitor.getByRole('link', { name: orgName }).click()
+  await expect(visitor.getByRole('heading', { name: orgName })).toBeVisible()
+  await expect(visitor.getByText('복지관 어르신 식사와 나들이를 함께해요.')).toBeVisible()
+  await expect(visitor.getByRole('link', { name: title })).toBeVisible()
+  await expect(visitor.locator('body')).not.toContainText('031-444-5555')
+})

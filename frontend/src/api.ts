@@ -26,6 +26,8 @@ export type LiveActivity = {
   difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number; autoApprove?: boolean | number
   /** V36: the 1365 recruitment page an institution also posted (link only). */
   vmsLink?: string | null
+  /** V37: false = 만 19세 이상만; the one question asked when applying; the institution (for its public page). */
+  youthOk?: boolean | number; applyQuestion?: string | null; organizationId?: number | null
   rescheduleCount?: number; checkinOpenedAt?: string | null; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
   /** V18: the organizer's cancellation (organizer and applicants only). Counts are null for cancellations before V18. */
   cancellation?: { reasonCode: string; reasonLabel: string; message: string; statusBefore: string; confirmedCount: number | null; waitingCount: number | null; appliedCount: number | null; cancelledAt: string }
@@ -34,7 +36,7 @@ export type ParticipationStatus = 'APPLIED' | 'CONFIRMED' | 'REJECTED' | 'WAITLI
 export type Participation = { id: number; status: ParticipationStatus; waitOrder: number | null; offerExpiresAt: string | null; cancelCount?: number; lateMinutes?: number | null }
 export type Seats = { confirmed: number; offered: number; waiting: number; pending: number }
 export type ViewerInfo = Seats & { participation: Participation | null }
-export type Applicant = Participation & { name: string; appliedAt: string; checkInMethod?: 'QR' | 'CODE' | 'MANUAL' | null; checkInReason?: string | null; checkedInAt?: string | null }
+export type Applicant = Participation & { name: string; appliedAt: string; answer?: string | null; checkInMethod?: 'QR' | 'CODE' | 'MANUAL' | null; checkInReason?: string | null; checkedInAt?: string | null }
 export type MyRecord = { id: number; activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes: number; checkInMethod: 'QR' | 'MANUAL'; confirmedAt: string; appealDeadline: string; status: 'VALID' | 'HELD' | 'INVALIDATED' }
 export type MyParticipation = Participation & { activityId: number; title: string; placeName: string | null; date: string; startTime: string; durationMinutes?: number; activityStatus?: string; cancelReason?: string | null; organizerId?: number; checkinOpen?: boolean | number }
 export type AppNotification = { id: number; type: string; title: string; body: string; link: string | null; read: boolean | number; createdAt: string }

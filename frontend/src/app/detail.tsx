@@ -152,6 +152,7 @@ function Labels({ activity }: { activity: LiveActivity }) {
     {activity.difficulty && <span className="m-badge gray">{difficultyLabel[activity.difficulty]}</span>}
     {activity.placeKind && <span className="m-badge gray">{placeKindLabel[activity.placeKind]}</span>}
     {isNewcomer(activity) && <span className="m-badge mint">처음 환영</span>}
+    {(activity.youthOk === false || activity.youthOk === 0) && <span className="m-badge gray">만 19세 이상</span>}
     {activity.activityType === 'INSTITUTION' && <span className="m-badge blue">{activity.organizationName ?? '기관'} 주관</span>}
   </div>
 }
@@ -189,6 +190,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   const [failed, setFailed] = useState('')
   const [busy, setBusy] = useState(false)
   const [sheet, setSheet] = useState<'cancel' | 'late' | 'scan' | 'camera' | 'safety' | 'report' | 'appeal' | null>(null)
+  const [answer, setAnswer] = useState('')
   // Week 7: 불참·신고 누적 (warn on the 2nd no-show, block while limited) and the target of an appeal.
   const status = useStatus()
   const [appeal, setAppeal] = useState<AppealTarget | null>(null)
@@ -367,8 +369,10 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     {action && <ActionBar>{action}</ActionBar>}
 
     {sheet === 'safety' && <Sheet title={full ? '대기 신청할까요?' : '신청할까요?'} onClose={() => setSheet(null)}
-      footer={<button className="m-btn" disabled={busy} onClick={() => act('/api/activities/' + id + '/participations', undefined, full ? '대기 신청했어요' : '신청했어요')}>{full ? '대기 신청하기' : '신청하기'}</button>}>
+      footer={<button className="m-btn" disabled={busy || (Boolean(activity.applyQuestion) && !answer.trim())} onClick={() => act('/api/activities/' + id + '/participations', activity.applyQuestion ? { answer } : undefined, full ? '대기 신청했어요' : '신청했어요')}>{full ? '대기 신청하기' : '신청하기'}</button>}>
       <div className="m-summary"><strong>{activity.title}</strong><span>{dayWord(activity.date)} {activity.startTime} · {activity.meetingPoint ?? activity.placeName}</span></div>
+      {activity.applyQuestion && <label className="m-field"><span className="m-label">모집자의 질문</span><span className="m-help" style={{ margin: 0 }}>{activity.applyQuestion}</span>
+        <TextArea className="m-input" value={answer} maxLength={200} rows={2} placeholder="답을 적어 주세요 · 연락처는 적을 수 없어요" onChange={event => setAnswer(event.target.value)} /></label>}
       {full && <ul className="m-rules">
         <li><b>{(viewer.waiting ?? 0) + 1}</b><span><strong>{(viewer.waiting ?? 0) + 1}번째로 기다려요</strong><small>지금 대기 {viewer.waiting ?? 0}명</small></span></li>
         <li><b>!</b><span><strong>자리가 나면 제안이 와요</strong><small>알림을 받고 정해진 시간 안에 수락하면 확정</small></span></li>

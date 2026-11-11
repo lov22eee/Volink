@@ -30,7 +30,7 @@ public class ActivityService {
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity, a.extra_minutes AS extraMinutes, a.extra_reason AS extraReason,
                    DATE_FORMAT(a.extra_at, '%Y-%m-%dT%H:%i') AS extraAt,
-                   a.vms_link AS vmsLink, a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
+                   a.vms_link AS vmsLink, a.youth_ok AS youthOk, a.apply_question AS applyQuestion, a.organization_id AS organizationId, a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'WAITLISTED') AS waiting,
                    a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId,
@@ -160,6 +160,12 @@ public class ActivityService {
                 "등록할 수 없는 활동입니다. " + String.join(", ", result.reasons()), Map.of("risk", String.join(", ", result.reasons())));
     }
 
+    /** 청소년 참여 가능 (null keeps it) and the 신청 질문 (null keeps it, empty clears it). */
+    private void options(long id, Boolean youthOk, String question) {
+        if (youthOk != null) jdbc.update("UPDATE activities SET youth_ok = ? WHERE id = ?", youthOk, id);
+        if (question != null) jdbc.update("UPDATE activities SET apply_question = ? WHERE id = ?", question.isEmpty() ? null : question, id);
+    }
+
     private Map<String, Object> save(long userId, ActivityRequest request, Map<String, Object> existing) {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 활동을 개설할 수 없습니다.");
@@ -181,6 +187,10 @@ public class ActivityService {
         String vmsLink = request.vmsLink() == null ? null : request.vmsLink().trim();
         if (vmsLink != null && !vmsLink.isEmpty() && (!institution || vmsLink.length() > 300 || !VMS_LINK.matcher(vmsLink).matches()))
             errors.putIfAbsent("vmsLink", institution ? "1365 모집 페이지 주소(https://www.1365.go.kr/…)를 붙여 넣어 주세요." : "1365 연결은 기관 모집글에서만 쓸 수 있어요.");
+        // 신청 질문 (one, up to 100 letters): null keeps the current one, empty clears it.
+        String question = request.applyQuestion() == null ? null : request.applyQuestion().trim();
+        if (question != null && (question.length() > 100 || com.volink.post.PostService.CONTACT.matcher(question).find()))
+            errors.putIfAbsent("applyQuestion", "질문은 100자 이내로, 연락처 없이 적어 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
 
         Long organizationId = null;
@@ -222,6 +232,7 @@ public class ActivityService {
                     result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
                     request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), request.autoApprove(), id);
             jdbc.update("DELETE FROM activity_locations WHERE activity_id = ?", id);
+            options(id, request.youthOk(), question);
             if (vmsLink != null || !institution) jdbc.update("UPDATE activities SET vms_link = ? WHERE id = ?", institution && vmsLink != null && !vmsLink.isEmpty() ? vmsLink : null, id);
             places.locate(id, placeId);
             log(id, userId, (String) existing.get("status"), status, "수정 · 위험도 " + result.level());
@@ -239,6 +250,7 @@ public class ActivityService {
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         places.locate(id, placeId);
         if (institution && vmsLink != null && !vmsLink.isEmpty()) jdbc.update("UPDATE activities SET vms_link = ? WHERE id = ?", vmsLink, id);
+        options(id, request.youthOk(), question);
         log(id, userId, null, status, "개설 · 위험도 " + result.level());
         return mine(userId, id);
     }

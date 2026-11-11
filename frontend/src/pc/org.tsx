@@ -150,10 +150,10 @@ function Applicants({ mine, id, onChanged }: { mine: LiveActivity[] | null; id?:
     <section className="pc-pn">
       <div className="pc-tabs" role="tablist">{groups.map(([k, label, states]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); setChecked([]) }}>{label} {(data?.items ?? []).filter(i => states.includes(i.status)).length}</button>)}</div>
       {!data ? <Loading /> : rows.length === 0 ? <p className="pc-empty">{tab === 'APPLIED' ? '승인을 기다리는 신청이 없어요.' : '해당하는 사람이 없어요.'}</p>
-        : <table className="pc-tbl"><thead><tr>{selectable && <th><input type="checkbox" className="pc-cb" aria-label="모두 고르기" checked={checked.length === rows.length} onChange={e => setChecked(e.target.checked ? rows.map(r => r.id) : [])} /></th>}<th>이름</th><th>신청</th><th>상태</th><th>출석</th></tr></thead>
+        : <table className="pc-tbl"><thead><tr>{selectable && <th><input type="checkbox" className="pc-cb" aria-label="모두 고르기" checked={checked.length === rows.length} onChange={e => setChecked(e.target.checked ? rows.map(r => r.id) : [])} /></th>}<th>이름</th><th>신청</th>{activity.applyQuestion && <th>답</th>}<th>상태</th><th>출석</th></tr></thead>
           <tbody>{rows.map(r => <tr key={r.id} className={checked.includes(r.id) ? 'on' : ''}>
             {selectable && <td style={{ width: 40 }}><input type="checkbox" className="pc-cb" aria-label={r.name + ' 고르기'} checked={checked.includes(r.id)} onChange={e => setChecked(old => e.target.checked ? [...old, r.id] : old.filter(x => x !== r.id))} /></td>}
-            <td className="t">{r.name}</td><td className="mu nw">{r.appliedAt}</td>
+            <td className="t">{r.name}</td><td className="mu nw">{r.appliedAt}</td>{activity.applyQuestion && <td>{r.answer ?? '-'}</td>}
             <td><span className={'pc-tag ' + (applicantWord[r.status]?.[1] ?? '')}>{applicantWord[r.status]?.[0] ?? r.status}{r.status === 'WAITLISTED' && r.waitOrder ? ` ${r.waitOrder}번` : ''}</span></td>
             <td className="mu">{r.checkInMethod ? (r.checkInMethod === 'MANUAL' ? '수동 확인' : r.checkInMethod === 'CODE' ? '숫자 코드' : 'QR') + (r.checkedInAt ? ' ' + r.checkedInAt : '') : '-'}</td></tr>)}</tbody></table>}
       {selectable && checked.length > 0 && <div className="pc-bulk"><b>{checked.length}명 선택</b><span className="mu">{checked.length > room ? `남은 자리는 ${room}명이에요. 넘는 신청은 확정되지 않아요` : `승인하면 확정 ${(data?.confirmed ?? 0) + checked.length} / ${data?.capacity}명`}</span>
@@ -210,6 +210,25 @@ function AppealRow({ appeal, onDone }: { appeal: HostAppeal & { activity: LiveAc
     <td className="r nw"><button className="pc-btn sm" onClick={() => void answer('ACCEPT')}>출석으로 바꾸기</button> <button className="pc-btn sm line" onClick={() => setOpen(v => !v)}>그대로 두기</button></td></tr>
 }
 
+/** 기관 공개 페이지 (#/o/{id}): the introduction shown there, and the link to share. */
+function PublicPagePanel({ id }: { id?: number }) {
+  const [intro, setIntro] = useState<string | null>(null)
+  const [note, setNote] = useState<{ ok?: string; error?: string }>({})
+  useEffect(() => { if (id) api<{ intro: string | null }>('/api/organizations/' + id).then(p => setIntro(old => old ?? p.intro ?? '')).catch(() => setIntro(old => old ?? '')) }, [id])
+  if (!id) return null
+  const url = window.location.origin + '/#/o/' + id
+  async function save() {
+    try { await api('/api/me/organization/intro', 'PUT', { intro }); setNote({ ok: '소개를 저장했어요' }) } catch (cause) { setNote({ error: failText(cause) }) }
+  }
+  return <Panel title="기관 공개 페이지" right={<a className="pc-link" href={'#/o/' + id} target="_blank" rel="noreferrer">페이지 보기 ›</a>}>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label className="pc-f"><span>소개 <small>{(intro ?? '').length} / 300 · 연락처는 적을 수 없어요</small></span><textarea className="pc-ta" maxLength={300} value={intro ?? ''} disabled={intro === null} onChange={e => { setIntro(e.target.value); setNote({}) }} /></label>
+      {note.ok && <p className="pc-ok" role="status" style={{ margin: 0 }}>{note.ok}</p>}{note.error && <p className="pc-err" role="alert" style={{ margin: 0 }}>{note.error}</p>}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><button className="pc-btn" onClick={() => void save()}>소개 저장</button>
+        <button className="pc-btn line" onClick={() => { void navigator.clipboard?.writeText(url).then(() => setNote({ ok: '페이지 링크를 복사했어요' })) }}>링크 복사</button><span className="mu" style={{ fontSize: 12.5 }}>{url}</span></div>
+    </div></Panel>
+}
+
 function Profile({ user }: { user: User }) {
   return <>
     <div className="pc-head"><h1>기관 정보</h1></div>
@@ -219,7 +238,8 @@ function Profile({ user }: { user: User }) {
         <div className="pc-kv"><span>상태</span><b><span className="pc-tag g">확인 완료</span></b></div>
         <div className="pc-kv"><span>담당자</span><b>{user.name}</b></div>
         <div className="pc-kv" style={{ borderBottom: 0 }}><span>로그인 이메일</span><b>{user.email}</b></div>
-        <p className="pc-note" style={{ marginTop: 8 }}>기관 정보를 바꾸려면 운영자에게 문의해 주세요.</p></div></Panel>
+        <p className="pc-note" style={{ marginTop: 8 }}>기관 이름·연락처를 바꾸려면 운영자에게 문의해 주세요.</p></div></Panel>
+      <PublicPagePanel id={user.organization?.id} />
       <Panel title="현장에서는 앱으로"><div style={{ padding: 16, display: 'flex', gap: 16, alignItems: 'center' }}><AppQr size={104} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}><p>출석 시작, QR 띄우기, 수동 출석은 같은 계정으로 앱에 로그인해서 해요.</p><a className="pc-btn sm" href={appUrl()}><PcIcon name="download" />앱 받기</a></div></div></Panel>
     </div>

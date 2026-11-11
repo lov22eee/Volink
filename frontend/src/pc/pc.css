@@ -217,3 +217,9 @@
 .pc-dim { position: fixed; inset: 0; background: rgba(20, 28, 24, .42); display: grid; place-items: center; z-index: 50; padding: 20px; }
 .pc-dialog { width: 480px; max-width: 100%; padding: 22px; display: flex; flex-direction: column; gap: 12px; }
 @media (max-width: 900px) { .pc-create { flex-direction: column; } .pc-create .side { width: 100%; position: static; } }
+.pc-orghead { padding: 22px; display: flex; gap: 18px; align-items: center; }
+.pc-orghead .mark { width: 72px; height: 72px; border-radius: 16px; background: var(--pc-blus); color: var(--pc-blu); display: grid; place-items: center; font-weight: 900; font-size: 28px; flex: none; }
+.pc-orghead .nums { display: flex; gap: 22px; text-align: center; flex: none; }
+.pc-orghead .nums b { display: block; font-size: 20px; font-weight: 800; }
+.pc-orghead .nums span { font-size: 12px; color: var(--pc-mu); }
+@media (max-width: 900px) { .pc-orghead { flex-wrap: wrap; } }

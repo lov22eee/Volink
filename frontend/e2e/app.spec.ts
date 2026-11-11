@@ -978,3 +978,21 @@ test('홈 추천: a post opens a summary sheet over 홈, and 신청하기 goes s
   await expect(page.getByRole('dialog', { name: '신청할까요?' })).toBeVisible()
   await expect(page).toHaveURL(/#\/activity\/\d+$/)
 })
+
+test('신청 질문: the 신청할까요? sheet asks the organizer question and applies only with an answer; 19+ posts show it', async ({ page }) => {
+  const organizer = await tokenFor(page, await signupByApi(page, '질문 모집자'))
+  const title = '질문 확인 공원 정리 ' + Math.floor(Math.random() * 1e5)
+  const created = await page.request.post('/api/activities', { headers: { Authorization: organizer }, data: { activityType: 'GENERAL', title, category: '환경', placeId: 1, date: inDays(3), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true, youthOk: false, applyQuestion: '장갑을 챙겨 오실 수 있나요?' } })
+  expect(created.ok()).toBeTruthy()
+  const id = (await created.json()).id
+  await login(page, await signupByApi(page, '질문 답변 회원'))
+  await page.goto('/#/activity/' + id)
+  await expect(page.getByText('만 19세 이상')).toBeVisible()
+  await page.getByRole('button', { name: '신청하기' }).click()
+  const sheet = page.getByRole('dialog', { name: '신청할까요?' })
+  await expect(sheet.getByText('장갑을 챙겨 오실 수 있나요?')).toBeVisible()
+  await expect(sheet.getByRole('button', { name: '신청하기' })).toBeDisabled()
+  await sheet.getByRole('textbox').fill('네 챙겨 갈게요')
+  await sheet.getByRole('button', { name: '신청하기' }).click()
+  await expect(page.getByText('신청했어요').first()).toBeVisible()
+})

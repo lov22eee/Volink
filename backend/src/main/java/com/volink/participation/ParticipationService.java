@@ -58,7 +58,9 @@ public class ParticipationService {
     // ---- participant ----
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Map<String, Object> apply(long userId, long activityId) {
+    public Map<String, Object> apply(long userId, long activityId) { return apply(userId, activityId, null); }
+
+    public Map<String, Object> apply(long userId, long activityId, String rawAnswer) {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw forbidden("FORBIDDEN", "관리자 계정은 활동에 신청할 수 없습니다.");
         if (!user.canWrite()) throw forbidden("ACCOUNT_RESTRICTED", "이용이 제한된 계정은 신청할 수 없습니다.");
@@ -71,6 +73,18 @@ public class ParticipationService {
         if (activity.organizerId() == userId) throw forbidden("FORBIDDEN", "내가 만든 활동에는 신청할 수 없습니다.");
         LocalDateTime now = now();
         if (!now.isBefore(activity.startsAt())) throw conflict("INVALID_STATE", "이미 시작한 활동입니다.");
+        // V37: 청소년 참여 가능이 꺼진 글은 만 19세 이상만, 신청 질문이 있으면 답이 있어야 함.
+        Map<String, Object> options = jdbc.queryForMap("SELECT youth_ok, apply_question FROM activities WHERE id = ?", activityId);
+        if (!Boolean.TRUE.equals(options.get("youth_ok"))) {
+            java.time.LocalDate birth = jdbc.queryForObject("SELECT birth_date FROM users WHERE id = ?", java.time.LocalDate.class, userId);
+            if (birth == null || java.time.Period.between(birth, now.toLocalDate()).getYears() < 19)
+                throw forbidden("ADULT_ONLY", "만 19세 이상만 참여할 수 있는 활동이에요.");
+        }
+        String answer = rawAnswer == null ? "" : rawAnswer.trim();
+        if (options.get("apply_question") != null) {
+            if (answer.isEmpty() || answer.length() > 200) throw ApiException.validation(Map.of("answer", "모집자의 질문에 200자 이내로 답해 주세요."));
+            if (com.volink.post.PostService.CONTACT.matcher(answer).find()) throw ApiException.validation(Map.of("answer", "답에는 연락처를 적을 수 없어요."));
+        } else answer = "";
 
         Map<String, Object> existing = jdbc.queryForList("SELECT id, status, cancel_count FROM participations WHERE activity_id = ? AND user_id = ? FOR UPDATE",
                 activityId, userId).stream().findFirst().orElse(null);
@@ -92,13 +106,13 @@ public class ParticipationService {
         long id;
         String from = null;
         if (existing == null) {
-            jdbc.update("INSERT INTO participations(activity_id, user_id, status, wait_order, updated_at) VALUES (?, ?, ?, ?, ?)",
-                    activityId, userId, to, order, now);
+            jdbc.update("INSERT INTO participations(activity_id, user_id, status, wait_order, updated_at, apply_answer) VALUES (?, ?, ?, ?, ?, ?)",
+                    activityId, userId, to, order, now, answer.isEmpty() ? null : answer);
             id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         } else {
             id = ((Number) existing.get("id")).longValue();
             from = (String) existing.get("status");
-            jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ? WHERE id = ?", to, order, now, id);
+            jdbc.update("UPDATE participations SET status = ?, wait_order = ?, offer_expires_at = NULL, updated_at = ?, apply_answer = ? WHERE id = ?", to, order, now, answer.isEmpty() ? null : answer, id);
         }
         log(activityId, id, userId, from, to, (from == null ? "신청" : "다시 신청") + ("CONFIRMED".equals(to) ? " · 자동 승인" : ""));
         if ("CONFIRMED".equals(to)) {
@@ -234,7 +248,7 @@ public class ParticipationService {
                 SELECT p.id, u.display_name AS name, p.status, WAIT_PLACE_P AS waitOrder,
                        DATE_FORMAT(p.offer_expires_at, '%Y-%m-%dT%H:%i') AS offerExpiresAt, DATE_FORMAT(KST(p.created_at), '%m-%d %H:%i') AS appliedAt,
                        c.method AS checkInMethod, c.reason AS checkInReason, DATE_FORMAT(c.checked_at, '%H:%i') AS checkedInAt,
-                       p.late_minutes AS lateMinutes
+                       p.late_minutes AS lateMinutes, p.apply_answer AS answer
                 FROM participations p JOIN users u ON u.id = p.user_id LEFT JOIN check_ins c ON c.participation_id = p.id WHERE p.activity_id = ?
                 ORDER BY FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED') = 0,
                          FIELD(p.status, 'APPLIED', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'NO_SHOW', 'OFFERED', 'WAITLISTED'), p.wait_order, p.id

@@ -45,6 +45,8 @@ export function OrgCreate({ user, editId, fromId }: { user: User; editId?: numbe
   const [placeKind, setPlaceKind] = useState('OUTDOOR')
   const [newcomer, setNewcomer] = useState(true)
   const [autoApprove, setAutoApprove] = useState(false)
+  const [youth, setYouth] = useState(true)
+  const [question, setQuestion] = useState('')
   const [supplies, setSupplies] = useState<{ name: string; provided: boolean }[]>([])
   const [vmsOn, setVmsOn] = useState(false)
   const [vmsLink, setVmsLink] = useState('')
@@ -63,6 +65,7 @@ export function OrgCreate({ user, editId, fromId }: { user: User; editId?: numbe
       setMeetingPoint(a.meetingPoint ?? ''); setCapacity(a.capacity); setDifficulty(a.difficulty ?? 'EASY'); setPlaceKind(a.placeKind ?? 'OUTDOOR')
       setNewcomer(a.newcomerOk === undefined ? true : Boolean(a.newcomerOk)); setAutoApprove(Boolean(a.autoApprove)); setSupplies(a.supplies ?? [])
       setVmsOn(Boolean(a.vmsLink)); setVmsLink(a.vmsLink ?? '')
+      setYouth(!(a.youthOk === false || a.youthOk === 0)); setQuestion(a.applyQuestion ?? '')
       if (editId) { setDates([a.date]); setSafety(true); setLocked((a.applicants ?? 0) > 0) }
       setLoaded(true)
     }).catch(() => { setMessage('모집글을 불러오지 못했어요.'); setLoaded(true) })
@@ -110,7 +113,7 @@ export function OrgCreate({ user, editId, fromId }: { user: User; editId?: numbe
         ? { place: { kakaoId: place!.kakaoId, name: place!.name, address: place!.address, categoryName: place!.categoryName, latitude: place!.latitude, longitude: place!.longitude, placeClass: place!.placeClass, classLabel: place!.classLabel, token: place!.token } }
         : { placeId: place!.placeId }
       const body = (date: string) => ({ activityType: 'INSTITUTION', title: t, category, ...chosen, meetingPoint, date, time, capacity, durationMinutes: duration, description: d, safetyConfirmed: true,
-        supplies, difficulty, placeKind, newcomerOk: newcomer, autoApprove, vmsLink: vmsOn ? vmsLink.trim() : '' })
+        supplies, difficulty, placeKind, newcomerOk: newcomer, autoApprove, vmsLink: vmsOn ? vmsLink.trim() : '', youthOk: youth, applyQuestion: question.trim() })
       if (editId) {
         const saved = await api<LiveActivity>('/api/activities/' + editId, 'PUT', body(dates[0]))
         showToast(saved.status === 'DRAFT' ? '고쳤어요 · 운영자 확인 뒤 공개돼요' : '고쳤어요'); window.location.hash = '#/org/activity/' + editId; return
@@ -136,7 +139,7 @@ export function OrgCreate({ user, editId, fromId }: { user: User; editId?: numbe
   const preview = <div className="pc-phone" aria-label="앱에서 보이는 모습"><div className="sc">
     <div className="cover" />
     <div className="body">
-      <div className="pc-chips" style={{ gap: 4 }}>{category && <span className="pc-tag g">{category}</span>}<span className="pc-tag">{({ EASY: '가벼워요', NORMAL: '보통', HARD: '힘써요' } as Record<string, string>)[difficulty]}</span>{newcomer && <span className="pc-tag g">처음 환영</span>}<span className="pc-tag blu">{user.organization?.name} 주관</span></div>
+      <div className="pc-chips" style={{ gap: 4 }}>{category && <span className="pc-tag g">{category}</span>}<span className="pc-tag">{({ EASY: '가벼워요', NORMAL: '보통', HARD: '힘써요' } as Record<string, string>)[difficulty]}</span>{newcomer && <span className="pc-tag g">처음 환영</span>}<span className="pc-tag blu">{user.organization?.name} 주관</span>{!youth && <span className="pc-tag">만 19세 이상</span>}</div>
       <b className="t">{title.trim() || '활동 이름'}</b>
       <span className="mu">{dates[0] ? when(dates[0], time) : '날짜'} · {durationLabel(duration)}</span>
       <span className="mu">{[place?.name || '장소', meetingPoint].filter(Boolean).join(' · ')}</span>
@@ -178,7 +181,9 @@ export function OrgCreate({ user, editId, fromId }: { user: User; editId?: numbe
           </div>
           <div className="pc-f"><span>장소 형태</span><div className="pc-chips">{[['OUTDOOR', '야외'], ['INDOOR', '실내'], ['MIXED', '실내·야외']].map(([k, label]) => <button key={k} type="button" disabled={locked} aria-pressed={placeKind === k} onClick={() => setPlaceKind(k)}>{label}</button>)}</div></div>
           <div><Switch on={newcomer} onChange={setNewcomer} label="처음 환영" note="처음 오는 사람도 편하게 신청할 수 있다고 보여 줘요" />
-            <Switch on={autoApprove} onChange={setAutoApprove} label="자동 승인" note="빈자리가 있으면 신청하자마자 확정돼요" /></div>
+            <Switch on={autoApprove} onChange={setAutoApprove} label="자동 승인" note="빈자리가 있으면 신청하자마자 확정돼요" />
+            <Switch on={youth} onChange={v => { if (!locked) setYouth(v) }} label="청소년 참여 가능" note={youth ? '만 14~18세도 신청할 수 있어요' : '만 19세 이상만 신청할 수 있어요'} /></div>
+          <label className="pc-f"><span>신청할 때 물어볼 것 <small>(선택 · 1개 · 100자)</small></span><input className={'pc-in' + (errors.applyQuestion ? ' bad' : '')} value={question} maxLength={100} disabled={locked} placeholder="예: 앞치마 사이즈를 알려 주세요 (S/M/L)" onChange={e => setQuestion(e.target.value)} />{err('applyQuestion')}</label>
         </Section>
         <Section title="1365">
           <Switch on={vmsOn} onChange={v => { if (!locked) setVmsOn(v) }} label="1365에도 등록한 활동이에요" note="참여자에게 1365 모집 페이지 링크를 보여 줘요. 1365 실적은 1365에서 신청해야 인정돼요" />
@@ -302,10 +307,10 @@ function People({ a, roster, ended, onChanged }: { a: LiveActivity; roster: Rost
     </div>
     {note.ok && <p className="pc-ok" role="status" style={{ margin: '10px 16px 0' }}>{note.ok}</p>}{note.error && <p className="pc-err" role="alert" style={{ margin: '10px 16px 0' }}>{note.error}</p>}
     {rows.length === 0 ? <p className="pc-empty">{filter === 'APPLIED' ? '승인을 기다리는 신청이 없어요.' : '해당하는 사람이 없어요.'}</p>
-      : <table className="pc-tbl"><thead><tr><th style={{ width: 40 }}>{choosable.length > 0 && <input type="checkbox" className="pc-cb" aria-label="승인 대기 모두 고르기" checked={checked.length === choosable.length} onChange={e => setChecked(e.target.checked ? choosable.map(x => x.id) : [])} />}</th><th>이름</th><th>신청</th><th>상태</th><th>출석</th></tr></thead>
+      : <table className="pc-tbl"><thead><tr><th style={{ width: 40 }}>{choosable.length > 0 && <input type="checkbox" className="pc-cb" aria-label="승인 대기 모두 고르기" checked={checked.length === choosable.length} onChange={e => setChecked(e.target.checked ? choosable.map(x => x.id) : [])} />}</th><th>이름</th><th>신청</th>{a.applyQuestion && <th>답 · {a.applyQuestion.length > 14 ? a.applyQuestion.slice(0, 14) + '…' : a.applyQuestion}</th>}<th>상태</th><th>출석</th></tr></thead>
         <tbody>{rows.map(p => <tr key={p.id} className={checked.includes(p.id) ? 'on' : ''}>
           <td>{p.status === 'APPLIED' && !ended && <input type="checkbox" className="pc-cb" aria-label={p.name + ' 고르기'} checked={checked.includes(p.id)} onChange={e => setChecked(old => e.target.checked ? [...old, p.id] : old.filter(x => x !== p.id))} />}</td>
-          <td className="t">{p.name}</td><td className="mu nw">{p.appliedAt}</td>
+          <td className="t">{p.name}</td><td className="mu nw">{p.appliedAt}</td>{a.applyQuestion && <td>{p.answer ?? '-'}</td>}
           <td><span className={'pc-tag ' + (applicantWord[p.status]?.[1] ?? '')}>{applicantWord[p.status]?.[0] ?? p.status}{p.status === 'WAITLISTED' && p.waitOrder ? ` ${p.waitOrder}번` : ''}</span>{p.lateMinutes ? <small>{p.lateMinutes}분 늦는다고 알렸어요</small> : null}</td>
           <td className="mu">{method(p)}{p.checkedInAt ? ' ' + p.checkedInAt : ''}</td></tr>)}</tbody></table>}
     {checked.length > 0 && <div className="pc-bulk"><b>{checked.length}명 선택</b><span className="mu">{checked.length > room ? `남은 자리는 ${room}명이에요. 넘는 신청은 확정되지 않아요` : `승인하면 확정 ${roster.confirmed + checked.length} / ${roster.capacity}명 · 각자에게 알림이 가요`}</span>
@@ -326,8 +331,8 @@ function Attendance({ a, roster, ended, onChanged }: { a: LiveActivity; roster: 
     try { await api('/api/activities/' + a.id + '/complete', 'POST', {}); setNote({ ok: `출석한 ${waiting}명을 완료 처리했어요. 활동 기록이 만들어졌어요.` }); onChanged() } catch (cause) { setNote({ error: fail(cause) }) } finally { setBusy(false) }
   }
   function download() {
-    const head = ['이름', '상태', '출석 방법', '출석 시각', '신청 시각']
-    const rows = people.map(p => [p.name, applicantWord[p.status]?.[0] ?? p.status, method(p), p.checkedInAt ?? '', p.appliedAt])
+    const head = ['이름', '상태', '출석 방법', '출석 시각', '신청 시각', ...(a.applyQuestion ? [a.applyQuestion] : [])]
+    const rows = people.map(p => [p.name, applicantWord[p.status]?.[0] ?? p.status, method(p), p.checkedInAt ?? '', p.appliedAt, ...(a.applyQuestion ? [p.answer ?? ''] : [])])
     const csv = '﻿' + [[`${a.title} · ${a.date} ${a.startTime}`], head, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n')
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a'); link.href = url; link.download = `volink-attendance-${a.date}-${a.id}.csv`

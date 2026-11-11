@@ -26,9 +26,12 @@ public class ParticipationController {
 
     @PostMapping("/api/activities/{id}/participations")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, Object> apply(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
-        return participations.apply(user(jwt), id);
+    public Map<String, Object> apply(@AuthenticationPrincipal Jwt jwt, @PathVariable long id, @RequestBody(required = false) ApplyBody body) {
+        return participations.apply(user(jwt), id, body == null ? null : body.answer());
     }
+
+    /** answer = the reply to the post's 신청 질문 (V37), when it has one. */
+    public record ApplyBody(String answer) {}
 
     /** Organizer only; other people's activities answer 404. */
     @GetMapping("/api/activities/{id}/participations")
