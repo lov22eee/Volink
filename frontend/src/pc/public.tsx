@@ -99,6 +99,7 @@ export function PublicDetail({ id, user, onSignOut }: { id: number; user: User |
           <h2>어떤 활동인가요?</h2><p style={{ whiteSpace: 'pre-wrap', color: 'var(--pc-ink2)', lineHeight: 1.7 }}>{a.description}</p>
           {a.supplies && a.supplies.length > 0 && <><h2 style={{ marginTop: 8 }}>준비물</h2><p style={{ color: 'var(--pc-ink2)' }}>{a.supplies.map(s => s.name + (s.provided ? ' (모집자가 준비)' : '')).join(' · ')}</p></>}
         </div>
+        {a.vmsLink && <div className="pc-pn" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}><div style={{ flex: 1 }}><b style={{ color: 'var(--pc-blu)' }}>1365에도 등록된 활동이에요</b><p className="pc-note">1365 봉사실적은 1365에서 신청해야 인정돼요. Volink는 1365 신청을 대신하지 않아요.</p></div><a className="pc-btn sm line" href={a.vmsLink} target="_blank" rel="noreferrer">1365에서 보기</a></div>}
         <p className="pc-note">Volink 활동은 공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않습니다. 연락처는 공개하지 않으며, 궁금한 점은 참가 확정 뒤 앱의 활동 소식에서 물어볼 수 있어요.</p>
       </div>
       <aside className="pc-pn aside">

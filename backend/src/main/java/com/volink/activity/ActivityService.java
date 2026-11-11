@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ActivityService {
+    static final java.util.regex.Pattern VMS_LINK = java.util.regex.Pattern.compile("^https://(www\\.)?1365\\.go\\.kr/\\S*$");
     /** Shared projection. DATETIME columns hold Korean local time; LocalDateTime is bound as-is (no JVM time-zone shift). Participation counts arrive in week 5. */
     static final String SELECT = """
             SELECT a.id, a.title, a.description, c.name AS category, a.activity_type AS activityType,
@@ -29,7 +30,7 @@ public class ActivityService {
                    DATE_FORMAT(a.starts_at, '%Y-%m-%d') AS date, DATE_FORMAT(a.starts_at, '%H:%i') AS startTime,
                    TIMESTAMPDIFF(MINUTE, a.starts_at, a.ends_at) AS durationMinutes, a.capacity, a.extra_minutes AS extraMinutes, a.extra_reason AS extraReason,
                    DATE_FORMAT(a.extra_at, '%Y-%m-%dT%H:%i') AS extraAt,
-                   a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
+                   a.vms_link AS vmsLink, a.difficulty, a.place_kind AS placeKind, a.newcomer_ok AS newcomerOk, a.auto_approve AS autoApprove, a.reschedule_count AS rescheduleCount, DATE_FORMAT(a.checkin_opened_at, '%Y-%m-%dT%H:%i:%s') AS checkinOpenedAt, a.cancel_reason AS cancelReason,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status IN ('CONFIRMED', 'CHECKED_IN', 'COMPLETED')) AS confirmed,
                    (SELECT COUNT(*) FROM participations x WHERE x.activity_id = a.id AND x.status = 'WAITLISTED') AS waiting,
                    a.status, a.risk_level AS riskLevel, a.organizer_id AS organizerId,
@@ -176,6 +177,10 @@ public class ActivityService {
         boolean institution = "INSTITUTION".equals(request.activityType());
         if (!institution && request.activityType() != null && !"GENERAL".equals(request.activityType()))
             errors.putIfAbsent("activityType", "활동 유형을 선택해 주세요.");
+        // 1365 link (institution posts only): null keeps the current one, empty clears it.
+        String vmsLink = request.vmsLink() == null ? null : request.vmsLink().trim();
+        if (vmsLink != null && !vmsLink.isEmpty() && (!institution || vmsLink.length() > 300 || !VMS_LINK.matcher(vmsLink).matches()))
+            errors.putIfAbsent("vmsLink", institution ? "1365 모집 페이지 주소(https://www.1365.go.kr/…)를 붙여 넣어 주세요." : "1365 연결은 기관 모집글에서만 쓸 수 있어요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
 
         Long organizationId = null;
@@ -217,6 +222,7 @@ public class ActivityService {
                     result.level(), result.reasons().isEmpty() ? null : String.join(", ", result.reasons()), status,
                     request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), request.autoApprove(), id);
             jdbc.update("DELETE FROM activity_locations WHERE activity_id = ?", id);
+            if (vmsLink != null || !institution) jdbc.update("UPDATE activities SET vms_link = ? WHERE id = ?", institution && vmsLink != null && !vmsLink.isEmpty() ? vmsLink : null, id);
             places.locate(id, placeId);
             log(id, userId, (String) existing.get("status"), status, "수정 · 위험도 " + result.level());
             return mine(userId, id);
@@ -232,6 +238,7 @@ public class ActivityService {
                 request.difficultyOrDefault(), request.placeKindOrDefault(), request.newcomer(), Boolean.TRUE.equals(request.autoApprove()));
         long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         places.locate(id, placeId);
+        if (institution && vmsLink != null && !vmsLink.isEmpty()) jdbc.update("UPDATE activities SET vms_link = ? WHERE id = ?", vmsLink, id);
         log(id, userId, null, status, "개설 · 위험도 " + result.level());
         return mine(userId, id);
     }

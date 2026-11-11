@@ -165,3 +165,45 @@ test('login keeps working after a reload, and a 기관 page asks for login first
   await page.getByRole('button', { name: '로그아웃' }).click()
   await expect(page).toHaveURL(/#\/$/)
 })
+
+test('기관 모집글: copy a post to two new dates at once, the 1365 link shows on its pages, and the attendance sheet downloads', async ({ page, request, browser }) => {
+  const email = unique('pc-org-post')
+  expect((await request.post('/api/auth/signup', { data: { memberType: 'INSTITUTION', name: '박담당', email, password, interests: [], organizationName: '복사 확인 센터', organizationContact: '031-222-3333', organizationType: 'NONPROFIT', agreedNotice: true } })).ok()).toBeTruthy()
+  const adminAuth = await token(request, admin, env.DEMO_ACCOUNT_PASSWORD)
+  const orgs = await (await request.get('/api/admin/organizations?status=PENDING', { headers: { Authorization: adminAuth } })).json() as { id: number; managerEmail: string }[]
+  expect((await request.post(`/api/admin/organizations/${orgs.find(o => o.managerEmail === email)!.id}/approve`, { headers: { Authorization: adminAuth }, data: { reason: '확인 완료' } })).ok()).toBeTruthy()
+  const auth = await token(request, email)
+  const title = '기관 복사 확인 정리 ' + Math.floor(Math.random() * 1e5)
+  const link = 'https://www.1365.go.kr/vols/P9210/partcptn/timeCptn.do?progrmRegistNo=42'
+  const created = await request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'INSTITUTION', title, category: '지역사회', placeId: 1, date: inDays(5), time: '10:00', capacity: 5, durationMinutes: 120, description: body, safetyConfirmed: true, vmsLink: link } })
+  expect(created.ok()).toBeTruthy()
+  const id = (await created.json()).id
+
+  await signIn(page, email)
+  await page.goto('/#/org/activity/' + id)
+  await expect(page.getByRole('link', { name: '1365에도 등록' })).toHaveAttribute('href', link)
+  await page.getByRole('tab', { name: '출석·완료' }).click()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: '출석부 내려받기' }).click()
+  expect((await download).suggestedFilename()).toMatch(/^volink-attendance-\d{4}-\d{2}-\d{2}-\d+\.csv$/)
+  await page.getByRole('button', { name: '일정 변경' }).click()
+  await expect(page.getByRole('dialog', { name: '일정 변경' }).getByRole('button', { name: '일정 바꾸기' })).toBeDisabled()
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('link', { name: '복사해서 새 모집' }).click()
+  await expect(page.getByLabel('활동 이름')).toHaveValue(title)
+  await expect(page.getByLabel('1365 모집 페이지 주소')).toHaveValue(link)
+  for (const n of [9, 16]) {
+    await page.getByRole('textbox', { name: '날짜 고르기' }).fill(inDays(n))
+    await page.getByRole('button', { name: '날짜 추가' }).click()
+  }
+  await page.getByRole('checkbox', { name: /참여자에게 안내합니다/ }).check()
+  await page.getByRole('button', { name: '2개 날짜로 올리기' }).click()
+  await expect(page).toHaveURL(/#\/org\/activity\/\d+$/)
+  const mine = await (await request.get('/api/me/activities', { headers: { Authorization: auth } })).json() as { title: string; date: string }[]
+  expect(mine.filter(a => a.title === title).map(a => a.date).sort()).toEqual([inDays(5), inDays(9), inDays(16)])
+  // The public page shows the 1365 link next to the app download.
+  const visitor = await (await browser.newContext({ baseURL: 'http://127.0.0.1:5173' })).newPage()
+  await visitor.goto('/#/activity/' + id)
+  await expect(visitor.getByRole('link', { name: '1365에서 보기' })).toHaveAttribute('href', link)
+})

@@ -40,6 +40,11 @@ const message = (cause: unknown) => cause instanceof ApiError ? (Object.values(c
  * Who runs it (week 7, 공개 이름 통일): the community nickname (or a partly hidden name) for everyone; confirmed people,
  * the organizer and admins also get the real name (they meet in person). Instead of a name: activities run and finished.
  */
+/** 기관 모집글 (V36): the 1365 page the institution also posted. A link only; the record is made on 1365. */
+function VmsLink({ link }: { link: string }) {
+  return <a className="m-state blue" href={link} target="_blank" rel="noopener noreferrer"><strong>1365에도 등록된 활동이에요</strong><span>1365 봉사실적은 1365에서 신청해야 인정돼요 · 1365에서 보기</span></a>
+}
+
 function OrganizerLine({ activity }: { activity: LiveActivity }) {
   if (activity.activityType === 'INSTITUTION') return <p className="m-by">{activity.organizationName}이 모집해요</p>
   const stats = activity.organizerStats
@@ -136,6 +141,7 @@ export function ActivitySheet({ activity: first, onClose }: { activity: LiveActi
     <div className="as-seats"><span><b>확정 {activity.confirmed} / {activity.capacity}명</b><em className={full ? 'hot' : ''}>{full ? `정원 마감 · 대기 ${activity.waiting ?? 0}명` : left + '자리 남음'}</em></span>
       <i><em style={{ width: Math.min(100, activity.confirmed / Math.max(1, activity.capacity) * 100) + '%' }} /></i></div>
     <OrganizerLine activity={activity} />
+    {activity.vmsLink && <VmsLink link={activity.vmsLink} />}
     {activity.description && <p className="as-desc">{activity.description}</p>}
   </Sheet>
 }
@@ -286,11 +292,13 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
       {dday && !['checkedin', 'done'].includes(stage) && stage !== 'closed' && <small>{dday === 'D-DAY' ? '오늘' : '활동까지 ' + dday.slice(2) + '일'}</small>}</div>
     <h1>{activity.title}</h1>
     <OrganizerLine activity={activity} />
+    {activity.vmsLink && <VmsLink link={activity.vmsLink} />}
   </section> : <section className="m-detail-head">
     <span className={'m-cover f' + categoryTone(activity.category)}><MIcon name={fieldIcon[activity.category] ?? 'sprout'} size={34} /></span>
     <Labels activity={activity} />
     <h1>{activity.title}</h1>
     <OrganizerLine activity={activity} />
+    {activity.vmsLink && <VmsLink link={activity.vmsLink} />}
   </section>
 
   // One card at the top that says where I am now and what happens next.

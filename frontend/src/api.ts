@@ -24,6 +24,8 @@ export type LiveActivity = {
   applicants?: number
   /** Week 6 (V9): labels, one reschedule, the organizer's cancel reason; counts only in the organizer's own list. */
   difficulty?: 'EASY' | 'NORMAL' | 'HARD'; placeKind?: 'OUTDOOR' | 'INDOOR' | 'MIXED'; newcomerOk?: boolean | number; autoApprove?: boolean | number
+  /** V36: the 1365 recruitment page an institution also posted (link only). */
+  vmsLink?: string | null
   rescheduleCount?: number; checkinOpenedAt?: string | null; cancelReason?: string | null; pending?: number; unanswered?: number; checkedIn?: number
   /** V18: the organizer's cancellation (organizer and applicants only). Counts are null for cancellations before V18. */
   cancellation?: { reasonCode: string; reasonLabel: string; message: string; statusBefore: string; confirmedCount: number | null; waitingCount: number | null; appliedCount: number | null; cancelledAt: string }

@@ -2,8 +2,7 @@
 // Writing and editing a post and one post's full page reuse the web screens (CreateActivity, LiveDetail) inside this frame.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import CreateActivity from '../create'
-import { LiveDetail } from '../App'
+import { OrgCreate, OrgManage } from './orgPost'
 import { api, ApiError } from '../api'
 import type { Applicant, LiveActivity, User } from '../api'
 import { appUrl, AppQr, Loading, Logo, Panel, PcIcon, when } from './ui'
@@ -31,10 +30,9 @@ export function OrgCenter({ parts, query, user, onSignOut, onChange }: { parts: 
   else if (section === 'applicants') page = <Applicants mine={mine} id={Number(query.get('activity')) || undefined} onChanged={load} />
   else if (section === 'records') page = <Records mine={mine} onChanged={load} />
   else if (section === 'profile') page = <Profile user={user} />
-  else if (section === 'create') page = <div className="pc-legacy"><CreateActivity user={user} ready /></div>
-  else if (section === 'activity' && parts[2] && parts[3] === 'edit') page = <div className="pc-legacy"><CreateActivity key={'e' + parts[2]} user={user} ready editId={Number(parts[2])} /></div>
-  else if (section === 'activity' && parts[2]) page = <><div className="pc-head"><a className="mu" href="#/org/activities">‹ 모집 관리</a><span className="r"><a className="pc-btn sm line" href={'#/org/applicants?activity=' + parts[2]}>신청자 표로 보기</a></span></div>
-    <div className="pc-legacy"><LiveDetail key={parts[2]} id={Number(parts[2])} ready user={user} onChange={() => { onChange(); load() }} /></div></>
+  else if (section === 'create') page = <OrgCreate key={'c' + (query.get('from') ?? '')} user={user} fromId={Number(query.get('from')) || undefined} />
+  else if (section === 'activity' && parts[2] && parts[3] === 'edit') page = <OrgCreate key={'e' + parts[2]} user={user} editId={Number(parts[2])} />
+  else if (section === 'activity' && parts[2]) page = <OrgManage key={parts[2]} id={Number(parts[2])} onChanged={() => { onChange(); load() }} />
   else page = <p className="pc-empty">없는 화면이에요. <a className="pc-link" href="#/org">할 일로</a></p>
   return <div className="pc">
     <header className="pc-hd"><Logo sub="기관센터" href="#/org" /><div className="pc-sp" /><a className="pc-btn" href="#/org/create"><PcIcon name="plus" />모집 만들기</a>
