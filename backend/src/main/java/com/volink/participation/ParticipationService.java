@@ -60,6 +60,8 @@ public class ParticipationService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> apply(long userId, long activityId) { return apply(userId, activityId, null); }
 
+    /** Runs in one READ COMMITTED transaction: the activity row lock (FOR UPDATE) holds until the application is written. */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> apply(long userId, long activityId, String rawAnswer) {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw forbidden("FORBIDDEN", "관리자 계정은 활동에 신청할 수 없습니다.");
