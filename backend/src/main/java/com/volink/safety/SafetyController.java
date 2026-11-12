@@ -58,6 +58,19 @@ public class SafetyController {
         return penalties.status(user(jwt));
     }
 
+    /** 경고 시트 (V38): the newest warning not yet confirmed, or {} when there is none. */
+    @GetMapping("/api/me/safety-notice")
+    public Map<String, Object> safetyNotice(@AuthenticationPrincipal Jwt jwt) {
+        Map<String, Object> notice = penalties.pendingNotice(user(jwt));
+        return notice == null ? Map.of() : notice;
+    }
+
+    @PostMapping("/api/me/safety-notice/{id}/ack")
+    public Map<String, Object> ackSafetyNotice(@AuthenticationPrincipal Jwt jwt, @PathVariable long id) {
+        penalties.ackNotice(user(jwt), id);
+        return Map.of("ok", true);
+    }
+
     @PostMapping("/api/appeals")
     public Map<String, Object> appeal(@AuthenticationPrincipal Jwt jwt, @RequestBody AppealService.AppealRequest request) {
         return appeals.create(user(jwt), request);

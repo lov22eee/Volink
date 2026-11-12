@@ -59,12 +59,17 @@ public class PenaltyService {
         int n = noShows(userId);
         if (n <= 1) notifications.send(userId, "SANCTION", title + "에 불참으로 기록됐어요", "90일 안에 3번이면 14일 동안 신청할 수 없어요 · 잘못됐다면 7일 안에 이의 신청해 주세요",
                 "#/my?view=status", activityId, "NOSHOW:" + activityId + ":" + userId);
-        else if (n == 2) notifications.send(userId, "SANCTION", "불참이 2번이에요", "최근 90일 불참 2번 · 한 번 더 불참하면 14일 동안 신청할 수 없어요",
+        else if (n == 2) {
+            Long participation = jdbc.queryForList("SELECT id FROM participations WHERE user_id = ? AND activity_id = ? ORDER BY id DESC LIMIT 1", Long.class, userId, activityId).stream().findFirst().orElse(null);
+            notice(userId, "NOSHOW", 2, null, null, participation);
+            notifications.send(userId, "SANCTION", "불참이 2번이에요", "최근 90일 불참 2번 · 한 번 더 불참하면 14일 동안 신청할 수 없어요",
                 "#/my?view=status", activityId, "NOSHOW:" + activityId + ":" + userId);
+        }
         else if (active(userId, "APPLY") == null) {
             LocalDateTime until = now().plusDays(NOSHOW_RESTRICT_DAYS);
             jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, starts_at, ends_at, created_by) VALUES (?, 'RESTRICTION', 'APPLY', 'NOSHOW', ?, ?, ?, ?)",
                     userId, "최근 90일 불참 " + n + "번", now(), until, userId);
+            notice(userId, "NOSHOW", 3, lastSanction(userId, "NOSHOW"), null, null);
             notifications.send(userId, "SANCTION", DAY.format(until) + "까지 신청할 수 없어요", "최근 90일 불참 " + n + "번이에요 · 잘못된 기록은 이의 신청할 수 있어요",
                     "#/my?view=status", activityId, "NOSHOW:" + activityId + ":" + userId);
         }
@@ -79,6 +84,7 @@ public class PenaltyService {
         LocalDateTime until = n == 1 ? null : now.plusDays(n == 2 ? 7 : 30);
         jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, report_id, starts_at, ends_at, created_by) VALUES (?, ?, ?, 'REPORT', ?, ?, ?, ?, ?)",
                 userId, type, scope, "신고 인정 " + n + "번 · " + why, reportId, now, until, adminId);
+        notice(userId, "REPORT", Math.min(3, n), lastSanction(userId, "REPORT"), reportId, null);
         String title = n == 1 ? "신고가 인정돼 경고를 받았어요" : n == 2 ? DAY.format(until) + "까지 글을 쓸 수 없어요" : DAY.format(until) + "까지 신청·글쓰기가 제한돼요";
         String body = "사유: " + why + (n == 1 ? " · 한 번 더 인정되면 7일 동안 글을 쓸 수 없어요" : " · 잘못됐다면 7일 안에 이의 신청할 수 있어요");
         notifications.send(userId, "SANCTION", title, body, "#/my?view=status", null, "REPORT_SANCTION:" + reportId);
@@ -113,6 +119,75 @@ public class PenaltyService {
         out.put("until", row.get("ends_at") == null ? null : row.get("ends_at").toString().replace(' ', 'T').substring(0, 16));
         out.put("reason", row.get("reason"));
         return out;
+    }
+
+    // ---- 경고 시트 (2026-11-12, V38): one sheet the next time the app opens, until the person ticks 확인했어요. ----
+
+    private void notice(long userId, String kind, int step, Long sanctionId, Long reportId, Long participationId) {
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, sanction_id, report_id, participation_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                userId, kind, step, sanctionId, reportId, participationId, now());
+    }
+
+    private Long lastSanction(long userId, String source) {
+        return jdbc.queryForList("SELECT id FROM sanctions WHERE user_id = ? AND source = ? ORDER BY id DESC LIMIT 1", Long.class, userId, source).stream().findFirst().orElse(null);
+    }
+
+    /**
+     * The newest warning not yet confirmed, with what the sheet shows: for a report the hidden post/comment and the reason,
+     * for no-shows the activity and the dates. A warning whose sanction was lifted or whose no-show was cleared (이의 인정) is skipped.
+     * Null when there is nothing to show.
+     */
+    public Map<String, Object> pendingNotice(long userId) {
+        Map<String, Object> row = jdbc.queryForList("""
+                SELECT n.id, n.kind, n.step, n.report_id, n.participation_id, s.ends_at, s.reason
+                FROM safety_notices n
+                LEFT JOIN sanctions s ON s.id = n.sanction_id
+                LEFT JOIN participations p ON p.id = n.participation_id
+                WHERE n.user_id = ? AND n.acked_at IS NULL AND (s.id IS NULL OR s.revoked_at IS NULL) AND (p.id IS NULL OR p.noshow_cleared = FALSE)
+                ORDER BY n.id DESC LIMIT 1""", userId).stream().findFirst().orElse(null);
+        if (row == null) return null;
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", row.get("id"));
+        out.put("kind", row.get("kind"));
+        out.put("step", row.get("step"));
+        out.put("until", row.get("ends_at") == null ? null : row.get("ends_at").toString().replace(' ', 'T').substring(0, 16));
+        if ("REPORT".equals(row.get("kind")) && row.get("report_id") != null) {
+            Map<String, Object> report = jdbc.queryForList("SELECT target_type, target_id, reason_type, result_note FROM reports WHERE id = ?", row.get("report_id")).stream().findFirst().orElse(null);
+            if (report != null) {
+                String type = (String) report.get("target_type");
+                long target = ((Number) report.get("target_id")).longValue();
+                Map<String, Object> text = switch (type) {
+                    case "POST" -> one("SELECT title, LEFT(body, 120) AS body FROM community_posts WHERE id = ?", target);
+                    case "COMMENT" -> one("SELECT NULL AS title, LEFT(body, 120) AS body FROM community_comments WHERE id = ?", target);
+                    case "PHOTO" -> one("SELECT c.title, NULL AS body FROM post_photos p LEFT JOIN community_posts c ON c.id = p.post_id WHERE p.id = ?", target);
+                    case "ACTIVITY" -> one("SELECT title, NULL AS body FROM activities WHERE id = ?", target);
+                    default -> null;
+                };
+                out.put("targetType", type);
+                out.put("targetTitle", text == null ? null : text.get("title"));
+                out.put("targetBody", text == null ? null : text.get("body"));
+                out.put("reason", ReportService.REASONS.getOrDefault((String) report.get("reason_type"), "기타"));
+                out.put("note", report.get("result_note"));
+            }
+        }
+        if ("NOSHOW".equals(row.get("kind"))) {
+            List<Map<String, Object>> list = jdbc.queryForList("""
+                    SELECT a.title, DATE_FORMAT(a.starts_at, '%Y-%m-%dT%H:%i') AS startsAt
+                    FROM participations p JOIN activities a ON a.id = p.activity_id
+                    WHERE p.user_id = ? AND p.status = 'NO_SHOW' AND p.noshow_cleared = FALSE AND a.starts_at > ? ORDER BY a.starts_at DESC""",
+                    userId, now().minusDays(NOSHOW_DAYS));
+            out.put("noShows", list);
+        }
+        return out;
+    }
+
+    /** 확인했어요: this warning and any older one still open. */
+    public void ackNotice(long userId, long id) {
+        jdbc.update("UPDATE safety_notices SET acked_at = ? WHERE user_id = ? AND id <= ? AND acked_at IS NULL", now(), userId, id);
+    }
+
+    private Map<String, Object> one(String sql, long id) {
+        return jdbc.queryForList(sql, id).stream().findFirst().orElse(null);
     }
 
     /** Whole seconds: DATETIME rounds fractions, and a limit starting a second "later" would not apply at once. */

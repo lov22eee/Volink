@@ -21,6 +21,7 @@ import { CreateWizard, HostScreen } from './host'
 import { MineScreen, RecordsScreen } from './mine'
 import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
+import { SafetyNoticeHost } from './status'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
 import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, useKeyboardAware } from './ui'
@@ -126,6 +127,7 @@ export default function MobileApp() {
     {screen}
     {tab && <TabBar active={tab} />}
     <PushBanner onArrive={pollUnread} />
+    <SafetyNoticeHost tick={route.page} />
     <ToastHost />
   </div>
 }

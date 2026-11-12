@@ -851,6 +851,39 @@ test('실적확인서 photo: misread labels (활통·내욕·8획) and a header-
   expect(got.one).toEqual(['one', '어린이 독서 지도', '2025-08-14', 240])
 })
 
+test('경고 시트: an accepted report shows one sheet on the next screen; 확인 needs the tick; 자세히 보기 shows the post; 마이 says 경고 1회', async ({ page }) => {
+  const writer = await signupByApi(page, '경고 받는 회원')
+  const reporter = await signupByApi(page, '신고한 회원')
+  const w = await tokenFor(page, writer), r = await tokenFor(page, reporter)
+  for (const [t, nick] of [[w, '경고확인' + Math.floor(Math.random() * 9000)], [r, '신고확인' + Math.floor(Math.random() * 9000)]]) await page.request.put('/api/community/me', { headers: { Authorization: t }, data: { nickname: nick, agree: true } })
+  const post = await (await page.request.post('/api/community/posts', { headers: { Authorization: w }, data: { category: 'FREE', title: '경고 시트 확인용 글', body: '봉사 끝나고 다 같이 모여서 이야기해요.' } })).json()
+  expect((await page.request.post('/api/reports', { headers: { Authorization: r }, data: { targetType: 'POST', targetId: post.id, reason: 'SPAM' } })).ok()).toBeTruthy()
+  const admin = 'Bearer ' + (await (await page.request.post('/api/auth/login', { data: { email: 'admin-01@demo.volink.kr', password: env.DEMO_ACCOUNT_PASSWORD } })).json()).accessToken
+  const list = await (await page.request.get('/api/admin/reports', { headers: { Authorization: admin } })).json() as { id: number; targetId: number; targetType: string }[]
+  const report = list.find(x => x.targetType === 'POST' && x.targetId === post.id)!
+  expect((await page.request.post(`/api/admin/reports/${report.id}/decision`, { headers: { Authorization: admin }, data: { decision: 'ACCEPT', hide: true, reason: '봉사와 관계없는 글이라 숨깁니다.' } })).ok()).toBeTruthy()
+
+  await login(page, writer)
+  const sheet = page.getByRole('alertdialog', { name: '경고를 받았어요' })
+  await expect(sheet).toBeVisible()
+  await expect(sheet).toContainText('신고가 누적되면 이용이 제한돼요')
+  const ok = sheet.getByRole('button', { name: '확인', exact: true })
+  await expect(ok).toBeDisabled()
+  // Tapping outside or Escape does not close it.
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole('button', { name: '자세히 보기' }).click()
+  await expect(sheet).toContainText('경고 시트 확인용 글')
+  await expect(sheet).toContainText('한 번 더 인정되면 7일 동안 글을 쓸 수 없어요')
+  await sheet.getByText('확인했어요').click()
+  await ok.click()
+  await expect(sheet).toHaveCount(0)
+  await page.reload()
+  await page.goto('/#/my')
+  await expect(page.getByRole('link', { name: /내 이용 상태.*경고 1회/ })).toBeVisible()
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+})
+
 test('1365 step guide: the words on the page tell which step the person is on (① 로그인 … ④ 이 화면 가져오기)', async ({ page }) => {
   await page.goto('/#/login')
   const steps = await page.evaluate(async () => {

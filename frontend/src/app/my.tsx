@@ -103,7 +103,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
     { icon: 'record', label: '활동 기록', href: '#/records', note: (() => { const n = valid.length + led.length + (extRecords ?? []).filter(r => r.status === 'ATTENDED').length; return n ? n + '건' : undefined })() },
     { icon: 'bookmark', label: '저장한 봉사', href: '#/my?view=saved', note: saved ? saved + '개' : undefined },
     { icon: 'heart', label: '관심 분야', href: '#/my?view=interests', note: user.interests.join(', ') || '선택 안 함' },
-    { icon: 'alert', label: '내 이용 상태', href: '#/my?view=status', note: status ? (status.apply || status.write ? '제한 중' : status.noShows ? `불참 ${status.noShows}` : '정상') : undefined },
+    { icon: 'alert', label: '내 이용 상태', href: '#/my?view=status', note: status ? (status.apply || status.write ? '제한 중' : [status.warnings ? `경고 ${status.warnings}회` : '', status.noShows ? `불참 ${status.noShows}회` : ''].filter(Boolean).join(' · ') || '정상') : undefined },
   ]
   const more: Item[] = [
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
