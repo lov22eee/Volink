@@ -349,10 +349,7 @@ function sceneTalk(g) {
   const handF = el('g', {}, W.arms.f.tip);
   const SIT = { x: 346, y: 384, fT: -84, fS: 82, bT: -78, bS: 80, lean: -6, head: 4, fU: -30, fL: -60, bU: -16, bL: -52 };
   const wKey = track([
-    [0, { x: 170, y: 322, walk: 1, lean: 4, ikw: 0, head: 0, fU: 8, fL: -16, bU: -6, bL: -12 }],
-    [1.2, { x: 266, walk: 1 }],
-    [1.4, { x: 272, walk: 0 }],
-    [2.1, { lean: 10, ikw: 1, head: 8 }],
+    [0, { x: 272, y: 322, walk: 0, lean: 10, ikw: 1, head: 8, fU: 8, fL: -16, bU: -6, bL: -12 }],
     [4.6, { lean: 10, head: 8 }],
     [5.3, { lean: 22, head: 16 }],
     [6.6, { lean: 22, head: 16 }],
@@ -362,8 +359,8 @@ function sceneTalk(g) {
   return t => {
     const w = wKey(t);
     const laugh = win(t, 5.9, 6.2) * (1 - win(t, 7.3, 7.6)), shake = Math.sin(t * 20) * laugh;
-    const eTalk = (t > 2.6 && t < 4.0) || (t > 7.8 && t < 8.8), wTalk = t > 5.1 && t < 6.0;
-    const relax = win(t, 2.2, 2.6) * (1 - win(t, 5.0, 5.3));
+    const eTalk = (t > 1.6 && t < 4.0) || (t > 7.8 && t < 8.8), wTalk = t > 5.1 && t < 6.0;
+    const relax = win(t, 0.6, 1.0) * (1 - win(t, 5.0, 5.3));
     // 어르신: sits; enjoys it with eyes closed, tilts the head toward her when she talks, laughs, then pats her hand
     const eq = { ...STAND, ...SIT, x: SIT.x, lean: SIT.lean + shake * 3 + relax * 2, head: SIT.head - relax * 6 + win(t, 5.0, 5.4) * (1 - win(t, 6.8, 7.2)) * -10 + shake * 4 + (eTalk ? Math.sin(t * 8) * 2 : 0),
       mouth: laugh > 0.3 ? 'laugh' : eTalk ? talkMouth(t, 6) : relax > 0.5 ? 'smile' : 'smile', blink: laugh > 0.3 || relax > 0.5 ? 1 : blinkAt(t) };
@@ -374,7 +371,7 @@ function sceneTalk(g) {
     walk(wq, (w.x - 150) / 58 * Math.PI, w.walk);
     pose(W, wq);
     if (w.ikw > 0) {
-      const k = t * 4.2, rub = win(t, 2.0, 2.4);
+      const k = t * 4.2, rub = 1;
       const pf = gpos(sF), pb = gpos(sB);
       const tF = { x: pf.x + Math.cos(k) * 3 * rub, y: pf.y - 4 + Math.sin(k) * 3 * rub }, tB = { x: pb.x + Math.cos(k + 2.2) * 3 * rub, y: pb.y - 4 + Math.sin(k + 2.2) * 3 * rub };
       const [f1, f2] = ik(shoulderAt(wq, 4), tF, 40, 44, -1), [b1a, b2a] = ik(shoulderAt(wq, -2), tB, 40, 44, -1);
@@ -391,7 +388,7 @@ function sceneTalk(g) {
     }
     steam.forEach((st, i) => { const u = ((t * 0.7 + i * 0.5) % 1); st.setAttribute('transform', `translate(${-3 + i * 5} ${-14 - u * 16})`); st.setAttribute('opacity', (1 - u) * 0.7); });
     const pop = (b, a, z, x, y) => { const u = win(t, a, a + 0.35), v = 1 - win(t, z - 0.3, z); const k = Math.min(u, v); b.style.opacity = k; tf(b, x, y - (1 - k) * 8, 0, Math.max(0.01, 0.6 + 0.4 * ease(u)) * (k > 0 ? 1 : 0.01)); };
-    pop(b1, 2.6, 4.1, 440, 214);
+    pop(b1, 1.6, 4.1, 440, 214);
     pop(b2, 5.1, 6.1, 226, 150);
     pop(b3, 7.8, 8.9, 440, 214);
     hearts.forEach((h, i) => { const u = win(t, 6.0 + i * 0.3, 7.4 + i * 0.3); h.style.opacity = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0; tf(h, 330 + (i - 1) * 26 + Math.sin(u * 8 + i) * 8, 230 - u * 80, Math.sin(u * 6) * 12, 0.8 + i * 0.12); });
