@@ -1750,3 +1750,9 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 @keyframes rec-add-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.95); } }
 @keyframes rec-add-dim-out { to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rec-add-menu, .rec-add-menu.out, .rec-add-dim, .rec-add-dim.out { animation-duration: .01s; } .rec-add-btn svg { transition: none; } }
+
+/* 설정 줄 (2026-11-12): the label never squeezes; a sentence goes under it, a short value stays on the right. */
+.m-set-card > a > .m-set-text, .m-set-card > button > .m-set-text { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; }
+.m-set-text small { font-size: 13px; font-weight: 400; color: var(--ink-3); line-height: 1.4; }
+.m-set-note { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-set-card > a > span, .m-set-card > button > span { word-break: keep-all; }
