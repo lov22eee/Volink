@@ -217,16 +217,43 @@ export async function readPhoto(file: File): Promise<Page> {
   URL.revokeObjectURL(url)
   const straight = deskew(canvas)
   const preview = straight.toDataURL('image/jpeg', 0.8)
+  // The plain picture is kept: a clean scan can lose thin letters when the table lines are wiped, so it is read again
+  // as it was when the cleaned one gives nothing usable.
+  const plain = document.createElement('canvas'); plain.width = straight.width; plain.height = straight.height
+  plain.getContext('2d')!.drawImage(straight, 0, 0)
   wipeTable(straight)
-  const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker('kor')
+  const worker = await ocrWorker()
   try {
-    const data = (await worker.recognize(straight, {}, { blocks: true, text: true })).data
-    const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
-      .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
-        words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
-    return { text: data.text, lines, preview, width: straight.width, height: straight.height }
+    const read = async (source: HTMLCanvasElement) => {
+      const data = (await worker.recognize(source, {}, { blocks: true, text: true })).data
+      const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
+        .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
+          words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
+      return { text: data.text, lines, preview, width: source.width, height: source.height }
+    }
+    const first = await read(straight)
+    if (useful(first)) return first
+    const second = await read(plain)
+    return useful(second) || second.text.trim().length > first.text.trim().length ? second : first
   } finally { await worker.terminate() }
+}
+
+/** Something a 확인서 field can be taken from (a date, hours, or a label line). */
+function useful(page: Page) {
+  const r = readProof(page.text, page.lines.map(l => l.text), page.lines.map(l => l.words))
+  return r.kind !== 'none' && Boolean(r.title || r.to || r.from || r.minutes != null)
+}
+
+/** The OCR engine: the files shipped with the app first (/ocr/), the public CDN only if those cannot be loaded. */
+export class OcrUnavailable extends Error {}
+async function ocrWorker() {
+  const { createWorker } = await import('tesseract.js')
+  const base = new URL('ocr/', document.baseURI).href
+  try {
+    return await createWorker('kor', 1, { workerPath: base + 'worker.min.js', corePath: base.replace(/\/$/, ''), langPath: base.replace(/\/$/, ''), workerBlobURL: false })
+  } catch {
+    try { return await createWorker('kor') } catch { throw new OcrUnavailable('ocr') }
+  }
 }
 
 /**
@@ -329,6 +356,7 @@ export function matchRecord(read: ProofRead, list: ExternalRecord[]): ExternalRe
  */
 export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: ExternalRecord; onClose: () => void; onSaved: (saved: ExternalRecord) => void; onUse1365?: () => void }) {
   const [step, setStep] = useState<'pick' | 'reading' | 'check' | 'page' | 'none' | 'same'>('pick')
+  const [fail, setFail] = useState<'engine' | 'read'>('read')
   const [page, setPage] = useState<Page | null>(null)
   const [photo, setPhoto] = useState(false)
   const [read, setRead] = useState<ProofRead | null>(null)
@@ -371,8 +399,10 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
       const dup = list.find(x => x.certified && x.certDate === day && near(x.certTitle ?? x.title, r.title) && (r.minutes == null || x.certMinutes === r.minutes))
       if (dup) { setSame(dup); setStep('same'); return }
       setTarget(record ?? matchRecord(r, list) ?? 'new')
+      // Letters were read but no field was found: show the paper next to empty fields to fill by hand (no dead end).
+      if (r.kind === 'none' && got.text.replace(/\s/g, '').length >= 8) { setRead({ ...r, kind: 'one' }); setEditing(['title', 'to', 'time']); setStep('check'); return }
       setStep(r.kind === 'page' ? 'page' : r.kind === 'none' ? 'none' : 'check')
-    } catch { setStep('none') }
+    } catch (cause) { setFail(cause instanceof OcrUnavailable ? 'engine' : 'read'); setStep('none') }
   }
   const minutes = (Number(hours) || 0) * 60 + (Number(mins) || 0)
   const day = read ? (read.to || read.from) : ''
@@ -419,8 +449,8 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
   if (step === 'none' || !read || !page) return <Sheet title="" onClose={onClose}
     footer={<><button type="button" className="m-btn" onClick={() => setStep('pick')}>다시 고르기</button><button type="button" className="m-btn line" onClick={onClose}>닫기</button></>}>
     <div className="apply-res missed"><span className="apply-res-ico" aria-hidden="true"><MIcon name="alert" size={28} /></span>
-      <h3 className="m-h3">확인서를 읽지 못했어요</h3>
-      <p className="m-help center">흐리거나 잘린 것 같아요 · 1365에서 받은 PDF가 가장 정확해요</p></div>
+      <h3 className="m-h3">{fail === 'engine' ? '글자 읽기를 준비하지 못했어요' : '확인서를 읽지 못했어요'}</h3>
+      <p className="m-help center">{fail === 'engine' ? '인터넷 연결을 확인하고 다시 시도해 주세요' : '흐리거나 잘린 것 같아요 · 1365에서 받은 PDF가 가장 정확해요'}</p></div>
   </Sheet>
 
   const fix = (k: string) => editing.includes(k)
