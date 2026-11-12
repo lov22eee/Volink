@@ -13,6 +13,7 @@ import type { PlaceResult } from '../placePicker'
 import { activityRules as r } from '../rules'
 import type { Errors } from '../rules'
 import { addToCalendar, difficultyLabel, fieldIcon, placeKindLabel } from './cards'
+import { useStatus } from './status'
 import { ActionBar, dayWord, Empty, go, goUp, Loading, MIcon, PickField, Sheet, TopBar, WheelColumn, Wheels, TextInput, TextArea } from './ui'
 
 export function HostScreen({ user, actions }: { user: User; actions: ReactNode }) {
@@ -61,7 +62,20 @@ type Saved = { kind: 'published' | 'review'; activity: LiveActivity }
 // Which step shows each server field error.
 const stepOf: Record<string, number> = { title: 1, category: 1, difficulty: 1, placeKind: 1, activityType: 1, place: 2, meetingPoint: 2, date: 2, time: 2, duration: 2, supplies: 2, description: 2, capacity: 3, safety: 3 }
 
-export function CreateWizard({ user, from, editId }: { user: User; from?: number; editId?: number }) {
+/**
+ * 신고 3회부터(7·14·30일·정지) 새 모집글도 못 만들어요 (2026-11-12, user decision; the server checks too): the limit is
+ * said before the three steps, not after them. Editing an activity already open is not blocked.
+ */
+export function CreateWizard(props: { user: User; from?: number; editId?: number }) {
+  const status = useStatus()
+  if (!props.editId && status?.host) return <div className="m-screen"><TopBar title="모집 만들기" back="#/host" />
+    <div className="m-body"><Empty bare icon="alert" title={`${status.host.until ? md(status.host.until) + '까지 ' : ''}모집글을 만들 수 없어요`} text={status.host.reason}
+      action={<a className="m-btn sm" href="#/my?view=status">내 이용 상태</a>} /></div></div>
+  return <CreateForm {...props} />
+}
+const md = (iso: string) => `${Number(iso.slice(5, 7))}월 ${Number(iso.slice(8, 10))}일`
+
+function CreateForm({ user, from, editId }: { user: User; from?: number; editId?: number }) {
   const today = seoulToday()
   const [step, setStep] = useState(1)
   const [kind, setKind] = useState<'GENERAL' | 'INSTITUTION'>('GENERAL')

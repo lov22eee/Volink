@@ -103,6 +103,19 @@ public class SafetyController {
         return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG).cacheControl(CacheControl.noStore()).body(photos.evidence(id));
     }
 
+    /** 커뮤니티 이용 정지 검토 (6+ report steps within a year), for the admin's 할 일. */
+    @GetMapping("/api/admin/community-reviews")
+    public List<Map<String, Object>> communityReviews() {
+        return penalties.suspensionReviews();
+    }
+
+    public record SuspensionDecision(String decision, String reason) {}
+
+    @PostMapping("/api/admin/community-reviews/{userId}")
+    public Map<String, Object> decideCommunity(@AuthenticationPrincipal Jwt jwt, @PathVariable long userId, @RequestBody SuspensionDecision body) {
+        return penalties.decideSuspension(user(jwt), userId, body == null ? null : body.decision(), body == null ? null : body.reason());
+    }
+
     @GetMapping("/api/admin/appeals")
     public List<Map<String, Object>> appealQueue(@RequestParam(required = false) String status) {
         return appeals.queue(status);

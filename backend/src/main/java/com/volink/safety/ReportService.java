@@ -101,7 +101,8 @@ public class ReportService {
                 SELECT r.id, r.target_type AS targetType, r.target_id AS targetId, r.reason_type AS reason, r.description, r.status, r.result_note AS resultNote,
                        DATE_FORMAT(CONVERT_TZ(r.created_at, @@session.time_zone, '+09:00'), '%Y-%m-%d %H:%i') AS createdAt, r.target_user_id AS targetUserId,
                        (SELECT COUNT(*) FROM reports s WHERE s.target_type = r.target_type AND s.target_id = r.target_id) AS sameTarget,
-                       (SELECT COUNT(*) FROM sanctions x WHERE x.user_id = r.target_user_id AND x.source = 'REPORT' AND x.revoked_at IS NULL) AS warnings
+                       (SELECT COUNT(*) FROM sanctions x WHERE x.user_id = r.target_user_id AND x.source = 'REPORT' AND x.revoked_at IS NULL
+                          AND x.starts_at > DATE_SUB(CONVERT_TZ(NOW(), @@session.time_zone, '+09:00'), INTERVAL 365 DAY)) AS warnings
                 FROM reports r WHERE\s""" + filter + " ORDER BY r.id DESC LIMIT 100");
         for (Map<String, Object> row : rows) {
             row.put("reasonLabel", REASONS.getOrDefault((String) row.get("reason"), "기타"));

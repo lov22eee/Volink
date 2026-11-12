@@ -6,7 +6,7 @@ import { api, ApiError } from '../api'
 import { Loading, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 type Limit = { until: string | null; reason: string } | null
-export type Status = { noShows: number; apply: Limit; write: Limit; warnings: number
+export type Status = { noShows: number; apply: Limit; write: Limit; host?: Limit; warnings: number
   sanctions: { id: number; type: string; scope: string; source: string; reason: string; startsAt: string; endsAt: string | null; revoked: boolean; appealable: boolean; appeal: string | null }[]
   noShowList: { participationId: number; activityId: number; title: string; date: string; appealable: boolean; appeal: string | null }[] }
 type MyReport = { id: number; targetType: string; reasonLabel: string; status: string; resultNote: string | null; createdAt: string }
@@ -29,7 +29,7 @@ export function LimitCard({ status }: { status: Status }) {
   const both = status.apply && status.write
   return <a className="st-limit" href="#/my?view=status">
     <span className="st-limit-ico"><MIcon name="alert" size={20} /></span>
-    <span><b>{limit.until ? md(limit.until) + '까지 ' : ''}{both ? '신청·글쓰기가 제한돼요' : status.apply ? '신청할 수 없어요' : '글을 쓸 수 없어요'}</b><small>{limit.reason}</small></span>
+    <span><b>{limit.until ? md(limit.until) + '까지 ' : ''}{both ? '신청·글쓰기가 제한돼요' : status.apply ? '신청할 수 없어요' : status.host ? (limit.until ? '글과 모집글을 쓸 수 없어요' : '커뮤니티 이용이 정지됐어요') : '글을 쓸 수 없어요'}</b><small>{limit.reason}</small></span>
     <MIcon name="chevron" size={16} /></a>
 }
 
@@ -70,12 +70,12 @@ export function StatusScreen() {
         <div><b>{status.noShows}</b><small>최근 90일 불참</small></div>
         <div><b>{status.warnings}</b><small>인정된 신고</small></div>
       </section>
-      <p className="m-help">불참 90일 안 3번이면 14일 신청 제한 · 인정된 신고 1번 경고, 2번 7일 글쓰기 제한, 3번 30일 제한이에요. 이의가 받아들여지면 횟수에서 빠져요.</p>
+      <p className="m-help">불참 90일 안 3번이면 14일 신청 제한 · 인정된 신고(1년 안)는 1번 경고, 2번 24시간 글쓰기 제한, 3번 7일 · 4번 14일 · 5번 30일 글·모집글 제한이에요. 신고로는 봉사 신청을 막지 않아요. 이의가 받아들여지면 횟수에서 빠져요.</p>
       {status.noShowList.length > 0 && <><h2 className="m-h3">불참 기록</h2><div className="m-list">{status.noShowList.map(n => <div key={n.participationId} className="m-row">
         <span className="m-row-main"><strong>{n.title}</strong><small>{md(n.date)} · 불참{n.appeal ? ' · ' + appealWord[n.appeal] : ''}</small></span>
         {n.appealable && !n.appeal && <button type="button" className="m-btn line sm" onClick={() => setAppeal({ kind: 'NO_SHOW', participationId: n.participationId, label: `${n.title} · ${md(n.date)} 불참` })}>이의 신청</button>}</div>)}</div></>}
       {status.sanctions.length > 0 && <><h2 className="m-h3">제재 기록</h2><div className="m-list">{status.sanctions.map(s => <div key={s.id} className="m-row">
-        <span className="m-row-main"><strong>{s.type === 'WARNING' ? '경고' : s.scope === 'APPLY' ? '신청 제한' : s.scope === 'WRITE' ? '글쓰기 제한' : '신청·글쓰기 제한'}{s.endsAt ? ` · ${md(s.endsAt)}까지` : ''}</strong>
+        <span className="m-row-main"><strong>{s.type === 'WARNING' ? '경고' : s.type === 'SUSPENSION' && !s.endsAt && s.scope === 'POST' ? '커뮤니티 이용 정지' : s.scope === 'APPLY' ? '신청 제한' : s.scope === 'WRITE' ? '글쓰기 제한' : s.scope === 'POST' ? '글·모집글 제한' : '신청·글쓰기 제한'}{s.endsAt ? ` · ${md(s.endsAt)}까지` : ''}</strong>
           <small>{s.reason}{s.revoked ? ' · 풀림' : ''}{s.appeal ? ' · ' + appealWord[s.appeal] : ''}</small></span>
         {s.appealable && !s.appeal && !s.revoked && <button type="button" className="m-btn line sm" onClick={() => setAppeal({ kind: 'SANCTION', sanctionId: s.id, label: s.reason })}>이의 신청</button>}</div>)}</div></>}
       <h2 className="m-h3">내 신고</h2>
@@ -121,20 +121,30 @@ type SafetyNotice = { id: number; kind: 'REPORT' | 'NOSHOW'; step: number; until
   noShows?: { title: string; startsAt: string }[] }
 const dayTime = (iso: string) => `${md(iso)} ${iso.slice(11, 16)}`
 
+/** "11월 19일까지", or with the time when it ends within two days (the 24시간 step). */
+function untilWord(iso: string | null) {
+  if (!iso) return ''
+  const soon = new Date(iso.replace('T', ' ').replace(/-/g, '/')).getTime() - Date.now() < 2 * 86_400_000
+  return md(iso) + (soon ? ' ' + iso.slice(11, 16) : '') + '까지'
+}
+
 export function noticeText(n: SafetyNotice): { title: string; lines: string[] } {
-  const until = n.until ? md(n.until) + '까지' : ''
+  const until = untilWord(n.until)
   if (n.kind === 'NOSHOW') return n.step >= 3
     ? { title: `${until} 신청할 수 없어요`, lines: ['불참이 3번 쌓였어요.', '제한이 끝나면 다시 함께해요. 약속한 봉사는 꼭 지켜 주세요.'] }
     : { title: '불참이 2번이에요', lines: ['불참이 누적되면 신청이 제한돼요.', '못 가게 되면 미리 취소해 주세요.'] }
-  if (n.step >= 3) return { title: `${until} 신청과 글쓰기가 막혀요`, lines: ['신고가 세 번 쌓였어요.', '제한이 끝나면 다시 함께해요. 바른 활동을 기다릴게요.'] }
-  if (n.step === 2) return { title: `${until} 글을 쓸 수 없어요`, lines: ['신고가 누적되면 이용이 더 제한돼요.', '봉사 신청은 그대로 할 수 있어요. 활동에서 만나요!'] }
-  return { title: '경고를 받았어요', lines: ['신고가 누적되면 이용이 제한돼요.', '서로 존중하는 봉사 공간을 함께 만들어 주세요.'] }
+  // Reports limit the community only (2026-11-12): 1 경고 · 2 24시간 글 · 3+ 글·모집글 7·14·30일 · 관리자 정지(기간 없음).
+  if (n.step >= 3 && !n.until) return { title: '커뮤니티 이용이 정지됐어요', lines: ['신고가 여러 번 쌓여 관리자 확인을 거쳐 정지됐어요.', '봉사 신청·참여는 그대로 할 수 있어요.'] }
+  if (n.step >= 3) return { title: `${until} 글과 모집글을 쓸 수 없어요`, lines: ['신고가 누적되어 제한이 길어졌어요.', '봉사 신청·참여는 그대로 할 수 있어요. 바른 활동을 기다릴게요.'] }
+  if (n.step === 2) return { title: `${until} 글을 쓸 수 없어요`, lines: ['신고가 누적되면 이용이 더 제한돼요.', '봉사 신청·참여는 그대로 할 수 있어요. 활동에서 만나요!'] }
+  return { title: '경고를 받았어요', lines: ['신고가 누적되면 커뮤니티 이용이 제한돼요.', '서로 존중하는 봉사 공간을 함께 만들어 주세요.'] }
 }
 
 const targetWord: Record<string, string> = { POST: '숨겨진 글', COMMENT: '숨겨진 댓글', PHOTO: '숨겨진 사진', ACTIVITY: '신고된 활동', USER: '신고 내용' }
 const nextWord = (n: SafetyNotice) => n.kind === 'NOSHOW'
   ? (n.step >= 3 ? '이미 확정된 활동은 참여할 수 있어요' : '한 번 더 불참하면 14일 동안 신청할 수 없어요')
-  : n.step === 1 ? '한 번 더 인정되면 7일 동안 글을 쓸 수 없어요' : n.step === 2 ? '한 번 더 인정되면 30일 동안 신청과 글쓰기가 막혀요' : '이미 확정된 활동은 참여할 수 있어요'
+  : n.step === 1 ? '한 번 더 인정되면 24시간 동안 글을 쓸 수 없어요' : n.step === 2 ? '한 번 더 인정되면 7일 동안 글과 모집글을 쓸 수 없어요' : '봉사 신청·참여는 그대로 할 수 있어요'
+
 
 export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; onDone: () => void }) {
   const [open, setOpen] = useState(false)
