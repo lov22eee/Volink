@@ -136,6 +136,9 @@ class Week7IntegrationTest extends ApiTestSupport {
         perform(post("/api/community/posts"), Map.of("category", "FREE", "title", "다시 왔어요", "body", "안녕하세요 반가워요 모두"), writer)
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("RESTRICTED"));
         mvc.perform(get("/api/me/status").header("Authorization", "Bearer " + writer)).andExpect(jsonPath("$.write.until").isNotEmpty()).andExpect(jsonPath("$.warnings").value(2));
+        // 2026-11-12 (user decision): the same limit stops opening a 모집글.
+        perform(post("/api/activities"), body(3), writer).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("RESTRICTED"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("모집글을 만들 수 없어요")));
     }
 
     @Test
@@ -177,6 +180,8 @@ class Week7IntegrationTest extends ApiTestSupport {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> penalties.check(user, "APPLY")).isInstanceOf(com.volink.common.ApiException.class);
         long next = createActivity(body(3), organizer);
         perform(post("/api/activities/" + next + "/participations"), Map.of(), member).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("RESTRICTED"));
+        // The 불참 limit is about applying only: opening a 모집글 still works.
+        createActivity(body(3), member);
         // The last no-show is appealed: the organizer turns it into attendance → it stops counting.
         perform(post("/api/appeals"), Map.of("kind", "NO_SHOW", "participationId", last, "reasonCode", "ATTENDED", "reason", "QR이 안 찍혀서 직접 말씀드렸어요"), member).andExpect(status().isOk());
         perform(post("/api/appeals"), Map.of("kind", "NO_SHOW", "participationId", last, "reasonCode", "ATTENDED", "reason", "한 번 더 보내요"), member).andExpect(status().isConflict());

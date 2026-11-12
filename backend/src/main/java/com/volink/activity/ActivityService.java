@@ -86,7 +86,15 @@ public class ActivityService {
         return result;
     }
 
+    private com.volink.safety.PenaltyService penalties;
+
+    /** 신고 누적 제한 (set by Spring; absent in plain unit tests). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPenalties(com.volink.safety.PenaltyService penalties) { this.penalties = penalties; }
+
     public Map<String, Object> create(long userId, ActivityRequest request) {
+        // 신고 2회(7일 글쓰기 제한)·3회(30일 신청·글쓰기 제한) also stop opening a 모집글 (2026-11-12, user decision).
+        if (penalties != null) penalties.check(userId, "HOST");
         return save(userId, request, null);
     }
 

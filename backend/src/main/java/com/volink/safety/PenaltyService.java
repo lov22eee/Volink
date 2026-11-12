@@ -32,12 +32,13 @@ public class PenaltyService {
         this.clock = clock;
     }
 
-    /** Throws 403 RESTRICTED while an APPLY (or ALL) limit runs; WRITE for 글·댓글. */
+    /** Throws 403 RESTRICTED while an APPLY (or ALL) limit runs; WRITE for 글·댓글; HOST (the WRITE limit) for opening a 모집글. */
     public void check(long userId, String what) {
-        Map<String, Object> active = active(userId, what);
+        // HOST (2026-11-12, user decision): a 모집글 is a public post too, so the 신고 2·3회 글쓰기 limit also stops opening one.
+        Map<String, Object> active = active(userId, "HOST".equals(what) ? "WRITE" : what);
         if (active == null) return;
         LocalDateTime until = (LocalDateTime) active.get("ends_at");
-        String verb = "APPLY".equals(what) ? "신청할" : "글을 쓸";
+        String verb = "APPLY".equals(what) ? "신청할" : "HOST".equals(what) ? "모집글을 만들" : "글을 쓸";
         throw new ApiException(HttpStatus.FORBIDDEN, "RESTRICTED", (until == null ? "지금은 " : DAY.format(until) + "까지 ") + verb + " 수 없어요. " + active.get("reason"));
     }
 
