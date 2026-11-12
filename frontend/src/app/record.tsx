@@ -198,7 +198,7 @@ export function RecordScreen({ id }: { id: number }) {
         {/* 실적 확인 대기 (week 7): 1365 실적 새로고침 · 못 갔어요 moved here; the bottom button reads the 1365 확인서. */}
         {wait && <button type="button" onClick={connect}><MIcon name="refresh" size={20} /><span>1365 실적 새로고침<small>1365에 실적이 올라왔는지 확인해요</small></span><MIcon name="chevron" size={18} /></button>}
         {wait && <button type="button" disabled={busy} onClick={() => mark('MISSED')}><MIcon name="userX" size={20} /><span>못 갔어요<small>기록을 ‘못 감’으로 바꿔요</small></span><MIcon name="chevron" size={18} /></button>}
-        {record.status === 'ATTENDED' && !record.certified && !record.extKind && !record.reflected && <button type="button" onClick={() => setSheet('proof')}><MIcon name="record" size={20} /><span>실적확인서로 확인하기<small>PDF·사진을 휴대폰 안에서 읽어요</small></span><MIcon name="chevron" size={18} /></button>}
+        {record.status === 'ATTENDED' && !record.certified && !record.extKind && !record.reflected && <button type="button" onClick={() => setSheet('proof')}><MIcon name="record" size={20} /><span>실적확인서로 확인하기<small>스캔하거나 PDF·사진으로</small></span><MIcon name="chevron" size={18} /></button>}
         {record.status === 'PLANNED' && !record.started && <button type="button" onClick={() => void recordToCalendar(record)}><MIcon name="calendar" size={20} /><span>내 캘린더에 추가<small>{record.timeKnown ? '갤럭시 기본 캘린더에 바로 넣어요' : '시간이 없어 9시로 넣어요 · 캘린더에서 고쳐 주세요'}</small></span><MIcon name="chevron" size={18} /></button>}
         <a href={SITE_1365} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={20} /><span>{record.extKind ? '1365에서 실적 보기' : '1365에서 신청 상태 보기'}<small>{record.extKind ? '실적확인서 발급도 1365에서 해요' : '신청·승인·취소는 1365에서 해요'}</small></span><MIcon name="chevron" size={18} /></a>
       </nav>
