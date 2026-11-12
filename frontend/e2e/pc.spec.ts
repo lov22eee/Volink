@@ -109,6 +109,14 @@ test('기관: sign up on the PC, wait for the check, the admin approves from 할
   await page.getByRole('radio', { name: '비영리단체' }).click()
   await page.getByLabel('기관명').fill(orgName)
   await page.getByLabel('대표 연락처').fill('031-123-4567')
+  // 확인 서류 (선택): a PDF and a PNG; a .txt is refused on the page.
+  await page.locator('#org-docs').setInputFiles([
+    { name: '고유번호증.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') },
+    { name: '현판.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 0, 0, 0, 0]) },
+  ])
+  await page.locator('#org-docs').setInputFiles([{ name: '메모.txt', mimeType: 'text/plain', buffer: Buffer.from('x') }])
+  await expect(page.getByText('메모.txt: PDF·JPG·PNG 파일만 올릴 수 있어요.')).toBeVisible()
+  await expect(page.getByText('고유번호증.pdf')).toBeVisible()
   await page.getByRole('button', { name: '다음' }).click()
   await page.getByLabel('담당자 이름').fill('김담당')
   await page.getByLabel(/^이메일/).fill(email)
@@ -118,7 +126,9 @@ test('기관: sign up on the PC, wait for the check, the admin approves from 할
   await expect(page.getByText(orgName)).toBeVisible()
   await page.getByRole('button', { name: '가입 신청하기' }).click()
   await expect(page.getByRole('heading', { name: '가입 신청을 받았어요' })).toBeVisible()
+  await expect(page.getByText('확인 서류 2개를 함께 보냈어요')).toBeVisible()
   await page.getByRole('link', { name: '기관센터로 가기' }).click()
+  await expect(page.getByText('보낸 서류 2개')).toBeVisible()
   await expect(page.getByRole('heading', { name: '기관 확인을 기다리고 있어요' })).toBeVisible()
 
   // The admin's 할 일: open this organization, a rejection needs a reason, then approve.
@@ -129,6 +139,8 @@ test('기관: sign up on the PC, wait for the check, the admin approves from 할
   await adminPage.getByRole('button', { name: new RegExp(orgName) }).click()
   const decide = adminPage.getByRole('region', { name: '처리', exact: true })
   await expect(decide.getByRole('heading', { name: orgName })).toBeVisible()
+  await expect(decide.getByRole('heading', { name: '확인 서류 2개' })).toBeVisible()
+  await expect(decide.getByRole('img', { name: '현판.png 미리보기' })).toBeVisible()
   await decide.getByRole('radio', { name: '반려' }).check()
   await decide.getByRole('button', { name: '처리하고 다음 건' }).click()
   await expect(decide.getByRole('alert')).toContainText('사유')

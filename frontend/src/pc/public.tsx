@@ -2,8 +2,10 @@
 // and the page a personal account sees (Volink is used in the app).
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { api, ApiError, login } from '../api'
+import { api, ApiError, login, uploadFile } from '../api'
 import type { LiveActivity, User } from '../api'
+import { DocPicker } from './docs'
+import type { OrgDoc } from './docs'
 import { AppQr, appUrl, Loading, Logo, PcIcon, PublicFooter, PublicHeader, minutesWord, when } from './ui'
 
 const left = (a: LiveActivity) => Math.max(0, a.capacity - a.confirmed)
@@ -215,6 +217,8 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [docFiles, setDocFiles] = useState<File[]>([])
+  const [sent, setSent] = useState<{ ok: OrgDoc[]; failed: string[] }>({ ok: [], failed: [] })
   const set = (k: keyof typeof f) => (value: string) => { setF(old => ({ ...old, [k]: value })); setErrors(old => { const next = { ...old }; delete next[k]; return next }) }
   const go = (n: number) => { setStep(n); setMessage(''); window.scrollTo(0, 0) }
   function checkOrg() {
@@ -241,6 +245,10 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
         organizationName: f.organization.trim(), organizationContact: f.organizationContact.trim(), organizationType: f.organizationType, organizationAddress: f.address.trim() || null,
         vmsRegistered: Boolean(f.vmsCode.trim()), vmsCode: f.vmsCode.trim() || null, agreedNotice: true })
       onSession(await login(f.email.trim(), f.password))
+      // 확인 서류 (선택): sent after the account exists; one that fails can be added again on 심사 현황.
+      const ok: OrgDoc[] = [], failed: string[] = []
+      for (const file of docFiles) { try { ok.push(await uploadFile<OrgDoc>('/api/me/organization/documents', file)) } catch { failed.push(file.name) } }
+      setSent({ ok, failed })
       go(3)
     } catch (cause) {
       if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) {
@@ -275,6 +283,7 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
         <div className="pc-two">{input('organizationContact', '대표 연락처', { type: 'tel', maxLength: 20, placeholder: '031-000-0000' })}
           {input('vmsCode', <>1365 수요처 번호 <small>(있으면)</small></>, { maxLength: 30 })}</div>
         {input('address', <>주소 <small>(선택)</small></>, { maxLength: 200 })}
+        <DocPicker files={docFiles} onChange={setDocFiles} />
         <div className="pc-sign-nav"><button type="button" className="pc-btn lg line" onClick={() => go(0)}>이전</button><button className="pc-btn lg">다음</button></div>
       </form>}
       {step === 2 && <form className="pc-sign-body" key="account" noValidate onSubmit={submit}>
@@ -284,7 +293,7 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
         <div className="pc-two">{input('password', <>비밀번호 <small>영문·숫자 8자 이상</small></>, { type: 'password', autoComplete: 'new-password' })}
           {input('passwordConfirm', '비밀번호 확인', { type: 'password', autoComplete: 'new-password' })}</div>
         {f.passwordConfirm && !errors.passwordConfirm && <p className={'pc-hint' + (f.password === f.passwordConfirm ? '' : ' bad')}>{f.password === f.passwordConfirm ? '비밀번호가 같아요' : '비밀번호가 서로 달라요'}</p>}
-        <div className="pc-q" style={{ fontSize: 13 }}><b>신청할 기관</b><br />{orgTypes.find(([k]) => k === f.organizationType)?.[1]} · {f.organization}<br />{f.organizationContact}{f.address ? ' · ' + f.address : ''}{f.vmsCode ? ' · 1365 수요처 ' + f.vmsCode : ''}</div>
+        <div className="pc-q" style={{ fontSize: 13 }}><b>신청할 기관</b><br />{orgTypes.find(([k]) => k === f.organizationType)?.[1]} · {f.organization}<br />{f.organizationContact}{f.address ? ' · ' + f.address : ''}{f.vmsCode ? ' · 1365 수요처 ' + f.vmsCode : ''}{docFiles.length ? <><br />확인 서류 {docFiles.length}개</> : null}</div>
         {message && <p className="pc-err" role="alert" style={{ margin: 0 }}>{message}</p>}
         <div className="pc-sign-nav"><button type="button" className="pc-btn lg line" onClick={() => go(1)}>이전</button><button className="pc-btn lg" disabled={busy}>{busy ? '보내는 중…' : '가입 신청하기'}</button></div>
       </form>}
@@ -292,6 +301,8 @@ export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
         <span className="pc-sign-mark"><PcIcon name="check" size={30} /></span>
         <h1>가입 신청을 받았어요</h1>
         <p className="mu">운영자가 기관 정보를 확인하면 알림으로 알려 드려요. 보통 1~2일 걸려요.</p>
+        {sent.ok.length > 0 && <div className="pc-q pc-sent"><PcIcon name="check" size={16} />확인 서류 {sent.ok.length}개를 함께 보냈어요</div>}
+        {sent.failed.length > 0 && <p className="pc-err" role="alert" style={{ margin: 0, alignSelf: 'stretch' }}>{sent.failed.join(', ')}은(는) 올리지 못했어요. 기관센터의 심사 현황에서 다시 올려 주세요.</p>}
         <div className="pc-steps" style={{ alignSelf: 'stretch', textAlign: 'left', margin: '6px 0 0 8px' }}><div><b>가입 신청</b><small>{f.organization}</small></div><div className="now"><b>운영자 확인 중</b><small>기관 정보 확인</small></div><div className="next"><b>모집 시작</b><small>기관센터에서 모집글 올리기</small></div></div>
         <a className="pc-btn lg wide" href="#/org">기관센터로 가기</a>
       </div>}

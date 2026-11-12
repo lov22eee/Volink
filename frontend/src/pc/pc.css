@@ -421,3 +421,20 @@
 .pc-sign-mark { width: 64px; height: 64px; border-radius: 50%; background: var(--pc-gs); color: var(--pc-g); display: grid; place-items: center; margin-top: 10px; }
 .pc-chips button[role="radio"] { height: 34px; }
 @media (max-width: 900px) { .pc-card.pc-sign { width: 100%; padding: 22px 18px; } .pc-sign-steps li { font-size: 11.5px; } }
+
+/* 기관 확인 서류 (2026-11-12) */
+.pc-doc { display: flex; align-items: center; gap: 10px; border: 1px solid var(--pc-line); border-radius: 9px; padding: 9px 11px; background: #fff; }
+.pc-doc .ic { width: 32px; height: 38px; border-radius: 5px; display: grid; place-items: center; font-size: 10.5px; font-weight: 800; flex: none; background: var(--pc-reds); color: var(--pc-red); }
+.pc-doc .ic.jpg, .pc-doc .ic.png { background: var(--pc-blus); color: var(--pc-blu); }
+.pc-doc .m { flex: 1; min-width: 0; }
+.pc-doc .m b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-doc .m small { color: var(--pc-mu); font-size: 12px; }
+.pc-doc-x { border: 0; background: none; color: var(--pc-mu); font-size: 20px; line-height: 1; padding: 0 4px; }
+.pc-doc-act { display: flex; align-items: center; gap: 8px; }
+.pc-drop { border: 1.5px dashed #9cc3ad; background: #f6faf7; border-radius: 10px; padding: 13px; text-align: center; color: var(--pc-ink2); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font: inherit; }
+.pc-drop b { color: var(--pc-g); display: inline-flex; align-items: center; gap: 4px; }
+.pc-drop small { color: var(--pc-mu); font-size: 12px; }
+.pc-drop.over { background: var(--pc-gs); border-color: var(--pc-g); }
+.pc-drop:disabled { opacity: .6; cursor: default; }
+.pc-sent { display: flex; align-items: center; gap: 8px; color: var(--pc-g) !important; font-weight: 600; align-self: stretch; }
+.pc-doc-preview { width: 100%; max-height: 260px; object-fit: contain; border: 1px solid var(--pc-line); border-radius: 8px; background: #fafaf8; }

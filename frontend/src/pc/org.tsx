@@ -1,5 +1,6 @@
 // 기관센터 (PC, 2026-11-11): 할 일 · 모집 관리 · 신청자 · 완료·기록 · 기관 정보. 현장 출석(QR)은 같은 계정으로 앱에서.
 // Writing and editing a post and one post's full page reuse the web screens (CreateActivity, LiveDetail) inside this frame.
+import { MyDocs } from './docs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { OrgCreate, OrgManage } from './orgPost'
@@ -260,6 +261,7 @@ export function OrgPending({ user, onSignOut }: { user: User; onSignOut: () => v
         <div><b>가입 신청</b><small>{org?.name}</small></div>
         <div className="now"><b>운영자 확인</b><small>보통 1~2일 걸려요. 결과는 앱 알림으로도 알려 드려요</small></div>
         <div className="next"><b>모집 시작</b><small>확인되면 이 화면이 기관센터로 바뀌어요</small></div></div>}
+      {!stopped && <MyDocs canEdit={!stopped} />}
       <p className="mu">{rejected || stopped ? '궁금한 점은 운영자에게 문의해 주세요.' : '그동안 같은 계정으로 앱에 로그인해 둘 수 있어요.'}</p>
       <div style={{ display: 'flex', gap: 8 }}><a className="pc-btn line" href={appUrl()}><PcIcon name="download" />앱 받기</a><button className="pc-btn line" onClick={() => window.location.reload()}><PcIcon name="refresh" />다시 확인</button></div>
     </div></div>

@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.volink.notification.NotificationService;
+import com.volink.organization.OrganizationDocumentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -22,22 +23,27 @@ public class AdminService {
     private final ActivityService activities;
     private final Clock clock;
     private final NotificationService notifications;
+    private final OrganizationDocumentService documents;
 
-    public AdminService(JdbcTemplate jdbc, ActivityService activities, Clock clock, NotificationService notifications) {
+    public AdminService(JdbcTemplate jdbc, ActivityService activities, Clock clock, NotificationService notifications, OrganizationDocumentService documents) {
         this.jdbc = jdbc;
+        this.documents = documents;
         this.activities = activities;
         this.clock = clock;
         this.notifications = notifications;
     }
 
     public List<Map<String, Object>> organizations(String status) {
-        return jdbc.queryForList(Sql.kst("""
+        List<Map<String, Object>> rows = jdbc.queryForList(Sql.kst("""
                 SELECT o.id, o.name, o.org_type AS orgType, o.contact, o.address, o.vms_registered AS vmsRegistered, o.vms_code AS vmsCode,
                        o.status, o.reject_reason AS rejectReason,
                        u.display_name AS managerName, u.email AS managerEmail, DATE_FORMAT(KST(o.created_at), '%Y-%m-%d %H:%i') AS requestedAt
                 FROM organizations o JOIN users u ON u.id = o.manager_user_id
                 WHERE o.status = ? ORDER BY o.created_at, o.id
                 """), status);
+        // 기관 확인 서류 (V40, optional): the admin opens each with /api/org-documents/{id}.
+        rows.forEach(row -> row.put("documents", documents.list(((Number) row.get("id")).longValue())));
+        return rows;
     }
 
     @Transactional
