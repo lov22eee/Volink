@@ -3,6 +3,7 @@
 // fixes it, and it goes to the waiting 1365 record with the same day and name (실적 확인 대기 → 실적확인서 있음), or a new one.
 // Files never leave the phone; only the values are sent. Shown as ‘실적확인서 있음’, never as checked by Volink.
 import { useEffect, useRef, useState } from 'react'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { ReactNode } from 'react'
 import { api, ApiError } from '../api'
 import { showToast } from '../App'
@@ -10,6 +11,11 @@ import { DateField } from './host'
 import { MIcon, Sheet, TextInput } from './ui'
 import type { ExternalRecord } from './record'
 
+/**
+ * 종이 확인서 스캔하기 (2026-11-12, user decision): Google's document scanner on the phone (ML Kit, through Google Play
+ * services, no key) finds the paper's edges, takes the shot by itself and flattens it; the page comes back as a JPEG.
+ */
+const scanner = registerPlugin<{ scan(): Promise<{ jpeg: string }> }>('VolinkScanner')
 type Word = { text: string; x0: number; x1: number }
 type Line = { text: string; x: number; y: number; w: number; h: number; words?: Word[] }
 type Page = { text: string; lines: Line[]; preview: string; width: number; height: number }
@@ -334,7 +340,19 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
   const [target, setTarget] = useState<ExternalRecord | null | 'new'>(null)
   const [same, setSame] = useState<ExternalRecord | null>(null)
   const [choosing, setChoosing] = useState(false)
-  const pdf = useRef<HTMLInputElement>(null), image = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null)
+  const file = useRef<HTMLInputElement>(null), camera = useRef<HTMLInputElement>(null)
+  /** The scanner on the phone; without it (the web, a phone without Google Play) the camera as before. Closing it does nothing. */
+  async function scan() {
+    if (!Capacitor.isNativePlatform()) { camera.current?.click(); return }
+    try {
+      const { jpeg } = await scanner.scan()
+      const bytes = Uint8Array.from(atob(jpeg), c => c.charCodeAt(0))
+      await take(new File([bytes], 'scan.jpg', { type: 'image/jpeg' }), 'photo')
+    } catch (cause) {
+      const code = (cause as { code?: string })?.code
+      if (code !== 'CANCELED') camera.current?.click()
+    }
+  }
   const today = ymd(new Date())
   useEffect(() => { api<ExternalRecord[]>('/api/me/external').then(setList).catch(() => setList([])) }, [])
 
@@ -374,23 +392,20 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
     } finally { setBusy(false) }
   }
   const inputs = <>
-    <input ref={pdf} type="file" accept="application/pdf" hidden onChange={event => take(event.target.files?.[0], 'pdf')} />
-    <input ref={image} type="file" accept="image/*" hidden onChange={event => take(event.target.files?.[0], 'photo')} />
+    <input ref={file} type="file" accept="application/pdf,image/*" hidden onChange={event => { const f = event.target.files?.[0]; event.target.value = ''; void take(f, f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) ? 'pdf' : 'photo') }} />
     <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={event => take(event.target.files?.[0], 'photo')} />
   </>
 
   if (step === 'pick') return <Sheet title="실적확인서 넣기" onClose={onClose}>
     <div className="r-opts">
-      <button type="button" className="r-opt" onClick={() => pdf.current?.click()}><MIcon name="record" size={20} /><span><b>PDF 파일 고르기</b><small>1365에서 받은 파일 · 가장 정확해요</small></span></button>
-      <button type="button" className="r-opt" onClick={() => camera.current?.click()}><MIcon name="camera" size={20} /><span><b>종이 확인서 찍기</b><small>밝은 곳에서 반듯하게</small></span></button>
-      <button type="button" className="r-opt" onClick={() => image.current?.click()}><MIcon name="camera" size={20} /><span><b>앨범에서 고르기</b><small>확인서 사진·캡처</small></span></button>
+      <button type="button" className="r-opt" onClick={() => void scan()}><MIcon name="camera" size={20} /><span><b>종이 확인서 스캔하기</b><small>종이를 비추면 자동으로 찍고 반듯하게 펴요</small></span></button>
+      <button type="button" className="r-opt" onClick={() => file.current?.click()}><MIcon name="record" size={20} /><span><b>파일·앨범에서 고르기</b><small>1365에서 받은 PDF나 확인서 사진</small></span></button>
     </div>
     <a className="pf-link" href={PAGE_1365_RECORDS} target="_blank" rel="noopener noreferrer"><MIcon name="outward" size={18} /><span><b>1365에서 확인서 받기</b><small>나의 봉사 › 봉사참여 실적 › 실적확인서 발급</small></span><MIcon name="chevron" size={16} /></a>
-    <p className="m-help">파일은 보내지 않고 휴대폰 안에서만 읽어요.</p>
     {error && <p className="m-err" role="alert">{error}</p>}
     {inputs}
   </Sheet>
-  if (step === 'reading') return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />확인서를 읽고 있어요<small className="m-help">휴대폰 안에서만 읽어요</small></div></Sheet>
+  if (step === 'reading') return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />확인서를 읽고 있어요</div></Sheet>
   if (step === 'same' && same) return <Sheet title="" onClose={onClose}
     footer={<><a className="m-btn" href={'#/record/' + same.id} onClick={onClose}>그 기록 보기</a><button type="button" className="m-btn line" onClick={onClose}>닫기</button></>}>
     <div className="apply-res done"><span className="apply-res-ico" aria-hidden="true"><MIcon name="record" size={28} /></span>
@@ -442,7 +457,7 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
     {choosing && <div className="r-opts">{waiting.map(r => <button key={r.id} type="button" className="r-opt" onClick={() => { setTarget(r); setChoosing(false) }}>
       <MIcon name="calendar" size={20} /><span><b>{r.title}</b><small>{r.date.slice(5).replace('-', '/')} · {r.status === 'PLANNED' ? '실적 확인 대기' : '다녀옴'}</small></span></button>)}
       <button type="button" className="r-opt" onClick={() => { setTarget('new'); setChoosing(false) }}><MIcon name="plus" size={20} /><span><b>새 기록으로 추가</b></span></button></div>}
-    <p className="m-help">확인서 파일은 저장하지 않고 값만 남아요. 공식 실적은 1365 기준이에요.</p>
+    <p className="m-help">공식 실적은 1365 기준이에요.</p>
     {error && <p className="m-err" role="alert">{error}</p>}
   </Sheet>
 }

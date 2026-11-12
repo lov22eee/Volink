@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LabPlugin.class);
         registerPlugin(CameraPlugin.class);
         registerPlugin(ScreenPlugin.class);
+        registerPlugin(ScannerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
