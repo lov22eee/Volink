@@ -5,7 +5,7 @@ import type { FormEvent } from 'react'
 import { api, ApiError, login } from '../api'
 import type { LiveActivity, User } from '../api'
 import { categories } from '../categories'
-import { AppQr, appUrl, Loading, PcIcon, PublicFooter, PublicHeader, minutesWord, when } from './ui'
+import { AppQr, appUrl, Loading, Logo, PcIcon, PublicFooter, PublicHeader, minutesWord, when } from './ui'
 
 const left = (a: LiveActivity) => Math.max(0, a.capacity - a.confirmed)
 const startsAt = (a: LiveActivity) => new Date(`${a.date}T${a.startTime}:00+09:00`).getTime()
@@ -16,56 +16,79 @@ function seatTag(a: LiveActivity) {
   return <span className="pc-tag g">{left(a)}자리 남음</span>
 }
 
-function AppBox() {
-  return <div className="pc-pn pc-qr"><AppQr /><div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-    <a className="pc-btn lg" href={appUrl()}><PcIcon name="download" size={17} />앱 받기</a><span className="pc-note">휴대폰 카메라로 찍으면 바로 받을 수 있어요</span></div></div>
+const coverOf: Record<string, string> = { 환경: 'environment', 교육: 'education', 복지: 'welfare', '문화·예술': 'culture', 동물: 'animal', 지역사회: 'community', 기타: 'community' }
+const cover = (category: string) => '/covers/' + (coverOf[category] ?? 'community') + '.jpg'
+
+/** The app download: QR for a phone camera next to the button (the APK file on this server). */
+export function AppGet() {
+  return <div className="pc-get"><AppQr size={116} /><div><b>휴대폰 카메라로 찍어 앱 받기</b><span>안드로이드 · 무료</span>
+    <a className="pc-btn lg" href={appUrl()}><PcIcon name="download" size={17} />앱 받기</a></div></div>
 }
+
+const features: [Parameters<typeof PcIcon>[0]['name'], string, string][] = [
+  ['pin', '내 주변 봉사 찾기', '지도·날짜·분야로 찾고 바로 신청해요. 자리가 없으면 대기 신청'],
+  ['qr', '현장 QR 출석', '30초마다 바뀌는 QR과 위치 확인으로 출석하고 기록이 쌓여요'],
+  ['record', '1365 실적 한곳에', '1365 신청·실적과 실적확인서를 모아 함께한 시간을 봐요'],
+  ['chat', '봉사 커뮤니티', '후기·질문·홍보로 이웃과 봉사 경험을 나눠요'],
+]
 
 export function PublicHome({ user, onSignOut }: { user: User | null; onSignOut: () => void }) {
   const [list, setList] = useState<LiveActivity[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [field, setField] = useState('')
-  const [words, setWords] = useState('')
   const [weekend, setWeekend] = useState(false)
-  const [newcomer, setNewcomer] = useState(false)
+  const [all, setAll] = useState(false)
   useEffect(() => { api<LiveActivity[]>('/api/activities').then(setList).catch(() => { setList([]); setFailed(true) }) }, [])
   const shown = useMemo(() => (list ?? []).filter(a => {
     if (field && a.category !== field) return false
-    if (words.trim() && !(a.title + ' ' + (a.placeName ?? '')).includes(words.trim())) return false
-    if (newcomer && !(a.newcomerOk === true || a.newcomerOk === 1)) return false
     if (weekend) { const day = new Date(a.date + 'T12:00:00+09:00').getUTCDay(); if (day !== 0 && day !== 6) return false }
     return true
-  }), [list, field, words, weekend, newcomer])
+  }), [list, field, weekend])
   return <div className="pc">
     <PublicHeader user={user} current="find" onSignOut={onSignOut} />
-    <main className="pc-pub">
-      <aside className="pc-hero">
-        <h1>우리 동네 봉사,<br />앱에서 신청해요</h1>
-        <p>가까운 모집을 찾고, QR로 출석하고, 1365 기록까지 한곳에서 챙겨요.</p>
-        <AppBox />
-        <div className="pc-pn pc-org-cta"><PcIcon name="building" size={22} /><div style={{ flex: 1 }}><b>봉사자를 모집하는 기관이세요?</b><p className="pc-note">기관센터에서 모집글과 신청자를 관리할 수 있어요</p></div>
-          <a className="pc-btn sm line" href="#/org">기관센터</a></div>
-      </aside>
-      <section className="pc-pn" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }} aria-label="지금 모집 중">
-        <div className="pc-ph"><h2>지금 모집 중</h2><small>{list ? `${list.length}개` : ''}</small></div>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--pc-line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <label style={{ flex: 1, position: 'relative' }}><span className="sr">활동 검색</span><input className="pc-in" style={{ height: 36, paddingLeft: 34 }} value={words} onChange={e => setWords(e.target.value)} placeholder="활동 이름, 장소" />
-              <span style={{ position: 'absolute', left: 11, top: 10, color: 'var(--pc-mu)' }}><PcIcon name="search" /></span></label>
-            <div className="pc-chips"><button type="button" aria-pressed={weekend} onClick={() => setWeekend(v => !v)}>주말</button><button type="button" aria-pressed={newcomer} onClick={() => setNewcomer(v => !v)}>처음 환영</button></div>
-          </div>
-          <div className="pc-chips" role="group" aria-label="분야">{['', ...categories].map(c => <button key={c || 'all'} type="button" aria-pressed={field === c} onClick={() => setField(c)}>{c || '전체'}</button>)}</div>
-        </div>
-        {list === null ? <Loading /> : failed ? <p className="pc-empty">모집 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
-          : shown.length === 0 ? <p className="pc-empty">조건에 맞는 모집이 없어요.</p>
-          : <table className="pc-tbl"><thead><tr><th>분야</th><th>활동</th><th>일시</th><th>장소</th><th>확정</th><th>상태</th></tr></thead>
-            <tbody>{shown.map(a => <tr key={a.id} className="go" onClick={() => { window.location.hash = '#/activity/' + a.id }}>
-              <td><span className="pc-tag">{a.category}</span></td>
-              <td><a className="t" href={'#/activity/' + a.id}>{a.title}</a>{a.activityType === 'INSTITUTION' && a.organizationName && <small>{a.organizationName}</small>}</td>
-              <td className="nw">{when(a.date, a.startTime)}</td><td className="mu">{a.placeName ?? '장소 미정'}</td>
-              <td className="nw">{a.confirmed}/{a.capacity}명</td><td>{seatTag(a)}</td></tr>)}</tbody></table>}
-      </section>
-    </main>
+    <section className="pc-land-hero"><div className="pc-wrap">
+      <div className="pc-land-copy">
+        <h1>우리 동네 봉사,<br />찾고 신청하고 기록까지<br />앱 하나로</h1>
+        <p>가까운 모집을 찾아 신청하고, 현장에서 QR로 출석하고,<br />1365 실적까지 한곳에서 챙겨요.</p>
+        <AppGet />
+      </div>
+      <div className="pc-land-phones" aria-hidden="true"><img src="/pc/app-detail.jpg" alt="" /><img src="/pc/app-mine.jpg" alt="" /></div>
+    </div></section>
+    <section className="pc-wrap pc-land-sec" id="pc-about"><h2>Volink로 할 수 있는 것</h2>
+      <div className="pc-feat">{features.map(([icon, title, text]) => <div key={title}><span><PcIcon name={icon} size={22} /></span><b>{title}</b><p>{text}</p></div>)}</div>
+    </section>
+    <section className="pc-wrap pc-land-sec" aria-label="지금 모집 중">
+      <div className="pc-land-h"><h2>지금 모집 중</h2>{list && list.length > 0 && <small>{list.length}개</small>}</div>
+      <div className="pc-chips" role="group" aria-label="분야">{['', ...categories].map(c => <button key={c || 'all'} type="button" aria-pressed={field === c} onClick={() => setField(c)}>{c || '전체'}</button>)}
+        <button type="button" aria-pressed={weekend} onClick={() => setWeekend(v => !v)}>이번 주말</button></div>
+      {list === null ? <Loading /> : failed ? <p className="pc-land-empty">모집 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+        : shown.length === 0 ? <p className="pc-land-empty">{list.length ? '조건에 맞는 모집이 없어요.' : '지금 모집 중인 활동이 없어요. 앱에서 새 모집 알림을 받아 보세요.'}</p>
+        : <><div className="pc-cards">{(all ? shown : shown.slice(0, 8)).map(a => <a key={a.id} className="pc-acard" href={'#/activity/' + a.id}>
+            <span className="im" style={{ backgroundImage: `url(${cover(a.category)})` }} />
+            <span className="t"><small>{a.category}{a.activityType === 'INSTITUTION' && a.organizationName ? ' · ' + a.organizationName : ''}</small><b>{a.title}</b>
+              <span>{when(a.date, a.startTime)} · {a.placeName ?? '장소 미정'}</span>{seatTag(a)}</span></a>)}</div>
+          {!all && shown.length > 8 && <button type="button" className="pc-btn line pc-more" onClick={() => setAll(true)}>{shown.length - 8}개 더 보기</button>}</>}
+    </section>
+    <section className="pc-land-org"><div className="pc-wrap"><div><h2>봉사자를 모집하는 기관이세요?</h2><p>기관센터에서 모집글을 올리고 신청자·출석·기록을 PC로 관리하세요.</p></div>
+      <div className="pc-sp" /><a className="pc-btn lg light" href="#/org/signup">기관 가입 신청</a><a className="pc-btn lg ghost" href="#/org">기관 로그인</a></div></section>
+    <PublicFooter />
+  </div>
+}
+
+/** 기관센터 입구 (not logged in): what the 기관센터 does next to the 기관 login. */
+export function OrgEntry({ onSession, user, onSignOut }: { onSession: (user: User) => void; user: User | null; onSignOut: () => void }) {
+  return <div className="pc">
+    <PublicHeader user={user} current="org" onSignOut={onSignOut} />
+    <div className="pc-wrap pc-org-entry">
+      <div>
+        <h1>기관 봉사 모집,<br />PC에서 한 번에 관리하세요</h1>
+        <p className="lead">모집글 작성부터 신청자 승인, 현장 출석, 완료 기록까지.</p>
+        <div className="pc-steps3">{[['가입 신청', '기관 정보와 담당자를 입력해요'], ['운영자 확인', '확인되면 알림으로 알려 드려요'], ['모집 시작', '기관센터에서 모집글을 올려요']].map(([t, d], i) =>
+          <div key={t}><i>{i + 1}</i><b>{t}</b><span>{d}</span></div>)}</div>
+        <div className="pc-can">{[['여러 날짜', '모집글 한 번에 올리기'], ['신청자', '한 번에 승인 · 신청 질문 답 보기'], ['출석부', '내려받기 · 현장 출석은 앱으로'], ['1365 연결', '링크 · 기관 공개 페이지']].map(([b, t]) => <div key={b}><b>{b}</b> {t}</div>)}</div>
+      </div>
+      <LoginCard onSession={onSession} title="기관 로그인" note="기관 담당자 계정으로 로그인해요." />
+    </div>
     <PublicFooter />
   </div>
 }
@@ -115,7 +138,7 @@ export function PublicDetail({ id, user, onSignOut }: { id: number; user: User |
 }
 
 /** One login for 기관 and 운영자; the account decides where it goes. Personal members use the app. */
-export function PcLogin({ onSession }: { onSession: (user: User) => void }) {
+function LoginCard({ onSession, title, note }: { onSession: (user: User) => void; title: string; note: string }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -131,17 +154,21 @@ export function PcLogin({ onSession }: { onSession: (user: User) => void }) {
       window.location.replace(user.role === 'ADMIN' ? (next?.startsWith('#/admin') ? next : '#/admin') : user.memberType === 'INSTITUTION' ? (next?.startsWith('#/org') ? next : '#/org') : '#/app')
     } catch (cause) { setError(cause instanceof Error ? cause.message : '로그인하지 못했어요.') } finally { setBusy(false) }
   }
-  return <div className="pc"><header className="pc-hd"><a className="pc-logo" href="#/"><i><PcIcon name="leaf" size={14} /></i>volink</a></header>
-    <div className="pc-center"><form className="pc-pn pc-card" onSubmit={submit} noValidate>
-      <h1>로그인</h1><p className="mu" style={{ marginTop: -6 }}>기관 담당자와 운영자 계정으로 로그인해요</p>
-      <label className="pc-f"><span>이메일</span><input className="pc-in" name="email" type="email" autoComplete="username" /></label>
-      <label className="pc-f"><span>비밀번호</span><input className="pc-in" name="password" type="password" autoComplete="current-password" /></label>
-      {error && <p className="pc-err" role="alert" style={{ margin: 0 }}>{error}</p>}
-      <button className="pc-btn lg wide" disabled={busy}>{busy ? '로그인하는 중…' : '로그인'}</button>
-      <div style={{ borderTop: '1px solid var(--pc-line)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
-        <div style={{ display: 'flex' }}><span className="mu">처음 오셨나요?</span><a className="pc-link" style={{ marginLeft: 'auto' }} href="#/org/signup">기관 가입 신청</a></div>
-        <div style={{ display: 'flex' }}><span className="mu">봉사에 참여하려면</span><a className="pc-link" style={{ marginLeft: 'auto' }} href={appUrl()}>앱 받기</a></div></div>
-    </form></div></div>
+  return <form className="pc-pn pc-card pc-login" onSubmit={submit} noValidate>
+    <h1>{title}</h1><p className="mu" style={{ marginTop: -6 }}>{note}</p>
+    <label className="pc-f"><span>이메일</span><input className="pc-in" name="email" type="email" autoComplete="username" /></label>
+    <label className="pc-f"><span>비밀번호</span><input className="pc-in" name="password" type="password" autoComplete="current-password" /></label>
+    {error && <p className="pc-err" role="alert" style={{ margin: 0 }}>{error}</p>}
+    <button className="pc-btn lg wide" disabled={busy}>{busy ? '로그인하는 중…' : '로그인'}</button>
+    <div style={{ borderTop: '1px solid var(--pc-line)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
+      <div style={{ display: 'flex' }}><span className="mu">처음 오셨나요?</span><a className="pc-link" style={{ marginLeft: 'auto' }} href="#/org/signup">기관 가입 신청</a></div>
+      <div style={{ display: 'flex' }}><span className="mu">개인 회원은 앱에서 이용해요</span><a className="pc-link" style={{ marginLeft: 'auto' }} href={appUrl()}>앱 받기</a></div></div>
+  </form>
+}
+
+export function PcLogin({ onSession }: { onSession: (user: User) => void }) {
+  return <div className="pc"><header className="pc-hd"><Logo /></header>
+    <div className="pc-center"><LoginCard onSession={onSession} title="로그인" note="기관 담당자와 운영자 계정으로 로그인해요" /></div></div>
 }
 
 export function AppOnly({ user, onSignOut }: { user: User; onSignOut: () => void }) {
