@@ -1,6 +1,7 @@
 // 내 이용 상태 (week 7, 2026-11-09): running limits (신청 / 글쓰기), 최근 90일 불참, warnings, my reports and appeals.
 // 이의신청: 7 days after a no-show, a record or a sanction; the organizer answers first, then an admin.
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api, ApiError } from '../api'
 import { Loading, MIcon, Sheet, TextArea, TopBar } from './ui'
 
@@ -108,4 +109,80 @@ export function HostAppeals({ activityId, onChanged }: { activityId: number; onC
       : <div className="m-two"><button type="button" className="m-btn sm" onClick={() => answer(a.id, 'ACCEPT')}>출석으로 바꾸기</button><button type="button" className="m-btn line sm" onClick={() => setKeeping(a.id)}>그대로 두기</button></div>}
     {a.hostDueAt && <small className="ha-due">{md(a.hostDueAt)} {a.hostDueAt.slice(11, 16)}까지 답하지 않으면 관리자가 확인해요</small>}
   </div>)}</div>
+}
+
+/**
+ * 경고 시트 (2026-11-12, user decision, V38): after a report is accepted (1·2·3회) or no-shows add up (2·3회) the next app
+ * screen shows one sheet — a soft red ! in the middle, one line of what happened, why it matters, 자세히 보기 for the post or
+ * the dates, and [확인] only after 확인했어요 is ticked. It does not close by tapping outside, dragging or Escape.
+ */
+type SafetyNotice = { id: number; kind: 'REPORT' | 'NOSHOW'; step: number; until: string | null
+  targetType?: string; targetTitle?: string | null; targetBody?: string | null; reason?: string; note?: string | null
+  noShows?: { title: string; startsAt: string }[] }
+const dayTime = (iso: string) => `${md(iso)} ${iso.slice(11, 16)}`
+
+export function noticeText(n: SafetyNotice): { title: string; lines: string[] } {
+  const until = n.until ? md(n.until) + '까지' : ''
+  if (n.kind === 'NOSHOW') return n.step >= 3
+    ? { title: `${until} 신청할 수 없어요`, lines: ['불참이 3번 쌓였어요.', '제한이 끝나면 다시 함께해요. 약속한 봉사는 꼭 지켜 주세요.'] }
+    : { title: '불참이 2번이에요', lines: ['불참이 누적되면 신청이 제한돼요.', '못 가게 되면 미리 취소해 주세요.'] }
+  if (n.step >= 3) return { title: `${until} 신청과 글쓰기가 막혀요`, lines: ['신고가 세 번 쌓였어요.', '제한이 끝나면 다시 함께해요. 바른 활동을 기다릴게요.'] }
+  if (n.step === 2) return { title: `${until} 글을 쓸 수 없어요`, lines: ['신고가 누적되면 이용이 더 제한돼요.', '봉사 신청은 그대로 할 수 있어요. 활동에서 만나요!'] }
+  return { title: '경고를 받았어요', lines: ['신고가 누적되면 이용이 제한돼요.', '서로 존중하는 봉사 공간을 함께 만들어 주세요.'] }
+}
+
+const targetWord: Record<string, string> = { POST: '숨겨진 글', COMMENT: '숨겨진 댓글', PHOTO: '숨겨진 사진', ACTIVITY: '신고된 활동', USER: '신고 내용' }
+const nextWord = (n: SafetyNotice) => n.kind === 'NOSHOW'
+  ? (n.step >= 3 ? '이미 확정된 활동은 참여할 수 있어요' : '한 번 더 불참하면 14일 동안 신청할 수 없어요')
+  : n.step === 1 ? '한 번 더 인정되면 7일 동안 글을 쓸 수 없어요' : n.step === 2 ? '한 번 더 인정되면 30일 동안 신청과 글쓰기가 막혀요' : '이미 확정된 활동은 참여할 수 있어요'
+
+export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; onDone: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [checked, setChecked] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const text = noticeText(notice)
+  useEffect(() => { document.documentElement.classList.add('m-locked'); return () => document.documentElement.classList.remove('m-locked') }, [])
+  async function confirm() {
+    setBusy(true)
+    try { await api('/api/me/safety-notice/' + notice.id + '/ack', 'POST'); onDone() } catch { setBusy(false) }
+  }
+  return createPortal(<div className="m-sheet-wrap">
+    <div className="m-dim" />
+    <section className="m-sheet sn-sheet" role="alertdialog" aria-modal="true" aria-labelledby="sn-title" aria-describedby="sn-text">
+      <span className="m-grab" aria-hidden="true" />
+      <div className="sn-body">
+        <span className="sn-mark" aria-hidden="true">!</span>
+        <h2 id="sn-title">{text.title}</h2>
+        <p id="sn-text">{text.lines.map((line, i) => <span key={i}>{line}</span>)}</p>
+        <button type="button" className="sn-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '접기' : '자세히 보기'}<MIcon name="chevron" size={14} /></button>
+        {open && <dl className="sn-detail">
+          {notice.kind === 'REPORT' ? <>
+            {(notice.targetTitle || notice.targetBody) && <div><dt>{targetWord[notice.targetType ?? ''] ?? '신고 내용'}</dt><dd>{notice.targetTitle && <b>{notice.targetTitle}</b>}{notice.targetBody && <span>{notice.targetBody}</span>}</dd></div>}
+            <div><dt>사유</dt><dd>{notice.reason}{notice.note ? ' · ' + notice.note : ''}</dd></div>
+          </> : <>
+            {notice.noShows?.[0] && <div><dt>불참한 활동</dt><dd><b>{notice.noShows[0].title}</b><span>{dayTime(notice.noShows[0].startsAt)} · 출석 확인 없음</span></dd></div>}
+            {notice.noShows && notice.noShows.length > 0 && <div><dt>최근 90일 불참</dt><dd>{notice.noShows.length}번 ({notice.noShows.map(x => `${Number(x.startsAt.slice(5, 7))}/${Number(x.startsAt.slice(8, 10))}`).reverse().join(', ')})</dd></div>}
+          </>}
+          <div><dt>{notice.step >= 3 ? '제한 중에도' : '다음 단계'}</dt><dd>{nextWord(notice)}</dd></div>
+        </dl>}
+        <label className="m-check sn-check"><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} /><span className="m-box" />확인했어요</label>
+        <button type="button" className="m-btn" disabled={!checked || busy} onClick={confirm}>확인</button>
+        <a className="sn-appeal" href="#/my?view=status" onClick={() => { if (checked) void confirm() }}>이의 신청은 마이 › 내 이용 상태에서 (7일 안)</a>
+      </div>
+    </section>
+  </div>, document.body)
+}
+
+/** Looks for a warning when the app opens, comes back to the front, or moves to another screen. */
+export function SafetyNoticeHost({ tick }: { tick: string }) {
+  const [notice, setNotice] = useState<SafetyNotice | null>(null)
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    const look = () => { if (document.visibilityState === 'visible') api<SafetyNotice | Record<string, never>>('/api/me/safety-notice').then(x => setNotice('id' in x ? x as SafetyNotice : null)).catch(() => {}) }
+    look()
+    document.addEventListener('visibilitychange', look)
+    return () => document.removeEventListener('visibilitychange', look)
+  }, [tick, version])
+  if (!notice) return null
+  return <SafetyNoticeSheet key={notice.id} notice={notice} onDone={() => { setNotice(null); setVersion(v => v + 1) }} />
 }
