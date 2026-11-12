@@ -243,6 +243,8 @@ export function Notice({ text, tone = 'info' }: { text: string; tone?: Tone }) {
 // Short results of what the viewer just did (applied, joined the waitlist, cancelled…). They fade after a few seconds;
 // the lasting state stays on the page, and errors stay inline next to the button instead of disappearing.
 const toastBus = new EventTarget()
+/** A line that something did not work gets the red mark instead of the check (2026-11-12). */
+const failed = (text: string) => /못했|못 해|실패|오류|할 수 없|없어요$/.test(text)
 export function showToast(text: string, detail = '') {
   toastBus.dispatchEvent(new CustomEvent('toast', { detail: { text, detail } }))
 }
@@ -263,8 +265,9 @@ export function ToastHost() {
     return () => { toastBus.removeEventListener('toast', show); window.clearTimeout(timer) }
   }, [])
   if (!toast) return null
-  return createPortal(<div key={toast.id} className="toast" role="status">
-    <span className="toast-check" aria-hidden="true"><Icon name="check" size={14} /></span>
+  const bad = failed(toast.text)
+  return createPortal(<div key={toast.id} className={'toast' + (bad ? ' bad' : '')} role={bad ? 'alert' : 'status'}>
+    <span className="toast-check" aria-hidden="true">{bad ? <b>!</b> : <Icon name="check" size={14} />}</span>
     <span className="toast-text"><strong>{toast.text}</strong>{toast.detail && <span>{toast.detail}</span>}</span>
     <button className="toast-close" aria-label="안내 닫기" onClick={() => setToast(null)}><Icon name="close" size={16} /></button>
   </div>, document.body)

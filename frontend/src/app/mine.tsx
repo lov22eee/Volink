@@ -7,6 +7,7 @@ import type { LiveActivity, MyParticipation, MyRecord } from '../api'
 import { durationLabel } from '../create'
 import { dayWord, Empty, Loading, MIcon, RecruitFab, TopBar } from './ui'
 import { RecordRow, useRecords } from './record'
+import { ProofSheet } from './proof'
 import { useImport1365 } from './lab'
 import { plansOf, Schedule, todayKst } from './schedule'
 
@@ -130,6 +131,11 @@ export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
   const led = user?.memberType === 'INSTITUTION' ? [] : hostedRecords(hosted ?? [])
   const external = useRecords(version)
   const [importSheet, importFrom] = useImport1365(() => setVersion(v => v + 1))
+  const [proof, setProof] = useState(false)
+  const addMenu = <AddMenu items={[
+    { icon: 'refresh', label: '1365에서 가져오기', note: '1365 화면에서 한 번에', onPick: () => importFrom('S') },
+    { icon: 'record', label: '실적확인서 올리기', note: 'PDF·사진 한 장씩', onPick: () => setProof(true) },
+  ]} />
   const ext = (external ?? []).filter(r => r.status === 'ATTENDED')
   const volink = records ?? []
   type Item = { kind: '1365'; key: string; r: NonNullable<typeof external>[number] } | { kind: 'volink'; key: string; x: MyRecord } | { kind: 'led'; key: string; a: LiveActivity }
@@ -144,11 +150,11 @@ export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
   for (const item of items) { const g = groupOf(item.key); const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(item); else groups.push([g, [item]]) }
   const loading = !records || !external || !hosted
   return <div className="m-screen">
-    <TopBar title="활동 기록" back="#/my" />
+    <TopBar title="활동 기록" back="#/my" actions={user?.memberType === 'INSTITUTION' || loading || (!ext.length && !volink.length && !led.length) ? undefined : addMenu} />
     <div className="m-body">
       {loading ? <Loading /> : !ext.length && !volink.length && !led.length
         ? <Empty bare icon="record" title="아직 활동 기록이 없어요" text="함께한 봉사가 여기에 모여요"
-            action={<div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('S')}>1365 가져오기</button><a className="m-btn sm" href="#/find">봉사 찾아보기</a></div>} />
+            action={<><div className="m-empty-two"><button type="button" className="m-btn sm blue" onClick={() => importFrom('S')}>1365 가져오기</button><button type="button" className="m-btn sm" onClick={() => setProof(true)}>실적확인서 올리기</button></div><a className="rec-find" href="#/find">봉사 찾아보기</a></>} />
         : <>
           <div className="m-chips done-chips" role="radiogroup" aria-label="활동 기록 보기">{([['all', '전체', ext.length + volink.length + led.length], ['1365', '1365', ext.length], ['volink', 'Volink', volink.length + led.length]] as const).map(([key, label, n]) =>
             <button key={key} type="button" role="radio" aria-checked={kind === key} className={'m-chip' + (kind === key ? ' on' : '')} onClick={() => setKind(key)}>{label} {n}</button>)}</div>
@@ -159,5 +165,28 @@ export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
         </>}
     </div>
     {importSheet}
+    {proof && <ProofSheet onClose={() => setProof(false)} onSaved={saved => { setProof(false); setVersion(v => v + 1); window.location.hash = '#/record/' + saved.id }} />}
   </div>
+}
+
+/** ＋ on 활동 기록: a small menu that drops in from the button and fades back out (closing waits for the animation). */
+function AddMenu({ items }: { items: { icon: 'refresh' | 'record'; label: string; note: string; onPick: () => void }[] }) {
+  const [state, setState] = useState<'shut' | 'open' | 'closing'>('shut')
+  const close = () => setState(s => s === 'open' ? 'closing' : s)
+  useEffect(() => {
+    if (state !== 'open') return
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [state])
+  return <span className="rec-add">
+    <button type="button" className={'m-icon-btn rec-add-btn' + (state === 'open' ? ' on' : '')} aria-label="기록 추가" aria-expanded={state === 'open'}
+      onClick={() => setState(state === 'open' ? 'closing' : 'open')}><MIcon name="plus" /></button>
+    {state !== 'shut' && <>
+      <span className={'rec-add-dim' + (state === 'closing' ? ' out' : '')} onClick={close} />
+      <span role="menu" className={'rec-add-menu' + (state === 'closing' ? ' out' : '')} onAnimationEnd={() => setState(s => s === 'closing' ? 'shut' : s)}>
+        {items.map(item => <button key={item.label} type="button" role="menuitem" onClick={() => { setState('shut'); item.onPick() }}>
+          <MIcon name={item.icon} size={20} /><span><b>{item.label}</b><small>{item.note}</small></span></button>)}
+      </span></>}
+  </span>
 }

@@ -127,6 +127,7 @@ public class PhotoService {
             Files.createDirectories(root);
             Files.write(root.resolve(key), data);
         } catch (IOException e) {
+            org.slf4j.LoggerFactory.getLogger(PhotoService.class).error("Photo could not be written under {}: {}", root, e.toString());
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "UPLOAD_FAILED", "사진을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
         }
     }

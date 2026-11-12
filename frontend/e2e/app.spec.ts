@@ -735,6 +735,38 @@ test('1365: a marked activity → went → review; the lab reads a pasted 1365 l
   await expect(page.getByRole('link', { name: /도서관 정리 도우미/ })).toBeVisible()
 })
 
+test('활동 기록 ＋: 1365에서 가져오기 / 실적확인서 올리기 menu opens and closes; an empty list offers both', async ({ page }) => {
+  const member = await signupByApi(page, '기록 추가')
+  await login(page, member)
+  await page.goto('/#/records')
+  await expect(page.getByText('아직 활동 기록이 없어요')).toBeVisible()
+  await expect(page.getByRole('button', { name: '실적확인서 올리기', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '봉사 찾아보기' })).toBeVisible()
+  // No ＋ while the list is empty: the three in the middle are enough. One record later, ＋ shows.
+  await expect(page.getByRole('button', { name: '기록 추가' })).toHaveCount(0)
+  await page.getByRole('button', { name: '실적확인서 올리기', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText(/PDF/)
+  await page.getByRole('dialog').getByRole('button', { name: '닫기' }).click()
+  const made = await page.request.post('/api/me/external', { headers: { Authorization: await tokenFor(page, member) }, data: { title: '어린이 독서 지도', date: '2025-08-14' } })
+  expect(made.ok()).toBeTruthy()
+  const auth = await tokenFor(page, member)
+  expect((await page.request.put('/api/me/external/' + (await made.json()).id + '/certificate', { headers: { Authorization: auth }, data: { title: '어린이 독서 지도', date: '2025-08-14', minutes: 240 } })).ok()).toBeTruthy()
+  await page.reload()
+  await expect(page.getByRole('link', { name: /어린이 독서 지도/ })).toBeVisible()
+  const plus = page.getByRole('button', { name: '기록 추가' })
+  await plus.click()
+  const menu = page.getByRole('menu')
+  await expect(menu.getByRole('menuitem', { name: /1365에서 가져오기/ })).toBeVisible()
+  await expect(plus).toHaveAttribute('aria-expanded', 'true')
+  // Escape closes it after the fade.
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await plus.click()
+  await page.getByRole('menuitem', { name: /실적확인서 올리기/ }).click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(page.getByRole('dialog')).toContainText(/PDF/)
+})
+
 test('1365 connect: an empty 완료 기록 offers it, a consent sheet first, then the 3-step guide; 마이 shows Volink + 1365', async ({ page }) => {
   const member = await signupByApi(page, '연결 확인')
   await login(page, member)
