@@ -36,6 +36,8 @@ export const LAB_GUIDE = '로그인 → ☰ 메뉴 › 나의 봉사 › 봉사�
  * closed ☰ menu (on the phone '로그아웃' lives only there), `was` a login page was seen and left (2026-11-06: the guide stayed on
  * ① after logging in because '로그아웃' is hidden in the menu). Returns "<step><kind>|<line>": step 1-5,
  * kind S (실적 page), A (신청 현황 page) or -. Plain ES5 inside a string so the Android side runs it as it is.
+ * 2026-11-12 device: on the 활동인증형 tab (0 hours) a login form 1365 keeps on the page counted as shown, so the app said
+ * ‘로그인이 풀렸어요’ while the person was logged in: on the 실적 page with 로그아웃 in its menu a password box is not a login page.
  */
 export const LAB_STEP_BODY = `
   var s = String(t || '').replace(/\\s+/g, ' ');
@@ -46,8 +48,10 @@ export const LAB_STEP_BODY = `
   if (sum && tg !== 'A' && !ds) return '4S|④ 실적 화면이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
   if (app && tg !== 'S' && !da) return '4A|④ 신청 현황이에요. 아래 ‘이 화면 가져오기’를 눌러 주세요';
   if (sum || app) return '3-|③ ' + want + ' 화면으로 이동하고 있어요';
-  if (pw) return '1-|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
-  var inside = /로그아웃/.test(s) || /로그아웃/.test(String(full || '')) || !!was;
+  var out = /로그아웃/.test(s) || /로그아웃/.test(String(full || ''));
+  var records = /봉사\\s*참여\\s*실적|시간인증형|활동인증형/.test(s);
+  if (pw && !(records && out)) return '1-|① 1365 아이디·비밀번호나 간편인증으로 로그인해 주세요';
+  var inside = out || !!was;
   if (inside) return '2-|② ' + want + ' 화면으로 이동하고 있어요';
   return '1-|① 1365에 로그인해 주세요. 로그인하면 ' + want + ' 화면으로 바로 가요';
 `

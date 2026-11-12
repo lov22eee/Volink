@@ -69,7 +69,12 @@ public class LabActivity extends AppCompatActivity {
 
     private String stepCall(String text) {
         // Only a password box the person can see counts (1365 pages keep a hidden login form, 2026-11-06).
-        return "(function(t,pw,ds,da,full,was,tg){" + stepScript + "})(" + text + ",Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){return e.offsetParent!==null;}),"
+        // 2026-11-12: a box with no size, or under a hidden / see-through layer, is not shown either (the 활동인증형 tab said
+        // ‘로그인이 풀렸어요’ while logged in).
+        return "(function(t,pw,ds,da,full,was,tg){" + stepScript + "})(" + text + ",Array.prototype.some.call(document.querySelectorAll('input[type=password]'),function(e){"
+                + "if(e.offsetParent===null)return false;var r=e.getBoundingClientRect();if(r.width<4||r.height<4)return false;"
+                + "for(var n=e;n&&n.nodeType===1;n=n.parentElement){var c=getComputedStyle(n);if(c.visibility==='hidden'||c.display==='none'||parseFloat(c.opacity)===0)return false;}"
+                + "return true;}),"
                 + (summaryAt >= 0) + "," + (applicationsAt >= 0)
                 + ",(document.body?String(document.body.textContent||'').slice(0,60000):'')," + loggedIn + ",'" + target + "')";
     }
@@ -831,7 +836,9 @@ public class LabActivity extends AppCompatActivity {
             + "var T=document.body?document.body.innerText:'';\n"
             + "function nz(s){return String(s||'').replace(/\\s+/g,'');}\n"
             + "var C=nz(T);\n"
-            + "if(C.indexOf('현재페이지')<0)return JSON.stringify({a:'wait'});\n"
+            // An empty list (활동인증형 0건) has no 현재페이지 line: read it as an empty page instead of waiting (2026-11-12).
+            + "var empty=/전체0건|조회된(내용|결과|데이터|자료|실적)(이|가)?없|검색(된)?결과가없|(내역|실적)이없/.test(C);\n"
+            + "if(C.indexOf('현재페이지')<0&&!empty)return JSON.stringify({a:'wait'});\n"
             + "var inA=C.indexOf('활동인증형자원봉사실적')>=0,inT=C.indexOf('시간인증형자원봉사실적')>=0;\n"
             + "var tab=inA&&!inT?'activity':(inT&&!inA?'time':'');\n"
             + "function vis(e){return !!(e.offsetWidth||e.offsetHeight||e.getClientRects().length);}\n"

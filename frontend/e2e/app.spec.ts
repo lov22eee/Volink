@@ -835,6 +835,22 @@ test('1365 가져오기: chosen after signup; a past 1365 activity waits, a larg
   await expect(page.getByRole('button', { name: /1365 기록 방식.*가져오기/ })).toBeVisible()
 })
 
+test('실적확인서 photo: misread labels (활통·내욕·8획) and a header-row table still give 활동명·날짜·시간', async ({ page }) => {
+  await page.goto('/#/login')
+  const got = await page.evaluate(async () => {
+    const { readProof } = await import('/src/app/proof.tsx' as string)
+    const total = readProof('자원봉사활동 확인서\n활통기간 2025.03.01 ~ 2025,10.31\n활동시갑 총 46시간 30분\n촬통횟수 총 8획\n황통내욕 양주 하천 환경정화 의 7건\n2026년 11월 12일')
+    const w = (s: string, x: number) => ({ text: s, x0: x - 20, x1: x + 20 })
+    const lines = ['봉사활동 실적확인서', '번호 활동입자 붕사기관 활동내용 인정시간', '1 2025.08.14 양주시자원봉사센터 어린이 독서 지도 4시간', '위와 같이 확인합니다.']
+    const words = [undefined, [w('번호', 244), w('활동입자', 400), w('붕', 646), w('사', 671), w('기', 693), w('관', 717), w('활동내용', 990), w('인정시간', 1240)],
+      [w('1', 243), w('2025.08.14', 386), w('양주시자원봉사센터', 700), w('어린이', 946), w('독서', 1000), w('지도', 1063), w('4시간', 1250)], undefined]
+    const one = readProof(lines.join('\n'), lines, words)
+    return { total: [total.kind, total.title, total.from, total.to, total.minutes, total.count], one: [one.kind, one.title, one.to, one.minutes] }
+  })
+  expect(got.total).toEqual(['total', '양주 하천 환경정화 외 7건', '2025-03-01', '2025-10-31', 46 * 60 + 30, 8])
+  expect(got.one).toEqual(['one', '어린이 독서 지도', '2025-08-14', 240])
+})
+
 test('1365 step guide: the words on the page tell which step the person is on (① 로그인 … ④ 이 화면 가져오기)', async ({ page }) => {
   await page.goto('/#/login')
   const steps = await page.evaluate(async () => {
@@ -847,9 +863,13 @@ test('1365 step guide: the words on the page tell which step the person is on (�
       labStep(sum, true, false, false, '', false, 'S'), labStep(sum, false, false, false, '', false, 'A'), labStep(app, false, false, false, '', false, 'S'),
       // '로그아웃' only in the closed ☰ menu (textContent), or the login page was just left.
       labStep('1365 자원봉사포털 검색어를 입력하세요 청소년 성인', false, false, false, '메뉴 홍길동님 로그아웃 나의 봉사'), labStep('1365 자원봉사포털 검색어', false, false, false, '', true),
+      // 2026-11-12 device: the 활동인증형 tab (0건) with a login form 1365 keeps on the page, logged in → not ① 로그인.
+      labStep('나의 봉사 봉사참여 실적 시간인증형 활동인증형 활동인증형 자원봉사 실적 활동건수 총 0건 조회된 내용이 없습니다', true, true, false, '메뉴 홍길동님 로그아웃 나의 봉사'),
+      // Logged out on the same page (no 로그아웃 anywhere): still ①.
+      labStep('나의 봉사 봉사참여 실적 활동인증형 로그인', true, false, false, '로그인 회원가입'),
     ].map(x => x.step + x.kind)
   })
-  expect(steps).toEqual(['1-', '1-', '2-', '2-', '4S', '4A', '4S', '3-', '3-', '2-', '2-'])
+  expect(steps).toEqual(['1-', '1-', '2-', '2-', '4S', '4A', '4S', '3-', '3-', '2-', '2-', '2-', '1-'])
 })
 
 test('1365 신청 현황 as the page shows it: titles are not 봉사기간, 모집기간 is skipped, a period asks for the day, no time = 시간 미정', async ({ page }) => {
