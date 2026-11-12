@@ -1,6 +1,8 @@
 // PC 공개 화면 (2026-11-11): 봉사 찾기 (no login), a post's page (also what a shared link opens), login, 기관 가입,
 // and the page a personal account sees (Volink is used in the app).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { mountMotion } from './motion'
+import type { Motion } from './motion'
 import type { FormEvent, ReactNode } from 'react'
 import { api, ApiError, login, uploadFile } from '../api'
 import type { LiveActivity, User } from '../api'
@@ -15,6 +17,31 @@ function seatTag(a: LiveActivity) {
   if (a.status !== 'RECRUITING' || startsAt(a) <= Date.now()) return <span className="pc-tag">모집 마감</span>
   if (left(a) === 0) return startsAt(a) - Date.now() > 2 * 3_600_000 ? <span className="pc-tag amb">대기 가능</span> : <span className="pc-tag">모집 마감</span>
   return <span className="pc-tag g">{left(a)}자리 남음</span>
+}
+
+/** 봉사 장면 (첫 화면 위쪽): four scenes in turn. Stops while off screen or the tab is hidden;
+ *  with reduced motion one still scene shows. */
+function VolunteerMotion() {
+  const ref = useRef<SVGSVGElement>(null)
+  const motion = useRef<Motion | null>(null)
+  const [scene, setScene] = useState(0)
+  const [names, setNames] = useState<{ cat: string; name: string }[]>([])
+  useEffect(() => {
+    if (!ref.current) return
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const m = mountMotion(ref.current, { start: still ? 2.6 : 0, animate: !still, onScene: setScene })
+    motion.current = m; setNames(m.scenes)
+    let visible = true
+    const sync = () => m.play(!still && visible && document.visibilityState === 'visible')
+    const seen = 'IntersectionObserver' in window ? new IntersectionObserver(([e]) => { visible = e.isIntersecting; sync() }) : null
+    seen?.observe(ref.current)
+    document.addEventListener('visibilitychange', sync)
+    ;(window as unknown as { __motion?: Motion }).__motion = m
+    return () => { seen?.disconnect(); document.removeEventListener('visibilitychange', sync); m.destroy() }
+  }, [])
+  return <div className="pc-motion">
+    <svg ref={ref} viewBox="0 0 720 540" role="img" aria-label={names[scene] ? `봉사 장면: ${names[scene].name}` : '봉사 장면'} />
+  </div>
 }
 
 /** The app download: QR for a phone camera next to the button (the APK file on this server). */
@@ -66,7 +93,7 @@ export function PublicHome({ user, onSignOut, to }: { user: User | null; onSignO
         <p>가까운 모집을 찾아 신청하고, 현장에서 QR로 출석하고,<br />1365 실적까지 한곳에서 챙겨요.</p>
         <AppGet />
       </div>
-      <div className="pc-land-phones pc-rv" style={{ transitionDelay: '.12s' }}><Phone src="/pc/app-open.jpg" label="모집글 화면" /><Phone src="/pc/app-my.jpg" label="마이 화면" /></div>
+      <VolunteerMotion />
     </div></section>
     <section className="pc-wrap pc-land-sec" aria-label="Volink로 할 수 있는 것">
       <div className="pc-land-h pc-rv"><h2>Volink로 할 수 있는 것</h2><p>봉사를 찾는 순간부터 기록이 남을 때까지</p></div>
