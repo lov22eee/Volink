@@ -19,7 +19,7 @@ function seatTag(a: LiveActivity) {
   return <span className="pc-tag g">{left(a)}자리 남음</span>
 }
 
-/** 봉사 장면 (첫 화면 위쪽): four scenes in turn; the dots under it pick one. Stops while off screen or the tab is hidden;
+/** 봉사 장면 (첫 화면 위쪽): four scenes in turn. Stops while off screen or the tab is hidden;
  *  with reduced motion one still scene shows. */
 function VolunteerMotion() {
   const ref = useRef<SVGSVGElement>(null)
@@ -41,8 +41,6 @@ function VolunteerMotion() {
   }, [])
   return <div className="pc-motion">
     <svg ref={ref} viewBox="0 0 720 540" role="img" aria-label={names[scene] ? `봉사 장면: ${names[scene].name}` : '봉사 장면'} />
-    {names.length > 0 && <div className="cap"><span key={scene}><b>{names[scene].cat}</b>{names[scene].name}</span>
-      <div className="dots">{names.map((n, i) => <button key={n.name} type="button" aria-label={n.name} aria-pressed={i === scene} onClick={() => motion.current?.go(i)} />)}</div></div>}
   </div>
 }
 

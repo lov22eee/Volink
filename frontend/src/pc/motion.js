@@ -303,82 +303,82 @@ function sceneLitter(g) {
 /* ---------- scene 2: 어르신 말벗 ---------- */
 function sceneTalk(g) {
   el('rect', { x: 0, y: 0, width: 720, height: 540, fill: 'url(#sky2)' }, g);
-  el('circle', { cx: 140, cy: 120, r: 120, fill: 'url(#sun)' }, g);
+  el('circle', { cx: 150, cy: 120, r: 120, fill: 'url(#sun)' }, g);
   el('path', { d: 'M 0 360 Q 200 320 420 350 Q 600 320 720 340 L 720 540 L 0 540 Z', fill: '#cfe0bd' }, g);
-  tree(g, 620, 410, 1.35, ['#79aa86', '#93c09e', '#679a77']);
-  bush(g, 60, 440, 1.2, '#86b691');
-  // lamp
-  el('rect', { x: 92, y: 210, width: 6, height: 230, fill: '#55605a' }, g); el('path', { d: 'M 82 214 L 108 214 L 102 196 L 88 196 Z', fill: '#55605a' }, g); el('circle', { cx: 95, cy: 220, r: 8, fill: '#ffe9a8' }, g);
+  tree(g, 610, 410, 1.3, ['#79aa86', '#93c09e', '#679a77']);
+  bush(g, 70, 440, 1.1, '#86b691');
   el('path', { d: 'M 0 452 Q 360 430 720 452 L 720 540 L 0 540 Z', fill: '#e9dcc0' }, g);
-  // flowers
-  for (let i = 0; i < 9; i++) { const f = el('g', {}, g); tf(f, 520 + i * 22, 452 - (i % 3) * 4); el('path', { d: 'M 0 0 L 0 -16', stroke: '#6f9f74', 'stroke-width': 2 }, f); el('circle', { cx: 0, cy: -18, r: 5, fill: ['#f4a4a4', '#f7d27a', '#c7a6e8'][i % 3] }, f); }
-  groundShadow(g, 360, 456, 160);
-  // bench back
-  const bench = el('g', {}, g);
-  el('rect', { x: 196, y: 318, width: 330, height: 13, rx: 6, fill: '#b47d4f' }, bench); el('rect', { x: 196, y: 338, width: 330, height: 13, rx: 6, fill: '#c08a5b' }, bench);
-  el('rect', { x: 214, y: 318, width: 8, height: 70, fill: '#6e5a48' }, bench); el('rect', { x: 500, y: 318, width: 8, height: 70, fill: '#6e5a48' }, bench);
-  const E = person(g, { skin: '#e9b995', hairColor: '#dcdcd6', hair: 'elder', top: '#b9805f', cardigan: true, pants: '#666a74', shoe: '#5a4b40', glasses: true });
+  for (let i = 0; i < 8; i++) { const f = el('g', {}, g); tf(f, 500 + i * 24, 452 - (i % 3) * 4); el('path', { d: 'M 0 0 L 0 -16', stroke: '#6f9f74', 'stroke-width': 2 }, f); el('circle', { cx: 0, cy: -18, r: 5, fill: ['#f4a4a4', '#f7d27a', '#c7a6e8'][i % 3] }, f); }
+  groundShadow(g, 330, 458, 150);
+  // 봉사자 stands behind the bench; the backrest is between them
   const W = person(g, { skin: '#f3c9a8', hairColor: '#3b2a22', hair: 'pony', top: '#f7f4ec', vest: '#2f7a55', pants: '#3d4a63', shoe: '#ffffff' });
-  // seat in front of the people's hips
-  el('rect', { x: 190, y: 384, width: 342, height: 15, rx: 6, fill: '#c99561' }, g);
-  el('rect', { x: 214, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g); el('rect', { x: 500, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g);
-  // cane
-  el('path', { d: 'M 214 452 L 236 330 Q 240 318 250 324', stroke: '#7a5a3f', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, g);
-  // thermos on the bench
-  const thermos = el('g', {}, g); tf(thermos, 470, 384); el('rect', { x: -8, y: -36, width: 16, height: 36, rx: 5, fill: '#4f8fb3' }, thermos); el('rect', { x: -6, y: -42, width: 12, height: 8, rx: 2, fill: '#2f6f8f' }, thermos);
-  const cup = el('g', {}, g); el('path', { d: 'M -7 -10 L 7 -10 L 5.5 4 L -5.5 4 Z', fill: '#ffffff', stroke: '#d9d2c2', 'stroke-width': 1.3 }, cup); el('path', { d: 'M 7 -6 Q 12 -6 12 -2 Q 12 2 6.5 1', stroke: '#d9d2c2', 'stroke-width': 1.6, fill: 'none' }, cup);
-  const steam = [0, 1, 2].map(i => el('path', { d: 'M 0 0 q 3 -5 0 -10 q -3 -5 0 -10', stroke: '#ffffff', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8 }, cup));
-  const eHand = el('g', {}, E.arms.f.tip), wHand = el('g', {}, W.arms.f.tip);
-  // bubbles with small pictures
+  const back = el('g', {}, g);
+  el('rect', { x: 230, y: 318, width: 220, height: 13, rx: 6, fill: '#b47d4f' }, back); el('rect', { x: 230, y: 338, width: 220, height: 13, rx: 6, fill: '#c08a5b' }, back);
+  el('rect', { x: 246, y: 318, width: 8, height: 70, fill: '#6e5a48' }, back); el('rect', { x: 426, y: 318, width: 8, height: 70, fill: '#6e5a48' }, back);
+  const E = person(g, { skin: '#e9b995', hairColor: '#dcdcd6', hair: 'elder', top: '#b9805f', cardigan: true, pants: '#666a74', shoe: '#5a4b40', glasses: true });
+  el('rect', { x: 224, y: 384, width: 232, height: 15, rx: 6, fill: '#c99561' }, g);
+  el('rect', { x: 246, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g); el('rect', { x: 426, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g);
+  el('path', { d: 'M 452 452 L 438 336 Q 436 324 446 324', stroke: '#7a5a3f', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, g);
+  // a cup of tea on the bench
+  const cup = el('g', {}, g); tf(cup, 410, 384); el('path', { d: 'M -7 -12 L 7 -12 L 5.5 0 L -5.5 0 Z', fill: '#ffffff', stroke: '#d9d2c2', 'stroke-width': 1.3 }, cup);
+  const steam = [0, 1].map(i => el('path', { d: 'M 0 0 q 3 -5 0 -10 q -3 -5 0 -10', stroke: '#ffffff', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8 }, cup));
   const bubble = (pic) => { const b = el('g', {}, g); el('path', { d: 'M -34 -26 H 34 Q 46 -26 46 -14 V 10 Q 46 22 34 22 H 4 L -6 34 L -8 22 H -34 Q -46 22 -46 10 V -14 Q -46 -26 -34 -26 Z', fill: '#ffffff', stroke: '#e3dccb', 'stroke-width': 2 }, b); pic(el('g', {}, b)); return b; };
   const b1 = bubble(p => { el('circle', { cx: -12, cy: -2, r: 9, fill: '#f6c35b' }, p); for (let i = 0; i < 8; i++) el('path', { d: 'M 0 -14 L 0 -18', stroke: '#f6c35b', 'stroke-width': 2.4, 'stroke-linecap': 'round', transform: `translate(-12 -2) rotate(${i * 45})` }, p); el('path', { d: 'M 6 6 Q 12 -12 22 6 Z', fill: '#7fb08f' }, p); });
   const b2 = bubble(p => { el('rect', { x: -22, y: -16, width: 30, height: 24, rx: 3, fill: '#e8eef8', stroke: '#9fb3d4', 'stroke-width': 1.5 }, p); el('circle', { cx: -14, cy: -7, r: 3, fill: '#f6c35b' }, p); el('path', { d: 'M -22 6 L -10 -4 L -2 4 L 8 -6 L 8 8 L -22 8 Z', fill: '#7fb08f' }, p); el('path', { d: 'M 18 -6 c -4 -6 -12 -1 -8 5 l 8 7 l 8 -7 c 4 -6 -4 -11 -8 -5 z', fill: '#e8796b' }, p); });
   const b3 = bubble(p => { el('path', { d: 'M -16 8 V -12 L 10 -16 V 4', stroke: '#2f6f52', 'stroke-width': 3, fill: 'none' }, p); el('ellipse', { cx: -20, cy: 8, rx: 6, ry: 4.5, fill: '#2f6f52' }, p); el('ellipse', { cx: 6, cy: 4, rx: 6, ry: 4.5, fill: '#2f6f52' }, p); });
-  const hearts = [0, 1, 2].map(() => { const h = el('path', { d: 'M 0 -4 c -5 -8 -16 -2 -10 6 l 10 9 l 10 -9 c 6 -8 -5 -14 -10 -6 z', fill: '#ec7f70' }, g); return h; });
-  const SIT = { y: 378, fT: -86, fS: 84, bT: -80, bS: 80 };
-  const eKey = track([
-    [0, { ...SIT, x: 286, lean: -2, head: 2, fU: -20, fL: -60, bU: -10, bL: -50, mouth: 'smile' }],
-    [1.9, { fU: -20, fL: -60 }],
-    [2.4, { fU: -64, fL: -10, head: 6 }],
-    [2.9, { fU: -30, fL: -60, head: 0 }],
-    [3.3, { head: -8, lean: -6 }],
-    [3.9, { head: -12 }],
-    [4.4, { fU: -24, fL: -62, head: 0, lean: -2 }],
-  ]);
+  const hearts = [0, 1, 2].map(() => el('path', { d: 'M 0 -4 c -5 -8 -16 -2 -10 6 l 10 9 l 10 -9 c 6 -8 -5 -14 -10 -6 z', fill: '#ec7f70' }, g));
+  // the spots on his shoulders her hands rest on (inside his torso, so they move with him)
+  const sF = el('g', {}, E.torso); tf(sF, -2, -80);
+  const sB = el('g', {}, E.torso); tf(sB, -14, -78);
+  const handF = el('g', {}, W.arms.f.tip);
+  const SIT = { x: 340, y: 378, fT: -86, fS: 84, bT: -80, bS: 80, lean: -3, head: 4, fU: -24, fL: -62, bU: -12, bL: -52 };
   const wKey = track([
-    [0, { ...SIT, x: 436, f: -1, lean: 2, head: -2, fU: -40, fL: -40, bU: -8, bL: -40, pony: 0 }],
-    [1.6, { fU: -40, fL: -40 }],
-    [2.3, { fU: -74, fL: -6, lean: 10, head: 6 }],
-    [2.7, { fU: -40, fL: -40, lean: 2, head: 0 }],
+    [0, { x: 150, walk: 1, lean: 4, ikw: 0, head: 0, fU: 8, fL: -16, bU: -6, bL: -12 }],
+    [1.2, { x: 244, walk: 1 }],
+    [1.4, { x: 250, walk: 0 }],
+    [2.1, { lean: 10, ikw: 1, head: 8 }],
+    [4.6, { lean: 10, head: 8 }],
+    [5.3, { lean: 22, head: 16 }],
+    [6.6, { lean: 22, head: 16 }],
+    [7.2, { lean: 10, head: 6 }],
   ]);
+  const shoulderAt = (q, sx) => { const a = q.lean * R; return { x: q.x + sx * Math.cos(a) + 80 * Math.sin(a), y: q.y + sx * Math.sin(a) - 80 * Math.cos(a) }; };
   return t => {
-    const e = eKey(t), w = wKey(t);
-    const laugh = win(t, 4.7, 5.0) * (1 - win(t, 6.6, 6.9));
-    const shake = Math.sin(t * 22) * laugh;
-    const eTalk = (t > 0.2 && t < 1.4) || (t > 7.0 && t < 8.4), wTalk = (t > 1.5 && t < 2.1) || (t > 5.3 && t < 6.2) === false && (t > 5.3 && t < 6.2) || (t > 8.5);
-    const eq = { ...STAND, ...e, lean: e.lean + shake * 3, head: e.head + shake * 4 + (eTalk ? Math.sin(t * 9) * 2 : 0), mouth: laugh > 0.3 ? 'laugh' : eTalk ? talkMouth(t) : (t > 3.3 && t < 3.95 ? 'o' : 'smile'), blink: laugh > 0.3 ? 1 : blinkAt(t), fH: (t > 7 && t < 8.4) ? Math.sin(t * 8) * 18 : 0 };
+    const w = wKey(t);
+    const laugh = win(t, 5.9, 6.2) * (1 - win(t, 7.3, 7.6)), shake = Math.sin(t * 20) * laugh;
+    const eTalk = (t > 2.6 && t < 4.0) || (t > 7.8 && t < 8.8), wTalk = t > 5.1 && t < 6.0;
+    const relax = win(t, 2.2, 2.6) * (1 - win(t, 5.0, 5.3));
+    // 어르신: sits; enjoys it with eyes closed, tilts the head toward her when she talks, laughs, then pats her hand
+    const eq = { ...STAND, ...SIT, lean: SIT.lean + shake * 3 + relax * 2, head: SIT.head - relax * 6 + win(t, 5.0, 5.4) * (1 - win(t, 6.8, 7.2)) * -10 + shake * 4 + (eTalk ? Math.sin(t * 8) * 2 : 0),
+      mouth: laugh > 0.3 ? 'laugh' : eTalk ? talkMouth(t, 6) : relax > 0.5 ? 'smile' : 'smile', blink: laugh > 0.3 || relax > 0.5 ? 1 : blinkAt(t) };
     pose(E, eq);
-    const sip = win(t, 2.9, 3.3) * (1 - win(t, 3.95, 4.4));
-    if (sip > 0) { const m = gpos(E.mouthG); const [a1, a2] = ik(shoulder(eq), { x: m.x + 2, y: m.y + 8 }, 40, 44, -1); eq.fU = lerp(eq.fU, a1 - eq.lean, sip); eq.fL = lerp(eq.fL, a2 - a1, sip); pose(E, eq); }
-    const wGesture = (t > 5.3 && t < 6.6) ? Math.sin(t * 7) * 12 : 0;
-    pose(W, { ...w, lean: w.lean + shake * 3, head: w.head - shake * 4 + (wTalk ? Math.sin(t * 9 + 1) * 2 : 0), mouth: laugh > 0.3 ? 'laugh' : wTalk ? talkMouth(t + 0.3) : 'smile', blink: laugh > 0.3 ? 1 : blinkAt(t + 0.8), pony: Math.sin(t * 3) * 6 + shake * 10, fU: w.fU + wGesture });
-    // the cup: from the thermos to her hand, to his hand, to his mouth
-    const at = (n, dx = 0, dy = 0) => { const p = gpos(n); return { x: p.x + dx, y: p.y + dy }; };
-    let p;
-    const th = { x: 470, y: 340 }, wp = at(wHand, 0, -2), ep = at(eHand, 0, -2);
-    if (t < 1.4) p = th;
-    else if (t < 1.8) { const u = ease(win(t, 1.4, 1.8)); p = { x: lerp(th.x, wp.x, u), y: lerp(th.y, wp.y, u) }; }
-    else if (t < 2.25) p = wp;
-    else if (t < 2.45) { const u = ease(win(t, 2.25, 2.45)); p = { x: lerp(wp.x, ep.x, u), y: lerp(wp.y, ep.y, u) }; }
-    else p = ep;
-    const tilt = t > 3.3 && t < 3.95 ? -30 * Math.sin(win(t, 3.3, 3.95) * Math.PI) : 0;
-    tf(cup, p.x, p.y, tilt);
-    steam.forEach((s, i) => { const u = ((t * 0.8 + i * 0.33) % 1); s.setAttribute('transform', `translate(${-3 + i * 3} ${-12 - u * 16})`); s.setAttribute('opacity', (1 - u) * 0.75); });
-    const pop = (b, a, z, x, y) => { const u = win(t, a, a + 0.35), v = 1 - win(t, z - 0.25, z); const s = u < 1 ? 1.1 * Math.sin(u * Math.PI * 0.5) + (u > 0.8 ? 0 : 0) : 1; const k = Math.min(u, v); b.style.opacity = k; tf(b, x, y - (1 - k) * 8, 0, Math.max(0.01, Math.min(1, s) * (0.6 + 0.4 * k))); };
-    pop(b1, 0.3, 1.5, 250, 196);
-    pop(b2, 5.3, 6.6, 470, 190);
-    pop(b3, 7.1, 8.6, 250, 196);
-    hearts.forEach((h, i) => { const u = win(t, 4.8 + i * 0.35, 6.4 + i * 0.35); h.style.opacity = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0; tf(h, 352 + (i - 1) * 26 + Math.sin(u * 8 + i) * 8, 250 - u * 90, Math.sin(u * 6) * 12, 0.8 + i * 0.12); });
+    // 봉사자: comes in behind, both hands on his shoulders, kneading in small circles; leans in to talk
+    const wq = { ...STAND, ...w, blink: blinkAt(t + 0.7), mouth: laugh > 0.3 ? 'laugh' : wTalk ? talkMouth(t + 0.2, 6) : 'smile', pony: Math.sin(t * 2.4) * 5 + shake * 8 };
+    wq.lean += shake * 2;
+    walk(wq, (w.x - 150) / 58 * Math.PI, w.walk);
+    pose(W, wq);
+    if (w.ikw > 0) {
+      const k = t * 4.2, rub = win(t, 2.0, 2.4);
+      const pf = gpos(sF), pb = gpos(sB);
+      const tF = { x: pf.x + Math.cos(k) * 3 * rub, y: pf.y - 4 + Math.sin(k) * 3 * rub }, tB = { x: pb.x + Math.cos(k + 2.2) * 3 * rub, y: pb.y - 4 + Math.sin(k + 2.2) * 3 * rub };
+      const [f1, f2] = ik(shoulderAt(wq, 4), tF, 40, 44, -1), [b1a, b2a] = ik(shoulderAt(wq, -2), tB, 40, 44, -1);
+      wq.fU = lerp(wq.fU, f1 - wq.lean, w.ikw); wq.fL = lerp(wq.fL, f2 - f1, w.ikw); wq.fH = lerp(0, -70, w.ikw);
+      wq.bU = lerp(wq.bU, b1a - wq.lean, w.ikw); wq.bL = lerp(wq.bL, b2a - b1a, w.ikw); wq.bH = lerp(0, -70, w.ikw);
+      pose(W, wq);
+    }
+    const pat = win(t, 7.7, 8.1) * (1 - win(t, 8.8, 9));
+    if (pat > 0) {
+      const h = gpos(handF), tap = Math.abs(Math.sin(t * 9)) * 4;
+      const [a1, a2] = ik(shoulder(eq), { x: h.x + 2, y: h.y - 2 - tap }, 40, 44, 1);
+      eq.fU = lerp(eq.fU, a1 - eq.lean, pat); eq.fL = lerp(eq.fL, a2 - a1, pat); eq.fH = lerp(0, 60, pat);
+      pose(E, eq);
+    }
+    steam.forEach((st, i) => { const u = ((t * 0.7 + i * 0.5) % 1); st.setAttribute('transform', `translate(${-3 + i * 5} ${-14 - u * 16})`); st.setAttribute('opacity', (1 - u) * 0.7); });
+    const pop = (b, a, z, x, y) => { const u = win(t, a, a + 0.35), v = 1 - win(t, z - 0.3, z); const k = Math.min(u, v); b.style.opacity = k; tf(b, x, y - (1 - k) * 8, 0, Math.max(0.01, 0.6 + 0.4 * ease(u)) * (k > 0 ? 1 : 0.01)); };
+    pop(b1, 2.6, 4.1, 432, 210);
+    pop(b2, 5.1, 6.1, 236, 150);
+    pop(b3, 7.8, 8.9, 432, 210);
+    hearts.forEach((h, i) => { const u = win(t, 6.0 + i * 0.3, 7.4 + i * 0.3); h.style.opacity = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0; tf(h, 330 + (i - 1) * 26 + Math.sin(u * 8 + i) * 8, 230 - u * 80, Math.sin(u * 6) * 12, 0.8 + i * 0.12); });
   };
 }
 
