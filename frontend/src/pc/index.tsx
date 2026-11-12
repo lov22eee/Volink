@@ -6,7 +6,7 @@ import { logout, mayHaveSession, refresh } from '../api'
 import type { User } from '../api'
 import { AdminConsole } from './admin'
 import { OrgCenter, OrgPending } from './org'
-import { AppOnly, OrgPage, OrgSignup, PcLogin, PublicDetail, PublicHome } from './public'
+import { AppOnly, OrgEntry, OrgPage, OrgSignup, PcLogin, PublicDetail, PublicHome } from './public'
 import { Loading } from './ui'
 import './pc.css'
 
@@ -31,7 +31,8 @@ export default function PcApp() {
     refresh().then(setUser).catch(() => setUser(null)).finally(() => setReady(true))
   }, [])
   useEffect(restore, [restore])
-  const signOut = useCallback(async () => { await logout().catch(() => {}); setUser(null); window.location.hash = '#/' }, [])
+  // The route moves to #/ in the same render as the user leaves, so a login-only page never sends to #/login on the way out.
+  const signOut = useCallback(async () => { await logout().catch(() => {}); window.location.hash = '#/'; setRoute(read()); setUser(null) }, [])
 
   const p = route.parts
   const institution = user?.memberType === 'INSTITUTION' && user.role !== 'ADMIN'
@@ -56,7 +57,7 @@ export default function PcApp() {
   } else if (p[0] === 'org' && p[1] === 'signup') page = <OrgSignup onSession={setUser} />
   else if (p[0] === 'org') {
     if (!ready) page = <Loading />
-    else if (!user) page = needLogin('#/' + route.path)
+    else if (!user) page = p.length > 1 ? needLogin('#/' + route.path) : <OrgEntry onSession={setUser} user={null} onSignOut={signOut} />
     else if (user.role === 'ADMIN') { window.location.replace('#/admin'); page = null }
     else if (!institution) page = <AppOnly user={user} onSignOut={signOut} />
     else if (!approved) page = <OrgPending user={user} onSignOut={signOut} />

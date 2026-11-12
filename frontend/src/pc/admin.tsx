@@ -26,20 +26,22 @@ const failText = (cause: unknown) => cause instanceof ApiError ? (Object.values(
 
 export function AdminConsole({ parts, query, user, onSignOut }: { parts: string[]; query: URLSearchParams; user: User; onSignOut: () => void }) {
   const section = parts[1] ?? ''
-  const [count, setCount] = useState<number | null>(null)
+  const queue = useQueue()
   const [words, setWords] = useState(query.get('q') ?? '')
-  const nav: [string, string][] = [['', '할 일'], ['find', '찾기'], ['stats', '현황'], ['log', '기록'], ['places', '장소']]
+  const nav: [string, string][] = [['', '대시보드'], ['todo', '할 일'], ['find', '회원 찾기'], ['stats', '현황'], ['log', '기록'], ['places', '장소']]
+  const count = queue.items?.length ?? 0
   return <div className="pc">
     <header className="pc-hd dark">
       <Logo sub="관리자" href="#/admin" />
-      <nav className="pc-nav" aria-label="관리자 메뉴">{nav.map(([key, label]) => <a key={key} href={'#/admin' + (key ? '/' + key : '')} aria-current={section === key ? 'page' : undefined}>{label}{key === '' && count ? ` ${count}` : ''}</a>)}</nav>
+      <nav className="pc-nav" aria-label="관리자 메뉴">{nav.map(([key, label]) => <a key={key} href={'#/admin' + (key ? '/' + key : '')} aria-current={section === key ? 'page' : undefined}>{label}{key === 'todo' && count ? <b className="pc-cnt">{count}</b> : null}</a>)}</nav>
       <div className="pc-sp" />
       <form onSubmit={e => { e.preventDefault(); window.location.hash = '#/admin/find?q=' + encodeURIComponent(words.trim()) }} style={{ position: 'relative' }}>
         <label><span className="sr">회원 찾기</span><input value={words} onChange={e => setWords(e.target.value)} placeholder="회원 이메일·이름·닉네임" style={{ width: 250, height: 34, borderRadius: 8, border: '1px solid #3b443f', background: '#2c332f', color: '#fff', padding: '0 10px 0 32px' }} /></label>
         <span style={{ position: 'absolute', left: 10, top: 9, color: '#8f9993' }}><PcIcon name="search" /></span></form>
       <div className="pc-who"><span>{user.name}</span><button type="button" onClick={onSignOut}>로그아웃</button></div>
     </header>
-    {section === '' && <Queue onCount={setCount} />}
+    {section === '' && <Dashboard queue={queue} />}
+    {section === 'todo' && <Queue queue={queue} />}
     {section === 'find' && (parts[2] ? <Member id={Number(parts[2])} /> : <Find q={query.get('q') ?? ''} />)}
     {section === 'stats' && <Stats />}
     {section === 'log' && <Log type={query.get('type') ?? ''} />}
@@ -47,14 +49,13 @@ export function AdminConsole({ parts, query, user, onSignOut }: { parts: string[
   </div>
 }
 
-/* ---------------- 할 일 ---------------- */
+/* ---------------- 할 일 (shared by the dashboard and the list) ---------------- */
 
-function Queue({ onCount }: { onCount: (n: number) => void }) {
+type QueueState = { items: Item[] | null; waitingHost: number; failed: boolean; handled: number; load: () => Promise<void>; remove: (key: string) => void }
+function useQueue(): QueueState {
   const [items, setItems] = useState<Item[] | null>(null)
   const [waitingHost, setWaitingHost] = useState(0)
   const [failed, setFailed] = useState(false)
-  const [pick, setPick] = useState(0)
-  const [filter, setFilter] = useState<Item['kind'] | ''>('')
   const [handled, setHandled] = useState(0)
   const load = useCallback(async () => {
     setFailed(false)
@@ -78,20 +79,27 @@ function Queue({ onCount }: { onCount: (n: number) => void }) {
       for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청`, at: o.requestedAt, org: o })
       list.sort((x, y) => (x.at ?? '9').localeCompare(y.at ?? '9'))
       setItems(list)
-      onCount(list.length)
     } catch { setFailed(true); setItems([]) }
-  }, [onCount])
+  }, [])
   useEffect(() => { void load() }, [load])
+  const remove = useCallback((key: string) => { setHandled(n => n + 1); setItems(old => (old ?? []).filter(i => i.key !== key)) }, [])
+  return { items, waitingHost, failed, handled, load, remove }
+}
+
+const late = (item: Item) => item.at ? hoursSince(item.at) >= 24 : false
+function Row({ item, n, on, onClick }: { item: Item; n?: number; on?: boolean; onClick: () => void }) {
+  return <button type="button" className={'row' + (on ? ' on' : '')} onClick={onClick}>
+    {n != null && <span className="n">{n}</span>}<span className={'pc-tag ' + kindTag[item.kind][1]}>{kindTag[item.kind][0]}</span>
+    <span className="m"><b>{item.title}</b><small>{item.sub}</small></span>
+    <span className={'age' + (late(item) ? ' late' : '')}>{item.at ? ago(item.at) : '새 글'}</span></button>
+}
+
+function Queue({ queue }: { queue: QueueState }) {
+  const { items, waitingHost, failed, handled, load, remove } = queue
+  const [pick, setPick] = useState(0)
+  const [filter, setFilter] = useState<Item['kind'] | ''>('')
   const shown = useMemo(() => (items ?? []).filter(i => !filter || i.kind === filter), [items, filter])
   const current = shown[Math.min(pick, Math.max(0, shown.length - 1))]
-  function done() {
-    setHandled(n => n + 1)
-    setItems(old => {
-      const next = (old ?? []).filter(i => i.key !== current?.key)
-      onCount(next.length)
-      return next
-    })
-  }
   if (items === null) return <main className="pc-main"><Loading /></main>
   if (failed) return <main className="pc-main"><p className="pc-err">처리할 일을 불러오지 못했어요. <button className="pc-link" onClick={() => void load()}>다시 시도</button></p></main>
   if (!items.length) return <main className="pc-main"><AllDone handled={handled} waitingHost={waitingHost} /></main>
@@ -102,21 +110,95 @@ function Queue({ onCount }: { onCount: (n: number) => void }) {
         <div className="pc-ph" style={{ flexWrap: 'wrap' }}><h2>남은 일 {items.length}건</h2>{handled > 0 && <small>방금 {handled}건 처리</small>}
           <div className="pc-chips" style={{ width: '100%', marginTop: 4 }}>{([['', '전체', items.length], ['REPORT', '신고', counts('REPORT')], ['APPEAL', '이의', counts('APPEAL')], ['ACTIVITY', '검토', counts('ACTIVITY')], ['ORG', '기관', counts('ORG')], ...(counts('COMMUNITY') ? [['COMMUNITY', '정지 검토', counts('COMMUNITY')]] : [])] as [Item['kind'] | '', string, number][])
             .map(([k, label, n]) => <button key={label} type="button" aria-pressed={filter === k} onClick={() => { setFilter(k); setPick(0) }}>{label} {n}</button>)}</div></div>
-        {shown.map((item, i) => {
-          const late = item.at ? hoursSince(item.at) >= 24 : false
-          return <button key={item.key} type="button" className={'row' + (item === current ? ' on' : '')} onClick={() => setPick(i)}>
-            <span className="n">{i + 1}</span><span className={'pc-tag ' + kindTag[item.kind][1]}>{kindTag[item.kind][0]}</span>
-            <span className="m"><b>{item.title}</b><small>{item.sub}</small></span>
-            <span className={'age' + (late ? ' late' : '')}>{item.at ? ago(item.at) : '새 글'}</span></button>
-        })}
+        {shown.map((item, i) => <Row key={item.key} item={item} n={i + 1} on={item === current} onClick={() => setPick(i)} />)}
         {waitingHost > 0 && <p className="pc-note" style={{ padding: '10px 14px' }}>모집자 답변을 기다리는 이의 {waitingHost}건은 3일이 지나면 여기로 와요.</p>}
       </section>
-      {current && <Case key={current.key} item={current} position={`${shown.indexOf(current) + 1} / ${shown.length}`} onDone={done} />}
+      {current && <Case key={current.key} item={current} position={`${shown.indexOf(current) + 1} / ${shown.length}`} onDone={() => remove(current.key)} />}
     </div>
   </main>
 }
 
-function Case({ item, position, onDone }: { item: Item; position: string; onDone: () => void }) {
+/* ---------------- 대시보드 ---------------- */
+
+const kpis: [Item['kind'], string][] = [['REPORT', '신고'], ['APPEAL', '이의 신청'], ['ACTIVITY', '모집글 검토'], ['ORG', '기관 승인'], ['COMMUNITY', '정지 검토']]
+
+function Dashboard({ queue }: { queue: QueueState }) {
+  const { items, failed, load, remove, waitingHost } = queue
+  const [open, setOpen] = useState<string | null>(null)
+  const [o, setO] = useState<Overview | null>(null)
+  const [s, setS] = useState<System | null>(null)
+  const [log, setLog] = useState<Action[] | null>(null)
+  const loadLog = useCallback(() => { api<Action[]>('/api/admin/actions?limit=5').then(setLog).catch(() => setLog([])) }, [])
+  useEffect(() => {
+    api<Overview>('/api/admin/overview').then(setO).catch(() => {})
+    const sys = () => api<System>('/api/admin/system').then(setS).catch(() => {})
+    void sys(); loadLog()
+    const t = window.setInterval(sys, 30_000)
+    return () => window.clearInterval(t)
+  }, [loadLog])
+  const list = items ?? []
+  const current = list.find(i => i.key === open) ?? null
+  function openKind(kind: Item['kind']) { const first = list.find(i => i.kind === kind); if (first) setOpen(first.key); else window.location.hash = '#/admin/todo' }
+  function done() {
+    if (!current) return
+    const same = list.filter(i => i.kind === current.kind && i.key !== current.key)
+    remove(current.key); loadLog()
+    setOpen(same[0]?.key ?? null)
+  }
+  const thisWeek = o?.weeks[o.weeks.length - 1]?.applications ?? 0, lastWeek = o?.weeks[o.weeks.length - 2]?.applications ?? 0
+  const max = Math.max(1, ...(o?.weeks ?? []).map(w => w.applications))
+  const rate = o && o.attended + o.noShows ? Math.round(o.attended / (o.attended + o.noShows) * 100) : null
+  const rows = s ? systemRows(s) : []
+  const bad = rows.filter(r => r[1] === 'red' || r[1] === 'amb')
+  return <main className="pc-main pc-dash">
+    <div className="pc-head"><h1>대시보드</h1>{s && <span className="mu">{s.checkedAt.slice(11, 16)} 기준</span>}<div className="r"><button className="pc-btn sm line" onClick={() => { void load(); loadLog(); api<Overview>('/api/admin/overview').then(setO).catch(() => {}) }}><PcIcon name="refresh" />새로고침</button></div></div>
+    {failed && <p className="pc-err">처리할 일을 불러오지 못했어요. <button className="pc-link" onClick={() => void load()}>다시 시도</button></p>}
+    <div className="pc-kpi">{kpis.map(([kind, label]) => {
+      const mine = list.filter(i => i.kind === kind), old = mine.filter(late).length
+      return <button key={kind} type="button" className={mine.length ? 'on ' + kindTag[kind][1] : ''} onClick={() => openKind(kind)} aria-label={`${label} ${mine.length}건 처리하기`}>
+        <span>{label}</span><b>{items ? mine.length : '–'}<small>건</small></b>
+        <em>{old ? <span className="pc-tag red">24시간 넘음 {old}</span> : mine.length ? '눌러서 바로 처리' : kind === 'APPEAL' && waitingHost ? `모집자 답변 대기 ${waitingHost}` : '밀린 일 없음'}</em></button>
+    })}</div>
+    <div className="pc-dash-grid">
+      <Panel title="지금 처리할 일" note={items ? `${list.length}건 · 오래된 순` : ''} right={<a className="pc-link" href="#/admin/todo">전체 보기 ›</a>} className="pc-dash-todo">
+        {items === null ? <Loading /> : list.length === 0 ? <p className="pc-empty">지금 처리할 일이 없어요.</p>
+          : <div className="pc-rows">{list.slice(0, 9).map(item => <Row key={item.key} item={item} onClick={() => setOpen(item.key)} />)}</div>}
+      </Panel>
+      <Panel title="서비스 현황" right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
+        {!o ? <Loading /> : <div className="pc-mini">
+          <div><span>회원</span><b>{o.members.toLocaleString()}명</b><small className="up">이번 주 +{o.newMembers}</small></div>
+          <div><span>모집 중</span><b>{o.recruiting}개</b><small>기관 {o.recruitingInstitution} · 개인 {o.recruiting - o.recruitingInstitution}</small></div>
+          <div><span>이번 주 신청</span><b>{thisWeek}건</b><small className={thisWeek >= lastWeek ? 'up' : ''}>지난주 {lastWeek}건</small></div>
+          <div><span>출석률 (30일)</span><b>{rate == null ? '–' : rate + '%'}</b><small>불참 {o.noShows}</small></div>
+        </div>}
+      </Panel>
+      <Panel title="주별 신청" note="최근 12주">
+        {!o ? <Loading /> : <div style={{ padding: '6px 16px 12px' }}><div className="pc-bars" role="img" aria-label={`최근 12주 신청 수, 이번 주 ${thisWeek}건`}>{o.weeks.map(w => <div key={w.from}><span>{w.applications}</span><i style={{ height: Math.max(2, w.applications / max * 110) }} /><span>{w.from.slice(5).replace('-', '/')}</span></div>)}</div></div>}
+      </Panel>
+      <Panel title="서버 상태" note={s ? (bad.length ? `확인 필요 ${bad.length}` : '모두 정상') : ''} right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
+        {!s ? <Loading /> : <div className="pc-sys">{rows.map(([name, tone, state]) => <div key={name}><i className={tone || 'off'} /><span>{name}</span><b>{state}</b></div>)}</div>}
+      </Panel>
+      <Panel title="최근 처리 기록" right={<a className="pc-link" href="#/admin/log">전체 기록 ›</a>} className="pc-dash-log">
+        {log === null ? <Loading /> : log.length === 0 ? <p className="pc-empty">아직 처리한 일이 없어요.</p>
+          : <table className="pc-tbl"><tbody>{log.map(a => <tr key={a.id}><td className="mu nw">{a.at.slice(5, 16)}</td><td><span className={'pc-tag ' + actionTone(a.action)}>{actionWord[a.action] ?? a.action}</span></td><td>{actionTarget(a)}</td><td className="mu">{a.reason}</td></tr>)}</tbody></table>}
+      </Panel>
+    </div>
+    {current && <Drawer onClose={() => setOpen(null)}>
+      <Case key={current.key} item={current} position={`${kindTag[current.kind][0]} ${list.filter(i => i.kind === current.kind).indexOf(current) + 1} / ${list.filter(i => i.kind === current.kind).length}`} onDone={done} onClose={() => setOpen(null)} />
+    </Drawer>}
+  </main>
+}
+
+function Drawer({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+  return <div className="pc-drawer-dim" onClick={e => { if (e.target === e.currentTarget) onClose() }}><div className="pc-drawer" role="dialog" aria-modal="true" aria-label="바로 처리">{children}</div></div>
+}
+
+function Case({ item, position, onDone, onClose }: { item: Item; position: string; onDone: () => void; onClose?: () => void }) {
   const [choice, setChoice] = useState('')
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
@@ -176,7 +258,7 @@ function Case({ item, position, onDone }: { item: Item; position: string; onDone
     : v ? (pickNow === 'APPROVE' ? '승인하면 바로 공개돼요.' : '반려하면 모집자에게 사유가 전달돼요.')
     : o ? (pickNow === 'APPROVE' ? '승인하면 기관센터와 기관 주관 모집이 열려요.' : '반려하면 담당자에게 사유가 전달돼요.') : ''
   return <section className="pc-pn" aria-label="처리">
-    <div className="pc-ph"><span className={'pc-tag ' + tagTone}>{tagText}</span><h2>{item.title}</h2><span className="r mu">{position}</span></div>
+    <div className="pc-ph"><span className={'pc-tag ' + tagTone}>{tagText}</span><h2>{item.title}</h2><span className="r mu">{position}{onClose && <button type="button" className="pc-x" aria-label="닫기" onClick={onClose}>×</button>}</span></div>
     <div className="pc-case">
       <div>{left}</div>
       <div>
@@ -247,6 +329,18 @@ type System = { checkedAt: string; version: string | null; startedAt: string; up
 const span = (m: number | null) => m == null ? '–' : m < 60 ? `${m}분` : m < 1440 ? `${Math.round(m / 6) / 10}시간` : `${Math.round(m / 144) / 10}일`
 const gb = (b: number) => b >= 1e9 ? (b / 1e9).toFixed(1) + 'GB' : Math.round(b / 1e6) + 'MB'
 
+function systemRows(s: System): [string, 'g' | 'amb' | 'red' | '', string, string][] {
+  return [
+    ['API 서버', 'g', '정상', `켜진 지 ${span(s.uptimeMinutes)} · ${s.startedAt.replace('T', ' ')} 시작`],
+    ['데이터베이스', s.database.ok ? 'g' : 'red', s.database.ok ? '정상' : '응답 없음', s.database.ok ? `응답 ${s.database.millis}ms · 스키마 V${s.database.schema ?? '?'}` : ''],
+    ['1분 작업', s.scheduler.secondsAgo == null ? '' : s.scheduler.secondsAgo > 180 ? 'red' : 'g', s.scheduler.secondsAgo == null ? '꺼짐' : s.scheduler.secondsAgo > 180 ? '멈춤' : '정상', s.scheduler.secondsAgo == null ? '이 서버에서는 실행하지 않아요' : `${s.scheduler.secondsAgo}초 전 실행`],
+    ['1365 연동', s.volunteer1365.used == null ? '' : s.volunteer1365.used >= s.volunteer1365.limit * 0.8 ? 'amb' : 'g', s.volunteer1365.used == null ? '꺼짐' : s.volunteer1365.used >= s.volunteer1365.limit * 0.8 ? '주의' : '정상', s.volunteer1365.used == null ? '' : `오늘 ${s.volunteer1365.used} / ${s.volunteer1365.limit}회`],
+    ['휴대폰 알림', s.push.enabled ? 'g' : '', s.push.enabled ? '정상' : '꺼짐', `알림 받는 기기 ${s.push.tokens}대`],
+    ['디스크', s.disk.freeBytes / Math.max(1, s.disk.totalBytes) < 0.2 ? 'amb' : 'g', s.disk.freeBytes / Math.max(1, s.disk.totalBytes) < 0.2 ? '주의' : '정상', `남은 공간 ${gb(s.disk.freeBytes)} / ${gb(s.disk.totalBytes)} · 사진 ${gb(s.disk.photoBytes)}`],
+    ['메모리', s.memory.usedBytes / s.memory.maxBytes > 0.85 ? 'amb' : 'g', s.memory.usedBytes / s.memory.maxBytes > 0.85 ? '주의' : '정상', `${gb(s.memory.usedBytes)} / ${gb(s.memory.maxBytes)}`],
+  ]
+}
+
 function Stats() {
   const [o, setO] = useState<Overview | null>(null)
   const [s, setS] = useState<System | null>(null)
@@ -256,15 +350,7 @@ function Stats() {
   const thisWeek = o.weeks[o.weeks.length - 1]?.applications ?? 0, lastWeek = o.weeks[o.weeks.length - 2]?.applications ?? 0
   const rate = o.attended + o.noShows ? Math.round(o.attended / (o.attended + o.noShows) * 100) : null
   const max = Math.max(1, ...o.weeks.map(w => w.applications))
-  const rows: [string, 'g' | 'amb' | 'red' | '', string, string][] = s ? [
-    ['API 서버', 'g', '정상', `켜진 지 ${span(s.uptimeMinutes)} · ${s.startedAt.replace('T', ' ')} 시작`],
-    ['데이터베이스', s.database.ok ? 'g' : 'red', s.database.ok ? '정상' : '응답 없음', s.database.ok ? `응답 ${s.database.millis}ms · 스키마 V${s.database.schema ?? '?'}` : ''],
-    ['1분 작업', s.scheduler.secondsAgo == null ? '' : s.scheduler.secondsAgo > 180 ? 'red' : 'g', s.scheduler.secondsAgo == null ? '꺼짐' : s.scheduler.secondsAgo > 180 ? '멈춤' : '정상', s.scheduler.secondsAgo == null ? '이 서버에서는 실행하지 않아요' : `${s.scheduler.secondsAgo}초 전 실행`],
-    ['1365 연동', s.volunteer1365.used == null ? '' : s.volunteer1365.used >= s.volunteer1365.limit * 0.8 ? 'amb' : 'g', s.volunteer1365.used == null ? '꺼짐' : s.volunteer1365.used >= s.volunteer1365.limit * 0.8 ? '주의' : '정상', s.volunteer1365.used == null ? '' : `오늘 ${s.volunteer1365.used} / ${s.volunteer1365.limit}회`],
-    ['휴대폰 알림', s.push.enabled ? 'g' : '', s.push.enabled ? '정상' : '꺼짐', `알림 받는 기기 ${s.push.tokens}대`],
-    ['디스크', s.disk.freeBytes / Math.max(1, s.disk.totalBytes) < 0.2 ? 'amb' : 'g', s.disk.freeBytes / Math.max(1, s.disk.totalBytes) < 0.2 ? '주의' : '정상', `남은 공간 ${gb(s.disk.freeBytes)} / ${gb(s.disk.totalBytes)} · 사진 ${gb(s.disk.photoBytes)}`],
-    ['메모리', s.memory.usedBytes / s.memory.maxBytes > 0.85 ? 'amb' : 'g', s.memory.usedBytes / s.memory.maxBytes > 0.85 ? '주의' : '정상', `${gb(s.memory.usedBytes)} / ${gb(s.memory.maxBytes)}`],
-  ] : []
+  const rows = s ? systemRows(s) : []
   return <main className="pc-main">
     <div className="pc-head"><h1>현황</h1><div className="r">{s && <span className="mu">{s.version ? `배포 ${s.version} · ` : ''}{s.checkedAt.slice(11, 16)} 기준</span>}<button className="pc-btn sm line" onClick={load}><PcIcon name="refresh" />새로고침</button></div></div>
     <div className="pc-stats">

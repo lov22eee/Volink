@@ -33,10 +33,16 @@ test('anyone browses open posts, a post page offers the app instead of applying,
   const created = await request.post('/api/activities', { headers: { Authorization: organizer }, data: { activityType: 'GENERAL', title, category: '환경', placeId: 1, date: inDays(5), time: '10:00', capacity: 4, durationMinutes: 60, description: body, safetyConfirmed: true } })
   expect(created.ok()).toBeTruthy()
   await page.goto('/#/')
-  await expect(page.getByRole('heading', { name: /앱에서 신청해요/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /앱 하나로/ })).toBeVisible()
   await expect(page.getByRole('link', { name: '앱 받기' }).first()).toHaveAttribute('href', /\/download\/volink\.apk$/)
-  await page.getByRole('textbox', { name: '활동 검색' }).fill(title)
-  await page.getByRole('link', { name: title }).click()
+  await expect(page.getByRole('img', { name: '앱 받기 QR 코드' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Volink로 할 수 있는 것' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '지금 모집 중' }).locator('.pc-acard').first()).toBeVisible()
+  await expect(page.getByRole('link', { name: '기관 가입 신청' })).toHaveAttribute('href', '#/org/signup')
+  await page.getByRole('link', { name: '기관 로그인' }).click()
+  await expect(page.getByRole('heading', { name: /PC에서 한 번에 관리하세요/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '기관 로그인' })).toBeVisible()
+  await page.goto('/#/activity/' + (await created.json()).id)
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
   await expect(page.getByText('신청은 앱에서 해요')).toBeVisible()
   await expect(page.getByText('4자리 남음')).toBeVisible()
@@ -44,7 +50,7 @@ test('anyone browses open posts, a post page offers the app instead of applying,
   await expect(page.getByRole('button', { name: /신청하기/ })).toHaveCount(0)
   await expect(page.locator('body')).not.toContainText(/졸업작품|경동대학교|주차|발표|페르소나/)
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const hash of ['#/', '#/login', '#/org/signup']) {
+  for (const hash of ['#/', '#/login', '#/org', '#/org/signup']) {
     await page.goto('/' + hash)
     await page.waitForTimeout(300)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy()
@@ -55,7 +61,7 @@ test('the list says so when the server cannot be reached, without made-up posts'
   await page.route('**/api/activities', route => route.abort())
   await page.goto('/#/')
   await expect(page.getByText('모집 목록을 불러오지 못했어요')).toBeVisible()
-  await expect(page.locator('.pc-tbl')).toHaveCount(0)
+  await expect(page.locator('.pc-acard')).toHaveCount(0)
 })
 
 test('a personal account on the PC is pointed to the app and can log out', async ({ page, request }) => {
@@ -67,7 +73,7 @@ test('a personal account on the PC is pointed to the app and can log out', async
   await page.goto('/#/admin')
   await expect(page.getByRole('heading', { name: /Volink 앱에서 할 수 있어요/ })).toBeVisible()
   await page.getByRole('button', { name: '로그아웃' }).first().click()
-  await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '로그인', exact: true })).toBeVisible()
 })
 
 test('기관: sign up on the PC, wait for the check, the admin approves from 할 일 with a reason, then 기관센터 approves applicants in one go', async ({ page, browser, request }) => {
@@ -91,6 +97,7 @@ test('기관: sign up on the PC, wait for the check, the admin approves from 할
   const adminPage = await (await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: 1440, height: 1000 } })).newPage()
   await signIn(adminPage, admin, env.DEMO_ACCOUNT_PASSWORD)
   await expect(adminPage).toHaveURL(/#\/admin$/)
+  await adminPage.getByRole('link', { name: /할 일/ }).click()
   await adminPage.getByRole('button', { name: new RegExp(orgName) }).click()
   const decide = adminPage.getByRole('region', { name: '처리', exact: true })
   await expect(decide.getByRole('heading', { name: orgName })).toBeVisible()
@@ -135,6 +142,16 @@ test('admin: a post waiting for review stays hidden until it is approved in 할 
   const id = (await created.json()).id
   expect((await (await request.get('/api/activities')).json() as { id: number }[]).some(a => a.id === id)).toBeFalsy()
   await signIn(page, admin, env.DEMO_ACCOUNT_PASSWORD)
+  // The dashboard: the 모집글 검토 card opens the oldest post waiting for review in a drawer, Esc closes it.
+  const card = page.getByRole('button', { name: /모집글 검토 \d+건 처리하기/ })
+  await expect(card).toBeVisible()
+  await expect(page.getByRole('region', { name: '지금 처리할 일' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '서버 상태' })).toBeVisible()
+  await card.click()
+  await expect(page.getByRole('dialog', { name: '바로 처리' }).getByRole('region', { name: '처리', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByRole('link', { name: /할 일/ }).click()
   await page.getByRole('button', { name: new RegExp(title) }).click()
   const decide = page.getByRole('region', { name: '처리', exact: true })
   await expect(decide).toContainText('야간')
@@ -156,6 +173,8 @@ test('admin: a post waiting for review stays hidden until it is approved in 할 
 })
 
 test('login keeps working after a reload, and a 기관 page asks for login first', async ({ page, request }) => {
+  await page.goto('/#/org')
+  await expect(page.getByRole('heading', { name: '기관 로그인' })).toBeVisible()
   await page.goto('/#/org/records')
   await expect(page).toHaveURL(/#\/login\?next=/)
   await signIn(page, admin, env.DEMO_ACCOUNT_PASSWORD)

@@ -1,6 +1,6 @@
 // PC 화면 shared pieces (2026-11-11): header, icons, the app download QR, date words.
 import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import QRCode from 'qrcode'
 import type { User } from '../api'
 
@@ -16,6 +16,10 @@ const paths = {
   bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4Z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
   refresh: <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  qr: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2" /></>,
+  record: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+  chat: <path d="M5 5h14v10H9l-4 4z" />,
+  pin: <><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z" /><circle cx="12" cy="9" r="2.5" /></>,
 }
 export type PcIconName = keyof typeof paths
 export function PcIcon({ name, size = 16 }: { name: PcIconName; size?: number }) {
@@ -35,13 +39,18 @@ export function AppQr({ size = 112 }: { size?: number }) {
   return src ? <img src={src} alt="앱 받기 QR 코드" width={size} height={size} /> : <span style={{ width: size, height: size, display: 'inline-block' }} />
 }
 
-export function PublicHeader({ user, current, onSignOut }: { user: User | null; current?: 'find'; onSignOut: () => void }) {
+export function PublicHeader({ user, current, onSignOut }: { user: User | null; current?: 'find' | 'org'; onSignOut: () => void }) {
+  const about = (event: MouseEvent) => {
+    const el = document.getElementById('pc-about')
+    if (el) { event.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }) }
+  }
   return <header className="pc-hd">
     <Logo />
-    <nav className="pc-nav" aria-label="주요 메뉴"><a href="#/" aria-current={current === 'find' ? 'page' : undefined}>봉사 찾기</a><a href={appUrl()}>앱 받기</a></nav>
+    <nav className="pc-nav" aria-label="주요 메뉴"><a href="#/" aria-current={current === 'find' ? 'page' : undefined}>봉사 찾기</a><a href="#/" onClick={about}>앱 소개</a>
+      <a href="#/org" aria-current={current === 'org' ? 'page' : undefined}>기관센터</a></nav>
     <div className="pc-sp" />
-    {user ? <div className="pc-who"><a href={user.role === 'ADMIN' ? '#/admin' : user.memberType === 'INSTITUTION' ? '#/org' : '#/app'}>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? (user.organization?.name ?? '기관센터') : user.name + '님'}</a><button type="button" onClick={onSignOut}>로그아웃</button></div>
-      : <><a className="mu" href="#/login" style={{ fontWeight: 600 }}>로그인</a><a className="pc-btn line" href="#/org"><PcIcon name="building" />기관센터</a></>}
+    {user ? <div className="pc-who"><a href={user.role === 'ADMIN' ? '#/admin' : user.memberType === 'INSTITUTION' ? '#/org' : '#/app'}>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? (user.organization?.name ?? '기관센터') : user.name}</a><button type="button" onClick={onSignOut}>로그아웃</button></div>
+      : <><a className="mu" href="#/login" style={{ fontWeight: 600 }}>로그인</a><a className="pc-btn" href={appUrl()}><PcIcon name="download" />앱 받기</a></>}
   </header>
 }
 
