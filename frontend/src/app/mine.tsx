@@ -150,7 +150,7 @@ export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
   for (const item of items) { const g = groupOf(item.key); const last = groups[groups.length - 1]; if (last && last[0] === g) last[1].push(item); else groups.push([g, [item]]) }
   const loading = !records || !external || !hosted
   return <div className="m-screen">
-    <TopBar title="활동 기록" back="#/my" actions={user?.memberType === 'INSTITUTION' ? undefined : addMenu} />
+    <TopBar title="활동 기록" back="#/my" actions={user?.memberType === 'INSTITUTION' || loading || (!ext.length && !volink.length && !led.length) ? undefined : addMenu} />
     <div className="m-body">
       {loading ? <Loading /> : !ext.length && !volink.length && !led.length
         ? <Empty bare icon="record" title="아직 활동 기록이 없어요" text="함께한 봉사가 여기에 모여요"
