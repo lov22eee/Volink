@@ -302,26 +302,42 @@ function sceneLitter(g) {
 
 /* ---------- scene 2: 어르신 말벗 ---------- */
 function sceneTalk(g) {
-  el('rect', { x: 0, y: 0, width: 720, height: 540, fill: 'url(#sky2)' }, g);
-  el('circle', { cx: 150, cy: 120, r: 120, fill: 'url(#sun)' }, g);
-  el('path', { d: 'M 0 360 Q 200 320 420 350 Q 600 320 720 340 L 720 540 L 0 540 Z', fill: '#cfe0bd' }, g);
-  tree(g, 610, 410, 1.3, ['#79aa86', '#93c09e', '#679a77']);
-  bush(g, 70, 440, 1.1, '#86b691');
-  el('path', { d: 'M 0 452 Q 360 430 720 452 L 720 540 L 0 540 Z', fill: '#e9dcc0' }, g);
-  for (let i = 0; i < 8; i++) { const f = el('g', {}, g); tf(f, 500 + i * 24, 452 - (i % 3) * 4); el('path', { d: 'M 0 0 L 0 -16', stroke: '#6f9f74', 'stroke-width': 2 }, f); el('circle', { cx: 0, cy: -18, r: 5, fill: ['#f4a4a4', '#f7d27a', '#c7a6e8'][i % 3] }, f); }
-  groundShadow(g, 330, 458, 150);
-  // 봉사자 stands behind the bench; the backrest is between them
-  const W = person(g, { skin: '#f3c9a8', hairColor: '#3b2a22', hair: 'pony', top: '#f7f4ec', vest: '#2f7a55', pants: '#3d4a63', shoe: '#ffffff' });
-  const back = el('g', {}, g);
-  el('rect', { x: 230, y: 318, width: 220, height: 13, rx: 6, fill: '#b47d4f' }, back); el('rect', { x: 230, y: 338, width: 220, height: 13, rx: 6, fill: '#c08a5b' }, back);
-  el('rect', { x: 246, y: 318, width: 8, height: 70, fill: '#6e5a48' }, back); el('rect', { x: 426, y: 318, width: 8, height: 70, fill: '#6e5a48' }, back);
-  const E = person(g, { skin: '#e9b995', hairColor: '#dcdcd6', hair: 'elder', top: '#b9805f', cardigan: true, pants: '#666a74', shoe: '#5a4b40', glasses: true });
-  el('rect', { x: 224, y: 384, width: 232, height: 15, rx: 6, fill: '#c99561' }, g);
-  el('rect', { x: 246, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g); el('rect', { x: 426, y: 396, width: 9, height: 56, fill: '#6e5a48' }, g);
-  el('path', { d: 'M 452 452 L 438 336 Q 436 324 446 324', stroke: '#7a5a3f', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, g);
-  // a cup of tea on the bench
-  const cup = el('g', {}, g); tf(cup, 410, 384); el('path', { d: 'M -7 -12 L 7 -12 L 5.5 0 L -5.5 0 Z', fill: '#ffffff', stroke: '#d9d2c2', 'stroke-width': 1.3 }, cup);
+  // a warm living room at a welfare centre: wall, window with curtains, a picture, a lamp, a rug; the armchair turned diagonally
+  el('rect', { x: 0, y: 0, width: 720, height: 540, fill: 'url(#wall)' }, g);
+  el('rect', { x: 0, y: 300, width: 720, height: 10, fill: '#e2d3b8' }, g);
+  el('rect', { x: 430, y: 70, width: 170, height: 170, rx: 8, fill: '#d6e8ee' }, g);
+  el('path', { d: 'M 515 70 V 240 M 430 155 H 600', stroke: '#f3ece0', 'stroke-width': 7 }, g);
+  el('path', { d: 'M 418 58 Q 440 150 424 252 L 446 252 Q 452 150 440 58 Z', fill: '#e6b7a0' }, g);
+  el('path', { d: 'M 612 58 Q 590 150 606 252 L 584 252 Q 578 150 590 58 Z', fill: '#e6b7a0' }, g);
+  el('rect', { x: 410, y: 52, width: 210, height: 8, rx: 4, fill: '#a9774e' }, g);
+  el('path', { d: 'M 430 240 L 600 240 L 700 452 L 380 452 Z', fill: 'url(#beam)' }, g);
+  const pic = el('g', {}, g); tf(pic, 150, 120); el('rect', { x: -46, y: -36, width: 92, height: 70, rx: 4, fill: '#b98a5e' }, pic); el('rect', { x: -38, y: -28, width: 76, height: 54, fill: '#eaf2e6' }, pic);
+  el('path', { d: 'M -38 26 L -14 2 L 2 16 L 18 -2 L 38 18 L 38 26 Z', fill: '#8fbe9c' }, pic); el('circle', { cx: 20, cy: -12, r: 6, fill: '#f6c35b' }, pic);
+  el('rect', { x: 0, y: 452, width: 720, height: 88, fill: '#d9c4a1' }, g);
+  for (let i = 0; i < 8; i++) el('rect', { x: i * 96, y: 452, width: 2, height: 88, fill: '#cbb48f' }, g);
+  el('ellipse', { cx: 330, cy: 470, rx: 210, ry: 26, fill: '#c98f6a', opacity: 0.55 }, g);
+  el('ellipse', { cx: 330, cy: 470, rx: 180, ry: 20, fill: 'none', stroke: '#f3e2c8', 'stroke-width': 3, opacity: 0.7 }, g);
+  // floor lamp
+  const lamp = el('g', {}, g); tf(lamp, 92, 452); el('rect', { x: -2, y: -230, width: 4, height: 230, fill: '#6b5a4c' }, lamp); el('ellipse', { cx: 0, cy: 0, rx: 18, ry: 5, fill: '#6b5a4c' }, lamp);
+  el('path', { d: 'M -28 -226 L 28 -226 L 18 -262 L -18 -262 Z', fill: '#f4dcae' }, lamp); el('circle', { cx: 0, cy: -220, r: 40, fill: 'url(#sun)', opacity: 0.8 }, lamp);
+  // side table with tea
+  const table = el('g', {}, g); tf(table, 520, 452);
+  el('rect', { x: -34, y: -84, width: 68, height: 8, rx: 3, fill: '#a9774e' }, table); el('rect', { x: -4, y: -78, width: 8, height: 78, fill: '#8a6a4f' }, table); el('ellipse', { cx: 0, cy: 0, rx: 22, ry: 5, fill: '#8a6a4f' }, table);
+  const pot = el('g', {}, table); tf(pot, -14, -84); el('path', { d: 'M -12 0 Q -14 -20 0 -20 Q 14 -20 12 0 Z', fill: '#ffffff', stroke: '#d9d2c2', 'stroke-width': 1.3 }, pot); el('path', { d: 'M 12 -12 L 20 -18', stroke: '#d9d2c2', 'stroke-width': 3, 'stroke-linecap': 'round' }, pot); el('circle', { cx: 0, cy: -22, r: 3, fill: '#d9d2c2' }, pot);
+  const cup = el('g', {}, table); tf(cup, 16, -84); el('path', { d: 'M -7 -12 L 7 -12 L 5.5 0 L -5.5 0 Z', fill: '#ffffff', stroke: '#d9d2c2', 'stroke-width': 1.3 }, cup);
   const steam = [0, 1].map(i => el('path', { d: 'M 0 0 q 3 -5 0 -10 q -3 -5 0 -10', stroke: '#ffffff', 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8 }, cup));
+  // 봉사자 stands behind the chair, a little further back
+  const W = person(g, { skin: '#f3c9a8', hairColor: '#3b2a22', hair: 'pony', top: '#f7f4ec', vest: '#2f7a55', pants: '#3d4a63', shoe: '#ffffff' });
+  // armchair turned diagonally (back, then the person, then the seat front and arm)
+  const chairBack = el('g', {}, g);
+  el('path', { d: 'M 300 300 Q 296 270 320 266 L 362 262 Q 388 262 388 288 L 392 392 L 304 400 Z', fill: '#7d9c8a' }, chairBack);
+  el('path', { d: 'M 312 300 Q 310 282 326 280 L 360 277 Q 376 278 377 296 L 380 384 L 314 390 Z', fill: '#8fb09c' }, chairBack);
+  el('path', { d: 'M 290 330 Q 284 316 298 314 L 312 314 L 314 404 L 292 406 Z', fill: '#6f8d7b' }, chairBack);
+  const E = person(g, { skin: '#e9b995', hairColor: '#dcdcd6', hair: 'elder', top: '#b9805f', cardigan: true, pants: '#666a74', shoe: '#5a4b40', glasses: true });
+  const chairFront = el('g', {}, g);
+  el('path', { d: 'M 300 388 L 420 380 Q 436 380 436 396 L 434 414 L 300 424 Z', fill: '#7d9c8a' }, chairFront);
+  el('path', { d: 'M 294 376 Q 290 362 304 360 L 396 356 Q 412 356 412 368 Q 412 380 398 382 L 308 388 Z', fill: '#6f8d7b' }, chairFront);
+  el('path', { d: 'M 310 424 L 314 452 M 424 414 L 428 446 M 302 420 L 300 446', stroke: '#6e5a48', 'stroke-width': 7, 'stroke-linecap': 'round' }, chairFront);
   const bubble = (pic) => { const b = el('g', {}, g); el('path', { d: 'M -34 -26 H 34 Q 46 -26 46 -14 V 10 Q 46 22 34 22 H 4 L -6 34 L -8 22 H -34 Q -46 22 -46 10 V -14 Q -46 -26 -34 -26 Z', fill: '#ffffff', stroke: '#e3dccb', 'stroke-width': 2 }, b); pic(el('g', {}, b)); return b; };
   const b1 = bubble(p => { el('circle', { cx: -12, cy: -2, r: 9, fill: '#f6c35b' }, p); for (let i = 0; i < 8; i++) el('path', { d: 'M 0 -14 L 0 -18', stroke: '#f6c35b', 'stroke-width': 2.4, 'stroke-linecap': 'round', transform: `translate(-12 -2) rotate(${i * 45})` }, p); el('path', { d: 'M 6 6 Q 12 -12 22 6 Z', fill: '#7fb08f' }, p); });
   const b2 = bubble(p => { el('rect', { x: -22, y: -16, width: 30, height: 24, rx: 3, fill: '#e8eef8', stroke: '#9fb3d4', 'stroke-width': 1.5 }, p); el('circle', { cx: -14, cy: -7, r: 3, fill: '#f6c35b' }, p); el('path', { d: 'M -22 6 L -10 -4 L -2 4 L 8 -6 L 8 8 L -22 8 Z', fill: '#7fb08f' }, p); el('path', { d: 'M 18 -6 c -4 -6 -12 -1 -8 5 l 8 7 l 8 -7 c 4 -6 -4 -11 -8 -5 z', fill: '#e8796b' }, p); });
@@ -331,11 +347,11 @@ function sceneTalk(g) {
   const sF = el('g', {}, E.torso); tf(sF, -2, -80);
   const sB = el('g', {}, E.torso); tf(sB, -14, -78);
   const handF = el('g', {}, W.arms.f.tip);
-  const SIT = { x: 340, y: 378, fT: -86, fS: 84, bT: -80, bS: 80, lean: -3, head: 4, fU: -24, fL: -62, bU: -12, bL: -52 };
+  const SIT = { x: 346, y: 384, fT: -84, fS: 82, bT: -78, bS: 80, lean: -6, head: 4, fU: -30, fL: -60, bU: -16, bL: -52 };
   const wKey = track([
-    [0, { x: 150, walk: 1, lean: 4, ikw: 0, head: 0, fU: 8, fL: -16, bU: -6, bL: -12 }],
-    [1.2, { x: 244, walk: 1 }],
-    [1.4, { x: 250, walk: 0 }],
+    [0, { x: 170, y: 322, walk: 1, lean: 4, ikw: 0, head: 0, fU: 8, fL: -16, bU: -6, bL: -12 }],
+    [1.2, { x: 266, walk: 1 }],
+    [1.4, { x: 272, walk: 0 }],
     [2.1, { lean: 10, ikw: 1, head: 8 }],
     [4.6, { lean: 10, head: 8 }],
     [5.3, { lean: 22, head: 16 }],
@@ -349,7 +365,7 @@ function sceneTalk(g) {
     const eTalk = (t > 2.6 && t < 4.0) || (t > 7.8 && t < 8.8), wTalk = t > 5.1 && t < 6.0;
     const relax = win(t, 2.2, 2.6) * (1 - win(t, 5.0, 5.3));
     // 어르신: sits; enjoys it with eyes closed, tilts the head toward her when she talks, laughs, then pats her hand
-    const eq = { ...STAND, ...SIT, lean: SIT.lean + shake * 3 + relax * 2, head: SIT.head - relax * 6 + win(t, 5.0, 5.4) * (1 - win(t, 6.8, 7.2)) * -10 + shake * 4 + (eTalk ? Math.sin(t * 8) * 2 : 0),
+    const eq = { ...STAND, ...SIT, x: SIT.x, lean: SIT.lean + shake * 3 + relax * 2, head: SIT.head - relax * 6 + win(t, 5.0, 5.4) * (1 - win(t, 6.8, 7.2)) * -10 + shake * 4 + (eTalk ? Math.sin(t * 8) * 2 : 0),
       mouth: laugh > 0.3 ? 'laugh' : eTalk ? talkMouth(t, 6) : relax > 0.5 ? 'smile' : 'smile', blink: laugh > 0.3 || relax > 0.5 ? 1 : blinkAt(t) };
     pose(E, eq);
     // 봉사자: comes in behind, both hands on his shoulders, kneading in small circles; leans in to talk
@@ -375,9 +391,9 @@ function sceneTalk(g) {
     }
     steam.forEach((st, i) => { const u = ((t * 0.7 + i * 0.5) % 1); st.setAttribute('transform', `translate(${-3 + i * 5} ${-14 - u * 16})`); st.setAttribute('opacity', (1 - u) * 0.7); });
     const pop = (b, a, z, x, y) => { const u = win(t, a, a + 0.35), v = 1 - win(t, z - 0.3, z); const k = Math.min(u, v); b.style.opacity = k; tf(b, x, y - (1 - k) * 8, 0, Math.max(0.01, 0.6 + 0.4 * ease(u)) * (k > 0 ? 1 : 0.01)); };
-    pop(b1, 2.6, 4.1, 432, 210);
-    pop(b2, 5.1, 6.1, 236, 150);
-    pop(b3, 7.8, 8.9, 432, 210);
+    pop(b1, 2.6, 4.1, 440, 214);
+    pop(b2, 5.1, 6.1, 226, 150);
+    pop(b3, 7.8, 8.9, 440, 214);
     hearts.forEach((h, i) => { const u = win(t, 6.0 + i * 0.3, 7.4 + i * 0.3); h.style.opacity = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0; tf(h, 330 + (i - 1) * 26 + Math.sin(u * 8 + i) * 8, 230 - u * 80, Math.sin(u * 6) * 12, 0.8 + i * 0.12); });
   };
 }
