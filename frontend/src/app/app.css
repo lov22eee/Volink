@@ -1756,3 +1756,8 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .m-set-text small { font-size: 13px; font-weight: 400; color: var(--ink-3); line-height: 1.4; }
 .m-set-note { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-set-card > a > span, .m-set-card > button > span { word-break: keep-all; }
+.lab-keep { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; color: var(--ink); }
+.lab-keep > svg { color: var(--m-green-ink); flex: none; }
+.lab-keep > span { flex: 1; min-width: 0; word-break: keep-all; }
+.lab-keep b { display: block; font-size: 15px; font-weight: 650; }
+.lab-keep small { display: block; margin-top: 3px; font-size: 13px; color: var(--ink-3); line-height: 1.4; }

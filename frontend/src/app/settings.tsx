@@ -1,5 +1,5 @@
 // 설정 (마이 → 톱니바퀴): app settings, the linked login account and 회원 탈퇴. 마이 keeps only what is about me.
-import { keep1365, labOn, logout1365, saveExtMode, setKeep1365, setLabOn, useExtMode } from './lab'
+import { keep1365, KEEP_MINUTES, labOn, logout1365, saveExtMode, setKeep1365, setLabOn, useExtMode } from './lab'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { User } from '../api'
@@ -61,7 +61,7 @@ export function SettingsScreen({ user, onSignOut }: { user: User; onSignOut: () 
         ...(user.memberType === 'INSTITUTION' ? [] : [{ icon: 'record' as MIconName, label: '1365 기록 방식', note: extMode === 'IMPORT' ? '가져오기' : extMode === 'MANUAL' ? '직접 남기기' : '고르지 않음', onClick: switchMode }]),
         { icon: 'flask', label: '1365 연결 (실험)', desc: '내 1365 신청 내역 가져오기', toggle: lab, onClick: () => { setLabOn(!lab); setLab(!lab) } },
         ...(lab ? [{ icon: 'outward' as MIconName, label: '1365 신청 내역 가져오기', href: '#/lab1365' }] : []),
-        ...(lab ? [{ icon: 'lock' as MIconName, label: '1365 로그인 유지', desc: '이 휴대폰에서만 로그인을 기억해요', toggle: keep, onClick: () => { setKeep1365(!keep); setKeep(!keep) } },
+        ...(lab ? [{ icon: 'lock' as MIconName, label: `1365 로그인 ${KEEP_MINUTES}분 유지`, desc: `마지막 사용 후 ${KEEP_MINUTES}분 · 이 휴대폰에만`, toggle: keep, onClick: () => { setKeep1365(!keep); setKeep(!keep) } },
           { icon: 'logout' as MIconName, label: '1365 로그아웃', desc: '이 휴대폰의 1365 로그인 기록 지우기', onClick: () => { void logout1365().then(() => showToast('1365에서 로그아웃했어요')) } }] : []),
       ]} />
       <Group title="계정" rows={[
