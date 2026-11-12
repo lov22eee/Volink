@@ -32,13 +32,19 @@ const features: [Parameters<typeof PcIcon>[0]['name'], string, string][] = [
   ['chat', '봉사 커뮤니티', '후기·질문·홍보로 이웃과 봉사 경험을 나눠요'],
 ]
 
-export function PublicHome({ user, onSignOut }: { user: User | null; onSignOut: () => void }) {
+export function PublicHome({ user, onSignOut, to }: { user: User | null; onSignOut: () => void; to?: string | null }) {
   const [list, setList] = useState<LiveActivity[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [field, setField] = useState('')
   const [weekend, setWeekend] = useState(false)
   const [all, setAll] = useState(false)
   useEffect(() => { api<LiveActivity[]>('/api/activities').then(setList).catch(() => { setList([]); setFailed(true) }) }, [])
+  // Opened from 앱 소개 / 봉사 찾기 on another page: go to that part once the list has its height.
+  useEffect(() => {
+    if (!to || list === null) return
+    const t = window.setTimeout(() => document.getElementById('pc-' + to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    return () => window.clearTimeout(t)
+  }, [to, list === null])
   const shown = useMemo(() => (list ?? []).filter(a => {
     if (field && a.category !== field) return false
     if (weekend) { const day = new Date(a.date + 'T12:00:00+09:00').getUTCDay(); if (day !== 0 && day !== 6) return false }
@@ -57,7 +63,7 @@ export function PublicHome({ user, onSignOut }: { user: User | null; onSignOut: 
     <section className="pc-wrap pc-land-sec" id="pc-about"><h2>Volink로 할 수 있는 것</h2>
       <div className="pc-feat">{features.map(([icon, title, text]) => <div key={title}><span><PcIcon name={icon} size={22} /></span><b>{title}</b><p>{text}</p></div>)}</div>
     </section>
-    <section className="pc-wrap pc-land-sec" aria-label="지금 모집 중">
+    <section className="pc-wrap pc-land-sec" id="pc-list" aria-label="지금 모집 중">
       <div className="pc-land-h"><h2>지금 모집 중</h2>{list && list.length > 0 && <small>{list.length}개</small>}</div>
       <div className="pc-chips" role="group" aria-label="분야">{['', ...categories].map(c => <button key={c || 'all'} type="button" aria-pressed={field === c} onClick={() => setField(c)}>{c || '전체'}</button>)}
         <button type="button" aria-pressed={weekend} onClick={() => setWeekend(v => !v)}>이번 주말</button></div>

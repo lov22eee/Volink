@@ -40,13 +40,14 @@ export function AppQr({ size = 112 }: { size?: number }) {
 }
 
 export function PublicHeader({ user, current, onSignOut }: { user: User | null; current?: 'find' | 'org'; onSignOut: () => void }) {
-  const about = (event: MouseEvent) => {
-    const el = document.getElementById('pc-about')
-    if (el) { event.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }) }
+  // 봉사 찾기 / 앱 소개 jump to their part of the first page: on that page by scrolling, from other pages through #/?to=.
+  const jump = (to: string) => (event: MouseEvent) => {
+    const el = document.getElementById('pc-' + to)
+    if (el) { event.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
   }
   return <header className="pc-hd">
     <Logo />
-    <nav className="pc-nav" aria-label="주요 메뉴"><a href="#/" aria-current={current === 'find' ? 'page' : undefined}>봉사 찾기</a><a href="#/" onClick={about}>앱 소개</a>
+    <nav className="pc-nav" aria-label="주요 메뉴"><a href="#/?to=list" onClick={jump('list')} aria-current={current === 'find' ? 'page' : undefined}>봉사 찾기</a><a href="#/?to=about" onClick={jump('about')}>앱 소개</a>
       <a href="#/org" aria-current={current === 'org' ? 'page' : undefined}>기관센터</a></nav>
     <div className="pc-sp" />
     {user ? <div className="pc-who"><a href={user.role === 'ADMIN' ? '#/admin' : user.memberType === 'INSTITUTION' ? '#/org' : '#/app'}>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? (user.organization?.name ?? '기관센터') : user.name}</a><button type="button" onClick={onSignOut}>로그아웃</button></div>

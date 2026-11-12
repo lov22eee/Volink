@@ -66,6 +66,6 @@ export default function PcApp() {
   else if (p[0] === 'app') page = ready && user ? <AppOnly user={user} onSignOut={signOut} /> : ready ? <PublicHome user={null} onSignOut={signOut} /> : <Loading />
   else if (p[0] === 'o' && p[1]) page = <OrgPage key={p[1]} id={Number(p[1])} user={user} onSignOut={signOut} />
   else if (p[0] === 'activity' && p[1] && !p[2]) page = <PublicDetail key={p[1]} id={Number(p[1])} user={user} onSignOut={signOut} />
-  else page = <PublicHome user={user} onSignOut={signOut} />
+  else page = <PublicHome user={user} onSignOut={signOut} to={route.query.get('to')} />
   return <>{page}<ToastHost /></>
 }

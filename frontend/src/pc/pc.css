@@ -240,7 +240,7 @@
 .pc-land-phones { flex: none; display: flex; gap: 18px; align-items: flex-end; }
 .pc-land-phones img { width: 220px; border-radius: 30px; border: 8px solid #1f2421; background: #1f2421; box-shadow: 0 18px 40px rgba(31, 36, 33, .16); display: block; }
 .pc-land-phones img + img { width: 200px; margin-bottom: 30px; }
-.pc-land-sec { padding-top: 40px; display: flex; flex-direction: column; gap: 16px; }
+.pc-land-sec { scroll-margin-top: 40px; padding-top: 40px; display: flex; flex-direction: column; gap: 16px; }
 .pc .pc-land-sec h2 { font-size: 22px; letter-spacing: -0.03em; }
 .pc-land-h { display: flex; align-items: baseline; gap: 8px; }
 .pc-land-h small { color: var(--pc-mu); font-weight: 700; }
