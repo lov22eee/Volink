@@ -845,10 +845,16 @@ test('실적확인서 photo: misread labels (활통·내욕·8획) and a header-
     const words = [undefined, [w('번호', 244), w('활동입자', 400), w('붕', 646), w('사', 671), w('기', 693), w('관', 717), w('활동내용', 990), w('인정시간', 1240)],
       [w('1', 243), w('2025.08.14', 386), w('양주시자원봉사센터', 700), w('어린이', 946), w('독서', 1000), w('지도', 1063), w('4시간', 1250)], undefined]
     const one = readProof(lines.join('\n'), lines, words)
-    return { total: [total.kind, total.title, total.from, total.to, total.minutes, total.count], one: [one.kind, one.title, one.to, one.minutes] }
+    // 2026-11-12 sample forms: a label read letter by letter, the value a line apart, (4)시간, a second day without its year, ?월 for 7월.
+    const school = readProof('봉사활동 확인서\n2025년 ?월 12일 ~ 2025년 ?월 12일\n봉사활동 일자 (1)회(4)시간\n봉 사 활 동 내 용 어르신 말벗 및 점심 배식 보조\n위와 같이 봉사활동을 하였음을 증명합니다.\n2025년 7월 14일')
+    const personal = readProof('개인 봉사활동 확인서\n활동일시 기 간: 2025년 9월 10일 ~ 9월 10일 1회\n총 활동 시간: 총 5시간\n활동내용\n장애인 시설 식사 보조 및 청소\n위와 같이 확인합니다.\n2025년 9월 12일')
+    return { total: [total.kind, total.title, total.from, total.to, total.minutes, total.count], one: [one.kind, one.title, one.to, one.minutes],
+      school: [school.title, school.to, school.minutes], personal: [personal.title, personal.to, personal.minutes] }
   })
   expect(got.total).toEqual(['total', '양주 하천 환경정화 외 7건', '2025-03-01', '2025-10-31', 46 * 60 + 30, 8])
   expect(got.one).toEqual(['one', '어린이 독서 지도', '2025-08-14', 240])
+  expect(got.school).toEqual(['어르신 말벗 및 점심 배식 보조', '2025-07-12', 240])
+  expect(got.personal).toEqual(['장애인 시설 식사 보조 및 청소', '2025-09-10', 300])
 })
 
 test('경고 시트: an accepted report shows one sheet on the next screen; 확인 needs the tick; 자세히 보기 shows the post; 마이 says 경고 1회', async ({ page }) => {

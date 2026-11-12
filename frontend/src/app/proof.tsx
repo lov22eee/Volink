@@ -20,8 +20,17 @@ export type ProofRead = { kind: ProofKind; title: string; from: string; to: stri
 const PAGE_1365_RECORDS = 'https://www.1365.go.kr/vols/1472178091420/mypage/partcptnAcmslt.do'
 const ymd = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)
 const compact = (s: string) => s.replace(/\s+/g, '')
-const DATE = /(20\d{2}|19\d{2})\s*[.,\-/년]\s*(\d{1,2})\s*[.,\-/월]\s*(\d{1,2})/g
-const dates = (s: string) => [...s.matchAll(new RegExp(DATE.source, 'g'))].map(m => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`)
+const DATE = /(20\d{2}|19\d{2})(?:\s*[.,\-/년]\s*|(?=\d{2}[.,\-/월]))(\d{1,2})\s*[.,\-/월]\s*(\d{1,2})/g
+/** Photo slips inside a date: 7월 read as ?월 or ㄱ월, 5월 as 5원, 0 as O. */
+const dayText = (s: string) => s.replace(/(\d{4}\s*[.,\-/년]\s*)[?ㄱ](?=\s*[.,\-/월])/g, '$17').replace(/(\d)\s*원(?=\s*\d{1,2}\s*일)/g, '$1월').replace(/(?<=\d)[Oo](?=\d)/g, '0')
+const dates = (raw: string) => {
+  const s = dayText(raw)
+  const out = [...s.matchAll(new RegExp(DATE.source, 'g'))].map(m => `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`)
+  // "2025년 9월 10일 ~ 9월 10일": the second day without its year takes the first one's.
+  const tail = out.length === 1 ? /[~∼〜-]\s*(\d{1,2})\s*[.월/]\s*(\d{1,2})\s*일?/.exec(s.slice(s.search(DATE) + 6)) : null
+  if (tail) out.push(`${out[0].slice(0, 4)}-${tail[1].padStart(2, '0')}-${tail[2].padStart(2, '0')}`)
+  return out
+}
 const after = (line: string) => line.replace(/^[^:：]*[:：]/, '').replace(/^[\s■□▪•·\-=ㅁ]+/, '').trim()
 
 /**
@@ -37,7 +46,7 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
   const read: ProofRead = { kind: 'none', title: '', from: '', to: '', minutes: null, count: null, used: [] }
   if (/님의시간인증형봉사시간|시간인증형자원봉사참여|봉사참여실적/.test(all) && !/확인서/.test(all)) return { ...read, kind: 'page' }
   const find = (re: RegExp) => lines.findIndex(l => re.test(fixed(l)))
-  const minutesIn = (s: string) => { const m = /(\d{1,5})시간(?:(\d{1,2})분)?/.exec(fixed(s)); return m ? Number(m[1]) * 60 + Number(m[2] ?? 0) : null }
+  const minutesIn = (s: string) => { const m = /(\d{1,5})시간(?:(\d{1,2})분)?/.exec(fixed(s).replace(/[()（）[\]]/g, '')); return m ? Number(m[1]) * 60 + Number(m[2] ?? 0) : null }
   const or = (i: number, re: RegExp) => i >= 0 ? i : find(re)
 
   // A table: a header row naming 3 or more columns, then one row per activity (values placed under their header by position).
@@ -45,9 +54,12 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
   if (header >= 0) {
     const cols = columnsOf(words![header]!)
     const rows: Record<string, string>[] = [], at: number[] = []
+    let skipped = 0
     for (let i = header + 1; i < lines.length && rows.length < 50; i++) {
       const row = cellsOf(words![i] ?? [], cols)
-      if (!row.day && !row.time) { if (rows.length) break; continue }
+      // A smudged line between two rows is skipped; two in a row end the table.
+      if (!row.day && !row.time) { if (rows.length && ++skipped > 1) break; continue }
+      skipped = 0
       rows.push(row); at.push(i)
     }
     if (rows.length) {
@@ -66,35 +78,55 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
     }
   }
 
-  const period = or(or(find(/활동기간|봉사기간/), new RegExp('^[^\\d]{0,4}기간')), /기간.*(19|20)\d{2}/)
+  // Label rows. On paper the label and its value may share a line or not (a PDF keeps a tall row's lines apart), the label
+  // may come out letter by letter (봉 사 활 동 내 용) and the footer has the 발급일: so the body is everything above
+  // "위와 같이 … 확인합니다", a value missing from its label's line is looked for in the body by its shape.
+  const end = lines.findIndex(l => /위와같이|확인합니다|증명합니다|확인함|위사실/.test(compact(l)))
+  const body = (end > 0 ? lines.slice(0, end) : lines).map((l, i) => ({ l, i })).filter(x => !/생년월일|주민|출생|발급|전화|연락처/.test(compact(x.l)))
+  const period = or(or(find(/활동기간|봉사기간|활동일시|활동일자|봉사일자|봉사활동일자|활동일|봉사일/), new RegExp('^[^\\d]{0,4}(기간|일자|일시)')), /기간.*(19|20)\d{2}/)
   const time = or(or(find(/활동시간|봉사시간|인정시간/), new RegExp('^[^\\d]{0,4}시간(?![가-힣])')), /[총층]\d{1,5}시간/)
   const count = or(or(find(/활동횟수|봉사횟수/), new RegExp('^[^\\d]{0,4}횟수')), /[총층]\d{1,4}회/)
   const content = or(find(/활동내용|봉사내용|봉사활동명|활동명|봉사명|프로그램명/), new RegExp('^[^\\d]{0,4}내용'))
-  if (period >= 0 || count >= 0 || /자원봉사활동확인서/.test(all)) {
-    read.kind = 'total'
-    if (period >= 0) { const d = dates(lines[period]); read.from = d[0] ?? ''; read.to = d[1] ?? ''; read.used.push(period) }
-    if (time >= 0) { read.minutes = minutesIn(lines[time]); read.used.push(time) }
-    if (count >= 0) { const m = /(\d{1,4})(회|건)/.exec(fixed(lines[count])); read.count = m ? Number(m[1]) : null; read.used.push(count) }
-    if (content >= 0) { read.title = valueOf(lines[content]).replace(/(\d)\s+(건|회)/g, '$1$2').replace(/\s[의외왜]\s*(\d+건)$/, ' 외 $1').slice(0, 120); read.used.push(content) }
-    return read
+  if (period < 0 && time < 0 && count < 0 && content < 0 && !/확인서/.test(all)) return read
+
+  let days = period >= 0 ? dates(lines[period]) : []
+  let dayAt = period
+  if (!days.length) { const hit = body.find(x => dates(x.l).length); if (hit) { days = dates(hit.l); dayAt = hit.i } }
+  if (days.length) { read.from = days.length > 1 ? days[0] : ''; read.to = days[days.length > 1 ? 1 : 0]; read.used.push(dayAt) }
+  let minutes = time >= 0 ? minutesIn(lines[time]) : null, timeAt = time
+  if (minutes == null) { const hit = body.find(x => minutesIn(x.l) != null); if (hit) { minutes = minutesIn(hit.l); timeAt = hit.i } }
+  if (minutes != null) { read.minutes = minutes; if (!read.used.includes(timeAt)) read.used.push(timeAt) }
+  if (count >= 0) { const m = /(\d{1,4})(회|건)/.exec(fixed(lines[count])); read.count = m ? Number(m[1]) : null; read.used.push(count) }
+  if (content >= 0) {
+    let title = valueOf(lines[content])
+    // The value on the next line (the label alone on its line).
+    if (!title && lines[content + 1] && !labelOf(lines[content + 1])) { title = clean(lines[content + 1]); read.used.push(content + 1) }
+    title = title.replace(/(\d)\s+(건|회)/g, '$1$2').replace(/\s[의외왜]\s*(\d+건)$/, ' 외 $1')
+    // "○○ 외 ?건" with the number smudged: 총 N회 says it is N - 1 more.
+    if (read.count && read.count > 1) title = title.replace(/\s[의외왜]\s*[^\d\s]{0,2}\s*[건견]$/, ` 외 ${read.count - 1}건`)
+    read.title = title.slice(0, 120)
+    read.used.push(content)
   }
-  if (content >= 0 || time >= 0) {
-    read.kind = 'one'
-    if (content >= 0) { read.title = valueOf(lines[content]).slice(0, 120); read.used.push(content) }
-    const day = or(find(/활동일|봉사일|활동일자|봉사일자/), new RegExp('^[^\\d]{0,4}(일자|날짜|일시)'))
-    if (day >= 0) { read.to = dates(lines[day])[0] ?? ''; read.used.push(day) }
-    if (time >= 0) { read.minutes = minutesIn(lines[time]); read.used.push(time) }
-  }
+  read.kind = (read.from && read.from !== read.to) || count >= 0 || /자원봉사활동확인서/.test(all) ? 'total' : 'one'
+  if (read.kind === 'one' && read.from === read.to) read.from = ''
   return read
 }
 
 /** Common OCR slips on these papers, fixed before matching (spaces dropped). */
-const fixed = (s: string) => compact(s).replace(/(\d)[획휘]/g, '$1회').replace(/내[욕옹움]/g, '내용').replace(/시[갑관]/g, '시간')
+const fixed = (s: string) => compact(s).replace(/(\d)[획휘]/g, '$1회').replace(/내[욕옹움]/g, '내용').replace(/(활동|봉사)[대네]용/g, '$1내용').replace(/시[갑관]/g, '시간')
 
-/** The value after a label: after ':' if there is one, else after the first word (the label as read, maybe broken). */
+const LABEL = /^[^\d가-힣]{0,3}(?:[가-힣]{0,4}?)(활동내용|봉사내용|봉사활동명|활동명|봉사명|프로그램명|내용)/
+/** The label a line starts with, letters counted without spaces (봉 사 활 동 내 용 → 봉사활동내용), or null. */
+function labelOf(line: string) { const m = LABEL.exec(fixed(line)); return m ? m[0] : null }
+const clean = (s: string) => s.replace(/^[\s■□▪•·\-=ㅁ|_.,:;'"`~!]+/, '').replace(/[\s|…。、_]+$/, '').trim()
+/** The value after a label: after ':' if there is one, else after the label's letters (spaces in between ignored). */
 function valueOf(line: string) {
-  const v = /[:：]/.test(line) ? after(line) : line.trim().replace(/^\S+\s*/, '')
-  return v.replace(/^[\s■□▪•·\-=ㅁ|]+/, '').replace(/[\s|…。、]+$/, '').trim()
+  if (/[:：]/.test(line)) return clean(after(line))
+  const label = labelOf(line)
+  if (!label) return clean(line.trim().replace(/^\S+\s*/, ''))
+  let n = 0, i = 0
+  for (; i < line.length && n < label.length; i++) if (!/\s/.test(line[i])) n++
+  return clean(line.slice(i))
 }
 
 type Column = { kind: 'no' | 'day' | 'org' | 'title' | 'time'; x: number }
@@ -135,7 +167,7 @@ function cellsOf(words: Word[], cols: Column[]): Record<string, string> {
 }
 
 /** PDF: the text as it is in the file (exact) and its position on page 1, which is drawn as the preview. */
-async function readPdf(file: File): Promise<Page> {
+export async function readPdf(file: File): Promise<Page> {
   const pdfjs = await import('pdfjs-dist')
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
   pdfjs.GlobalWorkerOptions.workerSrc = worker
@@ -152,8 +184,8 @@ async function readPdf(file: File): Promise<Page> {
     const h = Math.hypot(item.transform[2], item.transform[3]) * viewport.scale
     const w = item.width * viewport.scale
     const same = lines.find(l => Math.abs(l.y + l.h - y) < h * 0.5)
-    if (same) { const right = Math.max(same.x + same.w, x + w); same.x = Math.min(same.x, x); same.w = right - same.x; same.text += (x > same.x + 2 ? ' ' : '') + item.str }
-    else lines.push({ text: item.str, x, y: y - h, w, h })
+    if (same) { const right = Math.max(same.x + same.w, x + w); same.x = Math.min(same.x, x); same.w = right - same.x; same.text += (x > same.x + 2 ? ' ' : '') + item.str; same.words!.push({ text: item.str, x0: x, x1: x + w }) }
+    else lines.push({ text: item.str, x, y: y - h, w, h, words: [{ text: item.str, x0: x, x1: x + w }] })
   }
   lines.sort((a, b) => a.y - b.y || a.x - b.x)
   let text = lines.map(l => l.text).join('\n')
@@ -167,7 +199,7 @@ async function readPdf(file: File): Promise<Page> {
  * so the photo is made larger, turned black-and-white against its own neighbourhood (shadow, uneven light) and the long
  * straight lines are wiped before reading. The preview still shows the photo as taken.
  */
-async function readPhoto(file: File): Promise<Page> {
+export async function readPhoto(file: File): Promise<Page> {
   const url = URL.createObjectURL(file)
   const img = await new Promise<HTMLImageElement>((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url })
   const scale = 2000 / Math.max(img.width, img.height)
@@ -177,17 +209,56 @@ async function readPhoto(file: File): Promise<Page> {
   g.imageSmoothingQuality = 'high'
   g.drawImage(img, 0, 0, canvas.width, canvas.height)
   URL.revokeObjectURL(url)
-  const preview = canvas.toDataURL('image/jpeg', 0.8)
-  wipeTable(canvas)
+  const straight = deskew(canvas)
+  const preview = straight.toDataURL('image/jpeg', 0.8)
+  wipeTable(straight)
   const { createWorker } = await import('tesseract.js')
   const worker = await createWorker('kor')
   try {
-    const data = (await worker.recognize(canvas, {}, { blocks: true, text: true })).data
+    const data = (await worker.recognize(straight, {}, { blocks: true, text: true })).data
     const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
       .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
         words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
-    return { text: data.text, lines, preview, width: canvas.width, height: canvas.height }
+    return { text: data.text, lines, preview, width: straight.width, height: straight.height }
   } finally { await worker.terminate() }
+}
+
+/**
+ * A photo taken at a slant: find the angle (-8°…8°) at which the dark pixels line up in the most distinct rows (text lines and
+ * table lines are straight then) and turn the picture back by it. Done on a small copy; returns the original when it is straight.
+ */
+export function deskew(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const k = Math.min(1, 700 / canvas.width)
+  const sw = Math.round(canvas.width * k), sh = Math.round(canvas.height * k)
+  const small = document.createElement('canvas'); small.width = sw; small.height = sh
+  const sg = small.getContext('2d')!; sg.drawImage(canvas, 0, 0, sw, sh)
+  const px = sg.getImageData(0, 0, sw, sh).data
+  let total = 0
+  for (let i = 0; i < sw * sh; i++) total += px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114
+  const cut = (total / (sw * sh)) * 0.72
+  const xs: number[] = [], ys: number[] = []
+  for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+    const i = (y * sw + x) * 4
+    if (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < cut) { xs.push(x); ys.push(y) }
+  }
+  if (xs.length < 200) return canvas
+  const score = (deg: number) => {
+    const a = deg * Math.PI / 180, sin = Math.sin(a), cos = Math.cos(a)
+    const bins = new Float64Array(sh + sw + 2)
+    for (let j = 0; j < xs.length; j++) bins[Math.round(ys[j] * cos - xs[j] * sin) + sw + 1]++
+    let sum = 0; for (const b of bins) sum += b * b
+    return sum
+  }
+  let best = 0, bestScore = score(0)
+  for (let deg = -8; deg <= 8; deg += 0.5) { const v = score(deg); if (v > bestScore) { best = deg; bestScore = v } }
+  for (let deg = best - 0.4; deg <= best + 0.4; deg += 0.1) { const v = score(deg); if (v > bestScore) { best = deg; bestScore = v } }
+  if (Math.abs(best) < 0.3) return canvas
+  const a = best * Math.PI / 180
+  const out = document.createElement('canvas'); out.width = canvas.width; out.height = canvas.height
+  const g = out.getContext('2d')!
+  g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height)
+  g.translate(out.width / 2, out.height / 2); g.rotate(-a); g.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
+  return out
 }
 
 /** Black ink on white (each pixel against the mean around it), then long horizontal and vertical runs of ink (table lines) made white. */
