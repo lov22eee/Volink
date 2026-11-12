@@ -103,12 +103,16 @@ function person(parent, o) {
   const H = P.head;
   if (o.hair === 'pony') { P.pony = el('g', {}, H); tf(P.pony, -18, -30); el('path', { d: 'M 0 0 Q -14 6 -12 26 Q -4 18 4 4 Z', fill: o.hairColor }, P.pony); }
   el('ellipse', { cx: 3, cy: -22, rx: 21, ry: 23, fill: o.skin }, H);
-  el('ellipse', { cx: -9, cy: -20, rx: 4.5, ry: 6, fill: shade(o.skin, 0.9) }, H);
   const hc = o.hairColor;
   if (o.hair === 'short') el('path', { d: 'M -18 -18 Q -22 -44 2 -46 Q 26 -46 25 -26 Q 16 -34 4 -33 Q -4 -26 -12 -26 Q -14 -20 -18 -18 Z', fill: hc }, H);
   if (o.hair === 'pony') el('path', { d: 'M -18 -16 Q -24 -46 4 -46 Q 27 -44 25 -24 Q 14 -36 0 -32 Q -8 -30 -12 -22 Z', fill: hc }, H);
   if (o.hair === 'elder') { el('path', { d: 'M -18 -14 Q -22 -34 -12 -40 Q -4 -30 -10 -16 Z', fill: hc }, H); el('path', { d: 'M -6 -42 Q 6 -48 18 -40 Q 8 -42 -6 -38 Z', fill: hc }, H); }
   if (o.hair === 'kid') el('path', { d: 'M -18 -16 Q -22 -46 4 -46 Q 26 -45 25 -22 Q 18 -30 8 -31 Q 2 -24 -10 -27 Q -14 -20 -18 -16 Z', fill: hc }, H);
+  // ear: skin-coloured, on the side of the head with a soft inner fold (no dark patch on the face)
+  if (o.hair !== 'pony') {
+    el('path', { d: 'M -5 -27 Q -13 -28 -13 -20 Q -13 -12 -5 -13 Z', fill: o.skin }, H);
+    el('path', { d: 'M -7 -24 Q -10 -22 -9 -18 Q -8 -16 -6 -16', stroke: shade(o.skin, 0.8), 'stroke-width': 1.4, fill: 'none', 'stroke-linecap': 'round' }, H);
+  }
   if (o.cap) { el('path', { d: 'M -19 -26 Q -18 -48 4 -48 Q 25 -47 25 -28 Z', fill: o.cap }, H); el('path', { d: 'M 18 -30 L 38 -27 Q 36 -23 18 -24 Z', fill: shade(o.cap, 0.8) }, H); }
   P.eye = el('ellipse', { cx: 13, cy: -23, rx: 2.3, ry: 2.9, fill: '#1d2420' }, H);
   el('path', { d: 'M 9 -30 Q 13 -32 17 -30', stroke: hc === '#dcdcd6' ? '#8d8d88' : hc, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, H);
@@ -347,7 +351,8 @@ function sceneTalk(g) {
   const sF = el('g', {}, E.torso); tf(sF, -2, -80);
   const sB = el('g', {}, E.torso); tf(sB, -14, -78);
   const handF = el('g', {}, W.arms.f.tip);
-  const SIT = { x: 346, y: 384, fT: -84, fS: 82, bT: -78, bS: 80, lean: -6, head: 4, fU: -30, fL: -60, bU: -16, bL: -52 };
+  const eHand = el('g', {}, E.arms.f.tip); const eShoulder = el('g', {}, E.torso); tf(eShoulder, 10, -74);
+  const SIT = { x: 346, y: 384, fT: -84, fS: 82, bT: -78, bS: 80, lean: -6, head: 4, fU: -14, fL: -66, bU: -10, bL: -56 };
   const wKey = track([
     [0, { x: 272, y: 322, walk: 0, lean: 10, ikw: 1, head: 8, fU: 8, fL: -16, bU: -6, bL: -12 }],
     [4.6, { lean: 10, head: 8 }],
@@ -379,11 +384,14 @@ function sceneTalk(g) {
       wq.bU = lerp(wq.bU, b1a - wq.lean, w.ikw); wq.bL = lerp(wq.bL, b2a - b1a, w.ikw); wq.bH = lerp(0, -70, w.ikw);
       pose(W, wq);
     }
-    const pat = win(t, 7.7, 8.1) * (1 - win(t, 8.8, 9));
+    // he lifts his hand to his shoulder and pats hers: elbow forward and down, forearm folded up (no reaching backwards)
+    const pat = win(t, 7.6, 8.2) * (1 - win(t, 8.7, 9));
     if (pat > 0) {
-      const h = gpos(handF), tap = Math.abs(Math.sin(t * 9)) * 4;
-      const [a1, a2] = ik(shoulder(eq), { x: h.x + 2, y: h.y - 2 - tap }, 40, 44, 1);
-      eq.fU = lerp(eq.fU, a1 - eq.lean, pat); eq.fL = lerp(eq.fL, a2 - a1, pat); eq.fH = lerp(0, 60, pat);
+      // the hand travels in a straight line from the armrest to his own shoulder (where her hand is), elbow staying low
+      const rest = gpos(eHand), top = gpos(eShoulder), tap = Math.sin(t * 10) * 3 * win(t, 8.1, 8.2);
+      const target = { x: lerp(rest.x, top.x, ease(pat)), y: lerp(rest.y, top.y + tap, ease(pat)) };
+      const [a1, a2] = ik(shoulder(eq), target, 40, 44, 1);
+      eq.fU = a1 - eq.lean; eq.fL = a2 - a1; eq.fH = lerp(0, -40, pat);
       pose(E, eq);
     }
     steam.forEach((st, i) => { const u = ((t * 0.7 + i * 0.5) % 1); st.setAttribute('transform', `translate(${-3 + i * 5} ${-14 - u * 16})`); st.setAttribute('opacity', (1 - u) * 0.7); });
@@ -565,7 +573,7 @@ function sceneBooks(g) {
     const q = { ...STAND, ...k, blink: blinkAt(t), mouth: t > 8.4 ? 'open' : 'smile' };
     walk(q, (k.x - 356) / 30 * Math.PI, k.walk);
     pose(V, q);
-    if (k.ikw > 0) { const [a1, a2] = ik(shoulder(q), { x: k.tx, y: k.ty }, 40, 44, -1); q.fU = lerp(q.fU, a1 - q.lean, k.ikw); q.fL = lerp(q.fL, a2 - a1, k.ikw); q.fH = 0; pose(V, q); }
+    if (k.ikw > 0) { const [a1, a2] = ik(shoulder(q), { x: k.tx, y: k.ty }, 40, 44, 1); q.fU = lerp(q.fU, a1 - q.lean, k.ikw); q.fL = lerp(q.fL, a2 - a1, k.ikw); q.fH = 0; pose(V, q); }
     const hp = gpos(hand);
     const place = (b, from, slot, tGrab, tIn, tDone) => {
       let x, y, a;
