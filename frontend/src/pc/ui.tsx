@@ -1,5 +1,5 @@
 // PC 화면 shared pieces (2026-11-11): header, icons, the app download QR, date words.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 import QRCode from 'qrcode'
 import type { User } from '../api'
@@ -39,19 +39,47 @@ export function AppQr({ size = 112 }: { size?: number }) {
   return src ? <img src={src} alt="앱 받기 QR 코드" width={size} height={size} /> : <span style={{ width: size, height: size, display: 'inline-block' }} />
 }
 
-export function PublicHeader({ user, current, onSignOut }: { user: User | null; current?: 'find' | 'org'; onSignOut: () => void }) {
-  // 봉사 찾기 / 앱 소개 jump to their part of the first page: on that page by scrolling, from other pages through #/?to=.
+const menu: [string, string][] = [['about', '앱 소개'], ['how', '이용 방법'], ['org', '기관 안내']]
+/** The menu of the public pages. On the first page each item goes to its part and the underline follows the scroll;
+ *  from other pages it opens the first page at that part (#/?to=…). 기관센터 입구 underlines 기관 안내. */
+export function PublicHeader({ user, current, onSignOut }: { user: User | null; current?: 'home' | 'org'; onSignOut: () => void }) {
+  const asked = new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('to')
+  const [spy, setSpy] = useState(current === 'org' ? 'org' : current === 'home' ? (asked ?? 'about') : '')
+  // After a menu click the underline stays on that item until the person scrolls by hand (the end of the page can
+  // leave 이용 방법 below the top line, and it should not jump to 기관 안내).
+  const pinned = useRef<string | null>(current === 'home' ? asked : null)
+  useEffect(() => {
+    if (current !== 'home') return
+    const look = () => {
+      if (pinned.current) return
+      const bottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4
+      let now = 'about'
+      for (const [key] of menu) { const el = document.getElementById('pc-' + key); if (el && el.getBoundingClientRect().top <= 150) now = key }
+      setSpy(bottom ? 'org' : now)
+    }
+    const hand = () => { pinned.current = null }
+    look()
+    window.addEventListener('scroll', look, { passive: true })
+    window.addEventListener('resize', look)
+    for (const type of ['wheel', 'touchmove', 'keydown']) window.addEventListener(type, hand, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', look); window.removeEventListener('resize', look)
+      for (const type of ['wheel', 'touchmove', 'keydown']) window.removeEventListener(type, hand)
+    }
+  }, [current])
   const jump = (to: string) => (event: MouseEvent) => {
     const el = document.getElementById('pc-' + to)
-    if (el) { event.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+    if (!el || current !== 'home') return
+    event.preventDefault()
+    pinned.current = to; setSpy(to)
+    if (to === 'about') window.scrollTo({ top: 0, behavior: 'smooth' }); else el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   return <header className="pc-hd">
     <Logo />
-    <nav className="pc-nav" aria-label="주요 메뉴"><a href="#/?to=list" onClick={jump('list')} aria-current={current === 'find' ? 'page' : undefined}>봉사 찾기</a><a href="#/?to=about" onClick={jump('about')}>앱 소개</a>
-      <a href="#/org" aria-current={current === 'org' ? 'page' : undefined}>기관센터</a></nav>
+    <nav className="pc-nav" aria-label="주요 메뉴">{menu.map(([key, label]) => <a key={key} href={'#/?to=' + key} onClick={jump(key)} aria-current={spy === key ? 'page' : undefined}>{label}</a>)}</nav>
     <div className="pc-sp" />
     {user ? <div className="pc-who"><a href={user.role === 'ADMIN' ? '#/admin' : user.memberType === 'INSTITUTION' ? '#/org' : '#/app'}>{user.role === 'ADMIN' ? '관리자' : user.memberType === 'INSTITUTION' ? (user.organization?.name ?? '기관센터') : user.name}</a><button type="button" onClick={onSignOut}>로그아웃</button></div>
-      : <><a className="mu" href="#/login" style={{ fontWeight: 600 }}>로그인</a><a className="pc-btn" href={appUrl()}><PcIcon name="download" />앱 받기</a></>}
+      : <><a className="mu pc-hd-login" href="#/login" style={{ fontWeight: 600 }}>로그인</a><a className="pc-btn" href={appUrl()}><PcIcon name="download" />앱 받기</a></>}
   </header>
 }
 

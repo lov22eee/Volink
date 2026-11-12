@@ -35,17 +35,25 @@ test('anyone browses open posts, a post page offers the app instead of applying,
   await page.goto('/#/')
   await expect(page.getByRole('heading', { name: /앱 하나로/ })).toBeVisible()
   await expect(page.getByRole('link', { name: '앱 받기' }).first()).toHaveAttribute('href', /\/download\/volink\.apk$/)
-  await expect(page.getByRole('img', { name: '앱 받기 QR 코드' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Volink로 할 수 있는 것' })).toBeVisible()
-  await expect(page.getByRole('region', { name: '지금 모집 중' }).locator('.pc-acard').first()).toBeVisible()
-  // 앱 소개 moves to the 소개 part, also from another page.
-  const aboutTop = () => page.evaluate(() => document.getElementById('pc-about')!.getBoundingClientRect().top)
-  await page.getByRole('link', { name: '앱 소개' }).click()
-  await expect.poll(aboutTop).toBeLessThan(120)
+  await expect(page.getByRole('img', { name: '앱 받기 QR 코드' }).first()).toBeVisible()
+  // The first page introduces the app (no list of posts); parts fade in as they come into view.
+  await expect(page.getByRole('img', { name: '모집글 화면' }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: /내 주변 봉사를/ })).toBeVisible()
+  await expect(page.locator('.pc-acard')).toHaveCount(0)
+  // A menu item moves to its part and the underline follows, also from another page.
+  // At its part: the part is at the top, or the page is scrolled to the end (이용 방법 is near the bottom).
+  const top = (id: string) => page.evaluate(id => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4 ? 0 : document.getElementById(id)!.getBoundingClientRect().top, id)
+  await page.getByRole('link', { name: '이용 방법' }).click()
+  await expect.poll(() => top('pc-how')).toBeLessThan(120)
+  await expect(page.getByRole('link', { name: '이용 방법' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('region', { name: '이렇게 시작해요' }).locator('.pc-rv.in').first()).toBeVisible()
   await page.goto('/#/org')
+  await expect(page.getByRole('link', { name: '기관 안내' })).toHaveAttribute('aria-current', 'page')
+  await page.getByRole('link', { name: '이용 방법' }).click()
+  await expect.poll(() => top('pc-how')).toBeLessThan(120)
+  await expect(page).toHaveURL(/to=how/)
   await page.getByRole('link', { name: '앱 소개' }).click()
-  await expect.poll(aboutTop).toBeLessThan(120)
-  await expect(page).toHaveURL(/to=about/)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
   await expect(page.getByRole('link', { name: '기관 가입 신청' })).toHaveAttribute('href', '#/org/signup')
   await page.getByRole('link', { name: '기관 로그인' }).click()
   await expect(page.getByRole('heading', { name: /PC에서 한 번에 관리하세요/ })).toBeVisible()
@@ -65,10 +73,11 @@ test('anyone browses open posts, a post page offers the app instead of applying,
   }
 })
 
-test('the list says so when the server cannot be reached, without made-up posts', async ({ page, request }) => {
-  await page.route('**/api/activities', route => route.abort())
+test('the first page still opens when the server cannot be reached, without made-up posts', async ({ page }) => {
+  await page.route('**/api/**', route => route.abort())
   await page.goto('/#/')
-  await expect(page.getByText('모집 목록을 불러오지 못했어요')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /앱 하나로/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: '앱 받기' }).first()).toBeVisible()
   await expect(page.locator('.pc-acard')).toHaveCount(0)
 })
 
@@ -87,18 +96,29 @@ test('a personal account on the PC is pointed to the app and can log out', async
 test('기관: sign up on the PC, wait for the check, the admin approves from 할 일 with a reason, then 기관센터 approves applicants in one go', async ({ page, browser, request }) => {
   const email = unique('pc-org')
   const orgName = 'PC 확인 센터 ' + Math.floor(Math.random() * 1e5)
+  // 기관 가입: 약관 동의 (전체 동의, [보기]) → 기관 정보 → 담당자 계정 → 신청 완료.
   await page.goto('/#/org/signup')
-  await page.getByRole('button', { name: '가입 신청하기' }).click()
+  await expect(page.getByRole('button', { name: '동의하고 계속' })).toBeDisabled()
+  await page.getByRole('button', { name: /개인정보 처리방침에 동의해요 보기/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '동의하고 닫기' }).click()
+  await expect(page.getByRole('checkbox', { name: /개인정보 처리방침/ })).toBeChecked()
+  await page.getByRole('checkbox', { name: '전체 동의하기' }).check()
+  await page.getByRole('button', { name: '동의하고 계속' }).click()
+  await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText('기관 유형을 골라 주세요.')).toBeVisible()
-  await page.getByLabel('기관 유형').selectOption('NONPROFIT')
+  await page.getByRole('radio', { name: '비영리단체' }).click()
   await page.getByLabel('기관명').fill(orgName)
   await page.getByLabel('대표 연락처').fill('031-123-4567')
+  await page.getByRole('button', { name: '다음' }).click()
   await page.getByLabel('담당자 이름').fill('김담당')
-  await page.getByLabel('이메일').fill(email)
+  await page.getByLabel(/^이메일/).fill(email)
   await page.getByLabel(/^비밀번호/).first().fill(password)
   await page.getByLabel('비밀번호 확인').fill(password)
-  await page.getByRole('checkbox').check()
+  await expect(page.getByText('비밀번호가 같아요')).toBeVisible()
+  await expect(page.getByText(orgName)).toBeVisible()
   await page.getByRole('button', { name: '가입 신청하기' }).click()
+  await expect(page.getByRole('heading', { name: '가입 신청을 받았어요' })).toBeVisible()
+  await page.getByRole('link', { name: '기관센터로 가기' }).click()
   await expect(page.getByRole('heading', { name: '기관 확인을 기다리고 있어요' })).toBeVisible()
 
   // The admin's 할 일: open this organization, a rejection needs a reason, then approve.

@@ -238,8 +238,6 @@
 .pc-get b { font-size: 15px; }
 .pc-get span { font-size: 13px; color: var(--pc-mu); margin-bottom: 6px; }
 .pc-land-phones { flex: none; display: flex; gap: 18px; align-items: flex-end; }
-.pc-land-phones img { width: 220px; border-radius: 30px; border: 8px solid #1f2421; background: #1f2421; box-shadow: 0 18px 40px rgba(31, 36, 33, .16); display: block; }
-.pc-land-phones img + img { width: 200px; margin-bottom: 30px; }
 .pc-land-sec { scroll-margin-top: 40px; padding-top: 40px; display: flex; flex-direction: column; gap: 16px; }
 .pc .pc-land-sec h2 { font-size: 22px; letter-spacing: -0.03em; }
 .pc-land-h { display: flex; align-items: baseline; gap: 8px; }
@@ -277,7 +275,7 @@
 .pc-can > div::before { content: ''; position: absolute; left: 0; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--pc-g); }
 .pc-can b { color: var(--pc-ink); }
 .pc-org-entry .pc-login { width: 100%; }
-@media (max-width: 1100px) { .pc-feat, .pc-cards { grid-template-columns: repeat(2, 1fr); } .pc-land-phones img + img { display: none; } }
+@media (max-width: 1100px) { .pc-feat, .pc-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) {
   .pc-wrap { padding: 0 16px; }
   .pc-land-hero .pc-wrap { flex-direction: column; align-items: stretch; padding-top: 28px; }
@@ -342,3 +340,84 @@
 @keyframes pc-slide { from { transform: translateX(40px); opacity: .6; } }
 @media (max-width: 1100px) { .pc-kpi { grid-template-columns: repeat(3, 1fr); } .pc-dash-grid { grid-template-columns: 1fr; } .pc-dash-todo { grid-row: auto; } }
 @media (max-width: 640px) { .pc-kpi { grid-template-columns: 1fr 1fr; } .pc-sys, .pc-mini { grid-template-columns: 1fr; } }
+
+/* 첫 화면 = 앱 소개 (2026-11-12): phone shots at real phone size, rows that alternate, fade-up on scroll */
+.pc-shot { display: block; width: 250px; height: auto; aspect-ratio: 390 / 844; object-fit: cover; object-position: top; border-radius: 38px; border: 9px solid #1f2421; background: #1f2421; box-shadow: 0 22px 48px rgba(31, 36, 33, .18); flex: none; }
+.pc-land-phones { gap: 22px; }
+.pc-land-phones .pc-shot + .pc-shot { width: 218px; margin-bottom: 36px; }
+.pc-land-h p { color: var(--pc-mu); font-size: 15px; margin-top: 4px; }
+.pc-land-h { flex-direction: column; align-items: flex-start; gap: 0; margin-bottom: 8px; }
+.pc .pc-land-sec h2 { font-size: 28px; }
+.pc-land-sec { padding-top: 64px; }
+.pc-row { display: flex; align-items: center; gap: 64px; background: #fff; border: 1px solid var(--pc-line); border-radius: 22px; padding: 40px 64px; overflow: hidden; }
+.pc-row.flip { flex-direction: row-reverse; }
+.pc-row .t { flex: 1; min-width: 0; }
+.pc-row small { color: var(--pc-g); font-weight: 800; font-size: 13px; }
+.pc .pc-row h3 { font-size: 28px; line-height: 1.35; letter-spacing: -0.035em; margin: 8px 0 12px; }
+.pc-row p { color: var(--pc-ink2); font-size: 15.5px; line-height: 1.75; max-width: 460px; }
+.pc-row ul { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.pc-row li { background: var(--pc-gs); color: var(--pc-g); font-weight: 700; font-size: 13px; border-radius: 8px; padding: 6px 11px; }
+.pc-row .pc-shot { width: 236px; box-shadow: 0 14px 34px rgba(31, 36, 33, .14); }
+.pc-steps3.big { margin-top: 4px; gap: 16px; }
+.pc-steps3.big > div { padding: 26px; border-radius: 16px; }
+.pc-steps3.big i { width: 34px; height: 34px; font-size: 15px; }
+.pc-steps3.big b { font-size: 17px; }
+.pc-steps3.big span { font-size: 14px; line-height: 1.55; }
+.pc-land-cta { display: flex; align-items: center; gap: 18px; background: var(--pc-gs); border-radius: 18px; padding: 18px 24px 18px 18px; }
+.pc-land-cta img { border-radius: 8px; background: #fff; padding: 4px; image-rendering: pixelated; }
+.pc-land-cta > div { flex: 1; }
+.pc-land-cta b { display: block; font-size: 18px; }
+.pc-land-cta span { color: var(--pc-ink2); font-size: 13.5px; }
+.pc-rv { opacity: 0; transform: translateY(32px); transition: opacity .7s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+.pc-rv.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .pc-rv { opacity: 1; transform: none; transition: none; } }
+@media (max-width: 900px) {
+  .pc-land-hero .pc-wrap { padding-bottom: 32px; }
+  .pc-land-phones { display: flex; justify-content: center; }
+  .pc-land-phones .pc-shot { width: 46%; max-width: 220px; border-width: 6px; border-radius: 26px; }
+  .pc-land-phones .pc-shot + .pc-shot { width: 40%; margin-bottom: 20px; }
+  .pc-row, .pc-row.flip { flex-direction: column; align-items: stretch; gap: 22px; padding: 26px 22px; border-radius: 18px; }
+  .pc .pc-row h3 { font-size: 22px; }
+  .pc-row p { font-size: 14.5px; }
+  .pc-row .pc-shot { width: 62%; max-width: 240px; align-self: center; border-width: 7px; border-radius: 30px; }
+  .pc .pc-land-sec h2 { font-size: 23px; }
+  .pc-land-sec { padding-top: 44px; }
+  .pc-land-cta { flex-wrap: wrap; }
+  .pc-land-cta img { display: none; }
+  .pc-land-cta .pc-btn { width: 100%; }
+  .pc-hd-login { display: none; }
+}
+.pc-logo, .pc-nav a, .pc-hd .pc-btn { white-space: nowrap; }
+@media (max-width: 560px) {
+  .pc-hd { gap: 12px; padding: 0 14px; }
+  .pc-logo { font-size: 16px; }
+  .pc-nav { gap: 12px; font-size: 13.5px; }
+  .pc-hd .pc-btn { padding: 0 10px; font-size: 13px; }
+  .pc-hd .pc-btn svg { display: none; }
+}
+
+/* 기관 가입 신청 단계 (2026-11-12) */
+.pc-card.pc-sign { width: 560px; padding: 28px 32px 30px; }
+.pc-sign-steps { list-style: none; margin: 0 0 4px; padding: 0; display: flex; gap: 6px; }
+.pc-sign-steps li { flex: 1; border-top: 3px solid #e1e3df; padding-top: 7px; font-size: 12.5px; font-weight: 700; color: #9aa19c; }
+.pc-sign-steps li.done { border-color: #9cc3ad; color: var(--pc-g); }
+.pc-sign-steps li.on { border-color: var(--pc-g); color: var(--pc-g); }
+.pc-sign-body { display: flex; flex-direction: column; gap: 14px; animation: pc-step .25s ease-out; }
+.pc-sign-body h1 { font-size: 23px; line-height: 1.35; margin: 6px 0 2px; }
+@keyframes pc-step { from { opacity: 0; transform: translateX(14px); } }
+.pc-agree { display: flex; align-items: center; gap: 8px; }
+.pc-agree label { flex: 1; display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 9px 2px; line-height: 1.45; }
+.pc-agree label .pc-cb { margin-top: 2px; flex: none; }
+.pc-agree em { font-style: normal; font-weight: 800; font-size: 12px; color: var(--pc-g); margin-right: 6px; }
+.pc-agree.all { border: 1.5px solid var(--pc-g); background: var(--pc-gs); border-radius: 10px; padding: 13px 14px; gap: 10px; cursor: pointer; font-size: 15.5px; }
+.pc-agree-list { display: flex; flex-direction: column; border-bottom: 1px solid var(--pc-line2); }
+.pc-agree-list .pc-agree { border-top: 1px solid var(--pc-line2); }
+.pc-agree-list .pc-agree:first-child { border-top: 0; }
+.pc-more-link { border: 0; background: none; color: var(--pc-mu); font-size: 13px; padding: 4px; white-space: nowrap; }
+.pc-sign-nav { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 6px; }
+.pc-hint { font-size: 12.5px; color: var(--pc-g); font-weight: 600; margin-top: -8px !important; }
+.pc-hint.bad { color: var(--pc-red); }
+.pc-sign-body.done { align-items: center; text-align: center; }
+.pc-sign-mark { width: 64px; height: 64px; border-radius: 50%; background: var(--pc-gs); color: var(--pc-g); display: grid; place-items: center; margin-top: 10px; }
+.pc-chips button[role="radio"] { height: 34px; }
+@media (max-width: 900px) { .pc-card.pc-sign { width: 100%; padding: 22px 18px; } .pc-sign-steps li { font-size: 11.5px; } }
