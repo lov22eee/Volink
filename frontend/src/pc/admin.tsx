@@ -6,11 +6,13 @@ import type { ReactNode } from 'react'
 import { api, ApiError, apiBlob } from '../api'
 import type { LiveActivity, PlaceInfo, User } from '../api'
 import { PlaceEditor } from '../App'
+import { AdminDocs } from './docs'
+import type { OrgDoc } from './docs'
 import { ago, hoursSince, Loading, Logo, Panel, PcIcon, minutesWord, when } from './ui'
 
 type Report = { id: number; targetType: string; targetId: number; reason: string; reasonLabel: string; description: string; status: string; createdAt: string; summary: string; sameTarget: number; warnings: number; evidence: number[] }
 type Appeal = { id: number; kind: string; reasonLabel: string; reason: string; status: string; hostNote: string | null; submittedAt: string; name: string; subject: string; checkInMethod: string | null; sanctionType: string | null }
-type Org = { id: number; name: string; orgType?: string | null; contact: string; address?: string | null; vmsRegistered?: boolean | null; vmsCode?: string | null; managerName: string; managerEmail: string; requestedAt: string }
+type Org = { id: number; name: string; orgType?: string | null; contact: string; address?: string | null; vmsRegistered?: boolean | null; vmsCode?: string | null; managerName: string; managerEmail: string; requestedAt: string; documents?: OrgDoc[] }
 type Review = { userId: number; name: string; steps: number; lastAt: string }
 type Item = { key: string; kind: 'REPORT' | 'APPEAL' | 'ACTIVITY' | 'ORG' | 'COMMUNITY'; title: string; sub: string; at: string | null; report?: Report; appeal?: Appeal; activity?: LiveActivity; org?: Org; review?: Review }
 type Action = { id: number; at: string; admin: string; targetType: string; targetId: number; action: string; reason: string; targetName: string | null }
@@ -76,7 +78,7 @@ function useQueue(): QueueState {
       for (const a of ready) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : ''}`, at: a.submittedAt, appeal: a })
       for (const a of activities) list.push({ key: 'v' + a.id, kind: 'ACTIVITY', title: a.title, sub: `검토 사유 · ${a.riskReasons || '확인 필요'}`, at: null, activity: a })
       for (const c of reviews) list.push({ key: 'c' + c.userId, kind: 'COMMUNITY', title: c.name, sub: `1년 안 신고 인정 ${c.steps}회 · 커뮤니티 이용 정지 검토`, at: c.lastAt, review: c })
-      for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청`, at: o.requestedAt, org: o })
+      for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청${o.documents?.length ? ` · 서류 ${o.documents.length}개` : ''}`, at: o.requestedAt, org: o })
       list.sort((x, y) => (x.at ?? '9').localeCompare(y.at ?? '9'))
       setItems(list)
     } catch { setFailed(true); setItems([]) }
@@ -251,6 +253,7 @@ function Case({ item, position, onDone, onClose }: { item: Item; position: strin
     <div><h3>기관 정보</h3><div className="pc-kv"><span>기관명</span><b>{o.name}</b></div><div className="pc-kv"><span>유형</span><b>{o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '-'}</b></div>
       <div className="pc-kv"><span>연락처</span><b>{o.contact}</b></div><div className="pc-kv"><span>주소</span><b>{o.address || '-'}</b></div><div className="pc-kv"><span>1365 수요처</span><b>{o.vmsRegistered ? '등록됨' + (o.vmsCode ? ` (${o.vmsCode})` : '') : o.vmsRegistered === false ? '아님' : '-'}</b></div></div>
     <div><h3>담당자</h3><div className="pc-kv"><span>이름</span><b>{o.managerName}</b></div><div className="pc-kv"><span>이메일</span><b>{o.managerEmail}</b></div><div className="pc-kv"><span>신청</span><b>{o.requestedAt}</b></div></div>
+    <AdminDocs docs={o.documents ?? []} />
   </>
   const effect = r && pickNow !== 'DISMISS' ? `인정하면 작성자는 1년 안 인정 ${r.warnings + 1}회로 ${ladder[Math.min(6, r.warnings + 1)]} 단계가 돼요. 봉사 신청은 막지 않아요.`
     : c ? (pickNow === 'STOP' ? '정지하면 기간 없이 글·댓글·모집글을 쓸 수 없어요. 봉사 신청·참여는 그대로이고, 본인은 이의 신청할 수 있어요.' : '지금 걸린 30일 제한만 유지해요. 다음 신고가 인정되면 다시 검토해요.')

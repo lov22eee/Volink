@@ -1,10 +1,11 @@
 // PC 공개 화면 (2026-11-11): 봉사 찾기 (no login), a post's page (also what a shared link opens), login, 기관 가입,
 // and the page a personal account sees (Volink is used in the app).
-import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
-import { api, ApiError, login } from '../api'
+import { useEffect, useState } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import { api, ApiError, login, uploadFile } from '../api'
 import type { LiveActivity, User } from '../api'
-import { categories } from '../categories'
+import { DocPicker } from './docs'
+import type { OrgDoc } from './docs'
 import { AppQr, appUrl, Loading, Logo, PcIcon, PublicFooter, PublicHeader, minutesWord, when } from './ui'
 
 const left = (a: LiveActivity) => Math.max(0, a.capacity - a.confirmed)
@@ -16,60 +17,70 @@ function seatTag(a: LiveActivity) {
   return <span className="pc-tag g">{left(a)}자리 남음</span>
 }
 
-const coverOf: Record<string, string> = { 환경: 'environment', 교육: 'education', 복지: 'welfare', '문화·예술': 'culture', 동물: 'animal', 지역사회: 'community', 기타: 'community' }
-const cover = (category: string) => '/covers/' + (coverOf[category] ?? 'community') + '.jpg'
-
 /** The app download: QR for a phone camera next to the button (the APK file on this server). */
 export function AppGet() {
   return <div className="pc-get"><AppQr size={116} /><div><b>휴대폰 카메라로 찍어 앱 받기</b><span>안드로이드 · 무료</span>
     <a className="pc-btn lg" href={appUrl()}><PcIcon name="download" size={17} />앱 받기</a></div></div>
 }
 
-const features: [Parameters<typeof PcIcon>[0]['name'], string, string][] = [
-  ['pin', '내 주변 봉사 찾기', '지도·날짜·분야로 찾고 바로 신청해요. 자리가 없으면 대기 신청'],
-  ['qr', '현장 QR 출석', '30초마다 바뀌는 QR과 위치 확인으로 출석하고 기록이 쌓여요'],
-  ['record', '1365 실적 한곳에', '1365 신청·실적과 실적확인서를 모아 함께한 시간을 봐요'],
-  ['chat', '봉사 커뮤니티', '후기·질문·홍보로 이웃과 봉사 경험을 나눠요'],
-]
+/** A screen of the app in a phone frame (real phone proportions, 390×844). */
+function Phone({ src, label, className }: { src: string; label: string; className?: string }) {
+  return <img className={'pc-shot' + (className ? ' ' + className : '')} src={src} alt={label} loading="lazy" width={390} height={844} />
+}
 
-export function PublicHome({ user, onSignOut }: { user: User | null; onSignOut: () => void }) {
-  const [list, setList] = useState<LiveActivity[] | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [field, setField] = useState('')
-  const [weekend, setWeekend] = useState(false)
-  const [all, setAll] = useState(false)
-  useEffect(() => { api<LiveActivity[]>('/api/activities').then(setList).catch(() => { setList([]); setFailed(true) }) }, [])
-  const shown = useMemo(() => (list ?? []).filter(a => {
-    if (field && a.category !== field) return false
-    if (weekend) { const day = new Date(a.date + 'T12:00:00+09:00').getUTCDay(); if (day !== 0 && day !== 6) return false }
-    return true
-  }), [list, field, weekend])
+/** Elements with .pc-rv fade up one by one as they come into view. */
+function useReveal() {
+  useEffect(() => {
+    const items = Array.from(document.querySelectorAll<HTMLElement>('.pc-rv'))
+    if (!('IntersectionObserver' in window)) { items.forEach(el => el.classList.add('in')); return }
+    const seen = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (entry.isIntersecting) { entry.target.classList.add('in'); seen.unobserve(entry.target) }
+    }), { rootMargin: '0px 0px -12% 0px', threshold: 0.12 })
+    items.forEach(el => seen.observe(el))
+    return () => seen.disconnect()
+  }, [])
+}
+
+const features: { tag: string; title: string[]; text: string; chips: string[]; shot: string; label: string }[] = [
+  { tag: '01 · 찾기·신청', title: ['내 주변 봉사를', '찾고 바로 신청해요'], text: '지도와 날짜·분야로 가까운 모집을 찾아요. 자리가 없으면 대기 신청하고, 자리가 나면 알림으로 알려 드려요.', chips: ['내 주변', '이번 주말', '처음 환영', '대기 신청'], shot: '/pc/app-detail.jpg', label: '모집글 화면' },
+  { tag: '02 · 일정·출석', title: ['신청한 일정은 달력으로,', '출석은 현장 QR로'], text: '모집자가 출석을 열면 알림이 와요. 30초마다 바뀌는 QR과 위치 확인으로 출석하고, 끝나면 활동 기록이 남아요.', chips: ['일정 달력', '하루 전 알림', 'QR 출석'], shot: '/pc/app-mine.jpg', label: '내 활동 달력 화면' },
+  { tag: '03 · 기록', title: ['1365 실적과 Volink 활동을', '한곳에서 봐요'], text: '1365 실적을 가져오거나 실적확인서를 스캔해 함께한 시간을 모아요. 1365 공식 실적과 Volink 활동은 따로 구분해 보여 줘요.', chips: ['1365 가져오기', '확인서 스캔', '함께한 시간'], shot: '/pc/app-my.jpg', label: '마이 화면' },
+  { tag: '04 · 커뮤니티', title: ['봉사 경험을', '이웃과 나눠요'], text: '후기·질문·봉사 홍보로 이야기를 나누고, 함께한 활동을 카드로 붙여 소개해요.', chips: ['봉사 후기', '질문', '봉사 홍보'], shot: '/pc/app-community.jpg', label: '커뮤니티 화면' },
+]
+const steps: [string, string][] = [['앱 받기', 'QR을 찍거나 [앱 받기]를 눌러 설치해요'], ['가입하기', '이메일·카카오·구글로 가입하고 관심 분야를 골라요'], ['신청하기', '마음에 드는 봉사를 찾아 신청하면 확정 알림이 와요']]
+
+/** The first page: what the app does, how to start, and the way in for 기관. No list of posts (shared links open #/activity/{id}). */
+export function PublicHome({ user, onSignOut, to }: { user: User | null; onSignOut: () => void; to?: string | null }) {
+  useReveal()
+  // Opened from a menu item on another page (#/?to=how): go to that part.
+  useEffect(() => {
+    if (!to) return
+    const t = window.setTimeout(() => document.getElementById('pc-' + to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
+    return () => window.clearTimeout(t)
+  }, [to])
   return <div className="pc">
-    <PublicHeader user={user} current="find" onSignOut={onSignOut} />
-    <section className="pc-land-hero"><div className="pc-wrap">
-      <div className="pc-land-copy">
+    <PublicHeader user={user} current="home" onSignOut={onSignOut} />
+    <section className="pc-land-hero" id="pc-about"><div className="pc-wrap">
+      <div className="pc-land-copy pc-rv">
         <h1>우리 동네 봉사,<br />찾고 신청하고 기록까지<br />앱 하나로</h1>
         <p>가까운 모집을 찾아 신청하고, 현장에서 QR로 출석하고,<br />1365 실적까지 한곳에서 챙겨요.</p>
         <AppGet />
       </div>
-      <div className="pc-land-phones" aria-hidden="true"><img src="/pc/app-detail.jpg" alt="" /><img src="/pc/app-mine.jpg" alt="" /></div>
+      <div className="pc-land-phones pc-rv" style={{ transitionDelay: '.12s' }}><Phone src="/pc/app-open.jpg" label="모집글 화면" /><Phone src="/pc/app-my.jpg" label="마이 화면" /></div>
     </div></section>
-    <section className="pc-wrap pc-land-sec" id="pc-about"><h2>Volink로 할 수 있는 것</h2>
-      <div className="pc-feat">{features.map(([icon, title, text]) => <div key={title}><span><PcIcon name={icon} size={22} /></span><b>{title}</b><p>{text}</p></div>)}</div>
+    <section className="pc-wrap pc-land-sec" aria-label="Volink로 할 수 있는 것">
+      <div className="pc-land-h pc-rv"><h2>Volink로 할 수 있는 것</h2><p>봉사를 찾는 순간부터 기록이 남을 때까지</p></div>
+      {features.map((f, i) => <article key={f.tag} className={'pc-row pc-rv' + (i % 2 ? ' flip' : '')}>
+        <div className="t"><small>{f.tag}</small><h3>{f.title[0]}<br />{f.title[1]}</h3><p>{f.text}</p><ul>{f.chips.map(c => <li key={c}>{c}</li>)}</ul></div>
+        <Phone src={f.shot} label={f.label} />
+      </article>)}
     </section>
-    <section className="pc-wrap pc-land-sec" aria-label="지금 모집 중">
-      <div className="pc-land-h"><h2>지금 모집 중</h2>{list && list.length > 0 && <small>{list.length}개</small>}</div>
-      <div className="pc-chips" role="group" aria-label="분야">{['', ...categories].map(c => <button key={c || 'all'} type="button" aria-pressed={field === c} onClick={() => setField(c)}>{c || '전체'}</button>)}
-        <button type="button" aria-pressed={weekend} onClick={() => setWeekend(v => !v)}>이번 주말</button></div>
-      {list === null ? <Loading /> : failed ? <p className="pc-land-empty">모집 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
-        : shown.length === 0 ? <p className="pc-land-empty">{list.length ? '조건에 맞는 모집이 없어요.' : '지금 모집 중인 활동이 없어요. 앱에서 새 모집 알림을 받아 보세요.'}</p>
-        : <><div className="pc-cards">{(all ? shown : shown.slice(0, 8)).map(a => <a key={a.id} className="pc-acard" href={'#/activity/' + a.id}>
-            <span className="im" style={{ backgroundImage: `url(${cover(a.category)})` }} />
-            <span className="t"><small>{a.category}{a.activityType === 'INSTITUTION' && a.organizationName ? ' · ' + a.organizationName : ''}</small><b>{a.title}</b>
-              <span>{when(a.date, a.startTime)} · {a.placeName ?? '장소 미정'}</span>{seatTag(a)}</span></a>)}</div>
-          {!all && shown.length > 8 && <button type="button" className="pc-btn line pc-more" onClick={() => setAll(true)}>{shown.length - 8}개 더 보기</button>}</>}
+    <section className="pc-wrap pc-land-sec" id="pc-how" aria-label="이렇게 시작해요">
+      <div className="pc-land-h pc-rv"><h2>이렇게 시작해요</h2><p>3분이면 첫 신청까지</p></div>
+      <div className="pc-steps3 big">{steps.map(([t, d], i) => <div key={t} className="pc-rv" style={{ transitionDelay: i * 0.1 + 's' }}><i>{i + 1}</i><b>{t}</b><span>{d}</span></div>)}</div>
+      <div className="pc-land-cta pc-rv"><AppQr size={92} /><div><b>지금 Volink 앱을 받아 보세요</b><span>안드로이드 · 무료</span></div><a className="pc-btn lg" href={appUrl()}><PcIcon name="download" size={17} />앱 받기</a></div>
     </section>
-    <section className="pc-land-org"><div className="pc-wrap"><div><h2>봉사자를 모집하는 기관이세요?</h2><p>기관센터에서 모집글을 올리고 신청자·출석·기록을 PC로 관리하세요.</p></div>
+    <section className="pc-land-org" id="pc-org" aria-label="기관 안내"><div className="pc-wrap pc-rv"><div><h2>봉사자를 모집하는 기관이세요?</h2><p>기관센터에서 모집글을 올리고 신청자·출석·기록을 PC로 관리하세요.</p></div>
       <div className="pc-sp" /><a className="pc-btn lg light" href="#/org/signup">기관 가입 신청</a><a className="pc-btn lg ghost" href="#/org">기관 로그인</a></div></section>
     <PublicFooter />
   </div>
@@ -134,7 +145,7 @@ export function PublicDetail({ id, user, onSignOut }: { id: number; user: User |
         <button type="button" className="pc-btn line wide" onClick={() => { void navigator.clipboard?.writeText(window.location.href).then(() => setCopied(true)).catch(() => {}) }}><PcIcon name="link" />{copied ? '링크를 복사했어요' : '링크 복사'}</button>
       </aside>
     </main>
-  return <div className="pc"><PublicHeader user={user} current="find" onSignOut={onSignOut} />{body}<PublicFooter /></div>
+  return <div className="pc"><PublicHeader user={user} onSignOut={onSignOut} />{body}<PublicFooter /></div>
 }
 
 /** One login for 기관 and 운영자; the account decides where it goes. Personal members use the app. */
@@ -187,60 +198,119 @@ export function AppOnly({ user, onSignOut }: { user: User; onSignOut: () => void
 
 const orgTypes: [string, string][] = [['VOLUNTEER_CENTER', '자원봉사센터'], ['WELFARE', '복지관·복지시설'], ['SCHOOL', '학교·교육기관'], ['NONPROFIT', '비영리단체'], ['PUBLIC', '공공기관'], ['OTHER', '기타']]
 
+/** 기관 가입 동의 (같은 항목을 앱 기관 가입도 받아요). The last value is the short text shown by [보기]. */
+const orgTerms: [string, string | null][] = [
+  ['기관을 대표하는 담당자이며 만 14세 이상이에요', null],
+  ['Volink 이용약관에 동의해요', '기관 회원은 운영자 확인을 받은 뒤 기관 이름으로 봉사 모집글을 올리고 신청자·출석·완료를 관리할 수 있어요. 모집글에는 사실인 내용만 쓰고, 연락처·외부 연락 유도·위험한 활동을 올리지 않아요. 규칙을 어기면 글이 숨겨지거나 이용이 제한될 수 있어요.'],
+  ['개인정보 처리방침에 동의해요', '담당자 이름·이메일과 기관 연락처·주소·1365 수요처 번호를 기관 확인과 서비스 안내에 써요. 기관 연락처는 다른 회원에게 공개하지 않아요. 탈퇴하면 개인 정보는 지우고, 법으로 남겨야 하는 기록만 정해진 기간 동안 보관해요.'],
+  ['기관 정보가 사실이고, 관리자 확인에 동의해요', null],
+  ['Volink 활동은 공식 봉사실적·자원봉사 종합보험이 아님을 이해해요', 'Volink 활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않아요. 1365 실적이 필요한 활동은 1365에도 등록하고, 참여자가 1365에서 신청하도록 안내해 주세요.'],
+]
+const signSteps = ['약관 동의', '기관 정보', '담당자 계정', '신청 완료']
+
+/** 기관 가입 신청 (2026-11-12): 약관 동의 → 기관 정보 → 담당자 계정 → 신청 완료, one step at a time. */
 export function OrgSignup({ onSession }: { onSession: (user: User) => void }) {
+  const [step, setStep] = useState(0)
+  const [agreed, setAgreed] = useState(orgTerms.map(() => false))
+  const [reading, setReading] = useState<number | null>(null)
+  const [f, setF] = useState({ organizationType: '', organization: '', organizationContact: '', vmsCode: '', address: '', name: '', email: '', password: '', passwordConfirm: '' })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const d = new FormData(event.currentTarget)
-    const v = (k: string) => String(d.get(k) ?? '').trim()
+  const [docFiles, setDocFiles] = useState<File[]>([])
+  const [sent, setSent] = useState<{ ok: OrgDoc[]; failed: string[] }>({ ok: [], failed: [] })
+  const set = (k: keyof typeof f) => (value: string) => { setF(old => ({ ...old, [k]: value })); setErrors(old => { const next = { ...old }; delete next[k]; return next }) }
+  const go = (n: number) => { setStep(n); setMessage(''); window.scrollTo(0, 0) }
+  function checkOrg() {
     const found: Record<string, string> = {}
-    if (!v('organizationType')) found.organizationType = '기관 유형을 골라 주세요.'
-    if (v('organization').length < 2) found.organization = '기관명을 입력해 주세요.'
-    if (!/^[0-9-]{9,20}$/.test(v('organizationContact'))) found.organizationContact = '연락처는 숫자와 - 로 입력해 주세요.'
-    if (!v('name')) found.name = '담당자 이름을 입력해 주세요.'
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v('email'))) found.email = '이메일 형식을 확인해 주세요.'
-    if (String(d.get('password')) !== String(d.get('passwordConfirm'))) found.passwordConfirm = '비밀번호가 서로 달라요.'
-    if (!d.get('notice')) found.notice = '안내를 확인해 주세요.'
+    if (!f.organizationType) found.organizationType = '기관 유형을 골라 주세요.'
+    if (f.organization.trim().length < 2) found.organization = '기관명을 입력해 주세요.'
+    if (!/^[0-9-]{9,20}$/.test(f.organizationContact.trim())) found.organizationContact = '연락처는 숫자와 - 로 입력해 주세요.'
+    setErrors(found)
+    if (!Object.keys(found).length) go(2)
+  }
+  const pwOk = f.password.length >= 8 && /[A-Za-z]/.test(f.password) && /\d/.test(f.password)
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    const found: Record<string, string> = {}
+    if (!f.name.trim()) found.name = '담당자 이름을 입력해 주세요.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) found.email = '이메일 형식을 확인해 주세요.'
+    if (!pwOk) found.password = '영문과 숫자를 섞어 8자 이상으로 만들어 주세요.'
+    if (f.password !== f.passwordConfirm) found.passwordConfirm = '비밀번호가 서로 달라요.'
     setErrors(found)
     if (Object.keys(found).length) return
     setBusy(true); setMessage('')
     try {
-      await api('/api/auth/signup', 'POST', { memberType: 'INSTITUTION', name: v('name'), email: v('email'), password: String(d.get('password')), interests: [],
-        organizationName: v('organization'), organizationContact: v('organizationContact'), organizationType: v('organizationType'), organizationAddress: v('address') || null,
-        vmsRegistered: Boolean(v('vmsCode')), vmsCode: v('vmsCode') || null, agreedNotice: true })
-      onSession(await login(v('email'), String(d.get('password'))))
-      window.location.replace('#/org')
+      await api('/api/auth/signup', 'POST', { memberType: 'INSTITUTION', name: f.name.trim(), email: f.email.trim(), password: f.password, interests: [],
+        organizationName: f.organization.trim(), organizationContact: f.organizationContact.trim(), organizationType: f.organizationType, organizationAddress: f.address.trim() || null,
+        vmsRegistered: Boolean(f.vmsCode.trim()), vmsCode: f.vmsCode.trim() || null, agreedNotice: true })
+      onSession(await login(f.email.trim(), f.password))
+      // 확인 서류 (선택): sent after the account exists; one that fails can be added again on 심사 현황.
+      const ok: OrgDoc[] = [], failed: string[] = []
+      for (const file of docFiles) { try { ok.push(await uploadFile<OrgDoc>('/api/me/organization/documents', file)) } catch { failed.push(file.name) } }
+      setSent({ ok, failed })
+      go(3)
     } catch (cause) {
-      if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) setErrors(cause.fieldErrors)
-      else setMessage(cause instanceof Error ? cause.message : '가입하지 못했어요.')
+      if (cause instanceof ApiError && Object.keys(cause.fieldErrors).length) {
+        const map: Record<string, string> = { organizationName: 'organization', organizationAddress: 'address' }
+        const next = Object.fromEntries(Object.entries(cause.fieldErrors).map(([k, v]) => [map[k] ?? k, v]))
+        setErrors(next)
+        if (['organizationType', 'organization', 'organizationContact', 'vmsCode', 'address'].some(k => next[k])) go(1)
+      } else setMessage(cause instanceof Error ? cause.message : '가입하지 못했어요.')
     } finally { setBusy(false) }
   }
   const err = (k: string) => errors[k] ? <em role="alert">{errors[k]}</em> : null
   const cls = (k: string) => 'pc-in' + (errors[k] ? ' bad' : '')
-  return <div className="pc"><header className="pc-hd"><a className="pc-logo" href="#/"><i><PcIcon name="leaf" size={14} /></i>volink<em>기관센터</em></a><div className="pc-sp" /><span className="mu">이미 계정이 있나요? <a className="pc-link" href="#/login">로그인</a></span></header>
-    <div className="pc-center"><form className="pc-pn pc-card wide" onSubmit={submit} noValidate>
-      <h1>기관 가입 신청</h1><p className="mu" style={{ marginTop: -6 }}>운영자가 기관 정보를 확인한 뒤 모집을 시작할 수 있어요. 보통 1~2일 걸려요.</p>
-      <h2 style={{ marginTop: 6 }}>기관 정보</h2>
-      <div className="pc-two">
-        <label className="pc-f"><span>기관 유형</span><select className={cls('organizationType')} name="organizationType" defaultValue=""><option value="" disabled>선택</option>{orgTypes.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>{err('organizationType')}</label>
-        <label className="pc-f"><span>기관명</span><input className={cls('organization')} name="organization" maxLength={100} />{err('organization')}</label>
-        <label className="pc-f"><span>대표 연락처</span><input className={cls('organizationContact')} name="organizationContact" type="tel" maxLength={20} placeholder="031-000-0000" />{err('organizationContact')}</label>
-        <label className="pc-f"><span>1365 수요처 번호 <small>(있으면)</small></span><input className={cls('vmsCode')} name="vmsCode" maxLength={30} />{err('vmsCode')}</label>
-      </div>
-      <label className="pc-f"><span>주소 <small>(선택)</small></span><input className={cls('organizationAddress')} name="address" maxLength={200} />{err('organizationAddress')}</label>
-      <h2 style={{ marginTop: 6 }}>담당자 계정</h2>
-      <div className="pc-two">
-        <label className="pc-f"><span>담당자 이름</span><input className={cls('name')} name="name" maxLength={40} autoComplete="name" />{err('name')}</label>
-        <label className="pc-f"><span>이메일</span><input className={cls('email')} name="email" type="email" autoComplete="email" />{err('email')}</label>
-        <label className="pc-f"><span>비밀번호 <small>영문·숫자 8자 이상</small></span><input className={cls('password')} name="password" type="password" autoComplete="new-password" />{err('password')}</label>
-        <label className="pc-f"><span>비밀번호 확인</span><input className={cls('passwordConfirm')} name="passwordConfirm" type="password" autoComplete="new-password" />{err('passwordConfirm')}</label>
-      </div>
-      <label className="pc-check"><input type="checkbox" name="notice" className="pc-cb" /><span>Volink 활동 기록은 공식 봉사실적으로 인정되지 않으며 자원봉사 종합보험이 적용되지 않음을 확인합니다. 기관 연락처는 다른 회원에게 공개하지 않습니다.</span></label>{err('notice')}
-      {message && <p className="pc-err" role="alert" style={{ margin: 0 }}>{message}</p>}
-      <button className="pc-btn lg" disabled={busy}>{busy ? '보내는 중…' : '가입 신청하기'}</button>
-    </form></div></div>
+  const input = (k: keyof typeof f, label: ReactNode, props: Record<string, unknown> = {}) =>
+    <label className="pc-f"><span>{label}</span><input className={cls(k)} value={f[k]} onChange={e => set(k)(e.target.value)} {...props} />{err(k)}</label>
+  const all = agreed.every(Boolean)
+  return <div className="pc"><header className="pc-hd"><a className="pc-logo" href="#/"><i><PcIcon name="leaf" size={14} /></i>volink<em>기관센터</em></a><div className="pc-sp" /><span className="mu">이미 계정이 있나요? <a className="pc-link" href="#/org">기관 로그인</a></span></header>
+    <div className="pc-center"><div className="pc-pn pc-card pc-sign">
+      <ol className="pc-sign-steps" aria-label="가입 단계">{signSteps.map((t, i) => <li key={t} className={i < step ? 'done' : i === step ? 'on' : ''} aria-current={i === step ? 'step' : undefined}>{t}</li>)}</ol>
+      {step === 0 && <div className="pc-sign-body" key="terms">
+        <h1>기관 가입을 위해<br />약관에 동의해 주세요</h1>
+        <label className="pc-agree all"><input type="checkbox" className="pc-cb" checked={all} onChange={e => setAgreed(orgTerms.map(() => e.target.checked))} /><b>전체 동의하기</b></label>
+        <div className="pc-agree-list">{orgTerms.map(([text, more], i) => <div key={text} className="pc-agree">
+          <label><input type="checkbox" className="pc-cb" checked={agreed[i]} onChange={e => setAgreed(old => old.map((v, k) => k === i ? e.target.checked : v))} /><span><em>필수</em>{text}</span></label>
+          {more && <button type="button" className="pc-more-link" onClick={() => setReading(i)} aria-label={text + ' 보기'}>보기 ›</button>}</div>)}</div>
+        <button type="button" className="pc-btn lg wide" disabled={!all} onClick={() => go(1)}>동의하고 계속</button>
+      </div>}
+      {step === 1 && <form className="pc-sign-body" key="org" noValidate onSubmit={e => { e.preventDefault(); checkOrg() }}>
+        <h1>어떤 기관인가요?</h1>
+        <div className="pc-f"><span id="org-type">기관 유형</span><div className="pc-chips" role="radiogroup" aria-labelledby="org-type">{orgTypes.map(([k, t]) =>
+          <button key={k} type="button" role="radio" aria-checked={f.organizationType === k} aria-pressed={f.organizationType === k} onClick={() => set('organizationType')(k)}>{t}</button>)}</div>{err('organizationType')}</div>
+        {input('organization', '기관명', { maxLength: 100 })}
+        <div className="pc-two">{input('organizationContact', '대표 연락처', { type: 'tel', maxLength: 20, placeholder: '031-000-0000' })}
+          {input('vmsCode', <>1365 수요처 번호 <small>(있으면)</small></>, { maxLength: 30 })}</div>
+        {input('address', <>주소 <small>(선택)</small></>, { maxLength: 200 })}
+        <DocPicker files={docFiles} onChange={setDocFiles} />
+        <div className="pc-sign-nav"><button type="button" className="pc-btn lg line" onClick={() => go(0)}>이전</button><button className="pc-btn lg">다음</button></div>
+      </form>}
+      {step === 2 && <form className="pc-sign-body" key="account" noValidate onSubmit={submit}>
+        <h1>로그인할 담당자 계정을<br />만들어 주세요</h1>
+        {input('name', '담당자 이름', { maxLength: 40, autoComplete: 'name' })}
+        {input('email', <>이메일 <small>(로그인 아이디)</small></>, { type: 'email', autoComplete: 'email' })}
+        <div className="pc-two">{input('password', <>비밀번호 <small>영문·숫자 8자 이상</small></>, { type: 'password', autoComplete: 'new-password' })}
+          {input('passwordConfirm', '비밀번호 확인', { type: 'password', autoComplete: 'new-password' })}</div>
+        {f.passwordConfirm && !errors.passwordConfirm && <p className={'pc-hint' + (f.password === f.passwordConfirm ? '' : ' bad')}>{f.password === f.passwordConfirm ? '비밀번호가 같아요' : '비밀번호가 서로 달라요'}</p>}
+        <div className="pc-q" style={{ fontSize: 13 }}><b>신청할 기관</b><br />{orgTypes.find(([k]) => k === f.organizationType)?.[1]} · {f.organization}<br />{f.organizationContact}{f.address ? ' · ' + f.address : ''}{f.vmsCode ? ' · 1365 수요처 ' + f.vmsCode : ''}{docFiles.length ? <><br />확인 서류 {docFiles.length}개</> : null}</div>
+        {message && <p className="pc-err" role="alert" style={{ margin: 0 }}>{message}</p>}
+        <div className="pc-sign-nav"><button type="button" className="pc-btn lg line" onClick={() => go(1)}>이전</button><button className="pc-btn lg" disabled={busy}>{busy ? '보내는 중…' : '가입 신청하기'}</button></div>
+      </form>}
+      {step === 3 && <div className="pc-sign-body done" key="done">
+        <span className="pc-sign-mark"><PcIcon name="check" size={30} /></span>
+        <h1>가입 신청을 받았어요</h1>
+        <p className="mu">운영자가 기관 정보를 확인하면 알림으로 알려 드려요. 보통 1~2일 걸려요.</p>
+        {sent.ok.length > 0 && <div className="pc-q pc-sent"><PcIcon name="check" size={16} />확인 서류 {sent.ok.length}개를 함께 보냈어요</div>}
+        {sent.failed.length > 0 && <p className="pc-err" role="alert" style={{ margin: 0, alignSelf: 'stretch' }}>{sent.failed.join(', ')}은(는) 올리지 못했어요. 기관센터의 심사 현황에서 다시 올려 주세요.</p>}
+        <div className="pc-steps" style={{ alignSelf: 'stretch', textAlign: 'left', margin: '6px 0 0 8px' }}><div><b>가입 신청</b><small>{f.organization}</small></div><div className="now"><b>운영자 확인 중</b><small>기관 정보 확인</small></div><div className="next"><b>모집 시작</b><small>기관센터에서 모집글 올리기</small></div></div>
+        <a className="pc-btn lg wide" href="#/org">기관센터로 가기</a>
+      </div>}
+    </div></div>
+    {reading !== null && <div className="pc-dim" onClick={() => setReading(null)}><div className="pc-pn pc-dialog" role="dialog" aria-label={orgTerms[reading][0]} onClick={e => e.stopPropagation()}>
+      <h2>{orgTerms[reading][0]}</h2><p style={{ lineHeight: 1.7, color: 'var(--pc-ink2)' }}>{orgTerms[reading][1]}</p>
+      <button type="button" className="pc-btn" onClick={() => { setAgreed(old => old.map((v, k) => k === reading ? true : v)); setReading(null) }}>동의하고 닫기</button></div></div>}
+  </div>
 }
 
 type OrgPageData = { id: number; name: string; orgType: string | null; address: string | null; intro: string | null; vmsRegistered: boolean | number | null
@@ -283,5 +353,5 @@ export function OrgPage({ id, user, onSignOut }: { id: number; user: User | null
         <button type="button" className="pc-btn line wide" onClick={() => { void navigator.clipboard?.writeText(window.location.href).then(() => setCopied(true)).catch(() => {}) }}><PcIcon name="link" />{copied ? '링크를 복사했어요' : '페이지 링크 복사'}</button>
       </aside>
     </main>
-  return <div className="pc"><PublicHeader user={user} current="find" onSignOut={onSignOut} />{body}<PublicFooter /></div>
+  return <div className="pc"><PublicHeader user={user} onSignOut={onSignOut} />{body}<PublicFooter /></div>
 }

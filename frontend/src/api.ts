@@ -118,6 +118,18 @@ export async function uploadPhoto(file: Blob): Promise<{ id: number; url: string
   return parse(response)
 }
 
+/** 기관 확인 서류 (2026-11-12): one file (PDF·JPG·PNG) sent as it is, with its own name. */
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const go = () => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return fetch(server + path, { method: 'POST', body: form, headers: accessToken ? { Authorization: 'Bearer ' + accessToken } : {}, credentials: server ? 'omit' : 'same-origin' })
+  }
+  let response = await go()
+  if (response.status === 401 && accessToken && await refresh()) response = await go()
+  return parse(response)
+}
+
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response = await send(path, method, body, true)
   if (response.status === 401 && accessToken && !path.startsWith('/api/auth/')) {
