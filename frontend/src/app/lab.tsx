@@ -13,11 +13,25 @@ import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
 
-// 1365 로그인 유지 (2026-11-09, week 7): the 1365 login stays on this phone only (cookies in the app's 1365 window),
-// so the next 신청·가져오기 skips the login until 1365 itself ends it. On by default; 설정 › 실험실 turns it off or logs out.
-const KEEP = 'volink.1365.keep'
-export function keep1365() { try { return localStorage.getItem(KEEP) !== '0' } catch { return true } }
-export function setKeep1365(on: boolean) { try { localStorage.setItem(KEEP, on ? '1' : '0') } catch { /* stays on */ } if (!on) void logout1365() }
+// 1365 로그인 유지 (2026-11-09, week 7): the 1365 login stays on this phone only (cookies in the app's 1365 window).
+// 2026-11-12 (user decision, security): off until the person turns it on — asked in the 1365 신청 sheet, or 설정 › 실험실 —
+// and kept for 30 minutes after the 1365 window was last used; after that the next 1365 window starts logged out.
+const KEEP = 'volink.1365.keep', KEEP_AT = 'volink.1365.keepAt'
+export const KEEP_MINUTES = 30
+export function keep1365() { try { return localStorage.getItem(KEEP) === '1' } catch { return false } }
+export function setKeep1365(on: boolean) {
+  try { localStorage.setItem(KEEP, on ? '1' : '0'); if (!on) localStorage.removeItem(KEEP_AT) } catch { /* stays off */ }
+  if (!on) void logout1365()
+}
+/** The 1365 window, with 로그인 유지: a login older than 30 minutes (or kept while it was off) is cleared first. */
+async function open1365(options: Parameters<typeof lab.open>[0]) {
+  const keep = keep1365()
+  let fresh = false
+  try { fresh = keep && Date.now() - Number(localStorage.getItem(KEEP_AT) || 0) < KEEP_MINUTES * 60_000 } catch { /* not fresh */ }
+  if (!fresh) await logout1365()
+  try { return await lab.open({ ...options, keep }) }
+  finally { if (keep) { try { localStorage.setItem(KEEP_AT, String(Date.now())) } catch { /* not kept */ } } }
+}
 /** 1365 로그아웃 on this phone (설정, Volink 로그아웃·탈퇴). */
 export async function logout1365() { if (Capacitor.isNativePlatform()) { try { await lab.logout() } catch { /* an older app without it */ } } }
 /** The two 1365 pages (addresses from the user's phone, 2026-11-06): opened directly, so nobody has to find them in the menu. */
@@ -163,7 +177,7 @@ export async function applyIn1365(url: string): Promise<{ applied: boolean; text
   if (!Capacitor.isNativePlatform() || !url.startsWith('https://www.1365.go.kr/')) return null
   try {
     // Login first: the 신청 현황 page asks for it; once logged in the window goes to the program page by itself.
-    const out = await lab.open({ guide: '', target: 'P', url: PAGE_1365.A, next: PAGE_1365.A, program: url, keep: keep1365() })
+    const out = await open1365({ guide: '', target: 'P', url: PAGE_1365.A, next: PAGE_1365.A, program: url })
     const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
     return out.applied || texts.length ? { applied: Boolean(out.applied), texts } : null
   } catch { return null }
@@ -173,7 +187,7 @@ export async function applyIn1365(url: string): Promise<{ applied: boolean; text
 export async function read1365Applications(): Promise<string[] | null> {
   if (!Capacitor.isNativePlatform()) return null
   try {
-    const out = await lab.open({ guide: '로그인하면 ‘신청 현황’ 화면으로 바로 가요', step: LAB_STEP_BODY, target: 'A', url: PAGE_1365.A, keep: keep1365() })
+    const out = await open1365({ guide: '로그인하면 ‘신청 현황’ 화면으로 바로 가요', step: LAB_STEP_BODY, target: 'A', url: PAGE_1365.A })
     const texts = (out.texts ?? (out.text ? [out.text] : [])).filter(Boolean)
     return texts.length ? texts : null
   } catch { return null }
@@ -363,7 +377,7 @@ export function LabScreen({ go }: { go?: string; both?: boolean }) {
     // A안 (2026-11-08): only from the signup guide (#/lab1365?go=S&both=1) the 1365 window offers the other page too
     // after the first one (one login), so both may come back. 내 활동·마이 take just the one page asked for (user decision).
     try {
-      const got = await lab.open({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: offerOther ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined, keep: keep1365() })
+      const got = await open1365({ guide, step: LAB_STEP_BODY, target, url: PAGE_1365[target], other: offerOther ? PAGE_1365[target === 'S' ? 'A' : 'S'] : undefined })
       // 신청 현황만 다시 (after a partial visit): the 실적 already read stays; only the 신청 rows are added.
       if (target === 'A' && partial) { readMore(got.texts?.length ? got.texts : [got.text ?? '']); return }
       setVisitBoth(offerOther && target === 'S'); setPartial(Boolean(got.partial))

@@ -11,7 +11,7 @@ import { Capacitor } from '@capacitor/core'
 import { showToast } from '../App'
 import { AskSheet, MarkSheet, recordToCalendar } from './record'
 import type { ExternalRecord } from './record'
-import { applyIn1365, findApplied, read1365Applications, useExtMode } from './lab'
+import { applyIn1365, findApplied, keep1365, KEEP_MINUTES, read1365Applications, setKeep1365, useExtMode } from './lab'
 import { currentPosition, declined, decline, remember, remembered } from '../location'
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
@@ -390,6 +390,7 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
   // the app puts it in 내 활동 by itself. Otherwise (web, 직접 남기기) the 1365 page opens in the browser as before.
   const semi = Capacitor.isNativePlatform() && extMode === 'IMPORT' && program.link.startsWith('https://www.1365.go.kr/')
   const [consent, setConsent] = useState(false)
+  const [keep, setKeep] = useState(keep1365)
   const [done, setDone] = useState<ExternalRecord | null>(null)
   const [result, setResult] = useState<{ tone: 'unread' | 'missed'; program: Program } | null>(null)
   const period = (p: Program) => when1365(p) || p.organization
@@ -454,8 +455,12 @@ export function ProgramSheet({ program, onClose }: { program: Program; onClose: 
       <ul className="lab-consent">
         <li><MIcon name="lock" size={18} /><span><b>먼저 1365에 로그인해요</b><small>로그인하면 이 봉사 페이지로 바로 이동해요. 날짜·동의·[신청]은 직접 눌러 주세요</small></span></li>
         <li><MIcon name="record" size={18} /><span><b>신청이 끝나면 신청 내역만 가져와요</b><small>활동명·날짜·시간·상태만 내 활동에 넣어요</small></span></li>
-        <li><MIcon name="checkCircle" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>창을 닫으면 1365에서 로그아웃돼요</small></span></li>
+        <li><MIcon name="checkCircle" size={18} /><span><b>비밀번호는 Volink로 오지 않아요</b><small>{keep ? `마지막 사용 ${KEEP_MINUTES}분 뒤 1365에서 로그아웃돼요` : '창을 닫으면 1365에서 로그아웃돼요'}</small></span></li>
       </ul>
+      {/* 2026-11-12 (user decision): 로그인 유지 is the person's choice here, off until turned on; 설정 › 실험실 changes it too. */}
+      <button type="button" role="switch" aria-checked={keep} className="lab-keep" onClick={() => { setKeep1365(!keep); setKeep(!keep) }}>
+        <MIcon name="lock" size={20} /><span><b>1365 로그인 {KEEP_MINUTES}분 유지</b><small>{KEEP_MINUTES}분 안에 다시 신청하면 로그인하지 않아요 · 이 휴대폰에만</small></span>
+        <i className={'m-set-switch' + (keep ? ' on' : '')} aria-hidden="true" /></button>
     </Sheet>}
     {done && <Sheet title="신청 완료! 내 활동에 넣었어요" onClose={() => finish(false)}
       footer={<><button type="button" className="m-btn" onClick={() => finish(true)}>캘린더에 추가하기</button><button type="button" className="m-btn line" onClick={() => finish(false)}>추가하지 않을게요</button></>}>
