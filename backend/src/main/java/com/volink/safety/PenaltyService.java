@@ -34,19 +34,28 @@ public class PenaltyService {
 
     /** Throws 403 RESTRICTED while an APPLY (or ALL) limit runs; WRITE for 글·댓글; HOST (the WRITE limit) for opening a 모집글. */
     public void check(long userId, String what) {
-        // HOST (2026-11-12, user decision): a 모집글 is a public post too, so the 신고 2·3회 글쓰기 limit also stops opening one.
-        Map<String, Object> active = active(userId, "HOST".equals(what) ? "WRITE" : what);
+        Map<String, Object> active = active(userId, what);
         if (active == null) return;
         LocalDateTime until = (LocalDateTime) active.get("ends_at");
         String verb = "APPLY".equals(what) ? "신청할" : "HOST".equals(what) ? "모집글을 만들" : "글을 쓸";
-        throw new ApiException(HttpStatus.FORBIDDEN, "RESTRICTED", (until == null ? "지금은 " : DAY.format(until) + "까지 ") + verb + " 수 없어요. " + active.get("reason"));
+        throw new ApiException(HttpStatus.FORBIDDEN, "RESTRICTED", (until == null ? "지금은 " : when(until) + "까지 ") + verb + " 수 없어요. " + active.get("reason"));
     }
 
+    /**
+     * Which sanction scopes stop what (V39): APPLY ← APPLY·ALL; WRITE (글·댓글) ← WRITE·POST·ALL; HOST (모집글) ← POST·ALL.
+     * Report limits are WRITE or POST only, so 봉사 신청·참여 stays open whatever the reports (2026-11-12, user decision).
+     */
     private Map<String, Object> active(long userId, String what) {
+        String scopes = "APPLY".equals(what) ? "'APPLY', 'ALL'" : "HOST".equals(what) ? "'POST', 'ALL'" : "'WRITE', 'POST', 'ALL'";
         return jdbc.queryForList("""
                 SELECT id, type, scope, reason, starts_at, ends_at FROM sanctions
-                WHERE user_id = ? AND revoked_at IS NULL AND starts_at <= ? AND (ends_at IS NULL OR ends_at > ?) AND (scope = 'ALL' OR scope = ?)
-                ORDER BY ends_at DESC LIMIT 1""", userId, now(), now(), what).stream().findFirst().orElse(null);
+                WHERE user_id = ? AND revoked_at IS NULL AND starts_at <= ? AND (ends_at IS NULL OR ends_at > ?) AND scope IN (""" + scopes + """
+                ) ORDER BY ends_at IS NULL DESC, ends_at DESC LIMIT 1""", userId, now(), now()).stream().findFirst().orElse(null);
+    }
+
+    /** "11월 19일" for a day-long limit, "11월 13일 15:20" when it ends within a day or two (the 24시간 step). */
+    private String when(LocalDateTime until) {
+        return until.isBefore(now().plusDays(2)) ? DAY.format(until) + " " + String.format("%02d:%02d", until.getHour(), until.getMinute()) : DAY.format(until);
     }
 
     public int noShows(long userId) {
@@ -76,19 +85,79 @@ public class PenaltyService {
         }
     }
 
-    /** An admin accepted a report about this person: the next step of the ladder. */
+    /** Report steps counted over the last year (2026-11-12, user decision); a lifted one does not count. */
+    static final int REPORT_DAYS = 365, REVIEW_FROM = 6;
+    private static final int[] REPORT_HOURS = { 0, 0, 24, 7 * 24, 14 * 24, 30 * 24 };
+
+    public int reportSteps(long userId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM sanctions WHERE user_id = ? AND source = 'REPORT' AND revoked_at IS NULL AND starts_at > ?",
+                Integer.class, userId, now().minusDays(REPORT_DAYS));
+    }
+
+    /**
+     * An admin accepted a report about this person: the next step (within a year). Reports limit the community only —
+     * 1 경고 · 2 24시간 글·댓글 · 3 7일 · 4 14일 · 5 30일 글·댓글·모집글 · 6+ 30일 again and the admin's 할 일 gets
+     * 커뮤니티 이용 정지 검토 (no automatic indefinite stop). 봉사 신청·참여 is never limited by reports.
+     */
     public void afterReport(long userId, long reportId, long adminId, String why) {
-        int n = jdbc.queryForObject("SELECT COUNT(*) FROM sanctions WHERE user_id = ? AND source = 'REPORT' AND revoked_at IS NULL", Integer.class, userId) + 1;
+        int n = reportSteps(userId) + 1;
         LocalDateTime now = now();
-        String type = n == 1 ? "WARNING" : n == 2 ? "RESTRICTION" : "SUSPENSION";
-        String scope = n == 1 ? "NONE" : n == 2 ? "WRITE" : "ALL";
-        LocalDateTime until = n == 1 ? null : now.plusDays(n == 2 ? 7 : 30);
+        String type = n == 1 ? "WARNING" : "RESTRICTION";
+        String scope = n == 1 ? "NONE" : n == 2 ? "WRITE" : "POST";
+        LocalDateTime until = n == 1 ? null : now.plusHours(REPORT_HOURS[Math.min(n, 5)]);
         jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, report_id, starts_at, ends_at, created_by) VALUES (?, ?, ?, 'REPORT', ?, ?, ?, ?, ?)",
                 userId, type, scope, "신고 인정 " + n + "번 · " + why, reportId, now, until, adminId);
         notice(userId, "REPORT", Math.min(3, n), lastSanction(userId, "REPORT"), reportId, null);
-        String title = n == 1 ? "신고가 인정돼 경고를 받았어요" : n == 2 ? DAY.format(until) + "까지 글을 쓸 수 없어요" : DAY.format(until) + "까지 신청·글쓰기가 제한돼요";
-        String body = "사유: " + why + (n == 1 ? " · 한 번 더 인정되면 7일 동안 글을 쓸 수 없어요" : " · 잘못됐다면 7일 안에 이의 신청할 수 있어요");
+        String title = n == 1 ? "신고가 인정돼 경고를 받았어요" : n == 2 ? when(until) + "까지 글을 쓸 수 없어요" : when(until) + "까지 글과 모집글을 쓸 수 없어요";
+        String body = "사유: " + why + (n == 1 ? " · 한 번 더 인정되면 24시간 동안 글을 쓸 수 없어요" : " · 봉사 신청·참여는 그대로 할 수 있어요 · 잘못됐다면 7일 안에 이의 신청할 수 있어요");
         notifications.send(userId, "SANCTION", title, body, "#/my?view=status", null, "REPORT_SANCTION:" + reportId);
+    }
+
+    /**
+     * 커뮤니티 이용 정지 검토 (admin 할 일): people with 6 or more report steps within a year whom no admin has decided on since
+     * their last step, and who are not stopped already.
+     */
+    public List<Map<String, Object>> suspensionReviews() {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT u.id AS userId, COALESCE(u.community_nickname, u.display_name) AS name, COUNT(*) AS steps, MAX(s.starts_at) AS lastStep
+                FROM sanctions s JOIN users u ON u.id = s.user_id
+                WHERE s.source = 'REPORT' AND s.revoked_at IS NULL AND s.starts_at > ?
+                GROUP BY u.id, u.community_nickname, u.display_name
+                HAVING COUNT(*) >= ? ORDER BY MAX(s.starts_at)""", now().minusDays(REPORT_DAYS), REVIEW_FROM);
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            long user = ((Number) row.get("userId")).longValue();
+            LocalDateTime last = (LocalDateTime) row.get("lastStep");
+            boolean stopped = jdbc.queryForObject("SELECT COUNT(*) FROM sanctions WHERE user_id = ? AND type = 'SUSPENSION' AND ends_at IS NULL AND revoked_at IS NULL", Integer.class, user) > 0;
+            // admin_actions.created_at is a TIMESTAMP: compare in Korean time.
+            boolean decided = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM admin_actions WHERE target_type = 'USER' AND target_id = ? AND action IN ('COMMUNITY_STOP', 'COMMUNITY_KEEP')
+                      AND CONVERT_TZ(created_at, @@session.time_zone, '+09:00') >= ?""", Integer.class, user, last) > 0;
+            if (stopped || decided) continue;
+            row.put("lastAt", last.toString().replace('T', ' ').substring(0, 16));
+            row.remove("lastStep");
+            out.add(row);
+        }
+        return out;
+    }
+
+    /** The admin's decision: STOP = 커뮤니티 이용 정지 (no end, appealable, an admin can lift it), KEEP = the 30-day limit only. */
+    public Map<String, Object> decideSuspension(long adminId, long userId, String decision, String why) {
+        String reason = why == null ? "" : why.trim();
+        if (!List.of("STOP", "KEEP").contains(decision) || reason.isEmpty() || reason.length() > 500)
+            throw ApiException.validation(Map.of(reason.isEmpty() || reason.length() > 500 ? "reason" : "decision", reason.isEmpty() || reason.length() > 500 ? "처리 사유를 적어 주세요 (500자 이내)." : "처리 방법을 골라 주세요."));
+        if (suspensionReviews().stream().noneMatch(r -> ((Number) r.get("userId")).longValue() == userId))
+            throw new ApiException(HttpStatus.CONFLICT, "ALREADY_HANDLED", "이미 처리했거나 검토할 대상이 아니에요.");
+        if ("STOP".equals(decision)) {
+            jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, starts_at, ends_at, created_by) VALUES (?, 'SUSPENSION', 'POST', 'ADMIN', ?, ?, NULL, ?)",
+                    userId, "커뮤니티 이용 정지 · " + reason, now(), adminId);
+            notice(userId, "REPORT", 3, lastSanction(userId, "ADMIN"), null, null);
+            notifications.send(userId, "SANCTION", "커뮤니티 이용이 정지됐어요", "사유: " + reason + " · 봉사 신청·참여는 그대로 할 수 있어요 · 잘못됐다면 7일 안에 이의 신청할 수 있어요",
+                    "#/my?view=status", null, "COMMUNITY_STOP:" + userId + ":" + now());
+        }
+        jdbc.update("INSERT INTO admin_actions(admin_id, target_type, target_id, action, reason) VALUES (?, 'USER', ?, ?, ?)",
+                adminId, userId, "STOP".equals(decision) ? "COMMUNITY_STOP" : "COMMUNITY_KEEP", reason);
+        return Map.of("status", decision);
     }
 
     /** 마이 › 내 이용 상태: running limits, 90-day no-shows, warnings, and sanctions that can still be appealed. */
@@ -97,7 +166,8 @@ public class PenaltyService {
         out.put("noShows", noShows(userId));
         out.put("apply", limit(active(userId, "APPLY")));
         out.put("write", limit(active(userId, "WRITE")));
-        out.put("warnings", jdbc.queryForObject("SELECT COUNT(*) FROM sanctions WHERE user_id = ? AND source = 'REPORT' AND revoked_at IS NULL", Integer.class, userId));
+        out.put("host", limit(active(userId, "HOST")));
+        out.put("warnings", reportSteps(userId));
         List<Map<String, Object>> list = jdbc.queryForList("""
                 SELECT s.id, s.type, s.scope, s.source, s.reason, DATE_FORMAT(s.starts_at, '%Y-%m-%dT%H:%i') AS startsAt, DATE_FORMAT(s.ends_at, '%Y-%m-%dT%H:%i') AS endsAt,
                        s.revoked_at IS NOT NULL AS revoked, s.starts_at > ? AS appealable,

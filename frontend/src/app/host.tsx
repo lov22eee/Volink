@@ -63,13 +63,13 @@ type Saved = { kind: 'published' | 'review'; activity: LiveActivity }
 const stepOf: Record<string, number> = { title: 1, category: 1, difficulty: 1, placeKind: 1, activityType: 1, place: 2, meetingPoint: 2, date: 2, time: 2, duration: 2, supplies: 2, description: 2, capacity: 3, safety: 3 }
 
 /**
- * 신고 2·3회 글쓰기 제한 중에는 새 모집글도 못 만들어요 (2026-11-12, user decision; the server checks too): the limit is
+ * 신고 3회부터(7·14·30일·정지) 새 모집글도 못 만들어요 (2026-11-12, user decision; the server checks too): the limit is
  * said before the three steps, not after them. Editing an activity already open is not blocked.
  */
 export function CreateWizard(props: { user: User; from?: number; editId?: number }) {
   const status = useStatus()
-  if (!props.editId && status?.write) return <div className="m-screen"><TopBar title="모집 만들기" back="#/host" />
-    <div className="m-body"><Empty bare icon="alert" title={`${status.write.until ? md(status.write.until) + '까지 ' : ''}모집글을 만들 수 없어요`} text={status.write.reason}
+  if (!props.editId && status?.host) return <div className="m-screen"><TopBar title="모집 만들기" back="#/host" />
+    <div className="m-body"><Empty bare icon="alert" title={`${status.host.until ? md(status.host.until) + '까지 ' : ''}모집글을 만들 수 없어요`} text={status.host.reason}
       action={<a className="m-btn sm" href="#/my?view=status">내 이용 상태</a>} /></div></div>
   return <CreateForm {...props} />
 }

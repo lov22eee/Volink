@@ -872,7 +872,7 @@ test('경고 시트: an accepted report shows one sheet on the next screen; 확�
   await login(page, writer)
   const sheet = page.getByRole('alertdialog', { name: '경고를 받았어요' })
   await expect(sheet).toBeVisible()
-  await expect(sheet).toContainText('신고가 누적되면 이용이 제한돼요')
+  await expect(sheet).toContainText('신고가 누적되면 커뮤니티 이용이 제한돼요')
   const ok = sheet.getByRole('button', { name: '확인', exact: true })
   await expect(ok).toBeDisabled()
   // Tapping outside or Escape does not close it.
@@ -880,7 +880,7 @@ test('경고 시트: an accepted report shows one sheet on the next screen; 확�
   await expect(sheet).toBeVisible()
   await sheet.getByRole('button', { name: '자세히 보기' }).click()
   await expect(sheet).toContainText('경고 시트 확인용 글')
-  await expect(sheet).toContainText('한 번 더 인정되면 7일 동안 글을 쓸 수 없어요')
+  await expect(sheet).toContainText('한 번 더 인정되면 24시간 동안 글을 쓸 수 없어요')
   await sheet.getByText('확인했어요').click()
   await ok.click()
   await expect(sheet).toHaveCount(0)

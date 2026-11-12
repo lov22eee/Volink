@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -135,10 +136,45 @@ class Week7IntegrationTest extends ApiTestSupport {
         perform(post("/api/admin/reports/" + report2 + "/decision"), Map.of("decision", "ACCEPT", "hide", false, "reason", "도배"), admin).andExpect(status().isOk());
         perform(post("/api/community/posts"), Map.of("category", "FREE", "title", "다시 왔어요", "body", "안녕하세요 반가워요 모두"), writer)
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("RESTRICTED"));
-        mvc.perform(get("/api/me/status").header("Authorization", "Bearer " + writer)).andExpect(jsonPath("$.write.until").isNotEmpty()).andExpect(jsonPath("$.warnings").value(2));
-        // 2026-11-12 (user decision): the same limit stops opening a 모집글.
-        perform(post("/api/activities"), body(3), writer).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("RESTRICTED"))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("모집글을 만들 수 없어요")));
+        mvc.perform(get("/api/me/status").header("Authorization", "Bearer " + writer)).andExpect(jsonPath("$.write.until").isNotEmpty()).andExpect(jsonPath("$.host").isEmpty()).andExpect(jsonPath("$.warnings").value(2));
+        // 2026-11-12 (user decision): the 2nd step is 24 hours of 글·댓글 only — a 모집글 can still be opened.
+        assertThat(jdbc.queryForObject("SELECT TIMESTAMPDIFF(HOUR, starts_at, ends_at) FROM sanctions WHERE user_id = ? AND source = 'REPORT' AND scope = 'WRITE'", Integer.class, userId(writerEmail))).isEqualTo(24);
+        createActivity(body(3), writer);
+    }
+
+    @Test
+    void theReportLadderLimitsTheCommunityOnlyAndSixStepsGoToAnAdmin() throws Exception {
+        String writerEmail = member("GENERAL"), writer = token(writerEmail), reporter = token(member("GENERAL")), adminEmail = admin(), admin = token(adminEmail);
+        nickname(writer); nickname(reporter);
+        long user = userId(writerEmail), adminId = userId(adminEmail);
+        long post = json.readTree(perform(post("/api/community/posts"), Map.of("category", "FREE", "title", "사다리 확인", "body", "사다리 확인용 글이에요 반가워요"), writer)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        perform(post("/api/reports"), Map.of("targetType", "POST", "targetId", post, "reason", "SPAM"), reporter).andExpect(status().isOk());
+        long report = jdbc.queryForObject("SELECT id FROM reports WHERE target_type = 'POST' AND target_id = ?", Long.class, post);
+        // A step older than a year does not count.
+        jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, report_id, starts_at, ends_at, created_by) VALUES (?, 'WARNING', 'NONE', 'REPORT', '오래된 경고', ?, ?, NULL, ?)",
+                user, report, now().minusDays(400), adminId);
+        int[] hours = { 0, 24, 7 * 24, 14 * 24, 30 * 24, 30 * 24 };
+        String[] scopes = { "NONE", "WRITE", "POST", "POST", "POST", "POST" };
+        for (int i = 0; i < 6; i++) {
+            penalties.afterReport(user, report, adminId, "도배");
+            Map<String, Object> last = jdbc.queryForMap("SELECT scope, TIMESTAMPDIFF(HOUR, starts_at, ends_at) AS h FROM sanctions WHERE user_id = ? AND source = 'REPORT' ORDER BY id DESC LIMIT 1", user);
+            assertThat(last.get("scope")).isEqualTo(scopes[i]);
+            if (i > 0) assertThat(((Number) last.get("h")).intValue()).isEqualTo(hours[i]);
+        }
+        assertThat(penalties.reportSteps(user)).isEqualTo(6);
+        // 봉사 신청은 그대로, 모집글·글은 막힘.
+        assertThatCode(() -> penalties.check(user, "APPLY")).doesNotThrowAnyException();
+        perform(post("/api/activities"), body(3), writer).andExpect(status().isForbidden()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("모집글을 만들 수 없어요")));
+        // The 6th step puts the person on the admin's 할 일; 커뮤니티 이용 정지 has no end and takes it off.
+        mvc.perform(get("/api/admin/community-reviews").header("Authorization", "Bearer " + admin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.userId == " + user + ")].steps").value(org.hamcrest.Matchers.contains(6)));
+        perform(post("/api/admin/community-reviews/" + user), Map.of("decision", "STOP", "reason", ""), admin).andExpect(status().isBadRequest());
+        perform(post("/api/admin/community-reviews/" + user), Map.of("decision", "STOP", "reason", "반복된 도배"), writer).andExpect(status().isForbidden());
+        perform(post("/api/admin/community-reviews/" + user), Map.of("decision", "STOP", "reason", "반복된 도배"), admin).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sanctions WHERE user_id = ? AND type = 'SUSPENSION' AND scope = 'POST' AND ends_at IS NULL", Integer.class, user)).isEqualTo(1);
+        mvc.perform(get("/api/admin/community-reviews").header("Authorization", "Bearer " + admin)).andExpect(jsonPath("$[?(@.userId == " + user + ")]").isEmpty());
+        perform(post("/api/admin/community-reviews/" + user), Map.of("decision", "STOP", "reason", "다시"), admin).andExpect(status().isConflict());
     }
 
     @Test

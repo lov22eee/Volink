@@ -11,15 +11,17 @@ import { ago, hoursSince, Loading, Logo, Panel, PcIcon, minutesWord, when } from
 type Report = { id: number; targetType: string; targetId: number; reason: string; reasonLabel: string; description: string; status: string; createdAt: string; summary: string; sameTarget: number; warnings: number; evidence: number[] }
 type Appeal = { id: number; kind: string; reasonLabel: string; reason: string; status: string; hostNote: string | null; submittedAt: string; name: string; subject: string; checkInMethod: string | null; sanctionType: string | null }
 type Org = { id: number; name: string; orgType?: string | null; contact: string; address?: string | null; vmsRegistered?: boolean | null; vmsCode?: string | null; managerName: string; managerEmail: string; requestedAt: string }
-type Item = { key: string; kind: 'REPORT' | 'APPEAL' | 'ACTIVITY' | 'ORG'; title: string; sub: string; at: string | null; report?: Report; appeal?: Appeal; activity?: LiveActivity; org?: Org }
+type Review = { userId: number; name: string; steps: number; lastAt: string }
+type Item = { key: string; kind: 'REPORT' | 'APPEAL' | 'ACTIVITY' | 'ORG' | 'COMMUNITY'; title: string; sub: string; at: string | null; report?: Report; appeal?: Appeal; activity?: LiveActivity; org?: Org; review?: Review }
 type Action = { id: number; at: string; admin: string; targetType: string; targetId: number; action: string; reason: string; targetName: string | null }
 
-const kindTag: Record<Item['kind'], [string, string]> = { REPORT: ['신고', 'red'], APPEAL: ['이의', 'blu'], ACTIVITY: ['검토', 'amb'], ORG: ['기관', 'g'] }
+const kindTag: Record<Item['kind'], [string, string]> = { REPORT: ['신고', 'red'], APPEAL: ['이의', 'blu'], ACTIVITY: ['검토', 'amb'], ORG: ['기관', 'g'], COMMUNITY: ['정지 검토', 'red'] }
 const targetWord: Record<string, string> = { ACTIVITY: '활동', POST: '게시글', COMMENT: '댓글', USER: '회원', PHOTO: '사진' }
 const appealWord: Record<string, string> = { NO_SHOW: '불참 이의', RECORD: '활동 기록 이의', SANCTION: '제재 이의' }
 const orgTypeWord: Record<string, string> = { VOLUNTEER_CENTER: '자원봉사센터', WELFARE: '복지관·복지시설', SCHOOL: '학교·교육기관', NONPROFIT: '비영리단체', PUBLIC: '공공기관', OTHER: '기타' }
 export const reasonWord: Record<string, string> = { CONTACT: '연락처·외부 유도', DANGER: '위험한 활동', ABUSE: '욕설·혐오', SPAM: '광고·도배', FALSE_RECORD: '노쇼·허위 기록', PRIVACY: '개인정보 노출', OTHER: '기타', SAFETY: '안전', HARASSMENT: '괴롭힘', INAPPROPRIATE: '부적절한 내용' }
-const ladder = ['', '경고', '7일 글쓰기 제한', '30일 글쓰기 제한']
+/** 신고 사다리 (1년 안, 2026-11-12): 커뮤니티만 제한하고 봉사 신청은 막지 않아요. 6번째부터는 정지 검토가 할 일로 와요. */
+const ladder = ['', '경고', '24시간 글쓰기 제한', '7일 글·모집글 제한', '14일 글·모집글 제한', '30일 글·모집글 제한', '30일 제한 + 정지 검토']
 const failText = (cause: unknown) => cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : '처리하지 못했어요.'
 
 export function AdminConsole({ parts, query, user, onSignOut }: { parts: string[]; query: URLSearchParams; user: User; onSignOut: () => void }) {
@@ -57,9 +59,9 @@ function Queue({ onCount }: { onCount: (n: number) => void }) {
   const load = useCallback(async () => {
     setFailed(false)
     try {
-      const [reports, appeals, activities, orgs] = await Promise.all([
+      const [reports, appeals, activities, orgs, reviews] = await Promise.all([
         api<Report[]>('/api/admin/reports?status=OPEN'), api<Appeal[]>('/api/admin/appeals?status=OPEN'),
-        api<LiveActivity[]>('/api/admin/activities'), api<Org[]>('/api/admin/organizations?status=PENDING')])
+        api<LiveActivity[]>('/api/admin/activities'), api<Org[]>('/api/admin/organizations?status=PENDING'), api<Review[]>('/api/admin/community-reviews').catch(() => [] as Review[])])
       const list: Item[] = []
       const seen = new Set<string>()
       for (const r of [...reports].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
@@ -72,6 +74,7 @@ function Queue({ onCount }: { onCount: (n: number) => void }) {
       setWaitingHost(appeals.length - ready.length)
       for (const a of ready) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : ''}`, at: a.submittedAt, appeal: a })
       for (const a of activities) list.push({ key: 'v' + a.id, kind: 'ACTIVITY', title: a.title, sub: `검토 사유 · ${a.riskReasons || '확인 필요'}`, at: null, activity: a })
+      for (const c of reviews) list.push({ key: 'c' + c.userId, kind: 'COMMUNITY', title: c.name, sub: `1년 안 신고 인정 ${c.steps}회 · 커뮤니티 이용 정지 검토`, at: c.lastAt, review: c })
       for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청`, at: o.requestedAt, org: o })
       list.sort((x, y) => (x.at ?? '9').localeCompare(y.at ?? '9'))
       setItems(list)
@@ -97,7 +100,7 @@ function Queue({ onCount }: { onCount: (n: number) => void }) {
     <div className="pc-queue">
       <section className="pc-pn list" aria-label="처리할 일 목록">
         <div className="pc-ph" style={{ flexWrap: 'wrap' }}><h2>남은 일 {items.length}건</h2>{handled > 0 && <small>방금 {handled}건 처리</small>}
-          <div className="pc-chips" style={{ width: '100%', marginTop: 4 }}>{([['', '전체', items.length], ['REPORT', '신고', counts('REPORT')], ['APPEAL', '이의', counts('APPEAL')], ['ACTIVITY', '검토', counts('ACTIVITY')], ['ORG', '기관', counts('ORG')]] as [Item['kind'] | '', string, number][])
+          <div className="pc-chips" style={{ width: '100%', marginTop: 4 }}>{([['', '전체', items.length], ['REPORT', '신고', counts('REPORT')], ['APPEAL', '이의', counts('APPEAL')], ['ACTIVITY', '검토', counts('ACTIVITY')], ['ORG', '기관', counts('ORG')], ...(counts('COMMUNITY') ? [['COMMUNITY', '정지 검토', counts('COMMUNITY')]] : [])] as [Item['kind'] | '', string, number][])
             .map(([k, label, n]) => <button key={label} type="button" aria-pressed={filter === k} onClick={() => { setFilter(k); setPick(0) }}>{label} {n}</button>)}</div></div>
         {shown.map((item, i) => {
           const late = item.at ? hoursSince(item.at) >= 24 : false
@@ -118,10 +121,10 @@ function Case({ item, position, onDone }: { item: Item; position: string; onDone
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const r = item.report, a = item.appeal, v = item.activity, o = item.org
+  const r = item.report, a = item.appeal, v = item.activity, o = item.org, c = item.review
   const hideable = r && ['POST', 'COMMENT', 'PHOTO'].includes(r.targetType)
   const choices: [string, string][] = r ? [...(hideable ? [['HIDE', '인정 · 숨김'] as [string, string]] : []), ['ACCEPT', hideable ? '인정 · 숨기지 않음' : '인정'], ['DISMISS', '문제 없음']]
-    : a ? [['ACCEPT', '인정'], ['REJECT', '기각']] : [['APPROVE', '승인'], ['REJECT', '반려']]
+    : a ? [['ACCEPT', '인정'], ['REJECT', '기각']] : c ? [['STOP', '커뮤니티 이용 정지'], ['KEEP', '30일 제한만 유지']] : [['APPROVE', '승인'], ['REJECT', '반려']]
   const pickNow = choice || choices[0][0]
   const reasonNeeded = !(v || o) || pickNow === 'REJECT'
   async function send() {
@@ -131,6 +134,7 @@ function Case({ item, position, onDone }: { item: Item; position: string; onDone
       if (r) await api('/api/admin/reports/' + r.id + '/decision', 'POST', { decision: pickNow === 'DISMISS' ? 'DISMISS' : 'ACCEPT', hide: pickNow === 'HIDE', reason })
       else if (a) await api('/api/admin/appeals/' + a.id + '/decision', 'POST', { decision: pickNow, reason })
       else if (v) await api('/api/admin/activities/' + v.id + (pickNow === 'APPROVE' ? '/approve' : '/reject'), 'POST', { reason })
+      else if (c) await api('/api/admin/community-reviews/' + c.userId, 'POST', { decision: pickNow, reason })
       else if (o) await api('/api/admin/organizations/' + o.id + (pickNow === 'APPROVE' ? '/approve' : '/reject'), 'POST', { reason })
       onDone()
     } catch (cause) { setError(failText(cause)) } finally { setBusy(false) }
@@ -157,12 +161,17 @@ function Case({ item, position, onDone }: { item: Item; position: string; onDone
       <div className="pc-kv"><span>일시</span><b>{when(v.date, v.startTime)} · {minutesWord(v.durationMinutes)}</b></div><div className="pc-kv"><span>장소</span><b>{v.placeName ?? '장소 미정'}{v.meetingPoint ? ' · ' + v.meetingPoint : ''}</b></div><div className="pc-kv"><span>인원</span><b>{v.capacity}명</b></div></div>
     <div><h3>소개</h3><div className="pc-q">{v.description}</div></div>
   </>
+  if (c) left = <>
+    <div><h3>검토할 사람</h3><div className="pc-kv"><span>이름</span><b>{c.name}</b></div><div className="pc-kv"><span>1년 안 신고 인정</span><b>{c.steps}회</b></div><div className="pc-kv"><span>마지막 인정</span><b>{c.lastAt}</b></div></div>
+    <div><a className="pc-link" href={'#/admin/find/' + c.userId}>받은 신고·제재 기록 보기 ›</a></div>
+  </>
   if (o) left = <>
     <div><h3>기관 정보</h3><div className="pc-kv"><span>기관명</span><b>{o.name}</b></div><div className="pc-kv"><span>유형</span><b>{o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '-'}</b></div>
       <div className="pc-kv"><span>연락처</span><b>{o.contact}</b></div><div className="pc-kv"><span>주소</span><b>{o.address || '-'}</b></div><div className="pc-kv"><span>1365 수요처</span><b>{o.vmsRegistered ? '등록됨' + (o.vmsCode ? ` (${o.vmsCode})` : '') : o.vmsRegistered === false ? '아님' : '-'}</b></div></div>
     <div><h3>담당자</h3><div className="pc-kv"><span>이름</span><b>{o.managerName}</b></div><div className="pc-kv"><span>이메일</span><b>{o.managerEmail}</b></div><div className="pc-kv"><span>신청</span><b>{o.requestedAt}</b></div></div>
   </>
-  const effect = r && pickNow !== 'DISMISS' && r.warnings < 3 ? `인정하면 작성자는 인정 ${r.warnings + 1}회로 ${ladder[Math.min(3, r.warnings + 1)]} 단계가 돼요.`
+  const effect = r && pickNow !== 'DISMISS' ? `인정하면 작성자는 1년 안 인정 ${r.warnings + 1}회로 ${ladder[Math.min(6, r.warnings + 1)]} 단계가 돼요. 봉사 신청은 막지 않아요.`
+    : c ? (pickNow === 'STOP' ? '정지하면 기간 없이 글·댓글·모집글을 쓸 수 없어요. 봉사 신청·참여는 그대로이고, 본인은 이의 신청할 수 있어요.' : '지금 걸린 30일 제한만 유지해요. 다음 신고가 인정되면 다시 검토해요.')
     : a && pickNow === 'ACCEPT' ? (a.kind === 'SANCTION' ? '인정하면 제재가 바로 풀려요.' : a.kind === 'NO_SHOW' ? '인정하면 불참이 출석으로 바뀌고 횟수에서 빠져요.' : '인정하면 활동 기록이 다시 유효해져요.')
     : v ? (pickNow === 'APPROVE' ? '승인하면 바로 공개돼요.' : '반려하면 모집자에게 사유가 전달돼요.')
     : o ? (pickNow === 'APPROVE' ? '승인하면 기관센터와 기관 주관 모집이 열려요.' : '반려하면 담당자에게 사유가 전달돼요.') : ''
@@ -292,7 +301,7 @@ type MemberDetail = MemberRow & { organizationName: string | null; organizationS
   participations: { id: number; title: string; date: string; status: string }[]; reports: { id: number; targetType: string; reason: string; status: string; at: string }[] }
 const statusWord: Record<string, string> = { ACTIVE: '정상', RESTRICTED: '제한', SUSPENDED: '정지' }
 const partWord: Record<string, string> = { APPLIED: '승인 대기', CONFIRMED: '확정', WAITLISTED: '대기', OFFERED: '자리 제안', CHECKED_IN: '출석', COMPLETED: '완료', NO_SHOW: '불참', CANCELLED: '취소', REJECTED: '거절', EXPIRED: '만료' }
-const scopeWord: Record<string, string> = { APPLY: '신청 제한', WRITE: '글쓰기 제한', ALL: '이용 제한', NONE: '경고' }
+const scopeWord: Record<string, string> = { APPLY: '신청 제한', WRITE: '글쓰기 제한', POST: '글·모집글 제한', ALL: '이용 제한', NONE: '경고' }
 const sourceWord: Record<string, string> = { NOSHOW: '불참 누적', REPORT: '신고 인정', ADMIN: '관리자' }
 
 function Find({ q }: { q: string }) {
