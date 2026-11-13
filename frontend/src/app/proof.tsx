@@ -35,7 +35,8 @@ const dates = (raw: string) => {
   // "2025년 9월 10일 ~ 9월 10일": the second day without its year takes the first one's.
   const tail = out.length === 1 ? /[~∼〜-]\s*(\d{1,2})\s*[.월/]\s*(\d{1,2})\s*일?/.exec(s.slice(s.search(DATE) + 6)) : null
   if (tail) out.push(`${out[0].slice(0, 4)}-${tail[1].padStart(2, '0')}-${tail[2].padStart(2, '0')}`)
-  return out
+  // a misread digit can make an impossible day (5월 70일): such a date is left out
+  return out.filter(d => { const [, m, day] = d.split('-').map(Number); return m >= 1 && m <= 12 && day >= 1 && day <= 31 })
 }
 const after = (line: string) => line.replace(/^[^:：]*[:：]/, '').replace(/^[\s■□▪•·\-=ㅁ]+/, '').trim()
 
@@ -62,6 +63,7 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
     const rows: Record<string, string>[] = [], at: number[] = []
     let skipped = 0
     for (let i = header + 1; i < lines.length && rows.length < 50; i++) {
+      if (/위와같이|확인합니다|증명합니다|발급|포털/.test(compact(lines[i]))) break
       const row = cellsOf(words![i] ?? [], cols)
       // A smudged line between two rows is skipped; two in a row end the table.
       if (!row.day && !row.time) { if (rows.length && ++skipped > 1) break; continue }
@@ -72,7 +74,7 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
       read.used.push(header, ...at)
       const days = rows.flatMap(r => dates(r.day ?? ''))
       const times = rows.map(r => minutesIn(r.time ?? '')).filter((m): m is number => m != null)
-      const title = (rows[0].title ?? '').replace(/^[\s|_\-.,:;'"`~!]+|[\s|_\-.,:;'"`~!]+$/g, '').slice(0, 120)
+      const title = tidyTitle(rows[0].title ?? '').slice(0, 120)
       read.minutes = times.length ? times.reduce((x, y) => x + y, 0) : null
       if (rows.length === 1) { read.kind = 'one'; read.title = title; read.to = days[0] ?? '' }
       else {
@@ -107,7 +109,9 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
     let title = valueOf(lines[content])
     // The value on the next line (the label alone on its line).
     if (!title && lines[content + 1] && !labelOf(lines[content + 1])) { title = clean(lines[content + 1]); read.used.push(content + 1) }
-    title = title.replace(/(\d)\s+(건|회)/g, '$1$2').replace(/\s[의외왜]\s*(\d+건)$/, ' 외 $1')
+    title = tidyTitle(title).replace(/(\d)\s+(건|회)/g, '$1$2').replace(/\s[의외왜]\s*(\d+건)$/, ' 외 $1')
+    // "외" read as a mark (#11건 · 《'11건 · /# 7건): the number with 건 at the end is "외 N건".
+    title = title.replace(/(?:\s+|[^\s가-힣\d]+)[^\s\d]?\s*(\d{1,3})건$/, (m, n) => /^\s*외\s/.test(m) ? m : ` 외 ${n}건`)
     // "○○ 외 ?건" with the number smudged: 총 N회 says it is N - 1 more.
     if (read.count && read.count > 1) title = title.replace(/\s[의외왜]\s*[^\d\s]{0,2}\s*[건견]$/, ` 외 ${read.count - 1}건`)
     read.title = title.slice(0, 120)
@@ -116,6 +120,17 @@ export function readProof(text: string, lines: string[] = text.split('\n'), word
   read.kind = (read.from && read.from !== read.to) || count >= 0 || /자원봉사활동확인서/.test(all) ? 'total' : 'one'
   if (read.kind === 'one' && read.from === read.to) read.from = ''
   return read
+}
+
+/**
+ * A title as read from a photo: stray marks before it (、 … ·) and after it (/ | 8" . 융) are dropped. A wide gap means the
+ * text after it came from somewhere else on the paper (a shadow edge, the table border), so it is cut there.
+ */
+function tidyTitle(t: string) {
+  let s = t.split(/\s{3,}/)[0]
+  s = s.replace(/^[\s|_\-.,:;'"`~!、。…·•*#/\\《》<>()[\]]+/, '')
+  s = s.replace(/(\s+[^\s가-힣]{1,3})+$/u, '')
+  return s.replace(/[\s|_\-.,:;'"`~!、。…·•*#/\\《》<>]+$/, '').trim()
 }
 
 /** Common OCR slips on these papers, fixed before matching (spaces dropped). */
@@ -215,22 +230,54 @@ export async function readPhoto(file: File): Promise<Page> {
   g.imageSmoothingQuality = 'high'
   g.drawImage(img, 0, 0, canvas.width, canvas.height)
   URL.revokeObjectURL(url)
-  const straight = deskew(canvas)
+  // Paper photographed at an angle or from below: find its four corners and pull it back into a rectangle, then even out
+  // shadows (a hand or the phone over the paper) before straightening the last few degrees.
+  const quad = findPaper(canvas)
+  const paper = quad ? warpPaper(canvas, quad) : canvas
+  flattenLight(paper)
+  const straight = deskew(paper)
   const preview = straight.toDataURL('image/jpeg', 0.8)
+  // The plain picture is kept: a clean scan can lose thin letters when the table lines are wiped, so it is read again
+  // as it was when the cleaned one gives nothing usable.
+  const plain = document.createElement('canvas'); plain.width = straight.width; plain.height = straight.height
+  plain.getContext('2d')!.drawImage(straight, 0, 0)
   wipeTable(straight)
-  const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker('kor')
+  const worker = await ocrWorker()
   try {
-    const data = (await worker.recognize(straight, {}, { blocks: true, text: true })).data
-    const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
-      .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
-        words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
-    return { text: data.text, lines, preview, width: straight.width, height: straight.height }
+    const read = async (source: HTMLCanvasElement) => {
+      const data = (await worker.recognize(source, {}, { blocks: true, text: true })).data
+      const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
+        .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
+          words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
+      return { text: data.text, lines, preview, width: source.width, height: source.height }
+    }
+    const first = await read(straight)
+    if (useful(first)) return first
+    const second = await read(plain)
+    return useful(second) || second.text.trim().length > first.text.trim().length ? second : first
   } finally { await worker.terminate() }
 }
 
+/** Something a 확인서 field can be taken from (a date, hours, or a label line). */
+function useful(page: Page) {
+  const r = readProof(page.text, page.lines.map(l => l.text), page.lines.map(l => l.words))
+  return r.kind !== 'none' && Boolean(r.title || r.to || r.from || r.minutes != null)
+}
+
+/** The OCR engine: the files shipped with the app first (/ocr/), the public CDN only if those cannot be loaded. */
+export class OcrUnavailable extends Error {}
+async function ocrWorker() {
+  const { createWorker } = await import('tesseract.js')
+  const base = new URL('ocr/', document.baseURI).href
+  try {
+    return await createWorker('kor', 1, { workerPath: base + 'worker.min.js', corePath: base.replace(/\/$/, ''), langPath: base.replace(/\/$/, ''), workerBlobURL: false })
+  } catch {
+    try { return await createWorker('kor') } catch { throw new OcrUnavailable('ocr') }
+  }
+}
+
 /**
- * A photo taken at a slant: find the angle (-8°…8°) at which the dark pixels line up in the most distinct rows (text lines and
+ * A photo taken at a slant: find the angle (-15°…15°) at which the dark pixels line up in the most distinct rows (text lines and
  * table lines are straight then) and turn the picture back by it. Done on a small copy; returns the original when it is straight.
  */
 export function deskew(canvas: HTMLCanvasElement): HTMLCanvasElement {
@@ -256,7 +303,7 @@ export function deskew(canvas: HTMLCanvasElement): HTMLCanvasElement {
     return sum
   }
   let best = 0, bestScore = score(0)
-  for (let deg = -8; deg <= 8; deg += 0.5) { const v = score(deg); if (v > bestScore) { best = deg; bestScore = v } }
+  for (let deg = -15; deg <= 15; deg += 0.5) { const v = score(deg); if (v > bestScore) { best = deg; bestScore = v } }
   for (let deg = best - 0.4; deg <= best + 0.4; deg += 0.1) { const v = score(deg); if (v > bestScore) { best = deg; bestScore = v } }
   if (Math.abs(best) < 0.3) return canvas
   const a = best * Math.PI / 180
@@ -265,6 +312,164 @@ export function deskew(canvas: HTMLCanvasElement): HTMLCanvasElement {
   g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height)
   g.translate(out.width / 2, out.height / 2); g.rotate(-a); g.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
   return out
+}
+
+type Pt = [number, number]
+const lum = (d: Uint8ClampedArray, i: number) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114
+
+/**
+ * The sheet of paper in a photo: the largest bright region (threshold between paper and desk by Otsu's method, small holes
+ * from the letters closed), its corners taken as the extreme points along the two diagonals. Null when no clear sheet is seen
+ * (the paper fills the picture, or the region is too small or not four-sided).
+ */
+export function findPaper(canvas: HTMLCanvasElement): [Pt, Pt, Pt, Pt] | null {
+  const k = 360 / Math.max(canvas.width, canvas.height)
+  const w = Math.round(canvas.width * k), h = Math.round(canvas.height * k)
+  const c = document.createElement('canvas'); c.width = w; c.height = h
+  const x2 = c.getContext('2d')!; x2.drawImage(canvas, 0, 0, w, h)
+  const d = x2.getImageData(0, 0, w, h).data, n = w * h
+  const g = new Uint8Array(n), hist = new Float64Array(256)
+  for (let i = 0; i < n; i++) { g[i] = lum(d, i * 4); hist[g[i]]++ }
+  let sum = 0; for (let v = 0; v < 256; v++) sum += v * hist[v]
+  let wb = 0, sb = 0, best = 0, cut = 128
+  for (let v = 0; v < 256; v++) {
+    wb += hist[v]; if (!wb) continue
+    const wf = n - wb; if (!wf) break
+    sb += v * hist[v]
+    const between = wb * wf * (sb / wb - (sum - sb) / wf) ** 2
+    if (between > best) { best = between; cut = v }
+  }
+  // paper: brighter than the desk, or grey-neutral and not dark (a shadow on white paper keeps it colourless)
+  let m = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    const r = d[i * 4], gg = d[i * 4 + 1], bb = d[i * 4 + 2], chroma = Math.max(r, gg, bb) - Math.min(r, gg, bb)
+    m[i] = g[i] > cut || (chroma < 14 && g[i] > cut * 0.55) ? 1 : 0
+  }
+  const morph = (src: Uint8Array, grow: boolean, r: number) => {
+    const out = new Uint8Array(n)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = grow ? 0 : 1
+      for (let dy = -r; dy <= r && v === (grow ? 0 : 1); dy++) for (let dx = -r; dx <= r; dx++) {
+        const yy = y + dy, xx = x + dx
+        const s2 = yy < 0 || yy >= h || xx < 0 || xx >= w ? 0 : src[yy * w + xx]
+        if (grow ? s2 : !s2) { v = grow ? 1 : 0; break }
+      }
+      out[y * w + x] = v
+    }
+    return out
+  }
+  m = morph(morph(m, true, 3), false, 3)
+  // largest connected bright region
+  const label = new Int32Array(n).fill(-1), stack: number[] = []
+  let bestId = -1, bestSize = 0
+  for (let i = 0, id = 0; i < n; i++) {
+    if (!m[i] || label[i] >= 0) continue
+    let size = 0; label[i] = id; stack.push(i)
+    while (stack.length) {
+      const j = stack.pop()!; size++
+      const x = j % w, y = (j / w) | 0
+      for (const q of [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, y > 0 ? j - w : -1, y < h - 1 ? j + w : -1])
+        if (q >= 0 && m[q] && label[q] < 0) { label[q] = id; stack.push(q) }
+    }
+    if (size > bestSize) { bestSize = size; bestId = id }
+    id++
+  }
+  if (bestId < 0 || bestSize < n * 0.2 || bestSize > n * 0.93) return null
+  let tl: Pt = [0, 0], tr: Pt = [0, 0], br: Pt = [0, 0], bl: Pt = [0, 0]
+  let a = Infinity, b = -Infinity, cc = -Infinity, dd = Infinity
+  for (let i = 0; i < n; i++) {
+    if (label[i] !== bestId) continue
+    const x = i % w, y = (i / w) | 0
+    if (x + y < a) { a = x + y; tl = [x, y] }
+    if (x + y > b) { b = x + y; br = [x, y] }
+    if (x - y > cc) { cc = x - y; tr = [x, y] }
+    if (x - y < dd) { dd = x - y; bl = [x, y] }
+  }
+  const quad = [tl, tr, br, bl].map(([x, y]) => [x / k, y / k] as Pt) as [Pt, Pt, Pt, Pt]
+  // the four sides should be reasonably long and the shape should cover most of its region
+  const len = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1])
+  const sides = [len(quad[0], quad[1]), len(quad[1], quad[2]), len(quad[2], quad[3]), len(quad[3], quad[0])]
+  if (Math.min(...sides) < Math.max(canvas.width, canvas.height) * 0.2) return null
+  const area = Math.abs(quad.reduce((s2, p, i) => { const q = quad[(i + 1) % 4]; return s2 + p[0] * q[1] - q[0] * p[1] }, 0)) / 2
+  if (area < bestSize / (k * k) * 0.85) return null
+  return quad
+}
+
+/** Pulls the four corners back into an upright rectangle (perspective transform, bilinear sampling). */
+export function warpPaper(canvas: HTMLCanvasElement, [tl, tr, br, bl]: [Pt, Pt, Pt, Pt]): HTMLCanvasElement {
+  const len = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1])
+  let W = Math.max(len(tl, tr), len(bl, br)), H = Math.max(len(tl, bl), len(tr, br))
+  const s = Math.min(1, 2000 / Math.max(W, H)); W = Math.round(W * s); H = Math.round(H * s)
+  // homography from the output rectangle to the photo: solve the 8 unknowns from the 4 corner pairs
+  const from: Pt[] = [[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]], to = [tl, tr, br, bl]
+  const A: number[][] = []
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = from[i], [u, v] = to[i]
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]); A.push([0, 0, 0, x, y, 1, -v * x, -v * y, v])
+  }
+  for (let col = 0; col < 8; col++) {
+    let piv = col; for (let r = col + 1; r < 8; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r
+    ;[A[col], A[piv]] = [A[piv], A[col]]
+    for (let r = 0; r < 8; r++) if (r !== col) { const f = A[r][col] / A[col][col]; for (let c2 = col; c2 < 9; c2++) A[r][c2] -= f * A[col][c2] }
+  }
+  const H8 = A.map((r, i) => r[8] / r[i])
+  const src = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height), sd = src.data, sw = canvas.width, sh = canvas.height
+  const out = document.createElement('canvas'); out.width = W; out.height = H
+  const og = out.getContext('2d')!, od = og.createImageData(W, H), o = od.data
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const z = H8[6] * x + H8[7] * y + 1
+    const u = (H8[0] * x + H8[1] * y + H8[2]) / z, v = (H8[3] * x + H8[4] * y + H8[5]) / z
+    const x0 = Math.max(0, Math.min(sw - 2, Math.floor(u))), y0 = Math.max(0, Math.min(sh - 2, Math.floor(v)))
+    const fx = Math.max(0, Math.min(1, u - x0)), fy = Math.max(0, Math.min(1, v - y0))
+    const i00 = (y0 * sw + x0) * 4, i10 = i00 + 4, i01 = i00 + sw * 4, i11 = i01 + 4, oi = (y * W + x) * 4
+    for (let ch = 0; ch < 3; ch++) o[oi + ch] = (sd[i00 + ch] * (1 - fx) + sd[i10 + ch] * fx) * (1 - fy) + (sd[i01 + ch] * (1 - fx) + sd[i11 + ch] * fx) * fy
+    o[oi + 3] = 255
+  }
+  og.putImageData(od, 0, 0)
+  return out
+}
+
+/**
+ * Shadows and uneven light: estimate the paper's own brightness everywhere (a small copy, letters removed by taking the
+ * brightest pixel around, then blurred) and divide the photo by it, so a shadowed part of the paper is as white as the rest.
+ * Turns the picture grey.
+ */
+export function flattenLight(canvas: HTMLCanvasElement): boolean {
+  const W = canvas.width, H = canvas.height, f = 8
+  const ctx = canvas.getContext('2d')!, img = ctx.getImageData(0, 0, W, H), d = img.data
+  const w = Math.ceil(W / f), h = Math.ceil(H / f), small = new Float32Array(w * h)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let mx = 0
+    for (let yy = y * f; yy < Math.min(H, y * f + f); yy += 2) for (let xx = x * f; xx < Math.min(W, x * f + f); xx += 2) { const v = lum(d, (yy * W + xx) * 4); if (v > mx) mx = v }
+    small[y * w + x] = mx
+  }
+  const pass = (src: Float32Array, r: number, fn: 'max' | 'mean') => {
+    const out = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let acc = fn === 'max' ? 0 : 0, cnt = 0
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const yy = Math.min(h - 1, Math.max(0, y + dy)), xx = Math.min(w - 1, Math.max(0, x + dx)), v = src[yy * w + xx]
+        if (fn === 'max') { if (v > acc) acc = v } else { acc += v; cnt++ }
+      }
+      out[y * w + x] = fn === 'max' ? acc : acc / cnt
+    }
+    return out
+  }
+  const bg = pass(pass(pass(small, 2, 'max'), 2, 'mean'), 2, 'mean')
+  // even light already (a scan, a well-lit photo): left as it is, so nothing changes for papers that read fine before
+  const sorted = Float32Array.from(bg).sort(), low = sorted[Math.floor(sorted.length * 0.05)], high = sorted[Math.floor(sorted.length * 0.95)]
+  if (low > high * 0.82) return false
+  for (let y = 0; y < H; y++) {
+    const sy = Math.min(h - 1.001, Math.max(0, y / f - 0.5)), y0 = Math.floor(sy), fy = sy - y0
+    for (let x = 0; x < W; x++) {
+      const sx = Math.min(w - 1.001, Math.max(0, x / f - 0.5)), x0 = Math.floor(sx), fx = sx - x0
+      const b = (bg[y0 * w + x0] * (1 - fx) + bg[y0 * w + x0 + 1] * fx) * (1 - fy) + (bg[(y0 + 1) * w + x0] * (1 - fx) + bg[(y0 + 1) * w + x0 + 1] * fx) * fy
+      const i = (y * W + x) * 4, v = Math.min(255, (lum(d, i) / Math.max(30, b)) * 242)
+      d[i] = d[i + 1] = d[i + 2] = v
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return true
 }
 
 /** Black ink on white (each pixel against the mean around it), then long horizontal and vertical runs of ink (table lines) made white. */
@@ -329,6 +534,7 @@ export function matchRecord(read: ProofRead, list: ExternalRecord[]): ExternalRe
  */
 export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: ExternalRecord; onClose: () => void; onSaved: (saved: ExternalRecord) => void; onUse1365?: () => void }) {
   const [step, setStep] = useState<'pick' | 'reading' | 'check' | 'page' | 'none' | 'same'>('pick')
+  const [fail, setFail] = useState<'engine' | 'read'>('read')
   const [page, setPage] = useState<Page | null>(null)
   const [photo, setPhoto] = useState(false)
   const [read, setRead] = useState<ProofRead | null>(null)
@@ -371,8 +577,10 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
       const dup = list.find(x => x.certified && x.certDate === day && near(x.certTitle ?? x.title, r.title) && (r.minutes == null || x.certMinutes === r.minutes))
       if (dup) { setSame(dup); setStep('same'); return }
       setTarget(record ?? matchRecord(r, list) ?? 'new')
+      // Letters were read but no field was found: show the paper next to empty fields to fill by hand (no dead end).
+      if (r.kind === 'none' && got.text.replace(/\s/g, '').length >= 8) { setRead({ ...r, kind: 'one' }); setEditing(['title', 'to', 'time']); setStep('check'); return }
       setStep(r.kind === 'page' ? 'page' : r.kind === 'none' ? 'none' : 'check')
-    } catch { setStep('none') }
+    } catch (cause) { setFail(cause instanceof OcrUnavailable ? 'engine' : 'read'); setStep('none') }
   }
   const minutes = (Number(hours) || 0) * 60 + (Number(mins) || 0)
   const day = read ? (read.to || read.from) : ''
@@ -419,8 +627,8 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
   if (step === 'none' || !read || !page) return <Sheet title="" onClose={onClose}
     footer={<><button type="button" className="m-btn" onClick={() => setStep('pick')}>다시 고르기</button><button type="button" className="m-btn line" onClick={onClose}>닫기</button></>}>
     <div className="apply-res missed"><span className="apply-res-ico" aria-hidden="true"><MIcon name="alert" size={28} /></span>
-      <h3 className="m-h3">확인서를 읽지 못했어요</h3>
-      <p className="m-help center">흐리거나 잘린 것 같아요 · 1365에서 받은 PDF가 가장 정확해요</p></div>
+      <h3 className="m-h3">{fail === 'engine' ? '글자 읽기를 준비하지 못했어요' : '확인서를 읽지 못했어요'}</h3>
+      <p className="m-help center">{fail === 'engine' ? '인터넷 연결을 확인하고 다시 시도해 주세요' : '흐리거나 잘린 것 같아요 · 1365에서 받은 PDF가 가장 정확해요'}</p></div>
   </Sheet>
 
   const fix = (k: string) => editing.includes(k)
