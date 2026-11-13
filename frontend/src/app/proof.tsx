@@ -251,17 +251,22 @@ export async function readPhoto(file: File): Promise<Page> {
           words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
       return { text: data.text, lines, preview, width: source.width, height: source.height }
     }
-    const first = await read(straight)
-    if (useful(first)) return first
-    const second = await read(plain)
-    return useful(second) || second.text.trim().length > first.text.trim().length ? second : first
+    // up to two readings, stopping as soon as one gives all three values; otherwise the one with the most values
+    let best: Page | null = null, bestScore = -1
+    for (const source of [straight, plain]) {
+      const got = await read(source)
+      const score = fields(got) * 1000 + Math.min(999, got.text.replace(/\s/g, '').length)
+      if (score > bestScore) { best = got; bestScore = score }
+      if (fields(got) === 3) break
+    }
+    return best!
   } finally { await worker.terminate() }
 }
 
-/** Something a 확인서 field can be taken from (a date, hours, or a label line). */
-function useful(page: Page) {
+/** How many of the three values (name, day, hours) a reading gives. */
+function fields(page: Page) {
   const r = readProof(page.text, page.lines.map(l => l.text), page.lines.map(l => l.words))
-  return r.kind !== 'none' && Boolean(r.title || r.to || r.from || r.minutes != null)
+  return r.kind === 'none' || r.kind === 'page' ? 0 : (r.title.trim().length >= 2 ? 1 : 0) + (r.to || r.from ? 1 : 0) + (r.minutes != null ? 1 : 0)
 }
 
 /** The OCR engine: the files shipped with the app first (/ocr/), the public CDN only if those cannot be loaded. */
