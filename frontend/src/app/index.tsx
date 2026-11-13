@@ -111,7 +111,7 @@ export default function MobileApp() {
     case 'write': screen = <WriteScreen key={'w' + (route.query.get('edit') ?? '')} initial={route.query.get('category') ?? undefined} activity={Number(route.query.get('activity')) || undefined} external={Number(route.query.get('external')) || undefined} editId={Number(route.query.get('edit')) || undefined} />; break
     case 'create': screen = <CreateWizard user={user} from={Number(route.query.get('from')) || undefined} />; break
     case 'edit': screen = route.id ? <CreateWizard key={'edit' + route.id} user={user} editId={route.id} /> : null; break
-    case 'mine': screen = <MineScreen key={route.query.get('all') ?? 'tabs'} actions={bell} initial={route.query.get('tab') ?? undefined} all={route.query.get('all') ?? undefined} />; break
+    case 'mine': screen = <MineScreen key={route.query.get('all') ?? 'tabs'} user={user} actions={bell} initial={route.query.get('tab') ?? undefined} all={route.query.get('all') ?? undefined} />; break
     case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : route.query.get('view') === 'status' ? <StatusScreen /> : <MyScreen user={user} actions={bell} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break

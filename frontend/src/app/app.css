@@ -1735,6 +1735,7 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 .rec-add { position: relative; display: inline-flex; }
 .rec-add-btn svg { transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .rec-add-btn.on svg { transform: rotate(45deg); }
+.rec-add-btn.still.on svg { transform: none; }
 .rec-add-dim { position: fixed; inset: 0; z-index: 30; background: rgba(20, 28, 24, .18); animation: m-fade .18s ease-out both; }
 .rec-add-dim.out { animation: rec-add-dim-out .16s ease-in both; }
 .rec-add-menu { position: absolute; top: calc(100% + 4px); right: 4px; z-index: 31; width: 232px; padding: 6px; border-radius: 16px; background: #fff;
