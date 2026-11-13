@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
   | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
-  | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'sprout' | 'outward' | 'more' | 'send'
+  | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'docPlus' | 'sprout' | 'outward' | 'more' | 'send'
   | 'userPlus' | 'userX' | 'checkCircle' | 'alert' | 'moon' | 'book' | 'palette' | 'paw' | 'sliders' | 'camera' | 'flask'
 
 const paths: Record<MIconName, ReactNode> = {
@@ -49,6 +49,7 @@ const paths: Record<MIconName, ReactNode> = {
   flag: <path d="M5 21V4h11l-2 4 2 4H5" />,
   timer: <><circle cx="12" cy="13" r="7.5" /><path d="M12 13V9.5M10 3h4" /></>,
   record: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+  docPlus: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14h6" /></>,
   sprout: <><path d="M12 21v-9" /><path d="M12 12c0-4-3-6-7-6 0 4 3 6 7 6ZM12 10c0-4 3-6 7-6 0 4-3 6-7 6Z" /></>,
   outward: <path d="M7 17 17 7M9 7h8v8" />,
   send: <path d="M4 12 20 4l-6 16-3-7Z" />,

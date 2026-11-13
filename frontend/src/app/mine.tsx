@@ -55,13 +55,13 @@ function VolinkRow({ x }: { x: MyRecord }) {
     <span className={'m-badge ' + (x.status === 'VALID' ? 'mint' : 'amber')}>{x.status === 'VALID' ? '완료' : x.status === 'HELD' ? '보류' : '무효'}</span></a>
 }
 
-export function MineScreen({ actions, initial, all }: { actions: ReactNode; initial?: string; all?: string }) {
+export function MineScreen({ actions, initial, all, user }: { actions: ReactNode; initial?: string; all?: string; user?: { memberType?: string } }) {
   void all
-  if (initial === 'done') return <RecordsScreen />
-  return <MineTabs actions={actions} initial={initial} />
+  if (initial === 'done') return <RecordsScreen user={user} />
+  return <MineTabs actions={actions} initial={initial} user={user} />
 }
 
-function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }) {
+function MineTabs({ actions, initial, user }: { actions: ReactNode; initial?: string; user?: { memberType?: string } }) {
   const [view, setView] = useState<View>(initial === 'host' ? 'host' : 'join')
   const [joined, setJoined] = useState<MyParticipation[] | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
@@ -78,6 +78,12 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
   const hostLive = (hosted ?? []).filter(isLive)
   // Empty 참여 예정 / 완료 기록 [가져오기] (2026-11-07): 1365에서 가져오기 / 직접 추가하기 right here.
   const [importSheet, importFrom] = useImport1365(() => setRecordsVersion(v => v + 1))
+  // 기록 넣기 (2026-11-13, 사용자 결정): the document-plus at the top right of 내 활동 — 실적확인서 올리기 / 1365 가져오기.
+  const [proof, setProof] = useState(false)
+  const recordMenu = user?.memberType === 'INSTITUTION' ? null : <AddMenu icon="docPlus" label="기록 넣기" items={[
+    { icon: 'record', label: '실적확인서 올리기', note: '스캔하거나 PDF·사진으로', onPick: () => setProof(true) },
+    { icon: 'refresh', label: '1365 가져오기', note: '1365 실적·신청을 한 번에', onPick: () => importFrom('A') },
+  ]} />
   const now = Date.now()
   const tabs: [View, string][] = [['join', '일정'], ['host', '나의 모집']]
   const plans = joined && hosted && records && external ? plansOf(joined, hosted, records, external, now) : null
@@ -87,7 +93,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
   const [morePast, setMorePast] = useState(false)
   const hostPast = (hosted ?? []).filter(a => !isLive(a))
   return <div className="m-screen">
-    <TopBar title="내 활동" actions={actions} />
+    <TopBar title="내 활동" actions={<>{recordMenu}{actions}</>} />
     <div className="mg-tabs m-mine-tabs" role="tablist" aria-label="내 활동 보기">{tabs.map(([id, label]) =>
       <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'on' : ''} onClick={() => setView(id)}>{label}</button>)}</div>
     <div className="m-body">
@@ -110,6 +116,7 @@ function MineTabs({ actions, initial }: { actions: ReactNode; initial?: string }
           action={<a className="m-btn sm" href="#/create"><MIcon name="plus" size={18} />새 활동 만들기</a>} />)}
     </div>
     {importSheet}
+    {proof && <ProofSheet onClose={() => setProof(false)} onSaved={saved => { setProof(false); setRecordsVersion(v => v + 1); window.location.hash = '#/record/' + saved.id }} />}
     <RecruitFab />
   </div>
 }
@@ -170,7 +177,7 @@ export function RecordsScreen({ user }: { user?: { memberType?: string } }) {
 }
 
 /** ＋ on 활동 기록: a small menu that drops in from the button and fades back out (closing waits for the animation). */
-function AddMenu({ items }: { items: { icon: 'refresh' | 'record'; label: string; note: string; onPick: () => void }[] }) {
+function AddMenu({ items, icon = 'plus', label = '기록 추가' }: { items: { icon: 'refresh' | 'record'; label: string; note: string; onPick: () => void }[]; icon?: 'plus' | 'docPlus'; label?: string }) {
   const [state, setState] = useState<'shut' | 'open' | 'closing'>('shut')
   const close = () => setState(s => s === 'open' ? 'closing' : s)
   useEffect(() => {
@@ -180,8 +187,8 @@ function AddMenu({ items }: { items: { icon: 'refresh' | 'record'; label: string
     return () => window.removeEventListener('keydown', key)
   }, [state])
   return <span className="rec-add">
-    <button type="button" className={'m-icon-btn rec-add-btn' + (state === 'open' ? ' on' : '')} aria-label="기록 추가" aria-expanded={state === 'open'}
-      onClick={() => setState(state === 'open' ? 'closing' : 'open')}><MIcon name="plus" /></button>
+    <button type="button" className={'m-icon-btn rec-add-btn' + (icon !== 'plus' ? ' still' : '') + (state === 'open' ? ' on' : '')} aria-label={label} aria-expanded={state === 'open'}
+      onClick={() => setState(state === 'open' ? 'closing' : 'open')}><MIcon name={icon} /></button>
     {state !== 'shut' && <>
       <span className={'rec-add-dim' + (state === 'closing' ? ' out' : '')} onClick={close} />
       <span role="menu" className={'rec-add-menu' + (state === 'closing' ? ' out' : '')} onAnimationEnd={() => setState(s => s === 'closing' ? 'shut' : s)}>
