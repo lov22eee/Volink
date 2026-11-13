@@ -1781,3 +1781,5 @@ fieldset.m-fsec legend { padding: 0; margin-bottom: 6px; }
 @keyframes sn-pop { from { transform: scale(.6); opacity: 0; } }
 @keyframes sn-open { from { opacity: 0; transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .sn-mark, .sn-detail { animation: none; } }
+.r-progress { width: 200px; height: 6px; border-radius: 6px; background: var(--m-mint-2); overflow: hidden; }
+.r-progress i { display: block; height: 100%; border-radius: 6px; background: var(--m-green); transition: width .3s ease; }

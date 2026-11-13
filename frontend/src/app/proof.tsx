@@ -220,10 +220,14 @@ export async function readPdf(file: File): Promise<Page> {
  * so the photo is made larger, turned black-and-white against its own neighbourhood (shadow, uneven light) and the long
  * straight lines are wiped before reading. The preview still shows the photo as taken.
  */
-export async function readPhoto(file: File): Promise<Page> {
+/** Long side of the picture handed to the OCR (1600 was tried: 25% faster but read clearly worse on the test papers). */
+const OCR_SIDE = () => (globalThis as { __ocrSize?: number }).__ocrSize ?? 2000
+export type ReadStage = { step: 'prep' | 'read' | 'again'; percent: number }
+export async function readPhoto(file: File, onStage?: (stage: ReadStage) => void): Promise<Page> {
+  onStage?.({ step: 'prep', percent: 0 })
   const url = URL.createObjectURL(file)
   const img = await new Promise<HTMLImageElement>((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url })
-  const scale = 2000 / Math.max(img.width, img.height)
+  const scale = OCR_SIDE() / Math.max(img.width, img.height)
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale)
   const g = canvas.getContext('2d')!
@@ -242,7 +246,7 @@ export async function readPhoto(file: File): Promise<Page> {
   const plain = document.createElement('canvas'); plain.width = straight.width; plain.height = straight.height
   plain.getContext('2d')!.drawImage(straight, 0, 0)
   wipeTable(straight)
-  const worker = await ocrWorker()
+  const worker = await warmOcr()
   try {
     const read = async (source: HTMLCanvasElement) => {
       const data = (await worker.recognize(source, {}, { blocks: true, text: true })).data
@@ -253,14 +257,16 @@ export async function readPhoto(file: File): Promise<Page> {
     }
     // up to two readings, stopping as soon as one gives all three values; otherwise the one with the most values
     let best: Page | null = null, bestScore = -1
-    for (const source of [straight, plain]) {
+    for (const [i, source] of [straight, plain].entries()) {
+      progress = p => onStage?.({ step: i ? 'again' : 'read', percent: p })
+      onStage?.({ step: i ? 'again' : 'read', percent: 0 })
       const got = await read(source)
       const score = fields(got) * 1000 + Math.min(999, got.text.replace(/\s/g, '').length)
       if (score > bestScore) { best = got; bestScore = score }
       if (fields(got) === 3) break
     }
     return best!
-  } finally { await worker.terminate() }
+  } finally { progress = null }
 }
 
 /** How many of the three values (name, day, hours) a reading gives. */
@@ -271,14 +277,29 @@ function fields(page: Page) {
 
 /** The OCR engine: the files shipped with the app first (/ocr/), the public CDN only if those cannot be loaded. */
 export class OcrUnavailable extends Error {}
+let progress: ((percent: number) => void) | null = null
+const logger = (m: { status: string; progress: number }) => { if (m.status === 'recognizing text') progress?.(Math.round(m.progress * 100)) }
 async function ocrWorker() {
   const { createWorker } = await import('tesseract.js')
   const base = new URL('ocr/', document.baseURI).href
   try {
-    return await createWorker('kor', 1, { workerPath: base + 'worker.min.js', corePath: base.replace(/\/$/, ''), langPath: base.replace(/\/$/, ''), workerBlobURL: false })
+    return await createWorker('kor', 1, { workerPath: base + 'worker.min.js', corePath: base.replace(/\/$/, ''), langPath: base.replace(/\/$/, ''), workerBlobURL: false, logger })
   } catch {
-    try { return await createWorker('kor') } catch { throw new OcrUnavailable('ocr') }
+    try { return await createWorker('kor', 1, { logger }) } catch { throw new OcrUnavailable('ocr') }
   }
+}
+/**
+ * The engine takes a few seconds to start on a phone: it is started when the 실적확인서 sheet opens (while the person picks
+ * or scans the paper), kept for the next paper, and stopped when the sheet closes.
+ */
+let shared: ReturnType<typeof ocrWorker> | null = null
+export function warmOcr() {
+  if (!shared) shared = ocrWorker().catch(cause => { shared = null; throw cause })
+  return shared
+}
+export function coolOcr() {
+  const w = shared; shared = null
+  w?.then(x => x.terminate()).catch(() => {})
 }
 
 /**
@@ -404,7 +425,7 @@ export function findPaper(canvas: HTMLCanvasElement): [Pt, Pt, Pt, Pt] | null {
 export function warpPaper(canvas: HTMLCanvasElement, [tl, tr, br, bl]: [Pt, Pt, Pt, Pt]): HTMLCanvasElement {
   const len = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1])
   let W = Math.max(len(tl, tr), len(bl, br)), H = Math.max(len(tl, bl), len(tr, br))
-  const s = Math.min(1, 2000 / Math.max(W, H)); W = Math.round(W * s); H = Math.round(H * s)
+  const s = Math.min(1, OCR_SIDE() / Math.max(W, H)); W = Math.round(W * s); H = Math.round(H * s)
   // homography from the output rectangle to the photo: solve the 8 unknowns from the 4 corner pairs
   const from: Pt[] = [[0, 0], [W - 1, 0], [W - 1, H - 1], [0, H - 1]], to = [tl, tr, br, bl]
   const A: number[][] = []
@@ -540,6 +561,9 @@ export function matchRecord(read: ProofRead, list: ExternalRecord[]): ExternalRe
 export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: ExternalRecord; onClose: () => void; onSaved: (saved: ExternalRecord) => void; onUse1365?: () => void }) {
   const [step, setStep] = useState<'pick' | 'reading' | 'check' | 'page' | 'none' | 'same'>('pick')
   const [fail, setFail] = useState<'engine' | 'read'>('read')
+  const [stage, setStage] = useState<ReadStage | null>(null)
+  // start the reader while the paper is being picked; stop it when the sheet goes away
+  useEffect(() => { warmOcr().catch(() => {}); return coolOcr }, [])
   const [page, setPage] = useState<Page | null>(null)
   const [photo, setPhoto] = useState(false)
   const [read, setRead] = useState<ProofRead | null>(null)
@@ -573,7 +597,8 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
     if (file.size > 15 * 1024 * 1024) { setError('15MB 이하 파일만 읽을 수 있어요.'); return }
     setStep('reading'); setPhoto(kind === 'photo')
     try {
-      const got = kind === 'pdf' ? await readPdf(file) : await readPhoto(file)
+      setStage(null)
+      const got = kind === 'pdf' ? await readPdf(file) : await readPhoto(file, setStage)
       const r = readProof(got.text, got.lines.map(l => l.text), got.lines.map(l => l.words))
       setPage(got); setRead(r); setEditing([])
       setHours(r.minutes != null ? String(Math.floor(r.minutes / 60)) : ''); setMins(r.minutes != null ? String(r.minutes % 60) : '')
@@ -618,7 +643,12 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
     {error && <p className="m-err" role="alert">{error}</p>}
     {inputs}
   </Sheet>
-  if (step === 'reading') return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />확인서를 읽고 있어요</div></Sheet>
+  if (step === 'reading') {
+    const words = !stage ? '확인서를 읽고 있어요' : stage.step === 'prep' ? '종이를 반듯하게 펴고 있어요' : stage.step === 'again' ? '한 번 더 꼼꼼히 읽고 있어요' : '글자를 읽고 있어요'
+    const pct = stage && stage.step !== 'prep' ? (stage.step === 'again' ? 50 + stage.percent / 2 : stage.percent / 2) : 0
+    return <Sheet title="실적확인서" onClose={onClose}><div className="r-reading" role="status"><span className="m-spin big" />{words}
+      {stage && <span className="r-progress" aria-hidden="true"><i style={{ width: Math.max(4, pct) + '%' }} /></span>}</div></Sheet>
+  }
   if (step === 'same' && same) return <Sheet title="" onClose={onClose}
     footer={<><a className="m-btn" href={'#/record/' + same.id} onClick={onClose}>그 기록 보기</a><button type="button" className="m-btn line" onClick={onClose}>닫기</button></>}>
     <div className="apply-res done"><span className="apply-res-ico" aria-hidden="true"><MIcon name="record" size={28} /></span>
