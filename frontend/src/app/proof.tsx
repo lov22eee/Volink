@@ -249,7 +249,7 @@ export async function readPhoto(file: File, onStage?: (stage: ReadStage) => void
   const worker = await warmOcr()
   try {
     const read = async (source: HTMLCanvasElement) => {
-      const data = (await worker.recognize(source, {}, { blocks: true, text: true })).data
+      const data = (await within(worker.recognize(source, {}, { blocks: true, text: true }), 120_000).catch(cause => { coolOcr(); throw cause })).data
       const lines: Line[] = (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines))
         .map(l => ({ text: l.text.trim(), x: l.bbox.x0, y: l.bbox.y0, w: l.bbox.x1 - l.bbox.x0, h: l.bbox.y1 - l.bbox.y0,
           words: l.words.map(w => ({ text: w.text, x0: w.bbox.x0, x1: w.bbox.x1 })) }))
@@ -281,12 +281,33 @@ let progress: ((percent: number) => void) | null = null
 const logger = (m: { status: string; progress: number }) => { if (m.status === 'recognizing text') progress?.(Math.round(m.progress * 100)) }
 async function ocrWorker() {
   const { createWorker } = await import('tesseract.js')
+  // 2026-11-13: inside the Android app the OCR's own background worker could not load files by itself (requests from a web
+  // worker are not served by the app's local server), so it waited forever. Everything it needs is now fetched here, on
+  // the page, and handed over as blob: addresses (worker, engine, Korean model). Each try has a time
+  // limit, so a stuck start ends in a message instead of an endless spinner.
+  try { return await within(localWorker(createWorker), 30_000) } catch { /* the public CDN next */ }
+  try { return await within(createWorker('kor', 1, { logger }), 45_000) } catch { throw new OcrUnavailable('ocr') }
+}
+/** WebAssembly SIMD check (the same test module wasm-feature-detect uses): picks the faster engine build when it can run. */
+const SIMD = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11])
+async function localWorker(createWorker: typeof import('tesseract.js').createWorker) {
   const base = new URL('ocr/', document.baseURI).href
-  try {
-    return await createWorker('kor', 1, { workerPath: base + 'worker.min.js', corePath: base.replace(/\/$/, ''), langPath: base.replace(/\/$/, ''), workerBlobURL: false, logger })
-  } catch {
-    try { return await createWorker('kor', 1, { logger }) } catch { throw new OcrUnavailable('ocr') }
-  }
+  const bytes = async (name: string) => { const r = await fetch(base + name); if (!r.ok) throw new Error(name); return r.arrayBuffer() }
+  const script = async (name: string) => URL.createObjectURL(new Blob([await bytes(name)], { type: 'text/javascript' }))
+  const simd = (() => { try { return WebAssembly.validate(SIMD) } catch { return false } })()
+  const [workerPath, core, lang] = await Promise.all([script('worker.min.js'), script(simd ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js'),
+    bytes('kor.traineddata.gz').then(b => URL.createObjectURL(new Blob([b])))])
+  // "#.js": the engine is taken as a file (not a folder) only when its address ends in "js". "#": the model is fetched
+  // from "<langPath>/kor.traineddata.gz", and after "#" that tail is only a fragment, so the blob itself is read.
+  // (Passing the model as bytes looked possible but tesseract.js 5.1.1 then never finishes starting.)
+  return createWorker('kor', 1, { workerPath, corePath: core + '#.js', langPath: lang + '#', workerBlobURL: false, cacheMethod: 'none', logger })
+}
+/** A promise that gives up after ms (the worker's start or a reading that never answers). */
+function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error('timeout')), ms)
+    promise.then(v => { window.clearTimeout(t); resolve(v) }, e => { window.clearTimeout(t); reject(e) })
+  })
 }
 /**
  * The engine takes a few seconds to start on a phone: it is started when the 실적확인서 sheet opens (while the person picks
@@ -598,7 +619,7 @@ export function ProofSheet({ record, onClose, onSaved, onUse1365 }: { record?: E
     setStep('reading'); setPhoto(kind === 'photo')
     try {
       setStage(null)
-      const got = kind === 'pdf' ? await readPdf(file) : await readPhoto(file, setStage)
+      const got = kind === 'pdf' ? await within(readPdf(file), 60_000) : await readPhoto(file, setStage)
       const r = readProof(got.text, got.lines.map(l => l.text), got.lines.map(l => l.words))
       setPage(got); setRead(r); setEditing([])
       setHours(r.minutes != null ? String(Math.floor(r.minutes / 60)) : ''); setMins(r.minutes != null ? String(r.minutes % 60) : '')
