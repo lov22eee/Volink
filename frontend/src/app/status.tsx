@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { api, ApiError } from '../api'
 import { Loading, MIcon, Sheet, TextArea, TopBar } from './ui'
 
-type Limit = { until: string | null; reason: string } | null
+type Limit = { until: string | null; reason: string; sanctionId?: number } | null
 export type Status = { noShows: number; apply: Limit; write: Limit; host?: Limit; warnings: number
   sanctions: { id: number; type: string; scope: string; source: string; reason: string; startsAt: string; endsAt: string | null; revoked: boolean; appealable: boolean; appeal: string | null }[]
   noShowList: { participationId: number; activityId: number; title: string; date: string; appealable: boolean; appeal: string | null }[] }
@@ -23,14 +23,47 @@ export function useStatus(): Status | null {
 }
 
 /** 신청 제한 / 글쓰기 제한 card (마이 top, this screen). */
-export function LimitCard({ status }: { status: Status }) {
+export function LimitCard({ status, onOpen }: { status: Status; onOpen?: () => void }) {
   const limit = status.apply ?? status.write
   if (!limit) return null
   const both = status.apply && status.write
-  return <a className="st-limit" href="#/my?view=status">
+  const inner = <>
     <span className="st-limit-ico"><MIcon name="alert" size={20} /></span>
     <span><b>{limit.until ? md(limit.until) + '까지 ' : ''}{both ? '신청·글쓰기가 제한돼요' : status.apply ? '신청할 수 없어요' : status.host ? (limit.until ? '글과 모집글을 쓸 수 없어요' : '커뮤니티 이용이 정지됐어요') : '글을 쓸 수 없어요'}</b><small>{limit.reason}</small></span>
-    <MIcon name="chevron" size={16} /></a>
+    <MIcon name="chevron" size={16} /></>
+  // 내 이용 상태 itself (2026-11-14): the card opens the limit sheet instead of linking to the page it is on
+  return onOpen ? <button type="button" className="st-limit" onClick={onOpen}>{inner}</button> : <a className="st-limit" href="#/my?view=status">{inner}</a>
+}
+
+/** 제한 카드 → 시트 (2026-11-14): what is limited, why and until when; 이의 신청하기 right here. Closes like any sheet. */
+function LimitSheet({ status, onClose, onAppeal }: { status: Status; onClose: () => void; onAppeal: (target: AppealTarget) => void }) {
+  const limit = (status.apply ?? status.write)!
+  const apply = Boolean(status.apply)
+  const sanction = status.sanctions.find(x => x.id === limit.sanctionId)
+  const appealable = Boolean(sanction && sanction.appealable && !sanction.appeal && !sanction.revoked)
+  const recent = status.noShowList.slice(0, 3)
+  const title = `${limit.until ? md(limit.until) + '까지 ' : ''}${apply ? '신청할 수 없어요' : status.host ? (limit.until ? '글과 모집글을 쓸 수 없어요' : '커뮤니티 이용이 정지됐어요') : '글을 쓸 수 없어요'}`
+  return createPortal(<div className="m-sheet-wrap">
+    <div className="m-dim" onClick={onClose} />
+    <section className="m-sheet sn-sheet" role="dialog" aria-modal="true" aria-labelledby="ls-title">
+      <span className="m-grab" aria-hidden="true" />
+      <div className="sn-body">
+        <span className="sn-mark" aria-hidden="true">!</span>
+        <h2 id="ls-title">{title}</h2>
+        <p>{apply ? <><span>최근 90일 동안 불참이 {status.noShows}번 쌓였어요.</span><span>이미 확정된 활동은 그대로 참여할 수 있어요.</span></>
+          : <><span>{limit.reason}</span><span>봉사 신청·참여는 그대로 할 수 있어요.</span></>}</p>
+        <dl className="sn-detail">
+          {apply && recent[0] && <div><dt>불참한 활동</dt><dd><b>{recent[0].title}</b><span>{md(recent[0].date)} · 출석 확인 없음</span></dd></div>}
+          {apply && recent.length > 0 && <div><dt>최근 90일 불참</dt><dd>{status.noShows}번 ({recent.map(x => `${Number(x.date.slice(5, 7))}/${Number(x.date.slice(8, 10))}`).reverse().join(', ')})</dd></div>}
+          {sanction && <div><dt>제한 기간</dt><dd>{md(sanction.startsAt)}{sanction.endsAt ? ` ~ ${md(sanction.endsAt)}` : ' ~ 관리자가 풀 때까지'}</dd></div>}
+          {sanction?.appeal && <div><dt>이의 신청</dt><dd>{appealWord[sanction.appeal] ?? sanction.appeal}</dd></div>}
+        </dl>
+        {appealable && <button type="button" className="m-btn" onClick={() => onAppeal({ kind: 'SANCTION', sanctionId: sanction!.id, label: sanction!.reason })}>이의 신청하기</button>}
+        <button type="button" className={'m-btn' + (appealable ? ' line' : '')} onClick={onClose}>닫기</button>
+        {appealable && <span className="sn-appeal">{apply ? '출석했는데 불참으로 남았다면 이의를 신청해 주세요 (7일 안)' : '조치가 지나치다고 생각되면 이의를 신청해 주세요 (7일 안)'}</span>}
+      </div>
+    </section>
+  </div>, document.body)
 }
 
 export function AppealSheet({ target, onClose, onSent }: { target: AppealTarget; onClose: () => void; onSent: () => void }) {
@@ -59,13 +92,15 @@ export function StatusScreen() {
   const [status, setStatus] = useState<Status | null>(null)
   const [reports, setReports] = useState<MyReport[] | null>(null)
   const [appeal, setAppeal] = useState<AppealTarget | null>(null)
+  const [limitOpen, setLimitOpen] = useState(false)
   const load = () => { api<Status>('/api/me/status').then(setStatus).catch(() => {}); api<MyReport[]>('/api/me/reports').then(setReports).catch(() => setReports([])) }
   useEffect(load, [])
   if (!status) return <div className="m-screen"><TopBar title="내 이용 상태" back="history" /><Loading /></div>
   return <div className="m-screen">
     <TopBar title="내 이용 상태" back="history" />
     <div className="m-body">
-      <LimitCard status={status} />
+      <LimitCard status={status} onOpen={() => setLimitOpen(true)} />
+      {limitOpen && <LimitSheet status={status} onClose={() => setLimitOpen(false)} onAppeal={target => { setLimitOpen(false); setAppeal(target) }} />}
       <section className="st-sum">
         <div><b>{status.noShows}</b><small>최근 90일 불참</small></div>
         <div><b>{status.warnings}</b><small>인정된 신고</small></div>
@@ -117,6 +152,7 @@ export function HostAppeals({ activityId, onChanged }: { activityId: number; onC
  * the dates, and [확인] only after 확인했어요 is ticked. It does not close by tapping outside, dragging or Escape.
  */
 type SafetyNotice = { id: number; kind: 'REPORT' | 'NOSHOW'; step: number; until: string | null
+  sanctionId?: number | null; participationId?: number | null; appealable?: boolean
   targetType?: string; targetTitle?: string | null; targetBody?: string | null; reason?: string; note?: string | null
   noShows?: { title: string; startsAt: string }[] }
 const dayTime = (iso: string) => `${md(iso)} ${iso.slice(11, 16)}`
@@ -150,12 +186,19 @@ export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; on
   const [open, setOpen] = useState(false)
   const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [appeal, setAppeal] = useState(false)
   const text = noticeText(notice)
+  // 이의 신청하기 (2026-11-14): no tick needed; the sanction when there is one, else the no-show that made the 2회 warning
+  const target: AppealTarget | null = !notice.appealable ? null
+    : notice.sanctionId ? { kind: 'SANCTION', sanctionId: notice.sanctionId, label: notice.kind === 'REPORT' ? (notice.targetTitle ?? text.title) : text.title }
+    : notice.participationId ? { kind: 'NO_SHOW', participationId: notice.participationId, label: notice.noShows?.[0]?.title ?? '불참 기록' } : null
   useEffect(() => { document.documentElement.classList.add('m-locked'); return () => document.documentElement.classList.remove('m-locked') }, [])
   async function confirm() {
     setBusy(true)
     try { await api('/api/me/safety-notice/' + notice.id + '/ack', 'POST'); onDone() } catch { setBusy(false) }
   }
+  // Sending the appeal also counts as having seen the warning; 닫기 on the appeal form goes back to the warning.
+  if (appeal && target) return <AppealSheet target={target} onClose={() => setAppeal(false)} onSent={() => void confirm()} />
   return createPortal(<div className="m-sheet-wrap">
     <div className="m-dim" />
     <section className="m-sheet sn-sheet" role="alertdialog" aria-modal="true" aria-labelledby="sn-title" aria-describedby="sn-text">
@@ -177,7 +220,7 @@ export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; on
         </dl>}
         <label className="m-check sn-check"><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} /><span className="m-box" />확인했어요</label>
         <button type="button" className="m-btn" disabled={!checked || busy} onClick={confirm}>확인</button>
-        <a className="sn-appeal" href="#/my?view=status" onClick={() => { if (checked) void confirm() }}>이의 신청은 마이 › 내 이용 상태에서 (7일 안)</a>
+        {target && <button type="button" className="sn-appeal sn-appeal-btn" disabled={busy} onClick={() => setAppeal(true)}>이의 신청하기</button>}
       </div>
     </section>
   </div>, document.body)

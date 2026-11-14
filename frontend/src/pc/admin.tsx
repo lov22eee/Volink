@@ -1,11 +1,10 @@
 // 관리자 콘솔 (PC, 2026-11-11). 할 일 = one queue of everything waiting for a decision (신고 · 이의 · 활동 검토 · 기관 확인),
 // oldest first; a decision always has a reason and opens the next item. 찾기 (회원), 현황 (numbers and the server), 기록
-// (admin_actions) and 장소. Decisions use the existing admin APIs only.
+// (admin_actions). Decisions use the existing admin APIs only.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ApiError, apiBlob } from '../api'
-import type { LiveActivity, PlaceInfo, User } from '../api'
-import { PlaceEditor } from '../App'
+import type { LiveActivity, User } from '../api'
 import { AdminDocs } from './docs'
 import type { OrgDoc } from './docs'
 import { ago, hoursSince, Loading, Logo, Panel, PcIcon, minutesWord, when } from './ui'
@@ -29,17 +28,13 @@ const failText = (cause: unknown) => cause instanceof ApiError ? (Object.values(
 export function AdminConsole({ parts, query, user, onSignOut }: { parts: string[]; query: URLSearchParams; user: User; onSignOut: () => void }) {
   const section = parts[1] ?? ''
   const queue = useQueue()
-  const [words, setWords] = useState(query.get('q') ?? '')
-  const nav: [string, string][] = [['', '대시보드'], ['todo', '할 일'], ['find', '회원 찾기'], ['stats', '현황'], ['log', '기록'], ['places', '장소']]
+  const nav: [string, string][] = [['', '대시보드'], ['todo', '할 일'], ['find', '회원 찾기'], ['stats', '현황'], ['log', '기록']]
   const count = queue.items?.length ?? 0
   return <div className="pc">
     <header className="pc-hd dark">
       <Logo sub="관리자" href="#/admin" />
       <nav className="pc-nav" aria-label="관리자 메뉴">{nav.map(([key, label]) => <a key={key} href={'#/admin' + (key ? '/' + key : '')} aria-current={section === key ? 'page' : undefined}>{label}{key === 'todo' && count ? <b className="pc-cnt">{count}</b> : null}</a>)}</nav>
       <div className="pc-sp" />
-      <form onSubmit={e => { e.preventDefault(); window.location.hash = '#/admin/find?q=' + encodeURIComponent(words.trim()) }} style={{ position: 'relative' }}>
-        <label><span className="sr">회원 찾기</span><input value={words} onChange={e => setWords(e.target.value)} placeholder="회원 이메일·이름·닉네임" style={{ width: 250, height: 34, borderRadius: 8, border: '1px solid #3b443f', background: '#2c332f', color: '#fff', padding: '0 10px 0 32px' }} /></label>
-        <span style={{ position: 'absolute', left: 10, top: 9, color: '#8f9993' }}><PcIcon name="search" /></span></form>
       <div className="pc-who"><span>{user.name}</span><button type="button" onClick={onSignOut}>로그아웃</button></div>
     </header>
     {section === '' && <Dashboard queue={queue} />}
@@ -47,7 +42,6 @@ export function AdminConsole({ parts, query, user, onSignOut }: { parts: string[
     {section === 'find' && (parts[2] ? <Member id={Number(parts[2])} /> : <Find q={query.get('q') ?? ''} />)}
     {section === 'stats' && <Stats />}
     {section === 'log' && <Log type={query.get('type') ?? ''} />}
-    {section === 'places' && <Places />}
   </div>
 }
 
@@ -73,9 +67,9 @@ function useQueue(): QueueState {
         seen.add(target)
         list.push({ key: 'r' + r.id, kind: 'REPORT', title: `${targetWord[r.targetType] ?? r.targetType} · ${r.summary}`, sub: `${r.reasonLabel} · 신고 ${r.sameTarget}건`, at: r.createdAt, report: r })
       }
-      const ready = appeals.filter(a => a.status === 'ESCALATED' || a.kind === 'SANCTION')
-      setWaitingHost(appeals.length - ready.length)
-      for (const a of ready) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : ''}`, at: a.submittedAt, appeal: a })
+      // 2026-11-14: an appeal still waiting for the organizer shows here too, so an admin can decide it without waiting 3 days
+      setWaitingHost(0)
+      for (const a of appeals) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : a.status === 'SUBMITTED' && a.kind !== 'SANCTION' ? ' · 모집자 답변 대기' : ''}`, at: a.submittedAt, appeal: a })
       for (const a of activities) list.push({ key: 'v' + a.id, kind: 'ACTIVITY', title: a.title, sub: `검토 사유 · ${a.riskReasons || '확인 필요'}`, at: null, activity: a })
       for (const c of reviews) list.push({ key: 'c' + c.userId, kind: 'COMMUNITY', title: c.name, sub: `1년 안 신고 인정 ${c.steps}회 · 커뮤니티 이용 정지 검토`, at: c.lastAt, review: c })
       for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청${o.documents?.length ? ` · 서류 ${o.documents.length}개` : ''}`, at: o.requestedAt, org: o })
@@ -148,7 +142,6 @@ function Dashboard({ queue }: { queue: QueueState }) {
     setOpen(same[0]?.key ?? null)
   }
   const thisWeek = o?.weeks[o.weeks.length - 1]?.applications ?? 0, lastWeek = o?.weeks[o.weeks.length - 2]?.applications ?? 0
-  const max = Math.max(1, ...(o?.weeks ?? []).map(w => w.applications))
   const rate = o && o.attended + o.noShows ? Math.round(o.attended / (o.attended + o.noShows) * 100) : null
   const rows = s ? systemRows(s) : []
   const bad = rows.filter(r => r[1] === 'red' || r[1] === 'amb')
@@ -162,9 +155,9 @@ function Dashboard({ queue }: { queue: QueueState }) {
         <em>{old ? <span className="pc-tag red">24시간 넘음 {old}</span> : mine.length ? '눌러서 바로 처리' : kind === 'APPEAL' && waitingHost ? `모집자 답변 대기 ${waitingHost}` : '밀린 일 없음'}</em></button>
     })}</div>
     <div className="pc-dash-grid">
-      <Panel title="지금 처리할 일" note={items ? `${list.length}건 · 오래된 순` : ''} right={<a className="pc-link" href="#/admin/todo">전체 보기 ›</a>} className="pc-dash-todo">
+      <Panel title="지금 처리할 일" note={items ? `${list.length}건 · 오래된 순` : ''} right={<a className="pc-link" href="#/admin/todo">전체 보기 ›</a>} className="pc-dash-fit">
         {items === null ? <Loading /> : list.length === 0 ? <p className="pc-empty">지금 처리할 일이 없어요.</p>
-          : <div className="pc-rows">{list.slice(0, 9).map(item => <Row key={item.key} item={item} onClick={() => setOpen(item.key)} />)}</div>}
+          : <div className="pc-rows">{list.slice(0, 20).map(item => <Row key={item.key} item={item} onClick={() => setOpen(item.key)} />)}</div>}
       </Panel>
       <Panel title="서비스 현황" right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
         {!o ? <Loading /> : <div className="pc-mini">
@@ -174,9 +167,7 @@ function Dashboard({ queue }: { queue: QueueState }) {
           <div><span>출석률 (30일)</span><b>{rate == null ? '–' : rate + '%'}</b><small>불참 {o.noShows}</small></div>
         </div>}
       </Panel>
-      <Panel title="주별 신청" note="최근 12주">
-        {!o ? <Loading /> : <div style={{ padding: '6px 16px 12px' }}><div className="pc-bars" role="img" aria-label={`최근 12주 신청 수, 이번 주 ${thisWeek}건`}>{o.weeks.map(w => <div key={w.from}><span>{w.applications}</span><i style={{ height: Math.max(2, w.applications / max * 110) }} /><span>{w.from.slice(5).replace('-', '/')}</span></div>)}</div></div>}
-      </Panel>
+      <Trend o={o} />
       <Panel title="서버 상태" note={s ? (bad.length ? `확인 필요 ${bad.length}` : '모두 정상') : ''} right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
         {!s ? <Loading /> : <div className="pc-sys">{rows.map(([name, tone, state]) => <div key={name}><i className={tone || 'off'} /><span>{name}</span><b>{state}</b></div>)}</div>}
       </Panel>
@@ -189,6 +180,41 @@ function Dashboard({ queue }: { queue: QueueState }) {
       <Case key={current.key} item={current} position={`${kindTag[current.kind][0]} ${list.filter(i => i.kind === current.kind).indexOf(current) + 1} / ${list.filter(i => i.kind === current.kind).length}`} onDone={done} onClose={() => setOpen(null)} />
     </Drawer>}
   </main>
+}
+
+/** 주별 신청 (2026-11-14): the old bar chart as a line, next to 서버 상태; hovering a week shows its number. */
+const lines: { key: 'applications' | 'members' | 'attended' | 'reports'; label: string; color: string; on: boolean }[] = [
+  { key: 'applications', label: '신청', color: '#2f6f52', on: true }]
+
+function Trend({ o }: { o: Overview | null }) {
+  const [shown, setShown] = useState(() => lines.filter(l => l.on).map(l => l.key))
+  const [hover, setHover] = useState<number | null>(null)
+  const weeks = o?.weeks ?? []
+  const W = 640, H = 210, L = 40, R = 18, T = 12, B = 24
+  const on = lines.filter(l => shown.includes(l.key))
+  const top = Math.max(4, ...weeks.flatMap(w => on.map(l => w[l.key] ?? 0)))
+  const step = top <= 4 ? 1 : top <= 10 ? 2 : top <= 20 ? 5 : top <= 50 ? 10 : Math.ceil(top / 50) * 10
+  const max = Math.ceil(top / step) * step
+  const x = (i: number) => L + i * (W - L - R) / Math.max(1, weeks.length - 1), y = (v: number) => T + (H - T - B) * (1 - v / max)
+  const ticks = Array.from({ length: max / step + 1 }, (_, i) => i * step)
+  const h = hover ?? weeks.length - 1, at = weeks[h]
+  return <Panel title="주별 신청" note="최근 12주" right={lines.length < 2 ? undefined : <div className="pc-trend-chips">{lines.map(l =>
+    <button key={l.key} type="button" className={shown.includes(l.key) ? 'on' : ''} style={{ ['--c' as string]: l.color }} aria-pressed={shown.includes(l.key)}
+      onClick={() => setShown(s => s.includes(l.key) ? (s.length > 1 ? s.filter(k => k !== l.key) : s) : [...s, l.key])}><i />{l.label}</button>)}</div>}>
+    {!o ? <Loading /> : <div className="pc-trend">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`최근 12주 추세, 이번 주 ${on.map(l => `${l.label} ${weeks[weeks.length - 1]?.[l.key] ?? 0}`).join(', ')}`} onMouseLeave={() => setHover(null)}>
+        {ticks.map(v => <g key={v}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#efefeb" /><text x={L - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="#9aa09c">{v}</text></g>)}
+        {weeks.map((w, i) => <text key={w.from} x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill={i === h ? '#1f2421' : '#9aa09c'} fontWeight={i === h ? 700 : 400}>{w.from.slice(5).replace('-', '/')}</text>)}
+        <line x1={x(h)} x2={x(h)} y1={T} y2={H - B} stroke="#cfd3cd" strokeDasharray="3 3" />
+        {on.map((l, n) => { const pts = weeks.map((w, i) => `${x(i)},${y(w[l.key] ?? 0)}`).join(' ')
+          return <g key={l.key}>{n === 0 && <polygon points={`${x(0)},${y(0)} ${pts} ${x(weeks.length - 1)},${y(0)}`} fill={l.color} opacity=".07" />}
+            <polyline points={pts} fill="none" stroke={l.color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+            <circle cx={x(h)} cy={y(at?.[l.key] ?? 0)} r="4" fill="#fff" stroke={l.color} strokeWidth="2.2" /></g> })}
+        {weeks.map((w, i) => <rect key={w.from} x={x(i) - (W - L - R) / 22} y={T} width={(W - L - R) / 11} height={H - T - B} fill="transparent" onMouseEnter={() => setHover(i)} />)}
+      </svg>
+      <div className="pc-trend-now"><b>{at ? at.from.slice(5).replace('-', '/') + ' 주' : ''}</b>{on.map(l => <span key={l.key}><i style={{ background: l.color }} />{l.label} <b>{at?.[l.key] ?? 0}</b></span>)}</div>
+    </div>}
+  </Panel>
 }
 
 function Drawer({ children, onClose }: { children: ReactNode; onClose: () => void }) {
@@ -312,7 +338,7 @@ function AllDone({ handled, waitingHost }: { handled: number; waitingHost: numbe
 function Log({ type }: { type: string }) {
   const [list, setList] = useState<Action[] | null>(null)
   useEffect(() => { setList(null); api<Action[]>('/api/admin/actions?limit=200' + (type ? '&type=' + type : '')).then(setList).catch(() => setList([])) }, [type])
-  const types: [string, string][] = [['', '전체'], ['REPORT', '신고'], ['APPEAL', '이의'], ['ACTIVITY', '활동'], ['ORGANIZATION', '기관'], ['PLACE', '장소']]
+  const types: [string, string][] = [['', '전체'], ['REPORT', '신고'], ['APPEAL', '이의'], ['ACTIVITY', '활동'], ['ORGANIZATION', '기관']]
   return <main className="pc-main">
     <div className="pc-head"><h1>처리 기록</h1><span className="mu">관리자가 한 결정은 모두 사유와 함께 남아요</span></div>
     <Panel title="최근 200건" right={<div className="pc-chips">{types.map(([k, label]) => <button key={k || 'all'} type="button" aria-pressed={type === k} onClick={() => { window.location.hash = '#/admin/log' + (k ? '?type=' + k : '') }}>{label}</button>)}</div>}>
@@ -325,7 +351,7 @@ function Log({ type }: { type: string }) {
 
 /* ---------------- 현황 ---------------- */
 
-type Overview = { members: number; newMembers: number; recruiting: number; recruitingInstitution: number; weeks: { from: string; applications: number }[]; attended: number; noShows: number
+type Overview = { members: number; newMembers: number; recruiting: number; recruitingInstitution: number; weeks: { from: string; applications: number; members?: number; attended?: number; reports?: number }[]; attended: number; noShows: number
   institutions: number; institutionsPending: number; speed: { kind: string; count: number; averageMinutes: number | null; longestMinutes: number | null }[]; reasons: { reason: string; total: number; accepted: number }[] }
 type System = { checkedAt: string; version: string | null; startedAt: string; uptimeMinutes: number; database: { ok: boolean; millis?: number; schema?: string | null }; scheduler: { lastRun: string | null; secondsAgo: number | null }
   volunteer1365: { limit: number; used: number | null }; push: { enabled: boolean; tokens: number }; disk: { totalBytes: number; freeBytes: number; photoBytes: number }; memory: { usedBytes: number; maxBytes: number } }
@@ -395,15 +421,25 @@ const sourceWord: Record<string, string> = { NOSHOW: '불참 누적', REPORT: '�
 
 function Find({ q }: { q: string }) {
   const [list, setList] = useState<MemberRow[] | null>(null)
-  useEffect(() => { if (q.trim().length >= 2) { setList(null); api<MemberRow[]>('/api/admin/members?q=' + encodeURIComponent(q)).then(setList).catch(() => setList([])) } else setList([]) }, [q])
+  const [words, setWords] = useState(q)
+  const [kind, setKind] = useState('')
+  useEffect(() => { setWords(q); setKind(''); if (q.trim().length >= 2) { setList(null); api<MemberRow[]>('/api/admin/members?q=' + encodeURIComponent(q)).then(setList).catch(() => setList([])) } else setList([]) }, [q])
+  const all = list ?? []
+  const kinds: [string, string, (m: MemberRow) => boolean][] = [['', '전체', () => true], ['USER', '개인', m => m.role !== 'ADMIN' && m.memberType !== 'INSTITUTION'], ['ORG', '기관', m => m.memberType === 'INSTITUTION'], ['LIMIT', '제한·정지', m => m.status !== 'ACTIVE']]
+  const rows = all.filter(kinds.find(k => k[0] === kind)![2])
   return <main className="pc-main">
-    <div className="pc-head"><h1>회원 찾기</h1><span className="mu">위쪽 검색 칸에 이메일, 이름 또는 닉네임을 두 글자 이상 넣어 주세요</span></div>
-    <Panel title={q ? `“${q}” 검색 결과` : '검색 결과'}>
-      {list === null ? <Loading /> : list.length === 0 ? <p className="pc-empty">{q.trim().length >= 2 ? '맞는 회원이 없어요.' : '검색어를 입력해 주세요.'}</p>
-        : <table className="pc-tbl"><thead><tr><th>이름</th><th>닉네임</th><th>이메일</th><th>유형</th><th>상태</th><th>가입</th></tr></thead><tbody>{list.map(m =>
+    <div className="pc-head"><h1>회원 찾기</h1></div>
+    <form className="pc-find" role="search" onSubmit={e => { e.preventDefault(); window.location.hash = '#/admin/find?q=' + encodeURIComponent(words.trim()) }}>
+      <label><PcIcon name="search" /><span className="sr">회원 찾기</span><input autoFocus value={words} onChange={e => setWords(e.target.value)} placeholder="이메일, 이름 또는 닉네임 (두 글자 이상)" /></label>
+      <button type="submit" className="pc-btn" disabled={words.trim().length < 2}>찾기</button>
+    </form>
+    {q.trim().length >= 2 && list && list.length > 0 && <div className="pc-seg">{kinds.map(([k, label, test]) => <button key={k} type="button" className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{label} {all.filter(test).length}</button>)}</div>}
+    {q.trim().length >= 2 && <Panel title={`“${q}” 검색 결과`} note={list ? `${rows.length}명` : ''}>
+      {list === null ? <Loading /> : rows.length === 0 ? <p className="pc-empty">맞는 회원이 없어요.</p>
+        : <table className="pc-tbl"><thead><tr><th>이름</th><th>닉네임</th><th>이메일</th><th>유형</th><th>상태</th><th>가입</th></tr></thead><tbody>{rows.map(m =>
           <tr key={m.id} className="go" onClick={() => { window.location.hash = '#/admin/find/' + m.id }}><td><a className="t" href={'#/admin/find/' + m.id}>{m.name}</a></td><td>{m.nickname ?? '-'}</td><td className="mu">{m.email}</td>
             <td>{m.role === 'ADMIN' ? '관리자' : m.memberType === 'INSTITUTION' ? '기관' : '개인'}</td><td><span className={'pc-tag ' + (m.status === 'ACTIVE' ? 'g' : 'red')}>{statusWord[m.status] ?? m.status}</span></td><td className="mu nw">{m.joinedAt}</td></tr>)}</tbody></table>}
-    </Panel>
+    </Panel>}
   </main>
 }
 
@@ -429,20 +465,5 @@ function Member({ id }: { id: number }) {
     </div>
     <Panel title="최근 신청">{m.participations.length === 0 ? <p className="pc-empty">신청한 활동이 없어요.</p> : <table className="pc-tbl"><thead><tr><th>날짜</th><th>활동</th><th>상태</th></tr></thead><tbody>{m.participations.map(p =>
       <tr key={p.id}><td className="mu nw">{p.date}</td><td>{p.title}</td><td><span className={'pc-tag ' + (p.status === 'NO_SHOW' ? 'red' : ['CHECKED_IN', 'COMPLETED', 'CONFIRMED'].includes(p.status) ? 'g' : '')}>{partWord[p.status] ?? p.status}</span></td></tr>)}</tbody></table>}</Panel>
-  </main>
-}
-
-/* ---------------- 장소 ---------------- */
-
-function Places() {
-  const [places, setPlaces] = useState<PlaceInfo[] | null>(null)
-  const [ok, setOk] = useState('')
-  const load = useCallback(() => { api<PlaceInfo[]>('/api/places').then(setPlaces).catch(() => setPlaces([])) }, [])
-  useEffect(load, [load])
-  const missing = (places ?? []).filter(p => p.latitude == null).length
-  return <main className="pc-main">
-    <div className="pc-head"><h1>장소</h1><span className="mu">좌표가 있어야 거리 검색과 지도에 나와요</span>{missing > 0 && <span className="pc-tag amb">좌표 없음 {missing}</span>}</div>
-    {ok && <p className="pc-ok" role="status">{ok}</p>}
-    <div className="pc-legacy">{places === null ? <Loading /> : <ul className="place-list">{places.map(place => <PlaceEditor key={place.id + ':' + place.latitude + ':' + place.longitude} place={place} onSaved={text => { setOk(text); load() }} />)}</ul>}</div>
   </main>
 }

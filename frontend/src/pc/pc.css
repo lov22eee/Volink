@@ -306,8 +306,14 @@
 .pc-kpi button.on.blu { border-top-color: var(--pc-blu); }
 .pc-kpi button.on.amb { border-top-color: #c98a12; }
 .pc-kpi button.on em { color: var(--pc-ink2); font-weight: 600; }
-.pc-dash-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: start; }
-.pc-dash-todo { grid-row: span 3; }
+.pc-dash-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: stretch; }
+.pc-dash-grid > .pc-pn { display: flex; flex-direction: column; min-width: 0; }
+.pc-dash-grid .pc-mini, .pc-dash-grid .pc-sys, .pc-dash-grid .pc-trend { flex: 1; }
+.pc-dash-grid .pc-sys { grid-auto-rows: 1fr; }
+/* 처리할 일 takes the height of 서비스 현황 next to it and scrolls inside, so neither leaves blank space */
+.pc-dash-fit { height: 0; min-height: 100%; }
+.pc-dash-fit > .pc-rows { flex: 1; min-height: 0; overflow-y: auto; }
+.pc-trend { display: flex; flex-direction: column; justify-content: center; }
 .pc-dash-log { grid-column: 1 / -1; }
 .pc-rows button.row { all: unset; box-sizing: border-box; display: flex; gap: 10px; align-items: center; width: 100%; padding: 12px 16px; border-bottom: 1px solid var(--pc-line2); cursor: pointer; }
 .pc-rows button.row:last-child { border-bottom: 0; }
@@ -338,7 +344,7 @@
 .pc-x { border: 0; background: none; font-size: 22px; line-height: 1; color: var(--pc-mu); padding: 0 4px; margin-left: 8px; }
 @keyframes pc-fade { from { opacity: 0; } }
 @keyframes pc-slide { from { transform: translateX(40px); opacity: .6; } }
-@media (max-width: 1100px) { .pc-kpi { grid-template-columns: repeat(3, 1fr); } .pc-dash-grid { grid-template-columns: 1fr; } .pc-dash-todo { grid-row: auto; } }
+@media (max-width: 1100px) { .pc-kpi { grid-template-columns: repeat(3, 1fr); } .pc-dash-grid { grid-template-columns: 1fr; } .pc-dash-fit { height: auto; min-height: 0; } .pc-dash-fit > .pc-rows { max-height: 420px; } }
 @media (max-width: 640px) { .pc-kpi { grid-template-columns: 1fr 1fr; } .pc-sys, .pc-mini { grid-template-columns: 1fr; } }
 
 /* 첫 화면 = 앱 소개 (2026-11-12): phone shots at real phone size, rows that alternate, fade-up on scroll */
@@ -443,3 +449,25 @@
 .pc-motion { flex: 1 1 0; min-width: 0; max-width: 620px; margin-left: auto; display: flex; flex-direction: column; align-items: center; margin-block: -24px -8px; }
 .pc-motion svg { width: 100%; height: auto; aspect-ratio: 4 / 3; display: block; }
 @media (max-width: 900px) { .pc-motion { max-width: 520px; margin: 0 auto; width: 100%; } }
+
+/* 추세 (2026-11-14) */
+.pc-trend { padding: 8px 14px 12px; }
+.pc-trend svg { display: block; width: 100%; height: auto; }
+.pc-trend-chips { display: flex; gap: 6px; }
+.pc-trend-chips button { border: 1px solid var(--pc-line); background: #fff; border-radius: 16px; padding: 2px 10px; font-size: 12.5px; font-weight: 700; color: #b0b5b2; display: flex; align-items: center; gap: 6px; }
+.pc-trend-chips button i { width: 10px; height: 3px; border-radius: 2px; background: #d5d8d4; }
+.pc-trend-chips button.on { color: var(--pc-ink2); }
+.pc-trend-chips button.on i { background: var(--c); }
+.pc-trend-now { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--pc-mu); padding: 4px 4px 0; }
+.pc-trend-now span { display: flex; align-items: center; gap: 5px; }
+.pc-trend-now i { width: 8px; height: 8px; border-radius: 50%; }
+.pc-trend-now b { color: var(--pc-ink); }
+/* 회원 찾기 검색칸 */
+.pc-find { display: flex; gap: 10px; background: #fff; border: 1px solid var(--pc-line); border-radius: 12px; padding: 14px 16px; }
+.pc-find label { flex: 1; display: flex; align-items: center; gap: 10px; border: 1.5px solid var(--pc-line); border-radius: 10px; padding: 0 14px; height: 46px; color: var(--pc-mu); }
+.pc-find label:focus-within { border-color: var(--pc-g); box-shadow: 0 0 0 4px var(--pc-gs); }
+.pc-find input { flex: 1; border: 0; outline: 0; font-size: 15px; background: none; }
+.pc-find .pc-btn { height: 46px; padding: 0 24px; }
+.pc-seg { display: flex; gap: 6px; }
+.pc-seg button { border: 1px solid var(--pc-line); background: #fff; border-radius: 16px; padding: 4px 12px; font-size: 13px; font-weight: 700; color: var(--pc-ink2); }
+.pc-seg button.on { background: var(--pc-ink); border-color: var(--pc-ink); color: #fff; }

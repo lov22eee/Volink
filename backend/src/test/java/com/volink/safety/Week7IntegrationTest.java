@@ -259,4 +259,20 @@ class Week7IntegrationTest extends ApiTestSupport {
         perform(post("/api/me/safety-notice/" + json.readTree(second).get("id").asLong() + "/ack"), null, token).andExpect(status().is2xxSuccessful());
         perform(get("/api/me/safety-notice"), null, token).andExpect(jsonPath("$.id").doesNotExist());
     }
+
+    @Test
+    void theWarningSheetOffersAnAppealOnItsSanctionAndSendingItConfirmsTheWarning() throws Exception {
+        String email = member("GENERAL"), token = token(email);
+        long user = userId(email);
+        jdbc.update("INSERT INTO sanctions(user_id, type, scope, source, reason, starts_at, ends_at, created_by) VALUES (?, 'RESTRICTION', 'APPLY', 'NOSHOW', '불참 3회', NOW(), NOW() + INTERVAL 14 DAY, ?)", user, user);
+        long sanction = jdbc.queryForObject("SELECT MAX(id) FROM sanctions WHERE user_id = ?", Long.class, user);
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, sanction_id, created_at) VALUES (?, 'NOSHOW', 3, ?, NOW())", user, sanction);
+        String notice = perform(get("/api/me/safety-notice"), null, token)
+                .andExpect(jsonPath("$.sanctionId").value(sanction)).andExpect(jsonPath("$.appealable").value(true)).andReturn().getResponse().getContentAsString();
+        // the 내 이용 상태 limit card carries the same sanction, so its sheet can appeal it too
+        perform(get("/api/me/status"), null, token).andExpect(jsonPath("$.apply.sanctionId").value(sanction));
+        perform(post("/api/appeals"), Map.of("kind", "SANCTION", "sanctionId", sanction, "reasonCode", "TOO_MUCH", "reason", "출석했는데 불참으로 남았어요"), token).andExpect(status().is2xxSuccessful());
+        perform(post("/api/me/safety-notice/" + json.readTree(notice).get("id").asLong() + "/ack"), null, token).andExpect(status().is2xxSuccessful());
+        perform(get("/api/me/safety-notice"), null, token).andExpect(jsonPath("$.id").doesNotExist());
+    }
 }

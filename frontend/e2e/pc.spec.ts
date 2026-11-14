@@ -173,7 +173,7 @@ test('기관: sign up on the PC, wait for the check, the admin approves from 할
   await expect(page).toHaveURL(new RegExp('#/org/activity/' + id))
 })
 
-test('admin: a post waiting for review stays hidden until it is approved in 할 일; 현황, 찾기 and 장소 answer', async ({ page, request }) => {
+test('admin: a post waiting for review stays hidden until it is approved in 할 일; 현황, 찾기 and the 추세 chart answer', async ({ page, request }) => {
   const email = await person(request, 'PC 검토 모집자')
   const auth = await token(request, email)
   const title = '하천변 야간 정리 ' + Math.floor(Math.random() * 1e5)
@@ -202,14 +202,15 @@ test('admin: a post waiting for review stays hidden until it is approved in 할 
   await page.getByRole('link', { name: '현황' }).click()
   await expect(page.getByRole('region', { name: '서버 상태' })).toContainText('데이터베이스')
   await expect(page.getByRole('region', { name: '주별 신청' })).toBeVisible()
+  await page.getByRole('link', { name: '회원 찾기' }).click()
   await page.getByRole('textbox', { name: '회원 찾기' }).fill(email)
   await page.getByRole('textbox', { name: '회원 찾기' }).press('Enter')
   await page.getByRole('link', { name: 'PC 검토 모집자' }).click()
   await expect(page.getByRole('heading', { name: 'PC 검토 모집자' })).toBeVisible()
   await expect(page.getByText('모집한 활동')).toBeVisible()
-  await page.getByRole('link', { name: '장소' }).click()
-  await expect(page.getByRole('heading', { name: '장소' })).toBeVisible()
-  await expect(page.getByRole('textbox', { name: /좌표/ }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: '장소' })).toHaveCount(0)
+  await page.getByRole('link', { name: '대시보드' }).click()
+  await expect(page.getByRole('region', { name: '주별 신청' }).first()).toBeVisible()
 })
 
 test('login keeps working after a reload, and a 기관 page asks for login first', async ({ page, request }) => {
