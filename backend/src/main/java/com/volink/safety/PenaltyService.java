@@ -188,6 +188,7 @@ public class PenaltyService {
         if (row == null) return null;
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("until", row.get("ends_at") == null ? null : row.get("ends_at").toString().replace(' ', 'T').substring(0, 16));
+        out.put("sanctionId", row.get("id")); // 제한 카드 → 시트 → 이의 신청 (2026-11-14)
         out.put("reason", row.get("reason"));
         return out;
     }
@@ -210,18 +211,26 @@ public class PenaltyService {
      */
     public Map<String, Object> pendingNotice(long userId) {
         Map<String, Object> row = jdbc.queryForList("""
-                SELECT n.id, n.kind, n.step, n.report_id, n.participation_id, s.ends_at, s.reason
+                SELECT n.id, n.kind, n.step, n.report_id, n.participation_id, n.sanction_id, s.ends_at, s.reason,
+                       CASE WHEN s.id IS NOT NULL THEN s.starts_at > ? AND NOT EXISTS (SELECT 1 FROM appeals ap WHERE ap.sanction_id = s.id)
+                            WHEN p.id IS NOT NULL THEN a.ends_at > ? AND NOT EXISTS (SELECT 1 FROM appeals ap WHERE ap.participation_id = p.id)
+                            ELSE FALSE END AS appealable
                 FROM safety_notices n
                 LEFT JOIN sanctions s ON s.id = n.sanction_id
                 LEFT JOIN participations p ON p.id = n.participation_id
+                LEFT JOIN activities a ON a.id = p.activity_id
                 WHERE n.user_id = ? AND n.acked_at IS NULL AND (s.id IS NULL OR s.revoked_at IS NULL) AND (p.id IS NULL OR p.noshow_cleared = FALSE)
-                ORDER BY n.id DESC LIMIT 1""", userId).stream().findFirst().orElse(null);
+                ORDER BY n.id DESC LIMIT 1""", now().minusDays(7), now().minusDays(7), userId).stream().findFirst().orElse(null);
         if (row == null) return null;
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("id", row.get("id"));
         out.put("kind", row.get("kind"));
         out.put("step", row.get("step"));
         out.put("until", row.get("ends_at") == null ? null : row.get("ends_at").toString().replace(' ', 'T').substring(0, 16));
+        // 이의 신청 from the sheet (2026-11-14): the sanction it is about, or the no-show it is about when no sanction came yet
+        out.put("sanctionId", row.get("sanction_id"));
+        out.put("participationId", row.get("participation_id"));
+        out.put("appealable", ((Number) row.get("appealable")).intValue() == 1); // 7 days, one appeal (AppealService checks again)
         if ("REPORT".equals(row.get("kind")) && row.get("report_id") != null) {
             Map<String, Object> report = jdbc.queryForList("SELECT target_type, target_id, reason_type, result_note FROM reports WHERE id = ?", row.get("report_id")).stream().findFirst().orElse(null);
             if (report != null) {
