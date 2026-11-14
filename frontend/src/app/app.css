@@ -100,7 +100,7 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .m-inline { display: flex; gap: 8px; }
 .m-inline .m-input { min-height: 46px; font-size: 15px; }
-.m-rules { display: flex; gap: 6px; flex-wrap: wrap; }
+.m-pwrules { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .m-rule { display: inline-flex; align-items: center; gap: 3px; padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line-2); background: #fff; font-size: 12.5px; color: var(--ink-3); }
 .m-rule.ok { background: var(--m-mint); border-color: transparent; color: var(--m-green-ink); font-weight: 600; }
 

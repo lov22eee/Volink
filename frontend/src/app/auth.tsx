@@ -271,7 +271,7 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
       <span className="m-input big with-peek">
         <TextInput type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="영문·숫자 포함 8자 이상" aria-label="비밀번호" autoFocus value={password} onChange={event => setPassword(event.target.value)} enterKeyHint="next" />
         <button type="button" className="m-peek" aria-label={show ? '비밀번호 숨기기' : '비밀번호 보기'} onClick={() => setShow(!show)}><MIcon name={show ? 'eyeOff' : 'eye'} size={20} /></button></span>
-      <span className="m-rules">{rules.map(rule => <span key={rule.label} className={'m-rule' + (rule.ok ? ' ok' : '')}>{rule.ok && <MIcon name="check" size={13} />}{rule.label}</span>)}</span>
+      <span className="m-pwrules">{rules.map(rule => <span key={rule.label} className={'m-rule' + (rule.ok ? ' ok' : '')}>{rule.ok && <MIcon name="check" size={13} />}{rule.label}</span>)}</span>
       {passwordOk && <div className="m-q-more">
         <TextInput className={'m-input big' + (confirm && !confirmOk ? ' bad' : '')} type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="한 번 더 입력" aria-label="비밀번호 확인" value={confirm}
           onChange={event => setConfirm(event.target.value)} enterKeyHint="done" />

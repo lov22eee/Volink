@@ -254,7 +254,11 @@ public class PenaltyService {
 
     /** 확인했어요: this warning and any older one still open. */
     public void ackNotice(long userId, long id) {
-        jdbc.update("UPDATE safety_notices SET acked_at = ? WHERE user_id = ? AND id <= ? AND acked_at IS NULL", now(), userId, id);
+        // The newest step of one kind stands for the older steps of the same kind (불참 2회 → 3회); a warning of the other kind
+        // (신고 vs 불참) still shows next (2026-11-14: one 확인 used to clear both).
+        jdbc.update("""
+                UPDATE safety_notices SET acked_at = ? WHERE user_id = ? AND id <= ? AND acked_at IS NULL
+                  AND kind = (SELECT k FROM (SELECT kind AS k FROM safety_notices WHERE id = ? AND user_id = ?) x)""", now(), userId, id, id, userId);
     }
 
     private Map<String, Object> one(String sql, long id) {
