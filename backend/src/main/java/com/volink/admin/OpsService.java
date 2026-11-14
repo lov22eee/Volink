@@ -88,6 +88,10 @@ public class OpsService {
             Map<String, Object> week = new LinkedHashMap<>();
             week.put("from", from.toLocalDate().toString());
             week.put("applications", count(Sql.kst("SELECT COUNT(*) FROM participations WHERE KST(created_at) >= ? AND KST(created_at) < ?"), from, to));
+            // 추세 (2026-11-14): 새 회원 · 출석(그 주에 끝난 활동) · 신고 접수
+            week.put("members", count(Sql.kst("SELECT COUNT(*) FROM users WHERE role = 'USER' AND KST(created_at) >= ? AND KST(created_at) < ?"), from, to));
+            week.put("attended", count("SELECT COUNT(*) FROM participations p JOIN activities a ON a.id = p.activity_id WHERE a.ends_at >= ? AND a.ends_at < ? AND p.status IN ('CHECKED_IN', 'COMPLETED')", from, to));
+            week.put("reports", count(Sql.kst("SELECT COUNT(*) FROM reports WHERE KST(created_at) >= ? AND KST(created_at) < ?"), from, to));
             weeks.add(week);
         }
         out.put("weeks", weeks);
