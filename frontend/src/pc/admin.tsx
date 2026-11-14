@@ -182,10 +182,9 @@ function Dashboard({ queue }: { queue: QueueState }) {
   </main>
 }
 
-/** 추세 (2026-11-14): 최근 12주 신청 · 새 회원 · 출석 · 신고, 칩으로 선을 켜고 끄고 마우스를 올리면 그 주 숫자. */
+/** 주별 신청 (2026-11-14): the old bar chart as a line, next to 서버 상태; hovering a week shows its number. */
 const lines: { key: 'applications' | 'members' | 'attended' | 'reports'; label: string; color: string; on: boolean }[] = [
-  { key: 'applications', label: '신청', color: '#2f6f52', on: true }, { key: 'members', label: '새 회원', color: '#2f5592', on: true },
-  { key: 'attended', label: '출석', color: '#c98a12', on: true }, { key: 'reports', label: '신고', color: '#b8321f', on: false }]
+  { key: 'applications', label: '신청', color: '#2f6f52', on: true }]
 
 function Trend({ o }: { o: Overview | null }) {
   const [shown, setShown] = useState(() => lines.filter(l => l.on).map(l => l.key))
@@ -199,7 +198,7 @@ function Trend({ o }: { o: Overview | null }) {
   const x = (i: number) => L + i * (W - L - R) / Math.max(1, weeks.length - 1), y = (v: number) => T + (H - T - B) * (1 - v / max)
   const ticks = Array.from({ length: max / step + 1 }, (_, i) => i * step)
   const h = hover ?? weeks.length - 1, at = weeks[h]
-  return <Panel title="주별 추세" note="최근 12주" right={<div className="pc-trend-chips">{lines.map(l =>
+  return <Panel title="주별 신청" note="최근 12주" right={lines.length < 2 ? undefined : <div className="pc-trend-chips">{lines.map(l =>
     <button key={l.key} type="button" className={shown.includes(l.key) ? 'on' : ''} style={{ ['--c' as string]: l.color }} aria-pressed={shown.includes(l.key)}
       onClick={() => setShown(s => s.includes(l.key) ? (s.length > 1 ? s.filter(k => k !== l.key) : s) : [...s, l.key])}><i />{l.label}</button>)}</div>}>
     {!o ? <Loading /> : <div className="pc-trend">
