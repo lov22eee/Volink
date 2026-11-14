@@ -67,9 +67,9 @@ function useQueue(): QueueState {
         seen.add(target)
         list.push({ key: 'r' + r.id, kind: 'REPORT', title: `${targetWord[r.targetType] ?? r.targetType} · ${r.summary}`, sub: `${r.reasonLabel} · 신고 ${r.sameTarget}건`, at: r.createdAt, report: r })
       }
-      const ready = appeals.filter(a => a.status === 'ESCALATED' || a.kind === 'SANCTION')
-      setWaitingHost(appeals.length - ready.length)
-      for (const a of ready) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : ''}`, at: a.submittedAt, appeal: a })
+      // 2026-11-14: an appeal still waiting for the organizer shows here too, so an admin can decide it without waiting 3 days
+      setWaitingHost(0)
+      for (const a of appeals) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : a.status === 'SUBMITTED' && a.kind !== 'SANCTION' ? ' · 모집자 답변 대기' : ''}`, at: a.submittedAt, appeal: a })
       for (const a of activities) list.push({ key: 'v' + a.id, kind: 'ACTIVITY', title: a.title, sub: `검토 사유 · ${a.riskReasons || '확인 필요'}`, at: null, activity: a })
       for (const c of reviews) list.push({ key: 'c' + c.userId, kind: 'COMMUNITY', title: c.name, sub: `1년 안 신고 인정 ${c.steps}회 · 커뮤니티 이용 정지 검토`, at: c.lastAt, review: c })
       for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청${o.documents?.length ? ` · 서류 ${o.documents.length}개` : ''}`, at: o.requestedAt, org: o })
@@ -142,7 +142,6 @@ function Dashboard({ queue }: { queue: QueueState }) {
     setOpen(same[0]?.key ?? null)
   }
   const thisWeek = o?.weeks[o.weeks.length - 1]?.applications ?? 0, lastWeek = o?.weeks[o.weeks.length - 2]?.applications ?? 0
-  const max = Math.max(1, ...(o?.weeks ?? []).map(w => w.applications))
   const rate = o && o.attended + o.noShows ? Math.round(o.attended / (o.attended + o.noShows) * 100) : null
   const rows = s ? systemRows(s) : []
   const bad = rows.filter(r => r[1] === 'red' || r[1] === 'amb')
@@ -156,14 +155,10 @@ function Dashboard({ queue }: { queue: QueueState }) {
         <em>{old ? <span className="pc-tag red">24시간 넘음 {old}</span> : mine.length ? '눌러서 바로 처리' : kind === 'APPEAL' && waitingHost ? `모집자 답변 대기 ${waitingHost}` : '밀린 일 없음'}</em></button>
     })}</div>
     <div className="pc-dash-grid">
-      <div className="pc-dash-col">
-      <Panel title="지금 처리할 일" note={items ? `${list.length}건 · 오래된 순` : ''} right={<a className="pc-link" href="#/admin/todo">전체 보기 ›</a>}>
+      <Panel title="지금 처리할 일" note={items ? `${list.length}건 · 오래된 순` : ''} right={<a className="pc-link" href="#/admin/todo">전체 보기 ›</a>} className="pc-dash-fit">
         {items === null ? <Loading /> : list.length === 0 ? <p className="pc-empty">지금 처리할 일이 없어요.</p>
-          : <div className="pc-rows">{list.slice(0, 9).map(item => <Row key={item.key} item={item} onClick={() => setOpen(item.key)} />)}</div>}
+          : <div className="pc-rows">{list.slice(0, 20).map(item => <Row key={item.key} item={item} onClick={() => setOpen(item.key)} />)}</div>}
       </Panel>
-      <Trend o={o} />
-      </div>
-      <div className="pc-dash-col">
       <Panel title="서비스 현황" right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
         {!o ? <Loading /> : <div className="pc-mini">
           <div><span>회원</span><b>{o.members.toLocaleString()}명</b><small className="up">이번 주 +{o.newMembers}</small></div>
@@ -172,13 +167,10 @@ function Dashboard({ queue }: { queue: QueueState }) {
           <div><span>출석률 (30일)</span><b>{rate == null ? '–' : rate + '%'}</b><small>불참 {o.noShows}</small></div>
         </div>}
       </Panel>
-      <Panel title="주별 신청" note="최근 12주">
-        {!o ? <Loading /> : <div style={{ padding: '6px 16px 12px' }}><div className="pc-bars" role="img" aria-label={`최근 12주 신청 수, 이번 주 ${thisWeek}건`}>{o.weeks.map(w => <div key={w.from}><span>{w.applications}</span><i style={{ height: Math.max(2, w.applications / max * 110) }} /><span>{w.from.slice(5).replace('-', '/')}</span></div>)}</div></div>}
-      </Panel>
+      <Trend o={o} />
       <Panel title="서버 상태" note={s ? (bad.length ? `확인 필요 ${bad.length}` : '모두 정상') : ''} right={<a className="pc-link" href="#/admin/stats">자세히 ›</a>}>
         {!s ? <Loading /> : <div className="pc-sys">{rows.map(([name, tone, state]) => <div key={name}><i className={tone || 'off'} /><span>{name}</span><b>{state}</b></div>)}</div>}
       </Panel>
-      </div>
       <Panel title="최근 처리 기록" right={<a className="pc-link" href="#/admin/log">전체 기록 ›</a>} className="pc-dash-log">
         {log === null ? <Loading /> : log.length === 0 ? <p className="pc-empty">아직 처리한 일이 없어요.</p>
           : <table className="pc-tbl"><tbody>{log.map(a => <tr key={a.id}><td className="mu nw">{a.at.slice(5, 16)}</td><td><span className={'pc-tag ' + actionTone(a.action)}>{actionWord[a.action] ?? a.action}</span></td><td>{actionTarget(a)}</td><td className="mu">{a.reason}</td></tr>)}</tbody></table>}
@@ -207,7 +199,7 @@ function Trend({ o }: { o: Overview | null }) {
   const x = (i: number) => L + i * (W - L - R) / Math.max(1, weeks.length - 1), y = (v: number) => T + (H - T - B) * (1 - v / max)
   const ticks = Array.from({ length: max / step + 1 }, (_, i) => i * step)
   const h = hover ?? weeks.length - 1, at = weeks[h]
-  return <Panel title="추세" note="최근 12주" right={<div className="pc-trend-chips">{lines.map(l =>
+  return <Panel title="주별 추세" note="최근 12주" right={<div className="pc-trend-chips">{lines.map(l =>
     <button key={l.key} type="button" className={shown.includes(l.key) ? 'on' : ''} style={{ ['--c' as string]: l.color }} aria-pressed={shown.includes(l.key)}
       onClick={() => setShown(s => s.includes(l.key) ? (s.length > 1 ? s.filter(k => k !== l.key) : s) : [...s, l.key])}><i />{l.label}</button>)}</div>}>
     {!o ? <Loading /> : <div className="pc-trend">

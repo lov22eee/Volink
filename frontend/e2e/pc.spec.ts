@@ -210,7 +210,7 @@ test('admin: a post waiting for review stays hidden until it is approved in 할 
   await expect(page.getByText('모집한 활동')).toBeVisible()
   await expect(page.getByRole('link', { name: '장소' })).toHaveCount(0)
   await page.getByRole('link', { name: '대시보드' }).click()
-  await expect(page.getByRole('region', { name: '추세' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '주별 추세' })).toBeVisible()
 })
 
 test('login keeps working after a reload, and a 기관 page asks for login first', async ({ page, request }) => {
