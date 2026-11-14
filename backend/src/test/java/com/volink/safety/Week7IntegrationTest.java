@@ -244,4 +244,19 @@ class Week7IntegrationTest extends ApiTestSupport {
         perform(post("/api/community/posts"), review, organizer).andExpect(status().isCreated()).andExpect(jsonPath("$.reviewSource").value("HOST"));
         perform(post("/api/community/posts"), review, organizer).andExpect(status().isBadRequest());
     }
+
+    @Test
+    void aReportWarningStillShowsAfterTheNoShowWarningIsConfirmed() throws Exception {
+        String email = member("GENERAL"), token = token(email);
+        long user = userId(email);
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, created_at) VALUES (?, 'REPORT', 1, NOW())", user);
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, created_at) VALUES (?, 'NOSHOW', 2, NOW())", user);
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, created_at) VALUES (?, 'NOSHOW', 3, NOW())", user);
+        // the newest 불참 step first; confirming it also covers 불참 2회, but not the 신고 warning
+        String first = perform(get("/api/me/safety-notice"), null, token).andExpect(jsonPath("$.kind").value("NOSHOW")).andExpect(jsonPath("$.step").value(3)).andReturn().getResponse().getContentAsString();
+        perform(post("/api/me/safety-notice/" + json.readTree(first).get("id").asLong() + "/ack"), null, token).andExpect(status().is2xxSuccessful());
+        String second = perform(get("/api/me/safety-notice"), null, token).andExpect(jsonPath("$.kind").value("REPORT")).andReturn().getResponse().getContentAsString();
+        perform(post("/api/me/safety-notice/" + json.readTree(second).get("id").asLong() + "/ack"), null, token).andExpect(status().is2xxSuccessful());
+        perform(get("/api/me/safety-notice"), null, token).andExpect(jsonPath("$.id").doesNotExist());
+    }
 }
