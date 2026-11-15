@@ -1,6 +1,6 @@
 #!/bin/bash
 # 시연 준비 한 번에 (2026-11-14, for the week-7 demo with one phone and one account). Run on the server from /opt/volink:
-#   sudo bash scripts/aws/demo-ready.sh <시연 계정 이메일> <비밀번호>
+#   sudo bash scripts/aws/demo-ready.sh <시연 계정 이메일> <비밀번호> [이름]
 # The account is signed up if it does not exist (or logged in with that password). Then, on that one account:
 #   1) 신고 경고 1회 — a helper reports the account's community post and a temporary admin accepts it (the post is hidden),
 #   2) 불참 3회 — the same steps as demo-noshow.sh (14일 신청 제한),
@@ -10,8 +10,10 @@
 # back into a member at the end. Do not open the app with this account until the demo: each warning sheet shows once.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-EMAIL="${1:-}"; PASS="${2:-}"
-if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then echo "사용법: sudo bash scripts/aws/demo-ready.sh <이메일> <비밀번호>" >&2; exit 1; fi
+EMAIL="${1:-}"; PASS="${2:-}"; NAME="${3:-시연참가자}"
+# 2026-11-15: the 3rd argument is the account's name (default 시연참가자); quotes and backslashes are dropped
+NAME=$(printf '%s' "$NAME" | tr -d "\"'\\\\")
+if [ -z "$EMAIL" ] || [ -z "$PASS" ]; then echo "사용법: sudo bash scripts/aws/demo-ready.sh <이메일> <비밀번호> [이름]" >&2; exit 1; fi
 API=http://127.0.0.1:8080
 set -a; . ./.env; set +a
 sql() { docker compose exec -T -e MYSQL_PWD="$MYSQL_PASSWORD" db mysql --default-character-set=utf8mb4 -u "$MYSQL_USER" "$MYSQL_DATABASE" -N -e "$1"; }
@@ -30,10 +32,11 @@ STAMP=$(date +%s)
 HELPER_PASS="Demo${STAMP}a1"
 
 echo "1) 시연 계정"
-signup "$EMAIL" "시연참가자" "$PASS" "2000-01-01"
+signup "$EMAIL" "$NAME" "$PASS" "2000-01-01"
 ME=$(login "$EMAIL" "$PASS")
 [ -n "$ME" ] || { echo "시연 계정으로 로그인하지 못했어요. 이미 있는 이메일이면 그 계정의 비밀번호를 넣어 주세요." >&2; exit 1; }
 call PUT /api/community/me "{\"nickname\":\"초록손${STAMP: -5}\",\"agree\":true}" "$ME" >/dev/null || true
+sql "UPDATE users SET display_name='$NAME' WHERE email='$EMAIL'" # an existing account takes the name too
 
 echo "2) 도우미 계정 (신고하는 사람 · 임시 관리자)"
 HELPER="demo-helper-$STAMP@example.com"; ADMIN="demo-admin-$STAMP@example.com"
