@@ -1,6 +1,7 @@
 // 내 이용 상태 (week 7, 2026-11-09): running limits (신청 / 글쓰기), 최근 90일 불참, warnings, my reports and appeals.
 // 이의신청: 7 days after a no-show, a record or a sanction; the organizer answers first, then an admin.
 import { useEffect, useState } from 'react'
+import { showToast } from '../App'
 import { createPortal } from 'react-dom'
 import { api, ApiError } from '../api'
 import { Loading, MIcon, Sheet, TextArea, TopBar } from './ui'
@@ -118,7 +119,7 @@ export function StatusScreen() {
         <span className="m-row-main"><strong>{r.reasonLabel}</strong><small>{r.createdAt.slice(5, 10).replace('-', '/')} · {reportWord[r.status] ?? r.status}{r.resultNote ? ' · ' + r.resultNote : ''}</small></span></div>)}</div>
         : <p className="m-help">신고한 내용이 없어요.</p>}
     </div>
-    {appeal && <AppealSheet target={appeal} onClose={() => setAppeal(null)} onSent={() => { setAppeal(null); load() }} />}
+    {appeal && <AppealSheet target={appeal} onClose={() => setAppeal(null)} onSent={() => { const to = appeal.kind === 'SANCTION' ? '관리자' : '모집자'; setAppeal(null); load(); showToast('이의 신청을 보냈어요', `${to}가 확인하면 알림으로 알려 드릴게요`) }} />}
   </div>
 }
 
@@ -198,7 +199,7 @@ export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; on
     try { await api('/api/me/safety-notice/' + notice.id + '/ack', 'POST'); onDone() } catch { setBusy(false) }
   }
   // Sending the appeal also counts as having seen the warning; 닫기 on the appeal form goes back to the warning.
-  if (appeal && target) return <AppealSheet target={target} onClose={() => setAppeal(false)} onSent={() => void confirm()} />
+  if (appeal && target) return <AppealSheet target={target} onClose={() => setAppeal(false)} onSent={() => { showToast('이의 신청을 보냈어요', `${target.kind === 'SANCTION' ? '관리자' : '모집자'}가 확인하면 알림으로 알려 드릴게요`); void confirm() }} />
   return createPortal(<div className="m-sheet-wrap">
     <div className="m-dim" />
     <section className="m-sheet sn-sheet" role="alertdialog" aria-modal="true" aria-labelledby="sn-title" aria-describedby="sn-text">
