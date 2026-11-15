@@ -229,6 +229,11 @@ class Week7IntegrationTest extends ApiTestSupport {
         // 2026-11-15: with only 2 left the 14-day limit is lifted too, and the member can apply again
         assertThat(penalties.status(user).get("apply")).isNull();
         perform(post("/api/activities/" + next + "/participations"), Map.of(), member).andExpect(status().is2xxSuccessful());
+        // ... and the app shows one 제한이 풀렸어요 sheet, which goes away once seen
+        String lifted = perform(get("/api/me/safety-notice"), null, member).andExpect(jsonPath("$.kind").value("LIFTED"))
+                .andExpect(jsonPath("$.scope").value("APPLY")).andExpect(jsonPath("$.noShowCount").value(2)).andReturn().getResponse().getContentAsString();
+        perform(post("/api/me/safety-notice/" + json.readTree(lifted).get("id").asLong() + "/ack"), null, member).andExpect(status().is2xxSuccessful());
+        perform(get("/api/me/safety-notice"), null, member).andExpect(jsonPath("$.id").doesNotExist());
     }
 
     @Test
