@@ -171,6 +171,7 @@ public class AppealService {
         LocalDateTime now = LocalDateTime.now(clock);
         jdbc.update("UPDATE appeals SET status = ?, handled_by = ?, handled_at = ?, result_note = ? WHERE id = ?", accepted ? "ACCEPTED" : "REJECTED", by, now, why, id);
         String kind = (String) ap.get("kind");
+        int lifted = 0;
         if ("NO_SHOW".equals(kind) && accepted) {
             long p = ((Number) ap.get("participation_id")).longValue();
             jdbc.update("UPDATE participations SET noshow_cleared = TRUE WHERE id = ?", p);
@@ -181,11 +182,18 @@ public class AppealService {
                 jdbc.update("INSERT INTO activity_records(participation_id, check_in_id, confirmed_by, confirmed_at) VALUES (?, ?, ?, ?)", p, check, by, now);
                 jdbc.update("UPDATE participations SET status = 'COMPLETED', updated_at = ? WHERE id = ?", now, p);
             }
+            // 2026-11-15: a cleared no-show also lifts the 14-day 신청 제한 when fewer than 3 remain in 90 days
+            // (before this the count went down but the limit stayed, so the app still said 신청할 수 없어요).
+            int left = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM participations p2 JOIN activities a ON a.id = p2.activity_id
+                    WHERE p2.user_id = ? AND p2.status = 'NO_SHOW' AND p2.noshow_cleared = FALSE AND a.starts_at > ?""", Integer.class, user, now.minusDays(PenaltyService.NOSHOW_DAYS));
+            if (left < PenaltyService.NOSHOW_LIMIT)
+                lifted = jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE user_id = ? AND source = 'NOSHOW' AND scope = 'APPLY' AND revoked_at IS NULL AND (ends_at IS NULL OR ends_at > ?)", now, user, now);
         }
         if ("RECORD".equals(kind)) jdbc.update("UPDATE activity_records SET status = 'VALID' WHERE id = ?", ap.get("record_id"));
         if ("SANCTION".equals(kind) && accepted) jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE id = ?", now, ap.get("sanction_id"));
         notifications.send(user, "APPEAL", accepted ? "이의 신청이 받아들여졌어요" : "이의 신청이 기각됐어요",
-                accepted ? ("NO_SHOW".equals(kind) ? "불참 기록이 바뀌었고 불참 횟수에서 빠졌어요" : "SANCTION".equals(kind) ? "제한이 풀렸어요" : "기록을 다시 확인했어요") + " · " + why
+                accepted ? ("NO_SHOW".equals(kind) ? "불참 기록이 바뀌었고 불참 횟수에서 빠졌어요" + (lifted > 0 ? " · 신청 제한도 풀렸어요" : "") : "SANCTION".equals(kind) ? "제한이 풀렸어요" : "기록을 다시 확인했어요") + " · " + why
                         : "기록이 그대로 유지돼요 · 사유: " + why, "#/my?view=status", null, "APPEAL_DONE:" + id);
         return Map.of("status", accepted ? "ACCEPTED" : "REJECTED");
     }

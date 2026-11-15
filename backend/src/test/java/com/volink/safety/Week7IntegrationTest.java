@@ -226,6 +226,9 @@ class Week7IntegrationTest extends ApiTestSupport {
         perform(post("/api/appeals/" + appeal + "/answer"), Map.of("decision", "ACCEPT"), organizer).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACCEPTED"));
         assertThat(stateOf(last)).isEqualTo("COMPLETED");
         assertThat(penalties.noShows(user)).isEqualTo(2);
+        // 2026-11-15: with only 2 left the 14-day limit is lifted too, and the member can apply again
+        assertThat(penalties.status(user).get("apply")).isNull();
+        perform(post("/api/activities/" + next + "/participations"), Map.of(), member).andExpect(status().is2xxSuccessful());
     }
 
     @Test
