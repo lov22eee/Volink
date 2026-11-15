@@ -187,15 +187,32 @@ public class AppealService {
             int left = jdbc.queryForObject("""
                     SELECT COUNT(*) FROM participations p2 JOIN activities a ON a.id = p2.activity_id
                     WHERE p2.user_id = ? AND p2.status = 'NO_SHOW' AND p2.noshow_cleared = FALSE AND a.starts_at > ?""", Integer.class, user, now.minusDays(PenaltyService.NOSHOW_DAYS));
-            if (left < PenaltyService.NOSHOW_LIMIT)
-                lifted = jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE user_id = ? AND source = 'NOSHOW' AND scope = 'APPLY' AND revoked_at IS NULL AND (ends_at IS NULL OR ends_at > ?)", now, user, now);
+            if (left < PenaltyService.NOSHOW_LIMIT) {
+                List<Long> open = jdbc.queryForList("SELECT id FROM sanctions WHERE user_id = ? AND source = 'NOSHOW' AND scope = 'APPLY' AND revoked_at IS NULL AND (ends_at IS NULL OR ends_at > ?)", Long.class, user, now);
+                for (Long sid : open) jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE id = ?", now, sid);
+                lifted = open.size();
+                if (!open.isEmpty()) liftedNotice(user, open.get(0), ((Number) ap.get("participation_id")).longValue(), now);
+            }
         }
         if ("RECORD".equals(kind)) jdbc.update("UPDATE activity_records SET status = 'VALID' WHERE id = ?", ap.get("record_id"));
-        if ("SANCTION".equals(kind) && accepted) jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE id = ?", now, ap.get("sanction_id"));
+        if ("SANCTION".equals(kind) && accepted) {
+            jdbc.update("UPDATE sanctions SET revoked_at = ? WHERE id = ?", now, ap.get("sanction_id"));
+            // a warning (scope NONE) has nothing to lift, so only a real limit gets the 풀렸어요 sheet
+            if (!"NONE".equals(jdbc.queryForObject("SELECT scope FROM sanctions WHERE id = ?", String.class, ap.get("sanction_id"))))
+                liftedNotice(user, ((Number) ap.get("sanction_id")).longValue(), null, now);
+        }
         notifications.send(user, "APPEAL", accepted ? "이의 신청이 받아들여졌어요" : "이의 신청이 기각됐어요",
                 accepted ? ("NO_SHOW".equals(kind) ? "불참 기록이 바뀌었고 불참 횟수에서 빠졌어요" + (lifted > 0 ? " · 신청 제한도 풀렸어요" : "") : "SANCTION".equals(kind) ? "제한이 풀렸어요" : "기록을 다시 확인했어요") + " · " + why
                         : "기록이 그대로 유지돼요 · 사유: " + why, "#/my?view=status", null, "APPEAL_DONE:" + id);
         return Map.of("status", accepted ? "ACCEPTED" : "REJECTED");
+    }
+
+    /** 제한이 풀렸어요 sheet (2026-11-15, V41): shown once the next time the app opens or moves to another screen. */
+    private void liftedNotice(long user, long sanctionId, Long participationId, LocalDateTime now) {
+        // older warnings of the same kind are about the limit just lifted, so they stop showing
+        String source = jdbc.queryForObject("SELECT source FROM sanctions WHERE id = ?", String.class, sanctionId);
+        jdbc.update("UPDATE safety_notices SET acked_at = ? WHERE user_id = ? AND kind = ? AND acked_at IS NULL", now, user, "NOSHOW".equals(source) ? "NOSHOW" : "REPORT");
+        jdbc.update("INSERT INTO safety_notices(user_id, kind, step, sanction_id, participation_id, created_at) VALUES (?, 'LIFTED', 1, ?, ?, ?)", user, sanctionId, participationId, now);
     }
 
     private Map<String, Object> row(String sql, Object id) {

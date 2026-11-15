@@ -1,6 +1,7 @@
 // 내 이용 상태 (week 7, 2026-11-09): running limits (신청 / 글쓰기), 최근 90일 불참, warnings, my reports and appeals.
 // 이의신청: 7 days after a no-show, a record or a sanction; the organizer answers first, then an admin.
 import { useEffect, useState } from 'react'
+import { showToast } from '../App'
 import { createPortal } from 'react-dom'
 import { api, ApiError } from '../api'
 import { Loading, MIcon, Sheet, TextArea, TopBar } from './ui'
@@ -118,7 +119,7 @@ export function StatusScreen() {
         <span className="m-row-main"><strong>{r.reasonLabel}</strong><small>{r.createdAt.slice(5, 10).replace('-', '/')} · {reportWord[r.status] ?? r.status}{r.resultNote ? ' · ' + r.resultNote : ''}</small></span></div>)}</div>
         : <p className="m-help">신고한 내용이 없어요.</p>}
     </div>
-    {appeal && <AppealSheet target={appeal} onClose={() => setAppeal(null)} onSent={() => { setAppeal(null); load() }} />}
+    {appeal && <AppealSheet target={appeal} onClose={() => setAppeal(null)} onSent={() => { const to = appeal.kind === 'SANCTION' ? '관리자' : '모집자'; setAppeal(null); load(); showToast('이의 신청을 보냈어요', `${to}가 확인하면 알림으로 알려 드릴게요`) }} />}
   </div>
 }
 
@@ -151,7 +152,8 @@ export function HostAppeals({ activityId, onChanged }: { activityId: number; onC
  * screen shows one sheet — a soft red ! in the middle, one line of what happened, why it matters, 자세히 보기 for the post or
  * the dates, and [확인] only after 확인했어요 is ticked. It does not close by tapping outside, dragging or Escape.
  */
-type SafetyNotice = { id: number; kind: 'REPORT' | 'NOSHOW'; step: number; until: string | null
+type SafetyNotice = { id: number; kind: 'REPORT' | 'NOSHOW' | 'LIFTED'; step: number; until: string | null
+  scope?: string; from?: string | null; noShowCount?: number
   sanctionId?: number | null; participationId?: number | null; appealable?: boolean
   targetType?: string; targetTitle?: string | null; targetBody?: string | null; reason?: string; note?: string | null
   noShows?: { title: string; startsAt: string }[] }
@@ -198,7 +200,7 @@ export function SafetyNoticeSheet({ notice, onDone }: { notice: SafetyNotice; on
     try { await api('/api/me/safety-notice/' + notice.id + '/ack', 'POST'); onDone() } catch { setBusy(false) }
   }
   // Sending the appeal also counts as having seen the warning; 닫기 on the appeal form goes back to the warning.
-  if (appeal && target) return <AppealSheet target={target} onClose={() => setAppeal(false)} onSent={() => void confirm()} />
+  if (appeal && target) return <AppealSheet target={target} onClose={() => setAppeal(false)} onSent={() => { showToast('이의 신청을 보냈어요', `${target.kind === 'SANCTION' ? '관리자' : '모집자'}가 확인하면 알림으로 알려 드릴게요`); void confirm() }} />
   return createPortal(<div className="m-sheet-wrap">
     <div className="m-dim" />
     <section className="m-sheet sn-sheet" role="alertdialog" aria-modal="true" aria-labelledby="sn-title" aria-describedby="sn-text">
@@ -237,5 +239,37 @@ export function SafetyNoticeHost({ tick }: { tick: string }) {
     return () => document.removeEventListener('visibilitychange', look)
   }, [tick, version])
   if (!notice) return null
-  return <SafetyNoticeSheet key={notice.id} notice={notice} onDone={() => { setNotice(null); setVersion(v => v + 1) }} />
+  const done = () => { setNotice(null); setVersion(v => v + 1) }
+  if (notice.kind === 'LIFTED') return <LiftedSheet key={notice.id} notice={notice} onDone={done} />
+  return <SafetyNoticeSheet key={notice.id} notice={notice} onDone={done} />
+}
+
+/** 제한이 풀렸어요 (2026-11-15, user decision): after an appeal lifts a limit, one sheet the next time the app shows a screen.
+ *  Closes like any sheet; closing or the button counts as seen. */
+function LiftedSheet({ notice, onDone }: { notice: SafetyNotice; onDone: () => void }) {
+  const apply = notice.scope === 'APPLY' || notice.scope === 'ALL'
+  const what = apply ? '신청 제한' : notice.scope === 'WRITE' ? '글쓰기 제한' : '글·모집글 제한'
+  async function close(go?: string) {
+    try { await api('/api/me/safety-notice/' + notice.id + '/ack', 'POST') } catch { /* shows again next time */ }
+    onDone()
+    if (go) window.location.hash = go
+  }
+  return createPortal(<div className="m-sheet-wrap">
+    <div className="m-dim" onClick={() => void close()} />
+    <section className="m-sheet sn-sheet" role="dialog" aria-modal="true" aria-labelledby="lf-title">
+      <span className="m-grab" aria-hidden="true" />
+      <div className="sn-body">
+        <span className="sn-mark ok" aria-hidden="true"><MIcon name="check" size={32} /></span>
+        <h2 id="lf-title">{what}이 풀렸어요</h2>
+        <p><span>이의 신청이 받아들여졌어요.</span><span>{apply ? '지금부터 다시 봉사를 신청할 수 있어요.' : '지금부터 다시 글을 쓸 수 있어요.'}</span></p>
+        <dl className="sn-detail">
+          {notice.note && <div><dt>답변</dt><dd>{notice.note}</dd></div>}
+          {notice.from && <div><dt>풀린 제한</dt><dd>{md(notice.from)}{notice.until ? ` ~ ${md(notice.until)}` : ''} {what}</dd></div>}
+          {apply && notice.noShowCount != null && notice.noShowCount < 3 && <div><dt>지금 불참</dt><dd>최근 90일 {notice.noShowCount}번</dd></div>}
+        </dl>
+        <button type="button" className="m-btn" onClick={() => void close(apply ? '#/find' : '#/community')}>{apply ? '봉사 찾으러 가기' : '커뮤니티 가기'}</button>
+        <button type="button" className="m-btn line sn-close" onClick={() => void close()}>닫기</button>
+      </div>
+    </section>
+  </div>, document.body)
 }
