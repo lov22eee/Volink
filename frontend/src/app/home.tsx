@@ -154,8 +154,9 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
 
       <Sec title="이웃 이야기" more={['커뮤니티', '#/community']}>
         {stories.length ? <div className="hb-weekend hb-stories">{stories.map(r => <a key={r.id} href={'#/post/' + r.id}>
-          {/* the first photo the writer put up; the field picture only when there is none (2026-11-22) */}
-          <span className="hb-pic">{r.photo ? <img className="cover" src={serverUrl(r.photo)} alt="" loading="lazy" /> : <CategoryPhoto category={r.activityCategory ?? '지역사회'} seed={r.id} />}</span>
+          {/* the first photo the writer put up; without one, the review's own words on a soft card (2026-11-22, A안) */}
+          {r.photo ? <span className="hb-pic"><img className="cover" src={serverUrl(r.photo)} alt="" loading="lazy" /></span>
+            : <span className={'hb-quote t' + (categories.indexOf(r.activityCategory ?? '') + 4) % 4}><em>{r.activityCategory ?? '봉사 후기'}</em><i aria-hidden="true">“</i><q>{clip(r.preview, 30)}</q></span>}
           <b>{r.title}</b><small>{r.author} · ♡ {r.likes}</small></a>)}</div>
           : <p className="hb-empty">봉사를 마치면 첫 이야기의 주인공이 되어 보세요</p>}
       </Sec>
@@ -179,6 +180,9 @@ function Sec({ title, note, more, children }: { title: string; note?: string; mo
     {children}
   </section>
 }
+
+/** Cuts a preview at a word near n characters and ends it with … so a card never shows half a line. */
+const clip = (text: string, n: number) => { const t = (text ?? '').replace(/\s+/g, ' ').trim(); if (t.length <= n) return t; const cut = t.slice(0, n); const sp = cut.lastIndexOf(' '); return (sp > n * 0.6 ? cut.slice(0, sp) : cut).replace(/[.,!?·\s]+$/, '') + '…' }
 
 const statusWord: Record<string, string> = { APPLIED: '승인 대기', CONFIRMED: '참여 확정', WAITLISTED: '대기 중', OFFERED: '자리 제안', CHECKED_IN: '출석 완료' }
 const weekday = (date: string) => new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(date + 'T12:00:00+09:00'))

@@ -1860,3 +1860,12 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .hb-foot b { font-size: 19px; font-weight: 750; } .hb-foot small { font-size: 12px; color: var(--ink-3); }
 .hb-foot > svg { color: var(--ink-3); flex: none; }
 .hb-weekend { scroll-padding: 0 var(--m-x); }
+/* 이웃 이야기 글 카드 (사진 없는 후기, 2026-11-22 A안): same size as a photo card, the review's first words, ending in … */
+.hb-quote { height: 148px; border-radius: 12px; padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; margin-bottom: 4px; }
+.hb-quote em { align-self: flex-start; font-style: normal; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 7px; background: #fff; }
+.hb-quote i { font-style: normal; font-size: 30px; line-height: .7; font-weight: 900; margin-top: 6px; }
+.hb-quote q { quotes: none; font-size: 13.5px; line-height: 1.5; color: #2b302d; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
+.hb-quote.t0 { background: #e8f1eb; } .hb-quote.t0 em { color: #2f6f52; } .hb-quote.t0 i { color: #9cc5ad; }
+.hb-quote.t1 { background: #fff3e0; } .hb-quote.t1 em { color: #c47a12; } .hb-quote.t1 i { color: #ecc28a; }
+.hb-quote.t2 { background: #e8eef8; } .hb-quote.t2 em { color: #2f5592; } .hb-quote.t2 i { color: #a9bde0; }
+.hb-quote.t3 { background: #f1ecf8; } .hb-quote.t3 em { color: #6b4fa3; } .hb-quote.t3 i { color: #c3b2e0; }
