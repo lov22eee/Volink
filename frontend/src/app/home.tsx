@@ -17,12 +17,14 @@ import { dayWord, Loading, MIcon, TopBar } from './ui'
 import { ActivitySheet } from './detail'
 import { ProgramSheet } from './find'
 import type { MIconName } from './ui'
+import { phoneLine, usePhoneStatus } from './phone'
 
 type Todo = { key: string; icon: MIconName; text: string; href: string; tone?: 'hot' | 'ok' }
 const ACTIVE = ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN']
 
 export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }) {
   const now = useNow(30_000)
+  const phone = usePhoneStatus()
   const [mine, setMine] = useState<MyParticipation[] | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
   const [open, setOpen] = useState<LiveActivity[] | null>(null)
@@ -61,6 +63,9 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
 
   // Things to do now: shown only while they are true.
   const todos: Todo[] = []
+  // 1인 1계정 (V42): the phone line first while it is needed.
+  const askPhone = phoneLine(phone)
+  if (askPhone) todos.push({ key: 'phone', icon: 'phone', tone: phone?.required ? 'hot' : undefined, text: askPhone.short, href: '#/phone?next=' + encodeURIComponent('#/home') })
   for (const p of joined) {
     if (p.status === 'OFFERED') todos.push({ key: 'o' + p.id, icon: 'bolt', tone: 'hot', text: `빈자리 제안이 왔어요 · ${p.title}`, href: '#/activity/' + p.activityId })
     if (p.status === 'CONFIRMED' && phaseOf(p.date, p.startTime, p.durationMinutes ?? 90, now, Boolean(p.checkinOpen)).phase === 'open') todos.push({ key: 'c' + p.id, icon: 'qr', tone: 'hot', text: `출석이 시작됐어요 · ${p.title}`, href: '#/activity/' + p.activityId + '?scan=1' })

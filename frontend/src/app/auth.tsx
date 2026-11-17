@@ -15,6 +15,8 @@ import { searchPlaces } from '../placePicker'
 import type { PlaceResult } from '../placePicker'
 import { categories } from '../categories'
 import { fieldIcon } from './cards'
+import { PhoneVerify, rememberLoginEmail, TakenSheet, takeLoginEmail } from './phone'
+import type { Holder } from './phone'
 
 type Kind = 'GENERAL' | 'INSTITUTION'
 const kindFromHash = (): Kind => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('type') === 'institution' ? 'INSTITUTION' : 'GENERAL'
@@ -27,7 +29,8 @@ export function Login({ onSession }: { onSession: (user: User) => void }) {
     if (providers[provider] || (await loadProviders(true))[provider]) startSocial(provider)
     else showToast(providerName[provider] + ' 로그인은 준비 중이에요', '서버에 연결되지 않았거나 아직 준비 중이에요. 이메일로 로그인해 주세요')
   }
-  const [email, setEmail] = useState('')
+  // "이 계정으로 로그인" from a taken phone number: that account's e-mail is filled in, only the password is left.
+  const [email, setEmail] = useState(takeLoginEmail)
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [error, setError] = useState(() => socialError(new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('oauth')))
@@ -162,10 +165,18 @@ function AddressPicker({ value, onChange }: { value: string; onChange: (address:
 }
 
 export function Signup({ onSession, institution = false }: { onSession: (user: User) => void; institution?: boolean }) {
-  type Step = 'terms' | 'email' | 'password' | 'name' | 'birth' | 'interests' | 'orgType' | 'org' | 'address' | 'contact' | 'vms'
+  type Step = 'terms' | 'phone' | 'email' | 'password' | 'name' | 'birth' | 'interests' | 'orgType' | 'org' | 'address' | 'contact' | 'vms'
+  // 1인 1계정 (2026-11-22, V42): a personal sign-up proves a phone right after the terms, so a number that already has an
+  // account is found before anything else is typed. 기관 담당자 accounts are not asked.
+  const [phoneOn, setPhoneOn] = useState(false)
+  useEffect(() => { if (!institution) api<{ active: boolean }>('/api/auth/phone').then(r => setPhoneOn(r.active)).catch(() => {}) }, [institution])
+  const [phoneProof, setPhoneProof] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [phoneHolder, setPhoneHolder] = useState<{ holder: Holder; proof: string } | null>(null)
+  const [disputeLater, setDisputeLater] = useState('')
   // 기관회원: the manager's account (e-mail, password, name; no birth date since 2026-11-06 — the age is a consent line and
   // an admin confirms the organization) and then the organization. Interests are for personal members.
-  const order: Step[] = institution ? ['terms', 'email', 'password', 'name', 'orgType', 'org', 'address', 'contact', 'vms'] : ['terms', 'email', 'password', 'name', 'birth', 'interests']
+  const order: Step[] = institution ? ['terms', 'email', 'password', 'name', 'orgType', 'org', 'address', 'contact', 'vms'] : ['terms', ...(phoneOn ? ['phone' as Step] : []), 'email', 'password', 'name', 'birth', 'interests']
   const items = consents[institution ? 'INSTITUTION' : 'GENERAL']
   const [step, setStep] = useState<Step>('terms')
   const [agreed, setAgreed] = useState<boolean[]>(() => items.map(() => false))
@@ -201,13 +212,16 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   const orgOk = org.trim().length >= 2 && org.trim().length <= 100
   const contactOk = /^[0-9-]{9,20}$/.test(contact.trim())
   const vmsCodeOk = !vmsCode.trim() || /^[0-9A-Za-z-]{1,30}$/.test(vmsCode.trim())
-  const ok: Record<Step, boolean> = { terms: agreed.every(Boolean), email: emailOk, password: passwordOk && confirmOk, name: name.trim().length >= 1 && name.trim().length <= signupRules.nameMax,
+  const ok: Record<Step, boolean> = { terms: agreed.every(Boolean), phone: Boolean(phoneProof), email: emailOk, password: passwordOk && confirmOk, name: name.trim().length >= 1 && name.trim().length <= signupRules.nameMax,
     birth: ageOk, interests: true, orgType: Boolean(orgType), org: orgOk, address: address.trim().length >= 2, contact: contactOk, vms: vms !== null && vmsCodeOk }
   const index = order.indexOf(step)
   const last = index === order.length - 1
 
   async function enter() {
-    onSession(await login(email.trim(), password, institution ? 'INSTITUTION' : 'GENERAL'))
+    const user = await login(email.trim(), password, institution ? 'INSTITUTION' : 'GENERAL')
+    // "제 번호가 아니에요" at the phone step: the account is made without the number and an admin is asked right away.
+    if (disputeLater) await api('/api/me/phone/dispute', 'POST', { proof: disputeLater }).then(() => showToast('가입했어요', '번호 확인을 관리자에게 요청했어요')).catch(() => {})
+    onSession(user)
     window.location.hash = institution ? '#/home' : '#/welcome'
   }
   async function finish() {
@@ -221,10 +235,11 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
       await api('/api/auth/signup', 'POST', institution
         ? { memberType: 'INSTITUTION', name: name.trim(), email: email.trim(), password, interests: [], agreedNotice: true,
           organizationName: org.trim(), organizationContact: contact.trim(), organizationType: orgType, organizationAddress: address.trim(), vmsRegistered: vms, vmsCode: vms ? vmsCode.trim() : '' }
-        : { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate: birthIso(birth), interests, agreedNotice: true })
+        : { memberType: 'GENERAL', name: name.trim(), email: email.trim(), password, birthDate: birthIso(birth), interests, agreedNotice: true, phoneProof: disputeLater ? undefined : phoneProof || undefined })
       if (institution) try { sessionStorage.setItem('volink.orgAsk', '1') } catch { /* private mode */ }
       setCreated(true)
     } catch (cause) {
+      if (cause instanceof ApiError && cause.code === 'PHONE_TAKEN') { setPhoneProof(''); setStep('phone'); setError('이미 가입된 번호예요. 다시 인증해 주세요.'); setBusy(false); return }
       if (cause instanceof ApiError && cause.code === 'EMAIL_TAKEN') {
         // Same e-mail and the same password: it is this person's account (for example a signup that went through before) → just log in.
         try { await enter(); return } catch { /* another account or another password */ }
@@ -250,16 +265,27 @@ export function Signup({ onSession, institution = false }: { onSession: (user: U
   const back = () => index === 0 ? (window.location.hash = institution ? '#/login?type=institution' : '#/login') : (setError(''), setStep(order[index - 1]))
   // One line each (2026-11-06): short questions, no extra helper lines.
   const headings: Record<Step, string> = {
-    terms: '시작하기 전에 확인해 주세요', email: institution ? '담당자 이메일을 알려 주세요' : '이메일을 알려 주세요',
+    terms: '시작하기 전에 확인해 주세요', phone: '휴대폰 번호를 인증해 주세요', email: institution ? '담당자 이메일을 알려 주세요' : '이메일을 알려 주세요',
     password: '비밀번호를 정해 주세요', name: institution ? '담당자 이름을 알려 주세요' : '이름을 알려 주세요', birth: '생년월일을 알려 주세요',
     interests: '관심 있는 봉사를 골라 주세요', orgType: '어떤 기관인가요?', org: '기관 이름을 알려 주세요', address: '기관 주소를 알려 주세요', contact: '기관 연락처를 알려 주세요', vms: '1365 수요처인가요?',
   }
-  const subs: Partial<Record<Step, string>> = { interests: `${signupRules.maxInterests}개까지, 나중에 바꿀 수 있어요` }
+  const subs: Partial<Record<Step, string>> = { phone: '한 사람당 한 계정만 만들 수 있어요', interests: `${signupRules.maxInterests}개까지, 나중에 바꿀 수 있어요` }
+  async function checkPhone(proof: string, number: string) {
+    setBusy(true); setError('')
+    try {
+      const result = await api<{ status: string; account?: Holder }>('/api/auth/phone-check', 'POST', { proof })
+      if (result.status === 'TAKEN' && result.account) { setPhoneHolder({ holder: result.account, proof }); return }
+      setPhoneProof(proof); setPhoneNumber(number); setDisputeLater('')
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : '인증하지 못했어요.') } finally { setBusy(false) }
+  }
   const label = busy ? (institution ? '제출하는 중…' : '가입하는 중…') : last ? (institution ? '제출하기' : interests.length ? '가입하고 시작하기' : '나중에 고르고 가입하기') : '다음'
 
   return <Flow title={institution ? '기관회원 가입' : '회원가입'} index={index} total={order.length} heading={headings[step]} sub={subs[step]} onBack={back} onSubmit={next}
     footer={<>{error && <p className="m-err m-flow-err" role="alert">{error}</p>}<button className="m-btn" disabled={!ok[step] || busy || (step === 'email' && taken)}>{label}</button></>}>
     {step === 'terms' && <Terms items={items} value={agreed} onChange={setAgreed} />}
+    {step === 'phone' && <PhoneVerify onProof={(proof, number) => void checkPhone(proof, number)} busy={busy} done={Boolean(phoneProof)} confirmButton={false} initial={phoneNumber} />}
+    {phoneHolder && <TakenSheet holder={phoneHolder.holder} onLogin={() => { rememberLoginEmail(phoneHolder.holder); window.location.hash = '#/login' }} onClose={() => setPhoneHolder(null)}
+      onDispute={() => { setPhoneProof(phoneHolder.proof); setDisputeLater(phoneHolder.proof); setPhoneHolder(null); showToast('가입을 마치면 관리자가 번호를 확인해요') }} />}
     {step === 'email' && <>
       <TextInput className="m-input big" type="email" inputMode="email" autoComplete="email" placeholder="example@email.com" aria-label="이메일" autoFocus value={email}
         onChange={event => { const next = event.target.value; if (next.trim() !== email.trim()) { setTaken(false); setCreated(false) } setEmail(next); setError('') }} enterKeyHint="next" />
@@ -375,7 +401,9 @@ export function SocialSignup({ onSession }: { onSession: (user: User) => void })
     setError('')
     try {
       onSession(await completeSocial({ ticket: query.get('ticket') ?? '', name: name.trim(), birthDate: birthIso(birth), interests, agreedNotice: true }))
-      window.location.hash = '#/welcome'
+      // 1인 1계정 (V42): a Kakao / Google account proves its phone right after it is made.
+      const phone = await api<{ active: boolean; verified: boolean }>('/api/me/phone').catch(() => null)
+      window.location.hash = phone?.active && !phone.verified ? '#/phone?fresh=1&next=' + encodeURIComponent('#/welcome') : '#/welcome'
     } catch (cause) {
       setError(cause instanceof ApiError ? (Object.values(cause.fieldErrors)[0] ?? cause.message) : '가입하지 못했어요.')
     } finally {

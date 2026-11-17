@@ -5,6 +5,7 @@ import { api } from '../api'
 import type { LiveActivity, MyRecord, User } from '../api'
 import { hostedRecords } from './mine'
 import { LimitCard, useStatus } from './status'
+import { usePhoneStatus } from './phone'
 import { categories, showToast } from '../App'
 import { signupRules } from '../rules'
 import { ActivityRow, fieldIcon } from './cards'
@@ -71,6 +72,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   const [saved, setSaved] = useState<number | null>(null)
   const [hosted, setHosted] = useState<LiveActivity[] | null>(null)
   const status = useStatus()
+  const phone = usePhoneStatus()
   const [about, setAbout] = useState(false)
   const [nickname, setNickname] = useState<string | null>(null)
   // A (2026-11-06): one total = Volink records + the 1365 total read from the person's own 1365 page (not checked by Volink).
@@ -107,6 +109,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   ]
   const more: Item[] = [
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
+    ...(phone?.active ? [{ icon: 'phone' as MIconName, label: '휴대폰 인증', href: '#/phone', note: phone.verified ? `***-${phone.last4}` : '인증 필요' }] : []),
     { icon: 'flag', label: '활동 기록·보험 안내', onClick: () => setAbout(true) },
   ]
   const list = (title: string, items: Item[]) => <section className="my-group" aria-label={title}><h2>{title}</h2><nav className="m-menu">{items.map(item => item.href

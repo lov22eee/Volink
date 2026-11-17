@@ -87,6 +87,11 @@ public class ActivityService {
     }
 
     private com.volink.safety.PenaltyService penalties;
+    private com.volink.phone.PhoneService phones;
+
+    /** 1인 1계정 (V42): a verified phone before 신청 · 모집글 · 글쓰기. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhones(com.volink.phone.PhoneService phones) { this.phones = phones; }
 
     /** 신고 누적 제한 (set by Spring; absent in plain unit tests). */
     @org.springframework.beans.factory.annotation.Autowired
@@ -94,6 +99,7 @@ public class ActivityService {
 
     public Map<String, Object> create(long userId, ActivityRequest request) {
         // 신고 2회(7일 글쓰기 제한)·3회(30일 신청·글쓰기 제한) also stop opening a 모집글 (2026-11-12, user decision).
+        if (phones != null) phones.require(userId);
         if (penalties != null) penalties.check(userId, "HOST");
         return save(userId, request, null);
     }

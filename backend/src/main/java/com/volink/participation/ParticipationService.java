@@ -38,6 +38,11 @@ public class ParticipationService {
     private final Clock clock;
 
     private com.volink.safety.PenaltyService penalties;
+    private com.volink.phone.PhoneService phones;
+
+    /** 1인 1계정 (V42): a verified phone before 신청 · 모집글 · 글쓰기. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhones(com.volink.phone.PhoneService phones) { this.phones = phones; }
 
     /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
     @org.springframework.beans.factory.annotation.Autowired
@@ -66,6 +71,7 @@ public class ParticipationService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw forbidden("FORBIDDEN", "관리자 계정은 활동에 신청할 수 없습니다.");
         if (!user.canWrite()) throw forbidden("ACCOUNT_RESTRICTED", "이용이 제한된 계정은 신청할 수 없습니다.");
+        if (phones != null) phones.require(userId);
         if (penalties != null) penalties.check(userId, "APPLY");
         Activity activity = lock(activityId);
         if (!"RECRUITING".equals(activity.status())) {

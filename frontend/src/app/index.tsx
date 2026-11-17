@@ -22,6 +22,7 @@ import { MineScreen, RecordsScreen } from './mine'
 import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
 import { SafetyNoticeHost } from './status'
+import { PhoneRequiredHost, PhoneScreen } from './phone'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
 import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, useKeyboardAware } from './ui'
@@ -120,6 +121,7 @@ export default function MobileApp() {
     case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
     case 'settings': screen = route.query.get('view') === 'account' ? <AccountScreen onWithdrawn={signOut} /> : <SettingsScreen user={user} onSignOut={signOut} />; break
     case 'welcome': screen = <WelcomeScreen />; break
+    case 'phone': screen = <PhoneScreen key={route.query.get('next') ?? ''} next={route.query.get('next') ?? undefined} fresh={route.query.get('fresh') === '1'} />; break
     default: screen = null
   }
   if (!screen) { window.location.hash = '#/home'; return <Loading /> }
@@ -128,6 +130,7 @@ export default function MobileApp() {
     {tab && <TabBar active={tab} />}
     <PushBanner onArrive={pollUnread} />
     <SafetyNoticeHost tick={route.page} />
+    <PhoneRequiredHost />
     <ToastHost />
   </div>
 }

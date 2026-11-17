@@ -66,8 +66,8 @@ public class SecurityConfig {
                     // Spring's own error dispatch (a status set elsewhere) keeps that status instead of becoming 403.
                     auth.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/actuator/health").permitAll();
-                    auth.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/oauth/complete", "/api/auth/oauth/finish").permitAll();
-                    auth.requestMatchers(HttpMethod.GET, "/api/auth/oauth/**").permitAll();
+                    auth.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/oauth/complete", "/api/auth/oauth/finish", "/api/auth/phone-check").permitAll();
+                    auth.requestMatchers(HttpMethod.GET, "/api/auth/oauth/**", "/api/auth/phone").permitAll();
                     auth.requestMatchers(HttpMethod.GET, "/api/activities", "/api/activities/*", "/api/activities/*/my-participation", "/api/places", "/api/places/search", "/api/places/nearby", "/api/places/point", "/api/volunteer-programs", "/api/organizations/*").permitAll();
                     if (development) {
                         auth.requestMatchers(HttpMethod.GET, "/api/demo/catalog", "/api/project/status").permitAll();

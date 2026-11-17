@@ -120,6 +120,7 @@ public class AccountService {
         jdbc.update("DELETE FROM external_records WHERE user_id = ? AND id NOT IN (SELECT external_id FROM community_posts WHERE external_id IS NOT NULL)", userId);
         jdbc.update("DELETE FROM external_summaries WHERE user_id = ?", userId);
         jdbc.update("UPDATE users SET ext_mode = NULL WHERE id = ?", userId);
+        jdbc.update("UPDATE users SET phone_hash = NULL, phone_last4 = NULL WHERE id = ?", userId); // 1인 1계정: the number is free again
         jdbc.update("UPDATE external_records SET organization = NULL, place = NULL, lab_status = NULL, cert_org = NULL WHERE user_id = ?", userId);
         jdbc.update("""
                 UPDATE users SET email = ?, display_name = ?, password_hash = ?, birth_date = '1900-01-01', community_nickname = NULL,

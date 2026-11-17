@@ -88,6 +88,8 @@ async function parse(response: Response) {
   if (!response.ok) {
     const fieldErrors: Errors = {}
     for (const item of data?.fieldErrors ?? []) fieldErrors[item.field] = item.message
+    // 1인 1계정 (V42): the app opens the phone sheet wherever 신청 · 모집글 · 글쓰기 was stopped for it.
+    if (data?.code === 'PHONE_REQUIRED') window.dispatchEvent(new Event('volink:phone-required'))
     throw new ApiError(response.status, data?.code ?? 'ERROR', data?.message ?? '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.', fieldErrors)
   }
   return data

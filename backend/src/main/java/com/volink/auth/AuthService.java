@@ -36,6 +36,12 @@ public class AuthService {
     private final LoginRateLimiter limiter;
     private final Clock clock;
 
+    private com.volink.phone.PhoneService phones;
+
+    /** 1인 1계정 (V42): a personal e-mail sign-up carries the proven phone. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhones(com.volink.phone.PhoneService phones) { this.phones = phones; }
+
     public AuthService(JdbcTemplate jdbc, PasswordEncoder passwords, TokenService tokens, LoginRateLimiter limiter, Clock clock) {
         this.jdbc = jdbc;
         this.passwords = passwords;
@@ -89,6 +95,7 @@ public class AuthService {
         jdbc.update("INSERT INTO users(email, display_name, password_hash, role, member_type, birth_date) VALUES (?, ?, ?, 'USER', ?, ?)",
                 email, name, passwords.encode(password), institution ? "INSTITUTION" : "GENERAL", birthDate);
         long id = jdbc.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+        if (!institution && phones != null) phones.attachAtSignup(id, request.phoneProof());
         for (String interest : interests)
             jdbc.update("INSERT INTO user_interests(user_id, category_id) SELECT ?, id FROM categories WHERE name = ?", id, interest);
         if (institution) {

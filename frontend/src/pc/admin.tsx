@@ -13,10 +13,13 @@ type Report = { id: number; targetType: string; targetId: number; reason: string
 type Appeal = { id: number; kind: string; reasonLabel: string; reason: string; status: string; hostNote: string | null; submittedAt: string; name: string; subject: string; checkInMethod: string | null; sanctionType: string | null }
 type Org = { id: number; name: string; orgType?: string | null; contact: string; address?: string | null; vmsRegistered?: boolean | null; vmsCode?: string | null; managerName: string; managerEmail: string; requestedAt: string; documents?: OrgDoc[] }
 type Review = { userId: number; name: string; steps: number; lastAt: string }
-type Item = { key: string; kind: 'REPORT' | 'APPEAL' | 'ACTIVITY' | 'ORG' | 'COMMUNITY'; title: string; sub: string; at: string | null; report?: Report; appeal?: Appeal; activity?: LiveActivity; org?: Org; review?: Review }
+// 1인 1계정 (V42): "제 번호가 아니에요" — the number is proven by one account and held by another.
+type PhoneDispute = { id: number; last4: string; note: string | null; createdAt: string; userId: number; name: string; email: string; joinedAt: string
+  holderId: number; holderName: string; holderEmail: string; holderJoinedAt: string; holderVerifiedAt: string | null }
+type Item = { key: string; kind: 'REPORT' | 'APPEAL' | 'ACTIVITY' | 'ORG' | 'COMMUNITY' | 'PHONE'; title: string; sub: string; at: string | null; report?: Report; appeal?: Appeal; activity?: LiveActivity; org?: Org; review?: Review; phone?: PhoneDispute }
 type Action = { id: number; at: string; admin: string; targetType: string; targetId: number; action: string; reason: string; targetName: string | null }
 
-const kindTag: Record<Item['kind'], [string, string]> = { REPORT: ['신고', 'red'], APPEAL: ['이의', 'blu'], ACTIVITY: ['검토', 'amb'], ORG: ['기관', 'g'], COMMUNITY: ['정지 검토', 'red'] }
+const kindTag: Record<Item['kind'], [string, string]> = { REPORT: ['신고', 'red'], APPEAL: ['이의', 'blu'], ACTIVITY: ['검토', 'amb'], ORG: ['기관', 'g'], COMMUNITY: ['정지 검토', 'red'], PHONE: ['번호', 'blu'] }
 const targetWord: Record<string, string> = { ACTIVITY: '활동', POST: '게시글', COMMENT: '댓글', USER: '회원', PHOTO: '사진' }
 const appealWord: Record<string, string> = { NO_SHOW: '불참 이의', RECORD: '활동 기록 이의', SANCTION: '제재 이의' }
 const orgTypeWord: Record<string, string> = { VOLUNTEER_CENTER: '자원봉사센터', WELFARE: '복지관·복지시설', SCHOOL: '학교·교육기관', NONPROFIT: '비영리단체', PUBLIC: '공공기관', OTHER: '기타' }
@@ -56,9 +59,10 @@ function useQueue(): QueueState {
   const load = useCallback(async () => {
     setFailed(false)
     try {
-      const [reports, appeals, activities, orgs, reviews] = await Promise.all([
+      const [reports, appeals, activities, orgs, reviews, phones] = await Promise.all([
         api<Report[]>('/api/admin/reports?status=OPEN'), api<Appeal[]>('/api/admin/appeals?status=OPEN'),
-        api<LiveActivity[]>('/api/admin/activities'), api<Org[]>('/api/admin/organizations?status=PENDING'), api<Review[]>('/api/admin/community-reviews').catch(() => [] as Review[])])
+        api<LiveActivity[]>('/api/admin/activities'), api<Org[]>('/api/admin/organizations?status=PENDING'), api<Review[]>('/api/admin/community-reviews').catch(() => [] as Review[]),
+        api<PhoneDispute[]>('/api/admin/phone-disputes').catch(() => [] as PhoneDispute[])])
       const list: Item[] = []
       const seen = new Set<string>()
       for (const r of [...reports].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
@@ -72,6 +76,7 @@ function useQueue(): QueueState {
       for (const a of appeals) list.push({ key: 'a' + a.id, kind: 'APPEAL', title: `${a.subject}`, sub: `${appealWord[a.kind] ?? '이의'} · ${a.reasonLabel}${a.hostNote ? ' · 모집자 답변 있음' : a.status === 'SUBMITTED' && a.kind !== 'SANCTION' ? ' · 모집자 답변 대기' : ''}`, at: a.submittedAt, appeal: a })
       for (const a of activities) list.push({ key: 'v' + a.id, kind: 'ACTIVITY', title: a.title, sub: `검토 사유 · ${a.riskReasons || '확인 필요'}`, at: null, activity: a })
       for (const c of reviews) list.push({ key: 'c' + c.userId, kind: 'COMMUNITY', title: c.name, sub: `1년 안 신고 인정 ${c.steps}회 · 커뮤니티 이용 정지 검토`, at: c.lastAt, review: c })
+      for (const d of phones) list.push({ key: 'p' + d.id, kind: 'PHONE', title: `${d.name} · 번호 ***-${d.last4}`, sub: `제 번호가 아니에요 · 지금은 ${d.holderName} 계정에 있어요`, at: d.createdAt, phone: d })
       for (const o of orgs) list.push({ key: 'o' + o.id, kind: 'ORG', title: o.name, sub: `${o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '기관'} · 가입 신청${o.documents?.length ? ` · 서류 ${o.documents.length}개` : ''}`, at: o.requestedAt, org: o })
       list.sort((x, y) => (x.at ?? '9').localeCompare(y.at ?? '9'))
       setItems(list)
@@ -231,10 +236,10 @@ function Case({ item, position, onDone, onClose }: { item: Item; position: strin
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const r = item.report, a = item.appeal, v = item.activity, o = item.org, c = item.review
+  const r = item.report, a = item.appeal, v = item.activity, o = item.org, c = item.review, ph = item.phone
   const hideable = r && ['POST', 'COMMENT', 'PHOTO'].includes(r.targetType)
   const choices: [string, string][] = r ? [...(hideable ? [['HIDE', '인정 · 숨김'] as [string, string]] : []), ['ACCEPT', hideable ? '인정 · 숨기지 않음' : '인정'], ['DISMISS', '문제 없음']]
-    : a ? [['ACCEPT', '인정'], ['REJECT', '기각']] : c ? [['STOP', '커뮤니티 이용 정지'], ['KEEP', '30일 제한만 유지']] : [['APPROVE', '승인'], ['REJECT', '반려']]
+    : a ? [['ACCEPT', '인정'], ['REJECT', '기각']] : ph ? [['MOVE', '요청한 계정으로 옮기기'], ['KEEP', '그대로 두기']] : c ? [['STOP', '커뮤니티 이용 정지'], ['KEEP', '30일 제한만 유지']] : [['APPROVE', '승인'], ['REJECT', '반려']]
   const pickNow = choice || choices[0][0]
   const reasonNeeded = !(v || o) || pickNow === 'REJECT'
   async function send() {
@@ -244,6 +249,7 @@ function Case({ item, position, onDone, onClose }: { item: Item; position: strin
       if (r) await api('/api/admin/reports/' + r.id + '/decision', 'POST', { decision: pickNow === 'DISMISS' ? 'DISMISS' : 'ACCEPT', hide: pickNow === 'HIDE', reason })
       else if (a) await api('/api/admin/appeals/' + a.id + '/decision', 'POST', { decision: pickNow, reason })
       else if (v) await api('/api/admin/activities/' + v.id + (pickNow === 'APPROVE' ? '/approve' : '/reject'), 'POST', { reason })
+      else if (ph) await api('/api/admin/phone-disputes/' + ph.id + '/decision', 'POST', { decision: pickNow, reason })
       else if (c) await api('/api/admin/community-reviews/' + c.userId, 'POST', { decision: pickNow, reason })
       else if (o) await api('/api/admin/organizations/' + o.id + (pickNow === 'APPROVE' ? '/approve' : '/reject'), 'POST', { reason })
       onDone()
@@ -275,6 +281,12 @@ function Case({ item, position, onDone, onClose }: { item: Item; position: strin
     <div><h3>검토할 사람</h3><div className="pc-kv"><span>이름</span><b>{c.name}</b></div><div className="pc-kv"><span>1년 안 신고 인정</span><b>{c.steps}회</b></div><div className="pc-kv"><span>마지막 인정</span><b>{c.lastAt}</b></div></div>
     <div><a className="pc-link" href={'#/admin/find/' + c.userId}>받은 신고·제재 기록 보기 ›</a></div>
   </>
+  if (ph) left = <>
+    <div><h3>요청한 계정</h3><div className="pc-kv"><span>이름</span><b>{ph.name}</b></div><div className="pc-kv"><span>이메일</span><b>{ph.email}</b></div><div className="pc-kv"><span>가입</span><b>{ph.joinedAt}</b></div><div className="pc-kv"><span>요청</span><b>{ph.createdAt.replace('T', ' ')}</b></div></div>
+    {ph.note && <div><h3>요청한 사람의 말</h3><div className="pc-q">{ph.note}</div></div>}
+    <div><h3>지금 번호가 있는 계정</h3><div className="pc-kv"><span>이름</span><b>{ph.holderName}</b></div><div className="pc-kv"><span>이메일</span><b>{ph.holderEmail}</b></div><div className="pc-kv"><span>가입</span><b>{ph.holderJoinedAt}</b></div><div className="pc-kv"><span>번호 인증</span><b>{ph.holderVerifiedAt ?? '-'}</b></div>
+      <a className="pc-link" href={'#/admin/find/' + ph.holderId}>이 계정 기록 보기 ›</a></div>
+  </>
   if (o) left = <>
     <div><h3>기관 정보</h3><div className="pc-kv"><span>기관명</span><b>{o.name}</b></div><div className="pc-kv"><span>유형</span><b>{o.orgType ? orgTypeWord[o.orgType] ?? o.orgType : '-'}</b></div>
       <div className="pc-kv"><span>연락처</span><b>{o.contact}</b></div><div className="pc-kv"><span>주소</span><b>{o.address || '-'}</b></div><div className="pc-kv"><span>1365 수요처</span><b>{o.vmsRegistered ? '등록됨' + (o.vmsCode ? ` (${o.vmsCode})` : '') : o.vmsRegistered === false ? '아님' : '-'}</b></div></div>
@@ -284,6 +296,7 @@ function Case({ item, position, onDone, onClose }: { item: Item; position: strin
   const effect = r && pickNow !== 'DISMISS' ? `인정하면 작성자는 1년 안 인정 ${r.warnings + 1}회로 ${ladder[Math.min(6, r.warnings + 1)]} 단계가 돼요. 봉사 신청은 막지 않아요.`
     : c ? (pickNow === 'STOP' ? '정지하면 기간 없이 글·댓글·모집글을 쓸 수 없어요. 봉사 신청·참여는 그대로이고, 본인은 이의 신청할 수 있어요.' : '지금 걸린 30일 제한만 유지해요. 다음 신고가 인정되면 다시 검토해요.')
     : a && pickNow === 'ACCEPT' ? (a.kind === 'SANCTION' ? '인정하면 제재가 바로 풀려요.' : a.kind === 'NO_SHOW' ? '인정하면 불참이 출석으로 바뀌고 횟수에서 빠져요.' : '인정하면 활동 기록이 다시 유효해져요.')
+    : ph ? (pickNow === 'MOVE' ? '옮기면 번호가 요청한 계정으로 가고, 지금 계정은 다시 휴대폰 인증을 해야 신청할 수 있어요.' : '그대로 두면 요청한 계정은 다른 번호로 인증해야 해요.')
     : v ? (pickNow === 'APPROVE' ? '승인하면 바로 공개돼요.' : '반려하면 모집자에게 사유가 전달돼요.')
     : o ? (pickNow === 'APPROVE' ? '승인하면 기관센터와 기관 주관 모집이 열려요.' : '반려하면 담당자에게 사유가 전달돼요.') : ''
   return <section className="pc-pn" aria-label="처리">
