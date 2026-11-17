@@ -1851,7 +1851,7 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .hb-quick i.p { background: #f1ecf8; color: #6b4fa3; } .hb-quick i.b { background: #e8eef8; color: #2f5592; }
 .hb-quick:has(> :nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }
 .hb-stories a { width: 148px; } .hb-stories .hb-pic { height: 148px; }
-.hb-weekend a > small:first-of-type { color: var(--m-green-ink); font-weight: 650; }
+.hb-weekend:not(.hb-stories) a > small:first-of-type { color: var(--m-green-ink); font-weight: 650; }
 .hb-interest { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: var(--ink-3); }
 .hb-interest .m-chip { text-decoration: none; }
 .hb-foot { margin-top: 30px; display: flex; align-items: center; gap: 0; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 10px 12px 4px; color: var(--ink); text-decoration: none; }
