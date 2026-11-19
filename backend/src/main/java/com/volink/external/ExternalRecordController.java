@@ -18,8 +18,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class ExternalRecordController {
     private final ExternalRecordService records;
+    private com.volink.phone.PhoneService phones;
 
     public ExternalRecordController(ExternalRecordService records) { this.records = records; }
+
+    /** 1365 연결 needs a verified phone (V42, 2026-11-19). */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhones(com.volink.phone.PhoneService phones) { this.phones = phones; }
+    private void phoneFirst(long user) { if (phones != null) phones.requireVerified(user); }
 
     private static long user(Jwt jwt) { return Long.parseLong(jwt.getSubject()); }
 
@@ -40,7 +46,7 @@ public class ExternalRecordController {
     public Map<String, Object> summary(@AuthenticationPrincipal Jwt jwt) { return records.summary(user(jwt)); }
 
     @PutMapping("/api/me/external/summary")
-    public Map<String, Object> saveSummary(@AuthenticationPrincipal Jwt jwt, @RequestBody ExternalRecordService.SummaryRequest request) { return records.saveSummary(user(jwt), request); }
+    public Map<String, Object> saveSummary(@AuthenticationPrincipal Jwt jwt, @RequestBody ExternalRecordService.SummaryRequest request) { phoneFirst(user(jwt)); return records.saveSummary(user(jwt), request); }
 
     @DeleteMapping("/api/me/external/summary")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -55,7 +61,7 @@ public class ExternalRecordController {
 
     /** Lab (실험실): rows picked from the person's own 1365 page. */
     @PostMapping("/api/me/external/import")
-    public Map<String, Object> importRows(@AuthenticationPrincipal Jwt jwt, @RequestBody ExternalRecordService.ImportRequest request) { return records.importRows(user(jwt), request); }
+    public Map<String, Object> importRows(@AuthenticationPrincipal Jwt jwt, @RequestBody ExternalRecordService.ImportRequest request) { phoneFirst(user(jwt)); return records.importRows(user(jwt), request); }
 
     public record StatusRequest(String status) {}
 

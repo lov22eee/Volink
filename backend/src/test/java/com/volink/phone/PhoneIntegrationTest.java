@@ -94,4 +94,14 @@ class PhoneIntegrationTest extends ApiTestSupport {
         // 기관 accounts are not asked
         perform(get("/api/me/phone"), null, token(member("INSTITUTION"))).andExpect(jsonPath("$.active").value(false));
     }
+
+    @Test
+    void connecting1365NeedsAVerifiedPhoneEvenDuringTheGracePeriod() throws Exception {
+        String email = member("GENERAL"), token = token(email);
+        jdbc.update("UPDATE users SET phone_grace_until = ? WHERE id = ?", LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusDays(5), id(email));
+        Map<String, Object> rows = Map.of("items", java.util.List.of(Map.of("title", "하천 정화 활동", "date", TODAY.minusDays(3).toString(), "startTime", "10:00", "endTime", "12:00")));
+        perform(post("/api/me/external/import"), rows, token).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("PHONE_REQUIRED"));
+        perform(post("/api/me/phone"), proof(number()), token).andExpect(jsonPath("$.status").value("VERIFIED"));
+        perform(post("/api/me/external/import"), rows, token).andExpect(status().is2xxSuccessful());
+    }
 }

@@ -155,7 +155,7 @@ export function PhoneScreen({ next, fresh, onChange }: { next?: string; fresh?: 
     try {
       const result = await api<{ status: string; last4?: string; account?: Holder }>('/api/me/phone', 'POST', { proof })
       if (result.status === 'TAKEN' && result.account) { setHolder({ holder: result.account, proof }); return }
-      showToast('휴대폰 인증을 마쳤어요', `***-${result.last4}`)
+      showToast(status?.verified ? '휴대폰 번호를 바꿨어요' : '휴대폰 인증을 마쳤어요', `***-${result.last4}`)
       onChange?.()
       window.location.hash = next ?? '#/my'
     } catch (cause) { showToast(cause instanceof ApiError ? cause.message : '인증하지 못했어요.') } finally { setBusy(false) }
@@ -174,10 +174,10 @@ export function PhoneScreen({ next, fresh, onChange }: { next?: string; fresh?: 
     catch (cause) { showToast(cause instanceof ApiError ? cause.message : '보내지 못했어요.') }
   }
   return <div className="m-screen">
-    <TopBar title="휴대폰 인증" back={fresh ? undefined : next ?? '#/my'} />
+    <TopBar title={status?.verified ? '휴대폰 번호 변경' : '휴대폰 인증'} back={fresh ? undefined : next ?? '#/my'} />
     <div className="m-body ph-screen">
-      <h1 className="ph-title">휴대폰 번호를<br />인증해 주세요</h1>
-      <p className="ph-sub">{status?.verified ? `지금 인증된 번호: ***-${status.last4} · 바꾸려면 새 번호로 인증해요` : '한 사람당 한 계정만 만들 수 있어요'}</p>
+      <h1 className="ph-title">{status?.verified ? <>새 휴대폰 번호를<br />인증해 주세요</> : <>휴대폰 번호를<br />인증해 주세요</>}</h1>
+      <p className="ph-sub">{status?.verified ? `지금 번호 ***-${status.last4}` : '한 사람당 한 계정만 만들 수 있어요'}</p>
       {status?.dispute === 'OPEN' && <div className="m-note"><strong>관리자가 확인하고 있어요</strong>결과를 알림으로 알려 드릴게요.</div>}
       <PhoneVerify onProof={proof => void prove(proof)} busy={busy} />
       <p className="ph-fine">번호는 다른 사람에게 보이지 않고, 같은 번호인지 확인하는 데만 써요.</p>
