@@ -32,6 +32,8 @@ USER_TOKEN=$(login "$EMAIL" "$PASS")
 echo "2) 모집자 도우미 계정"
 HOST="demo-host-$(date +%s)@example.com"
 post /api/auth/signup "{\"memberType\":\"GENERAL\",\"name\":\"시연모집자\",\"email\":\"$HOST\",\"password\":\"$PASS\",\"birthDate\":\"1995-01-01\",\"interests\":[\"환경\"],\"agreedNotice\":true}" >/dev/null
+# 1인 1계정 (V42): demo accounts have no phone; they may wait 7 days like accounts from before the change.
+sql "UPDATE users SET phone_grace_until = NOW() + INTERVAL 7 DAY WHERE phone_hash IS NULL AND email IN ('$EMAIL', '$HOST')" 2>/dev/null || true
 HOST_TOKEN=$(login "$HOST" "$PASS")
 put /api/community/me "{\"nickname\":\"시연모집$(date +%S)\",\"agree\":true}" "$HOST_TOKEN"
 

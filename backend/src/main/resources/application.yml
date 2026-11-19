@@ -59,8 +59,15 @@ volink:
     origins: ${APP_ORIGINS:https://localhost}
     # Package name the Kakao / Google login hands the result back to (volink:// link).
     package: com.volink.app
+  phone:
+    # 1인 1계정 (V42): 신청·모집글·글쓰기 need a verified phone (Firebase phone sign-in). false = never asked (emergency switch).
+    required: ${PHONE_REQUIRED:true}
+    # Key for the phone number HMAC (only the hash is stored). Keep it stable: changing it frees every number.
+    hash-key: ${PHONE_HASH_KEY:${JWT_SECRET:}}
+    # Local development without Firebase: accept "dev:+8210…" as a verified number. Never set on the server.
+    dev-verify: ${PHONE_DEV_VERIFY:false}
   firebase:
-    # Firebase service account JSON file on the server only (phone push). Empty = no push is sent.
+    # Firebase service account JSON file on the server only (phone push, phone sign-in check). Empty = both off.
     service-account-file: ${FIREBASE_SERVICE_ACCOUNT_FILE:}
   data-go-kr:
     # data.go.kr "일반 인증키 (Decoding)" for 1365 봉사참여정보서비스. Empty = 1365 programs are not shown.
@@ -85,3 +92,7 @@ volink:
   scheduler:
     # Tests call ParticipationService.expireDue() directly instead of waiting for the minute timer.
     enabled: false
+  phone:
+    dev-verify: true
+    # Other tests create accounts without a phone; the phone tests switch this on (PhoneService.enforce).
+    required: false

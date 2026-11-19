@@ -1056,9 +1056,10 @@ test('홈 추천: a post opens a summary sheet over 홈, and 신청하기 goes s
   const auth = await tokenFor(page, organizer)
   const created = await page.request.post('/api/activities', { headers: { Authorization: auth }, data: { activityType: 'GENERAL', title: '홈 시트 확인 공원 정리', category: '환경', placeId: 1, date: inDays(2), time: '10:00', capacity: 3, durationMinutes: 60, description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 줍는 가벼운 활동이에요.', safetyConfirmed: true } })
   expect(created.ok(), await created.text()).toBeTruthy()
-  // The member's 관심 분야 is 환경, so 나에게 맞는 봉사 lists at least this one; the first row is the one opened.
+  // The member's 관심 분야 is 환경, so 홈 shows at least this one — as a card in 나에게 맞는 봉사, or in 곧 마감 when it starts within
+  // 48 hours (2026-11-22 홈 개편: the two never repeat a post).
   await login(page, await signupByApi(page, '홈 시트 회원'))
-  const row = page.getByRole('region', { name: '나에게 맞는 봉사' }).locator('.hb-list a').first()
+  const row = page.locator('[aria-label="나에게 맞는 봉사"] .hb-weekend a, [aria-label="곧 마감"] .hb-list a').first()
   const title = (await row.locator('b').textContent())!.trim()
   await row.click()
   await expect(page).toHaveURL(/#\/home$/)

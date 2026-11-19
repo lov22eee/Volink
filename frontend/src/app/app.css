@@ -1789,3 +1789,83 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 @media (prefers-reduced-motion: reduce) { .sn-mark, .sn-detail { animation: none; } }
 .r-progress { width: 200px; height: 6px; border-radius: 6px; background: var(--m-mint-2); overflow: hidden; }
 .r-progress i { display: block; height: 100%; border-radius: 6px; background: var(--m-green); transition: width .3s ease; }
+
+/* 1인 1계정 · 휴대폰 인증 (2026-11-22, V42) */
+.ph-verify { display: flex; flex-direction: column; gap: 10px; }
+.ph-row { display: flex; gap: 8px; }
+.ph-row .m-input { flex: 1; min-width: 0; }
+.ph-send { flex: none; border: 0; border-radius: 12px; padding: 0 14px; background: var(--brand-soft, #e8f1eb); color: var(--brand, #2f6f52); font: inherit; font-weight: 800; font-size: 14px; }
+.ph-send:disabled { opacity: .45; }
+.ph-code { position: relative; display: block; }
+.ph-code input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; font-size: 16px; }
+.ph-boxes { display: flex; gap: 7px; pointer-events: none; }
+.ph-boxes i { flex: 1; height: 54px; border: 1.5px solid var(--line-2, #d9ddd8); border-radius: 12px; background: #fff; display: grid; place-items: center; font-style: normal; font-size: 22px; font-weight: 800; }
+.ph-boxes i.on { border-color: var(--brand, #2f6f52); }
+.ph-code input:focus + .ph-boxes i.cur { border-color: var(--brand, #2f6f52); box-shadow: 0 0 0 3px #e8f1eb; }
+.ph-hint { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-3); margin: 0; }
+.ph-hint b { color: #b42318; }
+.ph-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.ph-done { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--brand, #2f6f52); }
+.ph-screen { padding-top: 8px; }
+.ph-title { font-size: 23px; line-height: 1.35; margin: 8px 0 6px; letter-spacing: -.02em; }
+.ph-sub { color: var(--ink-3); font-size: 14px; margin: 0 0 20px; }
+.ph-fine { color: var(--ink-3); font-size: 12.5px; margin-top: 18px; }
+.ph-acc { align-self: stretch; display: flex; gap: 12px; align-items: center; background: #f3f4f2; border-radius: 14px; padding: 13px 14px; margin: 4px 0 16px; text-align: left; }
+.ph-acc > span:last-child { display: flex; flex-direction: column; }
+.ph-acc small { color: var(--ink-3); font-size: 12.5px; }
+.ph-acc-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-weight: 900; background: #e8f1eb; color: #2f6f52; flex: none; }
+.ph-acc-ic.kakao { background: #fee500; color: #191919; }
+.ph-acc-ic.google { background: #fff; border: 1px solid #e4e4df; color: #4285f4; }
+.ph-points { align-self: stretch; text-align: left; margin: 0 0 16px; padding-left: 18px; color: var(--ink-2, #4b524e); font-size: 14px; }
+.ph-points li { margin-bottom: 6px; }
+.sn-mark.warn { background: #e8a33a; }
+
+/* 홈 개편 (2026-11-22) */
+.hb .hb-sec { margin-top: 30px; }
+.hb-hello h1 { font-size: 22px; }
+.hb-today { margin-top: 18px; border-radius: 20px; padding: 18px; background: var(--m-green, #2f6f52); color: #fff; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.hb-today.soft { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.hb-today .hb-dd { align-self: flex-start; background: #fff; color: var(--m-green-ink); font-weight: 900; font-size: 12.5px; border-radius: 8px; padding: 2px 9px; }
+.hb-today.soft .hb-dd { background: var(--m-mint); }
+.hb-today .hb-st { position: absolute; top: 18px; right: 18px; font-style: normal; font-size: 12.5px; font-weight: 700; opacity: .9; }
+.hb-today .hb-st.hot { color: #ffd7d1; } .hb-today .hb-st.wait { opacity: .75; }
+.hb-today > b { font-size: 19px; font-weight: 750; letter-spacing: -0.03em; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-today > small { font-size: 13.5px; opacity: .88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-acts { display: flex; gap: 8px; margin-top: 14px; }
+.hb-acts a { flex: 1; min-height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; font-size: 14.5px; text-decoration: none; color: inherit; background: rgb(255 255 255 / .16); }
+.hb-acts a.on { background: #fff; color: var(--m-green-ink); }
+.hb-today.soft .hb-acts a { background: var(--m-mint); color: var(--m-green-ink); }
+.hb-today.soft .hb-acts a.on { background: var(--m-green, #2f6f52); color: #fff; }
+.hb-first { margin-top: 18px; border-radius: 20px; padding: 18px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.hb-first > b { font-size: 18px; font-weight: 750; letter-spacing: -0.03em; }
+.hb-first > p { font-size: 13.5px; color: var(--ink-3); margin: 0 0 10px; }
+.hb-first ol { list-style: none; margin: 0 0 12px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.hb-first ol li { background: #f3f4f2; border-radius: 12px; padding: 10px 8px; font-size: 12px; color: var(--ink-2); }
+.hb-first ol b { display: block; font-size: 13px; color: var(--m-green-ink); margin-bottom: 2px; }
+.hb-todo-box { margin-top: 10px; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 0 14px; }
+.hb-todo-box li:first-child a { border-top: 0; }
+.hb-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.hb-quick a, .hb-quick button { all: unset; box-sizing: border-box; cursor: pointer; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.hb-quick i { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-style: normal; }
+.hb-quick i.g { background: #e8f1eb; color: #2f6f52; } .hb-quick i.o { background: #fff3e0; color: #c47a12; }
+.hb-quick i.p { background: #f1ecf8; color: #6b4fa3; } .hb-quick i.b { background: #e8eef8; color: #2f5592; }
+.hb-quick:has(> :nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); }
+.hb-stories a { width: 148px; } .hb-stories .hb-pic { height: 148px; }
+.hb-weekend:not(.hb-stories) a > small:first-of-type { color: var(--m-green-ink); font-weight: 650; }
+.hb-interest { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: var(--ink-3); }
+.hb-interest .m-chip { text-decoration: none; }
+.hb-foot { margin-top: 30px; display: flex; align-items: center; gap: 0; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 10px 12px 4px; color: var(--ink); text-decoration: none; }
+.hb-foot > span { flex: 1; text-align: center; display: flex; flex-direction: column; }
+.hb-foot > span + span { border-left: 1px solid var(--line); }
+.hb-foot b { font-size: 19px; font-weight: 750; } .hb-foot small { font-size: 12px; color: var(--ink-3); }
+.hb-foot > svg { color: var(--ink-3); flex: none; }
+.hb-weekend { scroll-padding: 0 var(--m-x); }
+/* 이웃 이야기 글 카드 (사진 없는 후기, 2026-11-22 A안): same size as a photo card, the review's first words, ending in … */
+.hb-quote { height: 148px; border-radius: 12px; padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; margin-bottom: 4px; }
+.hb-quote em { align-self: flex-start; font-style: normal; font-size: 11px; font-weight: 800; border-radius: 6px; padding: 1px 7px; background: #fff; }
+.hb-quote i { font-style: normal; font-size: 30px; line-height: .7; font-weight: 900; margin-top: 6px; }
+.hb-quote q { quotes: none; font-size: 13.5px; line-height: 1.5; color: #2b302d; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
+.hb-quote.t0 { background: #e8f1eb; } .hb-quote.t0 em { color: #2f6f52; } .hb-quote.t0 i { color: #9cc5ad; }
+.hb-quote.t1 { background: #fff3e0; } .hb-quote.t1 em { color: #c47a12; } .hb-quote.t1 i { color: #ecc28a; }
+.hb-quote.t2 { background: #e8eef8; } .hb-quote.t2 em { color: #2f5592; } .hb-quote.t2 i { color: #a9bde0; }
+.hb-quote.t3 { background: #f1ecf8; } .hb-quote.t3 em { color: #6b4fa3; } .hb-quote.t3 i { color: #c3b2e0; }

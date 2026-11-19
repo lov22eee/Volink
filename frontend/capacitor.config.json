@@ -9,6 +9,12 @@
     "SystemBars": {
       "insetsHandling": "css",
       "style": "LIGHT"
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": [
+        "phone"
+      ]
     }
   },
   "backgroundColor": "#ffffff"

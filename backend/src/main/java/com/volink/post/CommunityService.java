@@ -31,6 +31,11 @@ public class CommunityService {
     private final Clock clock;
 
     private com.volink.safety.PenaltyService penalties;
+    private com.volink.phone.PhoneService phones;
+
+    /** 1인 1계정 (V42): a verified phone before 신청 · 모집글 · 글쓰기. */
+    @org.springframework.beans.factory.annotation.Autowired
+    void setPhones(com.volink.phone.PhoneService phones) { this.phones = phones; }
 
     /** Week 7: 불참·신고 누적 제한 (set by Spring; absent in plain unit tests). */
     @org.springframework.beans.factory.annotation.Autowired
@@ -320,6 +325,7 @@ public class CommunityService {
         AuthUser user = auth.findById(userId);
         if (user.admin()) throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "관리자 계정은 글을 쓸 수 없습니다.");
         if (!user.canWrite()) throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_RESTRICTED", "이용이 제한된 계정은 글을 쓸 수 없습니다.");
+        if (phones != null) phones.require(userId);
         if (penalties != null) penalties.check(userId, "WRITE");
         if (!Boolean.TRUE.equals(profile(userId).get("ready")))
             throw new ApiException(HttpStatus.FORBIDDEN, "COMMUNITY_SETUP_REQUIRED", "커뮤니티 닉네임을 정하고 이용 규칙에 동의해 주세요.");

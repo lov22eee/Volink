@@ -42,6 +42,8 @@ echo "2) 도우미 계정 (신고하는 사람 · 임시 관리자)"
 HELPER="demo-helper-$STAMP@example.com"; ADMIN="demo-admin-$STAMP@example.com"
 signup "$HELPER" "시연도우미" "$HELPER_PASS" "1998-01-01"
 signup "$ADMIN" "시연관리" "$HELPER_PASS" "1990-01-01"
+# 1인 1계정 (V42): demo accounts have no phone; like accounts from before the change they may wait 7 days.
+sql "UPDATE users SET phone_grace_until = NOW() + INTERVAL 7 DAY WHERE phone_hash IS NULL AND email IN ('$EMAIL', '$HELPER', '$ADMIN')" 2>/dev/null || true
 sql "UPDATE users SET role='ADMIN' WHERE email='$ADMIN'"
 H=$(login "$HELPER" "$HELPER_PASS"); A=$(login "$ADMIN" "$HELPER_PASS")
 [ -n "$H" ] && [ -n "$A" ] || { echo "도우미 계정을 만들지 못했어요." >&2; exit 1; }

@@ -4,7 +4,7 @@ import type { InputHTMLAttributes, ReactNode, Ref, RefObject, TextareaHTMLAttrib
 import { createPortal } from 'react-dom'
 
 export type MIconName = 'home' | 'compass' | 'plus' | 'calendar' | 'user' | 'search' | 'bell' | 'back' | 'close' | 'pin' | 'clock' | 'users'
-  | 'leaf' | 'hand' | 'heart' | 'check' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
+  | 'leaf' | 'hand' | 'heart' | 'check' | 'phone' | 'chevron' | 'eye' | 'eyeOff' | 'mail' | 'lock' | 'qr' | 'map' | 'list' | 'bookmark' | 'bookmarked'
   | 'settings' | 'logout' | 'edit' | 'trash' | 'bolt' | 'sun' | 'chat' | 'megaphone' | 'refresh' | 'flag' | 'timer' | 'record' | 'docPlus' | 'sprout' | 'outward' | 'more' | 'send'
   | 'userPlus' | 'userX' | 'checkCircle' | 'alert' | 'moon' | 'book' | 'palette' | 'paw' | 'sliders' | 'camera' | 'flask'
 
@@ -27,6 +27,7 @@ const paths: Record<MIconName, ReactNode> = {
   hand: <path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11m0-1V5a1.5 1.5 0 0 1 3 0v6m0-1V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.5A5.5 5.5 0 0 1 6 17l-2-3.5a1.4 1.4 0 0 1 2.3-1.6L8 14" />,
   heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  phone: <><rect x="7" y="2.5" width="10" height="19" rx="2.2" /><path d="M11 18h2" /></>,
   chevron: <path d="m9 5 7 7-7 7" />,
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff: <><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.8M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.8 9.8 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
