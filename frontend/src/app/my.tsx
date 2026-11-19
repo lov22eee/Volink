@@ -109,7 +109,7 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   ]
   const more: Item[] = [
     { icon: 'chat', label: '커뮤니티 닉네임', href: '#/my?view=nickname', note: nickname ?? '정하지 않음' },
-    ...(phone?.active ? [{ icon: 'phone' as MIconName, label: '휴대폰 인증', href: '#/phone', note: phone.verified ? `***-${phone.last4}` : '인증 필요' }] : []),
+    ...(phone?.active ? [{ icon: 'phone' as MIconName, label: phone.verified ? '휴대폰 번호' : '휴대폰 인증', href: '#/phone', note: phone.verified ? `***-${phone.last4} · 변경` : '인증 필요' }] : []),
     { icon: 'flag', label: '활동 기록·보험 안내', onClick: () => setAbout(true) },
   ]
   const list = (title: string, items: Item[]) => <section className="my-group" aria-label={title}><h2>{title}</h2><nav className="m-menu">{items.map(item => item.href

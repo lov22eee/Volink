@@ -22,7 +22,7 @@ import { MineScreen, RecordsScreen } from './mine'
 import { setupNative, startPush, stopPush } from './native'
 import { WelcomeScreen } from './welcome'
 import { SafetyNoticeHost } from './status'
-import { PhoneRequiredHost, PhoneScreen } from './phone'
+import { PhoneNoticeHost, PhoneRequiredHost, PhoneScreen } from './phone'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
 import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, useKeyboardAware } from './ui'
@@ -131,6 +131,7 @@ export default function MobileApp() {
     <PushBanner onArrive={pollUnread} />
     <SafetyNoticeHost tick={route.page} />
     <PhoneRequiredHost />
+    <PhoneNoticeHost tick={route.page} />
     <ToastHost />
   </div>
 }

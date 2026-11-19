@@ -82,6 +82,8 @@ public class LabActivity extends AppCompatActivity {
     /** Every 1.5s: run the app's step script on the page and show its line (① 로그인 … ④ 이 화면 가져오기). */
     private final Runnable checkStep = new Runnable() {
         @Override public void run() {
+            // 정보 확인 (2026-11-19): while the 1365 member page is being read behind the cover, the step guide waits.
+            if (verifying || held) { timer.postDelayed(this, 1500); return; }
             if (web != null && stepScript != null && !stepScript.isEmpty()) {
                 String js = "(function(){try{return " + stepCall("document.body?document.body.innerText.slice(0,20000):''") + ";}catch(e){return '';}})()";
                 web.evaluateJavascript(js, value -> {
@@ -101,6 +103,7 @@ public class LabActivity extends AppCompatActivity {
                         }
                         else if (sawLogin && !loggedIn) { loggedIn = true; lastStep = 0; return; }
                         if (step == 1) jumped = false; // on the login page: once logged in, go to the page again
+                        if ((step == 2 || step == 3) && needVerify()) { startVerify(); return; }
                         if ((step == 2 || step == 3) && !jumped && !targetUrl.isEmpty() && !targetUrl.equals(web.getUrl())) { jumped = true; web.loadUrl(targetUrl); if (both) { coverLoading("1365에서 가져오는 중이에요"); setGoal(10, 30); } }
                         showStep(step, out.substring(3));
                         updateTake();
@@ -326,6 +329,10 @@ public class LabActivity extends AppCompatActivity {
         root.addView(bottom, wide);
         setContentView(root);
         String start = getIntent().getStringExtra("url");
+        startUrl = start == null ? LabPlugin.HOME : start;
+        String wantName = getIntent().getStringExtra("verifyName"), wantLast4 = getIntent().getStringExtra("verifyLast4");
+        verifyName = wantName == null ? "" : wantName.replaceAll("\\s+", "");
+        verifyLast4 = wantLast4 == null ? "" : wantLast4.replaceAll("\\D", "");
         targetUrl = start != null && !start.equals(LabPlugin.HOME) ? start : "";
         web.loadUrl(start == null ? LabPlugin.HOME : start);
         timer.postDelayed(checkStep, 1200);
@@ -562,6 +569,117 @@ public class LabActivity extends AppCompatActivity {
         }), 1200);
     }
 
+
+
+    // ---- 정보 확인 (2026-11-19, user decision): after the 1365 login, before anything is read, the 1365 account's 성명 and
+    // 휴대폰 번호 (회원정보 page) must match the Volink account (name, and the last 4 digits of the verified phone). It runs
+    // behind the cover; the person only sees 정보를 확인하고 있어요 → ✓ 정보를 확인했어요, or ! 계정 정보가 달라요 with no
+    // detail of what differs. The values are compared here on the phone and are never sent anywhere or kept.
+    private static final String MEMBER_PAGE = LabPlugin.HOME + "/vols/1478149574230/myPage/volsMber.do?type=save";
+    private String verifyName = "", verifyLast4 = "", startUrl = LabPlugin.HOME;
+    private boolean verified = false, verifying = false, held = false; // held: 계정이 달라요/확인 못 함 on screen, nothing goes on
+    private int verifyTries = 0;
+
+    private boolean needVerify() { return !verified && !verifyName.isEmpty() && verifyLast4.length() == 4; }
+
+    private void startVerify() {
+        if (verifying || web == null) return;
+        verifying = true; held = false; verifyTries = 0;
+        coverChecking();
+        web.stopLoading();
+        web.loadUrl(MEMBER_PAGE);
+        timer.postDelayed(readMember, 1200);
+    }
+
+    private static final String MEMBER_JS = "(function(){function cell(l){var c=document.querySelectorAll('th,dt,label');for(var i=0;i<c.length;i++){"
+            + "if((c[i].innerText||'').replace(/\\s/g,'')===l){return c[i].nextElementSibling||c[i].parentElement;}}return null;}"
+            + "var n=cell('성명'),p=cell('휴대폰번호'),name='',phone='';"
+            + "if(n){var k=n.cloneNode(true);k.querySelectorAll('button,a,input,select').forEach(function(e){e.remove();});name=(k.innerText||k.textContent||'').replace(/\\s/g,'');}"
+            + "if(p){phone=Array.prototype.map.call(p.querySelectorAll('select,input[type=text],input[type=tel],input:not([type])'),function(e){return e.value||'';}).join('').replace(/\\D/g,'');}"
+            + "return name+'|'+phone;})()";
+
+    private final Runnable readMember = new Runnable() {
+        @Override public void run() {
+            if (!verifying || web == null) return;
+            web.evaluateJavascript(MEMBER_JS, value -> {
+                String out;
+                try { Object parsed = new JSONTokener(value).nextValue(); out = parsed == null ? "" : parsed.toString(); } catch (Exception e) { out = ""; }
+                int bar = out.indexOf('|');
+                String name = bar < 0 ? "" : out.substring(0, bar), phone = bar < 0 ? "" : out.substring(bar + 1);
+                if (name.isEmpty() || phone.length() < 10) {
+                    // The page is still loading (or 1365 asked something first): a few more tries, then say so.
+                    if (++verifyTries < 12) { timer.postDelayed(this, 800); return; }
+                    verifying = false; held = true;
+                    coverProblem("?", "정보를 확인하지 못했어요", "잠시 뒤 다시 시도해 주세요", "다시 시도", LabActivity.this::startVerify, null, null, "닫기", () -> { pages.clear(); done(); });
+                    return;
+                }
+                boolean same = name.equals(verifyName) && phone.endsWith(verifyLast4);
+                verifying = false;
+                if (same) { held = true; coverChecked(); } else { held = true; coverMismatch(); }
+            });
+        }
+    };
+
+    /** 정보를 확인하고 있어요: a turning ring and one line, nothing else. */
+    private void coverChecking() {
+        cover.setVisibility(View.VISIBLE);
+        timer.removeCallbacks(gaugeTick);
+        coverLogos.setVisibility(View.GONE); coverRing.setVisibility(View.GONE);
+        coverSpin.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(GREEN));
+        coverSpin.setVisibility(View.VISIBLE);
+        coverTitle.setText("정보를 확인하고 있어요"); coverTitle.setAlpha(1f); coverSub.setText("");
+        coverBar.setVisibility(View.GONE); coverPercent.setVisibility(View.GONE); coverFold.setVisibility(View.GONE); coverSteps.setVisibility(View.GONE);
+        coverMain.setVisibility(View.GONE); coverSecond.setVisibility(View.GONE); coverText.setVisibility(View.GONE);
+        slim.setVisibility(View.GONE); progressCard.setVisibility(View.GONE); bottom.setVisibility(View.GONE);
+    }
+
+    /** ✓ first, then 정보를 확인했어요, then on to the page asked for and the usual gauge. */
+    private void coverChecked() {
+        coverSpin.setVisibility(View.GONE);
+        GradientDrawable bg = new GradientDrawable(); bg.setShape(GradientDrawable.OVAL); bg.setColor(GREEN);
+        coverRing.setBackground(bg); coverRing.setTextColor(Color.WHITE); coverRing.setText("✓");
+        coverRing.setVisibility(View.VISIBLE);
+        coverTitle.setText("정보를 확인했어요"); coverSub.setText("");
+        if (motion) {
+            coverRing.setScaleX(0.4f); coverRing.setScaleY(0.4f); coverRing.setAlpha(0f);
+            coverRing.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(380).start();
+            coverTitle.setAlpha(0f); coverTitle.setTranslationY(dp(8));
+            coverTitle.animate().alpha(1f).translationY(0).setStartDelay(420).setDuration(260).start();
+        }
+        timer.postDelayed(() -> {
+            verified = true; held = false;
+            coverTitle.animate().cancel(); coverTitle.setAlpha(1f); coverTitle.setTranslationY(0);
+            jumped = true;
+            String next = targetUrl.isEmpty() ? startUrl : targetUrl;
+            if (web != null) web.loadUrl(next);
+            if (both || "S".equals(target)) { coverLoading("1365에서 가져오는 중이에요"); setGoal(10, 30); }
+            else uncover(null);
+        }, 1500);
+    }
+
+    /** ! first, then 계정 정보가 달라요 · 본인 계정으로 로그인해 주세요 (what differs is not said). Nothing is read. */
+    private void coverMismatch() {
+        coverProblem("!", "계정 정보가 달라요", "본인 계정으로 로그인해 주세요", "다른 계정으로 로그인", this::loginAgain, null, null, "닫기", () -> { pages.clear(); done(); });
+        if (motion) {
+            coverRing.setScaleX(0.4f); coverRing.setScaleY(0.4f); coverRing.setAlpha(0f);
+            coverRing.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(380).start();
+            coverTitle.setAlpha(0f); coverSub.setAlpha(0f);
+            coverTitle.animate().alpha(1f).setStartDelay(420).setDuration(260).start();
+            coverSub.animate().alpha(1f).setStartDelay(520).setDuration(260).start();
+        }
+    }
+
+    /** 다른 계정으로 로그인: this 1365 login is wiped and the login page opens again. */
+    private void loginAgain() {
+        CookieManager.getInstance().removeAllCookies(ok -> {
+            if (web == null) return;
+            sawLogin = false; loggedIn = false; jumped = false; verified = false; verifying = false; held = false; hadLogin = false;
+            pages.clear();
+            coverSub.setAlpha(1f); coverTitle.setAlpha(1f);
+            uncover("1365에 다시 로그인해 주세요");
+            web.loadUrl(startUrl);
+        });
+    }
 
     // ---- 덮개 (2026-11-09, week 7 · 교수님 피드백): after the login only Volink's own screen shows, a smooth gauge and the
     // steps folded away. Any problem hides the gauge and says what to do. The 1365 page is shown again only when the
@@ -1194,6 +1312,7 @@ public class LabActivity extends AppCompatActivity {
     /** On the 실적 page with its list (현재페이지 shown): start reading by itself, once per visit. */
     private void maybeStartHarvest() {
         if (!"S".equals(target) || harvestStarted || harvesting || web == null || !onAllowedPage()) return;
+        if (needVerify()) { startVerify(); return; }
         web.evaluateJavascript("(function(){return document.body&&document.body.innerText.replace(/\\s+/g,'').indexOf('현재페이지')>=0;})()", value -> {
             if ("true".equals(value) && !harvestStarted && onAllowedPage()) startHarvest();
         });

@@ -105,6 +105,17 @@ public class PhoneService {
         throw new ApiException(HttpStatus.FORBIDDEN, "PHONE_REQUIRED", "휴대폰 인증 후 이용할 수 있어요.");
     }
 
+    /**
+     * 1365 연결 (2026-11-19, user decision): bringing in 1365 records needs a verified phone even during the grace period
+     * (the 1365 account will be matched with this number). 기관 · 관리자 accounts never get here.
+     */
+    public void requireVerified(long userId) {
+        if (!active()) return;
+        Map<String, Object> row = jdbc.queryForList("SELECT role, member_type, phone_hash FROM users WHERE id = ?", userId).stream().findFirst().orElse(null);
+        if (row == null || "ADMIN".equals(row.get("role")) || "INSTITUTION".equals(row.get("member_type")) || row.get("phone_hash") != null) return;
+        throw new ApiException(HttpStatus.FORBIDDEN, "PHONE_REQUIRED", "휴대폰 인증 후 1365를 연결할 수 있어요.");
+    }
+
     /** Who holds this number, masked, or null. Used before an e-mail sign-up and when a number is taken. */
     private Map<String, Object> holder(String hash, Long except) {
         Map<String, Object> row = jdbc.queryForList(Sql.kst("""

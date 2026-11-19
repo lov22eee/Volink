@@ -3,6 +3,7 @@
 // the rows are read on the phone, and only the rows the person picks are saved (title, day, time, 1365 status).
 // The password never reaches Volink; the 1365 login is cleared when that screen closes. Without the app (web), the text can be pasted.
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { api, ApiError } from '../api'
@@ -10,8 +11,9 @@ import { showToast } from '../App'
 import { DateField } from './host'
 import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
+import type { PhoneStatus } from './phone'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean; verifyName?: string; verifyLast4?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
 
 // 1365 로그인 유지 (2026-11-09, week 7): the 1365 login stays on this phone only (cookies in the app's 1365 window).
 // 2026-11-12 (user decision, security): off until the person turns it on — asked in the 1365 신청 sheet, or 설정 › 실험실 —
@@ -29,8 +31,18 @@ async function open1365(options: Parameters<typeof lab.open>[0]) {
   let fresh = false
   try { fresh = keep && Date.now() - Number(localStorage.getItem(KEEP_AT) || 0) < KEEP_MINUTES * 60_000 } catch { /* not fresh */ }
   if (!fresh) await logout1365()
-  try { return await lab.open({ ...options, keep }) }
+  // 정보 확인 (2026-11-19, user decision): the 1365 window checks that the 1365 account's 성명·휴대폰 번호 match this
+  // account (name, verified phone's last 4) before reading anything. The comparison happens on the phone only.
+  const who = options.target === 'P' ? null : await identity()
+  try { return await lab.open({ ...options, keep, ...(who ?? {}) }) }
   finally { if (keep) { try { localStorage.setItem(KEEP_AT, String(Date.now())) } catch { /* not kept */ } } }
+}
+async function identity() {
+  try {
+    const [me, phone] = await Promise.all([api<{ name?: string | null }>('/api/me'), api<PhoneStatus>('/api/me/phone')])
+    if (!me.name || !phone.verified || !phone.last4) return null
+    return { verifyName: me.name, verifyLast4: phone.last4 }
+  } catch { return null }
 }
 /** 1365 로그아웃 on this phone (설정, Volink 로그아웃·탈퇴). */
 export async function logout1365() { if (Capacitor.isNativePlatform()) { try { await lab.logout() } catch { /* an older app without it */ } } }
@@ -281,7 +293,42 @@ export function parseLabRecords(text: string): LabDone[] {
   return out.slice(0, 300)
 }
 
-export function LabScreen({ go }: { go?: string; both?: boolean }) {
+/**
+ * 1365 연결 (2026-11-19, user decision): only after the Volink account has a verified phone (even in the grace period);
+ * the server refuses the import too. Accounts that are not asked for a phone (기관, or the check switched off) go straight in.
+ */
+export function LabScreen(props: { go?: string; both?: boolean }) {
+  const [phone, setPhone] = useState<PhoneStatus | null | undefined>(undefined)
+  const [ask, setAsk] = useState(false)
+  useEffect(() => { api<PhoneStatus>('/api/me/phone').then(p => { setPhone(p); if (p.active && !p.verified) setAsk(true) }).catch(() => setPhone(null)) }, [])
+  const blocked = Boolean(phone && phone.active && !phone.verified)
+  // Any tap on the 1365 screen while not verified brings the sheet back instead of opening 1365.
+  return <div style={{ display: 'contents' }} onClickCapture={event => {
+    if (!blocked || (event.target as HTMLElement).closest('.m-sheet-wrap, .m-top')) return
+    event.preventDefault(); event.stopPropagation(); setAsk(true)
+  }}>
+    <LabFlow {...props} />
+    {ask && blocked && <PhoneFirstSheet onClose={() => setAsk(false)} />}
+  </div>
+}
+
+function PhoneFirstSheet({ onClose }: { onClose: () => void }) {
+  return createPortal(<div className="m-sheet-wrap">
+    <div className="m-dim" onClick={onClose} />
+    <section className="m-sheet sn-sheet" role="dialog" aria-modal="true" aria-labelledby="lab-phone">
+      <span className="m-grab" aria-hidden="true" />
+      <div className="sn-body">
+        <span className="sn-mark warn" aria-hidden="true"><MIcon name="phone" size={30} /></span>
+        <h2 id="lab-phone">문자 인증을 완료해 주세요</h2>
+        <p><span>문자 인증을 마치면 1365를 연결할 수 있어요.</span></p>
+        <a className="m-btn" href={'#/phone?next=' + encodeURIComponent('#/lab1365')}>문자 인증하기</a>
+        <button type="button" className="m-btn line sn-close" onClick={onClose}>닫기</button>
+      </div>
+    </section>
+  </div>, document.body)
+}
+
+function LabFlow({ go }: { go?: string; both?: boolean }) {
   const native = Capacitor.isNativePlatform()
   // On the web (no in-app browser) a card opens the paste box for that page.
   const [webFor, setWebFor] = useState<'' | 'S' | 'A'>('')
