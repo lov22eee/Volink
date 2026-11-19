@@ -237,3 +237,59 @@ export function rememberLoginEmail(holder?: Holder | null) {
 export function takeLoginEmail() {
   try { const email = sessionStorage.getItem('volink.loginEmail') ?? ''; sessionStorage.removeItem('volink.loginEmail'); return email } catch { return '' }
 }
+
+/**
+ * 휴대폰 인증 안내 (2026-11-19, user decision): an account still in its grace period sees this once each time the app is
+ * opened (not on every screen), until it verifies. After the grace day the 신청 · 글쓰기 sheet (PhoneRequiredHost) takes over.
+ * It waits while another sheet (경고 · 풀림) is open so the two never stack.
+ */
+export function PhoneNoticeHost({ tick }: { tick: string }) {
+  const [status, setStatus] = useState<PhoneStatus | null>(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    let seen = false
+    try { seen = sessionStorage.getItem('volink.phoneNotice') === '1' } catch { /* private mode */ }
+    if (seen) return
+    api<PhoneStatus>('/api/me/phone').then(setStatus).catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!status || open || !status.active || status.verified || status.required || !status.graceUntil) return
+    if (window.location.hash.startsWith('#/phone')) return
+    try { if (sessionStorage.getItem('volink.phoneNotice') === '1') return } catch { /* private mode */ }
+    let done = false
+    const tryOpen = () => {
+      if (done) return
+      if (document.querySelector('.m-sheet-wrap')) { window.setTimeout(tryOpen, 800); return }
+      done = true
+      try { sessionStorage.setItem('volink.phoneNotice', '1') } catch { /* private mode */ }
+      setOpen(true)
+    }
+    const t = window.setTimeout(tryOpen, 600)
+    return () => { done = true; window.clearTimeout(t) }
+  }, [status, tick, open])
+  if (!open || !status?.graceUntil) return null
+  const until = status.graceUntil
+  // calendar days in Korea: 19일 → 29일 is 10일 남음, the day itself is 오늘까지
+  const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)
+  const left = Math.max(0, Math.round((Date.parse(until) - Date.parse(today)) / 86_400_000))
+  const day = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(until + 'T12:00:00+09:00'))
+  const close = () => setOpen(false)
+  return createPortal(<div className="m-sheet-wrap">
+    <div className="m-dim" onClick={close} />
+    <section className="m-sheet sn-sheet" role="dialog" aria-modal="true" aria-labelledby="ph-notice">
+      <span className="m-grab" aria-hidden="true" />
+      <div className="sn-body">
+        <span className="sn-mark warn" aria-hidden="true"><MIcon name="phone" size={30} /></span>
+        <h2 id="ph-notice">휴대폰 인증을 해 주세요</h2>
+        <p><span>{md(until)}까지 인증하면 지금처럼 이용할 수 있어요.</span></p>
+        <dl className="sn-detail ph-notice-rows">
+          <div><dt>인증 마감</dt><dd>{md(until)} ({day}) · {left ? left + '일 남음' : '오늘까지'}</dd></div>
+          <div><dt>마감 뒤</dt><dd>신청 · 모집 · 글쓰기 제한</dd></div>
+          <div><dt>번호</dt><dd>다른 사람에게 보이지 않아요</dd></div>
+        </dl>
+        <button type="button" className="m-btn" onClick={() => { close(); window.location.hash = '#/phone?next=' + encodeURIComponent(window.location.hash || '#/home') }}>지금 인증하기</button>
+        <button type="button" className="m-btn line sn-close" onClick={close}>나중에 할게요</button>
+      </div>
+    </section>
+  </div>, document.body)
+}

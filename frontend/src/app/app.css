@@ -1869,3 +1869,7 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .hb-quote.t1 { background: #fff3e0; } .hb-quote.t1 em { color: #c47a12; } .hb-quote.t1 i { color: #ecc28a; }
 .hb-quote.t2 { background: #e8eef8; } .hb-quote.t2 em { color: #2f5592; } .hb-quote.t2 i { color: #a9bde0; }
 .hb-quote.t3 { background: #f1ecf8; } .hb-quote.t3 em { color: #6b4fa3; } .hb-quote.t3 i { color: #c3b2e0; }
+
+/* 휴대폰 인증 안내 (앱 켤 때마다, 유예 중): label left, value right */
+.ph-notice-rows > div { display: flex; justify-content: space-between; gap: 12px; }
+.ph-notice-rows dt { font-size: 13.5px; } .ph-notice-rows dd { margin: 0; text-align: right; font-weight: 700; color: #1f2421; }
