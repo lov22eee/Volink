@@ -37,6 +37,9 @@ public class LabPlugin extends Plugin {
         intent.putExtra("other", call.getString("other", ""));
         // 1365 로그인 유지 (2026-11-09, week 7): keep this phone's 1365 login cookies when the window closes.
         intent.putExtra("keep", Boolean.TRUE.equals(call.getBoolean("keep", false)));
+        // 정보 확인 (2026-11-19): the Volink account's name and the last 4 digits of its verified phone, matched on the phone.
+        intent.putExtra("verifyName", call.getString("verifyName", ""));
+        intent.putExtra("verifyLast4", call.getString("verifyLast4", ""));
         startActivityForResult(call, intent, "labResult");
     }
 

@@ -13,7 +13,7 @@ import { AddApplicationSheet } from './record'
 import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
 import type { PhoneStatus } from './phone'
 
-const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
+const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean; verifyName?: string; verifyLast4?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
 
 // 1365 로그인 유지 (2026-11-09, week 7): the 1365 login stays on this phone only (cookies in the app's 1365 window).
 // 2026-11-12 (user decision, security): off until the person turns it on — asked in the 1365 신청 sheet, or 설정 › 실험실 —
@@ -31,8 +31,18 @@ async function open1365(options: Parameters<typeof lab.open>[0]) {
   let fresh = false
   try { fresh = keep && Date.now() - Number(localStorage.getItem(KEEP_AT) || 0) < KEEP_MINUTES * 60_000 } catch { /* not fresh */ }
   if (!fresh) await logout1365()
-  try { return await lab.open({ ...options, keep }) }
+  // 정보 확인 (2026-11-19, user decision): the 1365 window checks that the 1365 account's 성명·휴대폰 번호 match this
+  // account (name, verified phone's last 4) before reading anything. The comparison happens on the phone only.
+  const who = options.target === 'P' ? null : await identity()
+  try { return await lab.open({ ...options, keep, ...(who ?? {}) }) }
   finally { if (keep) { try { localStorage.setItem(KEEP_AT, String(Date.now())) } catch { /* not kept */ } } }
+}
+async function identity() {
+  try {
+    const [me, phone] = await Promise.all([api<{ name?: string | null }>('/api/me'), api<PhoneStatus>('/api/me/phone')])
+    if (!me.name || !phone.verified || !phone.last4) return null
+    return { verifyName: me.name, verifyLast4: phone.last4 }
+  } catch { return null }
 }
 /** 1365 로그아웃 on this phone (설정, Volink 로그아웃·탈퇴). */
 export async function logout1365() { if (Capacitor.isNativePlatform()) { try { await lab.logout() } catch { /* an older app without it */ } } }
