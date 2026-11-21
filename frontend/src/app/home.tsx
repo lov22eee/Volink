@@ -9,7 +9,7 @@ import type { LiveActivity, MyParticipation, MyRecord, User } from '../api'
 import { categories } from '../categories'
 import { CategoryPhoto } from '../covers'
 import type { Program } from '../explore'
-import { currentPosition, remembered } from '../location'
+import { currentPosition, syncLocation } from '../location'
 import type { PostSummary } from './community'
 import { phaseOf, useNow } from '../checkin'
 import { isNewcomer, seatsLeft, startsAt } from './cards'
@@ -42,7 +42,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   // 2026-11-21: the last answer (public 1365 program fields only, kept 6 hours for the same 관심 분야) shows at once while a
   // new one loads; a position up to 10 minutes old is taken so there is no GPS wait.
   useEffect(() => {
-    if (!user.interests.length || !remembered()) return
+    if (!user.interests.length) return
     let live = true
     const key = user.interests.join(',')
     let shown = false
@@ -51,7 +51,7 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       const kept = JSON.parse(localStorage.getItem(HOME_1365) ?? 'null') as { key: string; at: number; items: Program[] } | null
       if (kept && kept.key === key && Date.now() - kept.at < 6 * 3_600_000 && kept.items.length) { setPrograms(kept.items); shown = true }
     } catch { /* nothing kept */ }
-    currentPosition(10 * 60_000).then(at => {
+    syncLocation().then(ok => ok ? currentPosition(10 * 60_000) : null).then(at => {
       if (!at || !live) return
       const url = `/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(key)}`
       const ask = (round: number) => api<{ items: Program[]; pending?: number }>(url)
