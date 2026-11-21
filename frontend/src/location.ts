@@ -8,9 +8,10 @@ export const remember = (on: boolean) => { try { if (on) localStorage.setItem(RE
 export const decline = () => { try { localStorage.setItem(REMEMBER, '0') } catch { /* private mode */ } }
 
 /** One position from the browser, or null when refused, unsupported or too slow. */
-export function currentPosition(): Promise<{ lat: number; lng: number } | null> {
+/** {@code maxAgeMs}: how old a position the phone already has may be (홈 takes one up to 10 minutes old, so no GPS wait). */
+export function currentPosition(maxAgeMs = 60000): Promise<{ lat: number; lng: number } | null> {
   return new Promise(resolve => {
     if (!navigator.geolocation) { resolve(null); return }
-    navigator.geolocation.getCurrentPosition(position => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }), () => resolve(null), { timeout: 8000, maximumAge: 60000 })
+    navigator.geolocation.getCurrentPosition(position => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }), () => resolve(null), { timeout: 8000, maximumAge: maxAgeMs })
   })
 }

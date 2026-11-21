@@ -21,6 +21,7 @@ import type { MIconName } from './ui'
 import { phoneLine, usePhoneStatus } from './phone'
 
 type Todo = { key: string; icon: MIconName; text: string; href: string; tone?: 'hot' | 'ok' }
+const HOME_1365 = 'volink.home1365'
 const ACTIVE = ['APPLIED', 'CONFIRMED', 'WAITLISTED', 'OFFERED', 'CHECKED_IN']
 
 export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }) {
@@ -38,15 +39,34 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
   const [proof, setProof] = useState(false)
   const peekActivity = (a: LiveActivity) => (event: { preventDefault: () => void }) => { event.preventDefault(); setPeek({ activity: a }) }
   // 1365 programs in my 관심 분야 near me (only when the person already allowed location; never asks here).
+  // 2026-11-21: the last answer (public 1365 program fields only, kept 6 hours for the same 관심 분야) shows at once while a
+  // new one loads; a position up to 10 minutes old is taken so there is no GPS wait.
   useEffect(() => {
     if (!user.interests.length || !remembered()) return
     let live = true
-    currentPosition().then(at => {
+    const key = user.interests.join(',')
+    let shown = false
+    let again: ReturnType<typeof setTimeout> | undefined
+    try {
+      const kept = JSON.parse(localStorage.getItem(HOME_1365) ?? 'null') as { key: string; at: number; items: Program[] } | null
+      if (kept && kept.key === key && Date.now() - kept.at < 6 * 3_600_000 && kept.items.length) { setPrograms(kept.items); shown = true }
+    } catch { /* nothing kept */ }
+    currentPosition(10 * 60_000).then(at => {
       if (!at || !live) return
-      api<{ items: Program[] }>(`/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(user.interests.join(','))}`)
-        .then(result => { if (live) setPrograms(result.items) }).catch(() => {})
+      const url = `/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(key)}`
+      const ask = (round: number) => api<{ items: Program[]; pending?: number }>(url)
+        .then(result => {
+          if (!live) return
+          if (result.items.length || !shown) {
+            setPrograms(result.items)
+            try { localStorage.setItem(HOME_1365, JSON.stringify({ key, at: Date.now(), items: result.items.slice(0, 3) })) } catch { /* not kept */ }
+          }
+          // Some still loading on the server: once more a few seconds later (twice at most).
+          if ((result.pending ?? 0) > 0 && result.items.length < 3 && round < 2) again = setTimeout(() => ask(round + 1), 4000)
+        }).catch(() => {})
+      void ask(0)
     })
-    return () => { live = false }
+    return () => { live = false; if (again) clearTimeout(again) }
   }, [user.interests])
   useEffect(() => {
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))

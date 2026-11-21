@@ -113,6 +113,46 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         assertThat(volunteer.calls.stream().filter(call -> call.startsWith("detail:S-")).count()).isEqualTo(8);
     }
 
+    @Test
+    void interestsGetTheDetailBudgetFirst() throws Exception {
+        // 2026-11-21: 25 programs in other fields came first in the area list; the 20 details went to them and 홈 found none.
+        kakao.enabled = true;
+        volunteer.enabled = true;
+        kakao.region = new KakaoLocal.Region("서울특별시", "강남구");
+        String end = TODAY.plusDays(30).toString().replace("-", "");
+        List<Map<String, String>> list = new java.util.ArrayList<>();
+        Map<String, Map<String, String>> details = new java.util.HashMap<>();
+        for (int i = 1; i <= 30; i++) {
+            String title = i <= 25 ? "행정 서류 정리 " + i : "유기견 산책 " + i;
+            list.add(Map.of("progrmRegistNo", "P-" + i, "progrmSj", title, "progrmSttusSe", "2"));
+            details.put("P-" + i, Map.of("progrmRegistNo", "P-" + i, "progrmSj", title, "progrmEndde", end));
+        }
+        volunteer.list = list;
+        volunteer.details = details;
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.50").param("lng", "127.04").param("category", "동물"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(5));
+    }
+
+    @Test
+    void slowDetailsDoNotHoldTheAnswerAndAreThereNextTime() throws Exception {
+        kakao.enabled = true;
+        volunteer.enabled = true;
+        kakao.region = new KakaoLocal.Region("서울특별시", "서초구");
+        String end = TODAY.plusDays(30).toString().replace("-", "");
+        volunteer.list = List.of(Map.of("progrmRegistNo", "W-1", "progrmSj", "느린 상세", "progrmSttusSe", "2"));
+        volunteer.details = Map.of("W-1", Map.of("progrmRegistNo", "W-1", "progrmSj", "느린 상세", "progrmEndde", end));
+        volunteer.detailDelayMs = 5000;
+        long started = System.nanoTime();
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.48").param("lng", "127.03"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0)).andExpect(jsonPath("$.pending").value(1));
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(4500);
+        // The detail kept loading in the background and was saved; the next visit shows it without asking again.
+        Thread.sleep(2500);
+        mvc.perform(get("/api/volunteer-programs").param("lat", "37.48").param("lng", "127.03"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].programNo").value("W-1")).andExpect(jsonPath("$.pending").value(0));
+        assertThat(volunteer.calls.stream().filter(call -> call.equals("detail:W-1")).count()).isEqualTo(1);
+    }
+
     private static Map<String, String> fields(String... pairs) {
         Map<String, String> map = new java.util.LinkedHashMap<>();
         for (int i = 0; i < pairs.length; i += 2) map.put(pairs[i], pairs[i + 1]);

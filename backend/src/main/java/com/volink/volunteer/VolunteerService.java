@@ -89,6 +89,41 @@ public class VolunteerService {
         return answers;
     }
 
+    /** How long one search waits for 1365 details (2026-11-21): the rest keep loading in the background for the next visit. */
+    static final Duration DETAIL_WAIT = Duration.ofMillis(3500);
+
+    /**
+     * Like {@link #together} but waits at most {@code wait} in all; an answer not ready by then is null here and the task keeps
+     * running (fetch saves its row, so the next search has it). Home showed nothing while 20 slow detail calls finished.
+     */
+    private <T> List<T> within(List<Callable<T>> tasks, Duration wait, java.util.concurrent.atomic.AtomicInteger late) {
+        List<Future<T>> futures = tasks.stream().map(calls::submit).toList();
+        long until = System.nanoTime() + wait.toNanos();
+        List<T> answers = new ArrayList<>();
+        for (Future<T> future : futures) {
+            try {
+                answers.add(future.get(Math.max(0, until - System.nanoTime()), java.util.concurrent.TimeUnit.NANOSECONDS));
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                answers.add(null);
+            } catch (java.util.concurrent.TimeoutException notYet) {
+                late.incrementAndGet();
+                answers.add(null);
+            } catch (ExecutionException failed) {
+                answers.add(null);
+            }
+        }
+        return answers;
+    }
+
+    /** Old (12 h+) details are shown as stored and refreshed in the background, once at a time per program. */
+    private final java.util.Set<String> refreshing = ConcurrentHashMap.newKeySet();
+    private void refreshLater(String no, Map<String, String> entry, double lat, double lng) {
+        if (!refreshing.add(no)) return;
+        try { calls.submit(() -> { try { fetch(no, entry, lat, lng); } finally { refreshing.remove(no); } }); }
+        catch (RuntimeException full) { refreshing.remove(no); }
+    }
+
     /**
      * Near a point (lat/lng/radiusKm), or in a chosen region (sido, optional sigungu) without any position.
      * {@code categories}: Volink category names; {@code recruiting} false also keeps programs known to be closed.
@@ -187,19 +222,34 @@ public class VolunteerService {
         List<String> numbers = new ArrayList<>();
         Map<String, Map<String, String>> entries = new LinkedHashMap<>();
         Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
-        List<String> missing = new ArrayList<>();
+        List<String> wanted = new ArrayList<>(), others = new ArrayList<>();
         for (Map<String, String> entry : list) {
             String no = first(entry, "progrmRegistNo");
             if (no == null || entries.containsKey(no)) continue;
             entries.put(no, entry);
             numbers.add(no);
             Map<String, Object> stored = stored(no);
-            if (stored != null) rows.put(no, stored);
-            if ((stored == null || stale(stored)) && missing.size() < NEW_DETAILS) missing.add(no);
+            if (stored != null) {
+                rows.put(no, stored);
+                if (stale(stored)) refreshLater(no, entry, query.lat(), query.lng());
+                continue;
+            }
+            // 2026-11-21: with 관심 분야 the detail budget goes first to programs whose list title (or field) points to them;
+            // before, the first 20 of the area were fetched and could all be in other fields, so 홈 found none.
+            String guess = ProgramCategory.of(first(entry, "srvcClCode"), first(entry, "progrmSj")).category();
+            boolean fits = query.categories() == null || query.categories().isEmpty() || query.categories().contains(guess) || "기타".equals(guess);
+            (fits ? wanted : others).add(no);
         }
-        // New or old details: fetched side by side.
-        List<Map<String, Object>> refreshed = together(missing.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), query.lat(), query.lng())).toList());
-        for (int i = 0; i < missing.size(); i++) if (refreshed.get(i) != null) rows.put(missing.get(i), refreshed.get(i));
+        List<String> missing = new ArrayList<>(wanted);
+        missing.addAll(others);
+        if (missing.size() > NEW_DETAILS) missing = new ArrayList<>(missing.subList(0, NEW_DETAILS));
+        // New details: side by side, waited for at most DETAIL_WAIT; slower ones are saved for the next search.
+        List<String> asked = missing;
+        java.util.concurrent.atomic.AtomicInteger late = new java.util.concurrent.atomic.AtomicInteger();
+        List<Map<String, Object>> refreshed = within(asked.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), query.lat(), query.lng())).toList(), DETAIL_WAIT, late);
+        // Still loading in the background: the app asks once more a few seconds later and the rest appear by themselves.
+        result.put("pending", late.get());
+        for (int i = 0; i < asked.size(); i++) if (refreshed.get(i) != null) rows.put(asked.get(i), refreshed.get(i));
         List<Map<String, Object>> items = new ArrayList<>();
         for (String no : numbers) if (rows.containsKey(no)) items.add(view(rows.get(no), query.lat(), query.lng()));
         String today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))).format(YMD);
@@ -324,6 +374,19 @@ public class VolunteerService {
         String cacheKey = codes.province() + "|" + codes.city() + "|" + q;
         Cached cached = lists.get(cacheKey);
         if (cached != null && cached.at().plus(LIST_CACHE).isAfter(clock.instant())) return cached.items();
+        // 2026-11-21: an expired list that had programs is answered at once and fetched again in the background.
+        if (cached != null && !cached.items().isEmpty() && listRefreshing.add(cacheKey)) {
+            try { calls.submit(() -> { try { fetchList(codes, q, cacheKey); } finally { listRefreshing.remove(cacheKey); } }); return cached.items(); }
+            catch (RuntimeException full) { listRefreshing.remove(cacheKey); }
+        }
+        if (cached != null && !cached.items().isEmpty()) return cached.items();
+        return fetchList(codes, q, cacheKey);
+    }
+
+    private final java.util.Set<String> listRefreshing = ConcurrentHashMap.newKeySet();
+
+    private List<Map<String, String>> fetchList(RegionCodes.Codes codes, String q, String cacheKey) {
+        Cached cached;
         synchronized (listLocks.computeIfAbsent(cacheKey, ignored -> new Object())) {
             cached = lists.get(cacheKey);
             if (cached != null && cached.at().plus(LIST_CACHE).isAfter(clock.instant())) return cached.items();
