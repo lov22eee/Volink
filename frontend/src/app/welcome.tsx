@@ -3,7 +3,7 @@
 // Last (V29, 2026-11-06): how to keep 1365 activities — 가져오기 (connect the 1365 page in the app) or 직접 남기기.
 import { useState } from 'react'
 import { api } from '../api'
-import { remember } from '../location'
+import { locate, remember } from '../location'
 import { ConsentSheet, saveExtMode, setLabOn } from './lab'
 import { askNotifications } from './native'
 import { MIcon } from './ui'
@@ -30,10 +30,7 @@ export function WelcomeScreen() {
   }
   async function allowLocation() {
     setBusy(true)
-    await new Promise<void>(resolve => {
-      if (!navigator.geolocation) { resolve(); return }
-      navigator.geolocation.getCurrentPosition(() => { remember(true); resolve() }, () => resolve(), { timeout: 10000 })
-    })
+    if (await locate({ timeoutMs: 10000 })) remember(true)
     setBusy(false)
     setStep('notify')
   }

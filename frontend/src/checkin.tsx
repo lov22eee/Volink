@@ -2,6 +2,7 @@
 // activity at its time and finishes it at its end. On site the organizer shows a QR that changes every 30 seconds; each
 // participant scans it with their own phone camera, which opens the check-in page here and sends the QR value with one
 // position reading (never stored). If that fails, the organizer checks the person in by hand with a reason.
+import { locate } from './location'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
@@ -187,10 +188,10 @@ export function CheckInPage({ id, token, user, ready }: { id: number; token?: st
   function start() {
     setState('locating')
     setMessage('')
-    if (!navigator.geolocation) { send(null, null, null); return }
-    navigator.geolocation.getCurrentPosition(
-      position => { setAccuracy(Math.round(position.coords.accuracy)); send(position.coords.latitude, position.coords.longitude, position.coords.accuracy) },
-      () => send(null, null, null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+    void locate({ high: true, timeoutMs: 15000, maxAgeMs: 0 }).then(at => {
+      if (!at) { send(null, null, null); return }
+      setAccuracy(Math.round(at.accuracy)); send(at.lat, at.lng, at.accuracy)
+    })
   }
   const facts = activity && <p className="checkin-facts"><Glyph name="calendar" size={16} />{dateLabel(activity.date)} · {activity.startTime}<span aria-hidden="true">·</span><Glyph name="pin" size={16} />{activity.placeName ?? '장소 미정'}</p>
   if (state === 'done') return <section className="checkin-page create-done" role="status">
