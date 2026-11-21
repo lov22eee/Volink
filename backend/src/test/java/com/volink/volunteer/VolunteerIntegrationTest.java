@@ -144,12 +144,12 @@ class VolunteerIntegrationTest extends ApiTestSupport {
         volunteer.detailDelayMs = 5000;
         long started = System.nanoTime();
         mvc.perform(get("/api/volunteer-programs").param("lat", "37.48").param("lng", "127.03"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items.length()").value(0)).andExpect(jsonPath("$.pending").value(1));
         assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(4500);
         // The detail kept loading in the background and was saved; the next visit shows it without asking again.
         Thread.sleep(2500);
         mvc.perform(get("/api/volunteer-programs").param("lat", "37.48").param("lng", "127.03"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].programNo").value("W-1"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].programNo").value("W-1")).andExpect(jsonPath("$.pending").value(0));
         assertThat(volunteer.calls.stream().filter(call -> call.equals("detail:W-1")).count()).isEqualTo(1);
     }
 

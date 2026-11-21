@@ -164,10 +164,23 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
     let current = true
     if (!area) setPrograms(null)
     const url = '/api/volunteer-programs?' + params
-    ;(area ? cached<{ enabled: boolean; items: Program[] }>(url) : api<{ enabled: boolean; items: Program[] }>(url))
-      .then(result => { if (!current) return; setProgramsState(result.enabled ? 'ok' : 'off'); setPrograms(result.items.filter(p => programInDates(p, filters))) })
+    type Answer = { enabled: boolean; items: Program[]; pending?: number }
+    let again: ReturnType<typeof setTimeout> | undefined
+    const show = (result: Answer, round: number) => {
+      if (!current) return
+      setProgramsState(result.enabled ? 'ok' : 'off')
+      setPrograms(result.items.filter(p => programInDates(p, filters)))
+      // 2026-11-21: the server answers within ~3.5 s and keeps loading the rest; ask again (twice at most) so they appear.
+      if ((result.pending ?? 0) > 0 && round < 2) again = setTimeout(() => {
+        const fresh = api<Answer>(url)
+        answers.set(url, { at: Date.now(), answer: fresh })
+        fresh.then(next => show(next, round + 1)).catch(() => {})
+      }, 4000)
+    }
+    ;(area ? cached<Answer>(url) : api<Answer>(url))
+      .then(result => show(result, 0))
       .catch(() => { if (current) { setProgramsState('error'); setPrograms([]) } })
-    return () => { current = false }
+    return () => { current = false; if (again) clearTimeout(again) }
   }, [filters, q, origin, near, show1365, waitPos, area])
   // A new filter or area chip starts from it again, not from where the map was left.
   useEffect(() => { setMapArea(null); setTooWide(false) }, [filters.area])

@@ -96,7 +96,7 @@ public class VolunteerService {
      * Like {@link #together} but waits at most {@code wait} in all; an answer not ready by then is null here and the task keeps
      * running (fetch saves its row, so the next search has it). Home showed nothing while 20 slow detail calls finished.
      */
-    private <T> List<T> within(List<Callable<T>> tasks, Duration wait) {
+    private <T> List<T> within(List<Callable<T>> tasks, Duration wait, java.util.concurrent.atomic.AtomicInteger late) {
         List<Future<T>> futures = tasks.stream().map(calls::submit).toList();
         long until = System.nanoTime() + wait.toNanos();
         List<T> answers = new ArrayList<>();
@@ -106,7 +106,10 @@ public class VolunteerService {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 answers.add(null);
-            } catch (ExecutionException | java.util.concurrent.TimeoutException notYet) {
+            } catch (java.util.concurrent.TimeoutException notYet) {
+                late.incrementAndGet();
+                answers.add(null);
+            } catch (ExecutionException failed) {
                 answers.add(null);
             }
         }
@@ -242,7 +245,10 @@ public class VolunteerService {
         if (missing.size() > NEW_DETAILS) missing = new ArrayList<>(missing.subList(0, NEW_DETAILS));
         // New details: side by side, waited for at most DETAIL_WAIT; slower ones are saved for the next search.
         List<String> asked = missing;
-        List<Map<String, Object>> refreshed = within(asked.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), query.lat(), query.lng())).toList(), DETAIL_WAIT);
+        java.util.concurrent.atomic.AtomicInteger late = new java.util.concurrent.atomic.AtomicInteger();
+        List<Map<String, Object>> refreshed = within(asked.stream().<Callable<Map<String, Object>>>map(no -> () -> fetch(no, entries.get(no), query.lat(), query.lng())).toList(), DETAIL_WAIT, late);
+        // Still loading in the background: the app asks once more a few seconds later and the rest appear by themselves.
+        result.put("pending", late.get());
         for (int i = 0; i < asked.size(); i++) if (refreshed.get(i) != null) rows.put(asked.get(i), refreshed.get(i));
         List<Map<String, Object>> items = new ArrayList<>();
         for (String no : numbers) if (rows.containsKey(no)) items.add(view(rows.get(no), query.lat(), query.lng()));

@@ -46,20 +46,27 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
     let live = true
     const key = user.interests.join(',')
     let shown = false
+    let again: ReturnType<typeof setTimeout> | undefined
     try {
       const kept = JSON.parse(localStorage.getItem(HOME_1365) ?? 'null') as { key: string; at: number; items: Program[] } | null
       if (kept && kept.key === key && Date.now() - kept.at < 6 * 3_600_000 && kept.items.length) { setPrograms(kept.items); shown = true }
     } catch { /* nothing kept */ }
     currentPosition(10 * 60_000).then(at => {
       if (!at || !live) return
-      api<{ items: Program[] }>(`/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(key)}`)
+      const url = `/api/volunteer-programs?lat=${at.lat.toFixed(6)}&lng=${at.lng.toFixed(6)}&radiusKm=10&category=${encodeURIComponent(key)}`
+      const ask = (round: number) => api<{ items: Program[]; pending?: number }>(url)
         .then(result => {
-          if (!live || (!result.items.length && shown)) return
-          setPrograms(result.items)
-          try { localStorage.setItem(HOME_1365, JSON.stringify({ key, at: Date.now(), items: result.items.slice(0, 3) })) } catch { /* not kept */ }
+          if (!live) return
+          if (result.items.length || !shown) {
+            setPrograms(result.items)
+            try { localStorage.setItem(HOME_1365, JSON.stringify({ key, at: Date.now(), items: result.items.slice(0, 3) })) } catch { /* not kept */ }
+          }
+          // Some still loading on the server: once more a few seconds later (twice at most).
+          if ((result.pending ?? 0) > 0 && result.items.length < 3 && round < 2) again = setTimeout(() => ask(round + 1), 4000)
         }).catch(() => {})
+      void ask(0)
     })
-    return () => { live = false }
+    return () => { live = false; if (again) clearTimeout(again) }
   }, [user.interests])
   useEffect(() => {
     api<MyRecord[]>('/api/me/records').then(setRecords).catch(() => setRecords([]))
