@@ -10,6 +10,31 @@ export const remember = (on: boolean) => { try { if (on) localStorage.setItem(RE
 export const decline = () => { try { localStorage.setItem(REMEMBER, '0') } catch { /* private mode */ } }
 
 /** One position from the browser, or null when refused, unsupported or too slow. */
+let synced: Promise<boolean> | null = null
+/**
+ * May this app use the position? (2026-11-21, device check) A reinstall clears the remembered answer, so an existing
+ * account never saw the 위치 question again and 홈·찾기 never looked. In the app the phone's own permission decides:
+ * already granted → remembered again; never answered on this install → the system question once (a refusal is
+ * remembered and not asked again). Once per app start; the browser keeps the remembered answer.
+ */
+export function syncLocation(): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return Promise.resolve(remembered())
+  synced ??= (async () => {
+    try {
+      let status = await Geolocation.checkPermissions()
+      const unanswered = (state: string) => state === 'prompt' || state === 'prompt-with-rationale'
+      if (unanswered(status.location) && unanswered(status.coarseLocation)) {
+        if (declined()) return false
+        status = await Geolocation.requestPermissions()
+      }
+      const ok = status.location === 'granted' || status.coarseLocation === 'granted'
+      if (ok) remember(true); else decline()
+      return ok
+    } catch { return remembered() }
+  })()
+  return synced
+}
+
 /**
  * One position, or null when refused, unsupported or too slow (2026-11-21). In the app the phone's own location service
  * (@capacitor/geolocation, Google fused location) is asked: the WebView's navigator.geolocation often found nothing in
