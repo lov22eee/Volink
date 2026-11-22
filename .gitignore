@@ -38,3 +38,4 @@ Thumbs.db
 frontend/android/app/google-services.json
 backend/uploads/
 /uploads/
+.demo-activity
