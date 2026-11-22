@@ -1873,3 +1873,17 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 /* 휴대폰 인증 안내 (앱 켤 때마다, 유예 중): label left, value right */
 .ph-notice-rows > div { display: flex; justify-content: space-between; gap: 12px; }
 .ph-notice-rows dt { font-size: 13.5px; } .ph-notice-rows dd { margin: 0; text-align: right; font-weight: 700; color: #1f2421; }
+
+/* 홈 나에게 맞는 봉사 날짜 카드 (2026-11-22, D3·S3): a field-colored date band instead of the repeated field photo. */
+.hb-dates a { width: 196px; gap: 0; background: #fff; border: 1px solid var(--line, #e6e9e6); border-radius: 16px; overflow: hidden; }
+.hb-dates .hb-band { display: flex; align-items: center; gap: 8px; height: 58px; padding: 0 12px 0 14px; }
+.hb-dates .hb-band strong { font-size: 22px; font-weight: 750; line-height: 1; }
+.hb-dates .hb-band span { display: flex; flex-direction: column; font-size: 12.5px; font-weight: 650; line-height: 1.3; min-width: 0; }
+.hb-dates .hb-band em.sm { font-style: normal; font-size: 12.5px; font-weight: 700; white-space: nowrap; color: inherit; }
+.hb-dates .hb-band i { margin-left: auto; flex: none; font-style: normal; font-size: 11px; font-weight: 700; background: #fff; border-radius: 6px; padding: 2px 6px; }
+.hb-dates a > b { margin: 11px 14px 0; font-size: 14.5px; line-height: 1.32; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; height: 38px; }
+.hb-dates .hb-src { display: flex; align-items: center; gap: 6px; margin: 14px 14px 13px; min-width: 0; font-size: 12.5px; }
+.hb-dates .hb-src i { flex: none; font-style: normal; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 2px 6px; }
+.hb-dates .hb-src i.v { background: #e9f3ee; color: var(--m-green-ink); }
+.hb-dates .hb-src i.b { background: #eaf0fa; color: var(--blue); }
+.hb-dates .hb-src small { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
