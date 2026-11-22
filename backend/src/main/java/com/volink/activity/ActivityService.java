@@ -334,12 +334,14 @@ public class ActivityService {
             args.add(box(search.lat() - dLat, search.lng() - dLng, search.lat() + dLat, search.lng() + dLng));
         } else sql.append(" WHERE 1 = 1");
         LocalDateTime now = LocalDateTime.now(clock);
-        if (status == null) { sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ?"); args.add(now); }
-        else if (status.equals("OPEN")) { sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ? AND " + SEATS_TAKEN + " < a.capacity"); args.add(now); }
+        // 진행 중 합류 (2026-11-22): a started post with 자동 승인 and a free seat stays in the lists until 출석 closes.
+        String joinable = " OR (a.auto_approve = TRUE AND a.status IN ('RECRUITING', 'IN_PROGRESS') AND a.starts_at <= ? AND a.ends_at > ? AND " + SEATS_TAKEN + " < a.capacity)";
+        if (status == null) { sql.append(" AND ((a.status = 'RECRUITING' AND a.starts_at > ?)" + joinable + ")"); args.add(now); args.add(now); args.add(now.plusMinutes(30)); }
+        else if (status.equals("OPEN")) { sql.append(" AND ((a.status = 'RECRUITING' AND a.starts_at > ? AND " + SEATS_TAKEN + " < a.capacity)" + joinable + ")"); args.add(now); args.add(now); args.add(now.plusMinutes(30)); }
         else if (status.equals("WAITLIST")) {
             // Full ones only while the waitlist is open (it closes 2 h before the start).
-            sql.append(" AND a.status = 'RECRUITING' AND a.starts_at > ? AND (" + SEATS_TAKEN + " < a.capacity OR a.starts_at > ?)");
-            args.add(now); args.add(now.plusHours(2));
+            sql.append(" AND ((a.status = 'RECRUITING' AND a.starts_at > ? AND (" + SEATS_TAKEN + " < a.capacity OR a.starts_at > ?))" + joinable + ")");
+            args.add(now); args.add(now.plusHours(2)); args.add(now); args.add(now.plusMinutes(30));
         } else {
             sql.append(" AND ((a.status = 'RECRUITING' AND a.starts_at > ?) OR (a.status IN ('RECRUITING', 'IN_PROGRESS', 'FINISHED') AND a.starts_at > ?))");
             args.add(now); args.add(now.minusDays(30));

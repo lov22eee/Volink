@@ -1,11 +1,11 @@
 #!/bin/bash
 # 최종 발표 시연 준비 (2026-11-22). Run on the server from /opt/volink, the evening before:
-#   sudo bash scripts/aws/demo-tomorrow.sh <모집자 이메일> <모집자 비밀번호> [장소 검색어]
+#   sudo bash scripts/aws/demo-tomorrow.sh '<모집자 이메일>' '<모집자 비밀번호>' '[장소 검색어]'
 # One post by the organizer (개인 회원, 이름 박용빈; signed up if the e-mail is new, 7 days without the phone step):
-#   "캠퍼스 산책로 쓰레기 줍기", 자동 승인 켬, 정원 9, 2 hours, a 공지 in 소식. It is made 2 days ahead (a post must
-#   start 24 h later) and nobody is signed in to it: on stage the participant applies (자동 승인 → 확정) and writes a Q&A.
-# Right before the talk, demo-now.sh moves it to start 20 minutes later, so 신청 still works (before the start) and
-# [출석 시작] already works (from 30 minutes before the start).
+#   "캠퍼스 산책로 쓰레기 줍기", 자동 승인 켬, 정원 9, TOMORROW 14:00~17:00, a 공지 in 소식. Nobody is signed in to it.
+#   A post must start 24 h ahead, so it is made 2 days later and moved to tomorrow here in the database.
+# On stage, whenever the talk is between 13:30 and 16:30: the participant applies (before 14:00) or joins (진행 중 합류,
+# after 14:00) and is confirmed at once by 자동 승인; [출석 시작] works from 13:30 and 체크인 until 16:30.
 # The place: the first Kakao result for [장소 검색어] (출석 needs the participant within 200 m), or else the first admin place
 # with coordinates. A post the place check sends to 운영자 검토 is opened here (demo only).
 set -euo pipefail
@@ -61,9 +61,10 @@ B=$(call POST /api/activities "{\"activityType\":\"GENERAL\",\"title\":\"캠퍼�
 # A school or a street can be a place that goes to 운영자 검토 (DRAFT): opened here for the demo, with a note.
 sql "UPDATE activities SET status = 'RECRUITING', review_note = '시연 준비 스크립트로 공개' WHERE id = $B AND status = 'DRAFT'"
 call POST "/api/activities/$B/notices" '{"body":"건물 정문 앞에서 모여요. 집게와 봉투는 나눠 드려요."}' "$H" >/dev/null
-echo "$B" > .demo-activity
+TOMORROW=$(day 1)
+sql "UPDATE activities SET starts_at = '$TOMORROW 14:00:00', ends_at = '$TOMORROW 17:00:00' WHERE id = $B"
 
 echo
 echo "완료"
-sql "SELECT CONCAT('   ', id, ' · ', title, ' · ', status, ' · ', starts_at) FROM activities WHERE id = $B"
-echo "   발표 직전에: sudo bash scripts/aws/demo-now.sh   (이 글이 20분 뒤 시작으로 바뀌어요)"
+sql "SELECT CONCAT('   ', id, ' · ', title, ' · ', status, ' · ', starts_at, ' ~ ', TIME(ends_at)) FROM activities WHERE id = $B"
+echo "   내일 13:30이 지나면 모집자 폰에서 이 글 → 출석 → [출석 시작]을 눌러 두세요(16:30까지 신청·합류·체크인)."

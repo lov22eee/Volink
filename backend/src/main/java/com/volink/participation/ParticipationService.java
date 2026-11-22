@@ -30,6 +30,8 @@ public class ParticipationService {
     static final List<String> SEAT = List.of("CONFIRMED", "OFFERED");
     /** The waitlist closes this long before the start; seats freed later stay empty. */
     static final Duration WAITLIST_CLOSE = Duration.ofHours(2);
+    /** 진행 중 합류 closes with 출석 (CheckInService.WINDOW): 30 minutes before the end. */
+    static final Duration JOIN_UNTIL_END = Duration.ofMinutes(30);
     private static final DateTimeFormatter SHORT = DateTimeFormatter.ofPattern("M월 d일 HH:mm");
 
     private final JdbcTemplate jdbc;
@@ -55,7 +57,7 @@ public class ParticipationService {
         this.clock = clock;
     }
 
-    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, int capacity, boolean autoApprove) {
+    record Activity(long id, long organizerId, String title, String status, LocalDateTime startsAt, LocalDateTime endsAt, int capacity, boolean autoApprove) {
         LocalDateTime waitlistClosesAt() { return startsAt.minus(WAITLIST_CLOSE); }
         String link() { return "#/activity/" + id; }
     }
@@ -74,13 +76,17 @@ public class ParticipationService {
         if (phones != null) phones.require(userId);
         if (penalties != null) penalties.check(userId, "APPLY");
         Activity activity = lock(activityId);
-        if (!"RECRUITING".equals(activity.status())) {
+        LocalDateTime now = now();
+        // 진행 중 합류 (2026-11-22): a post with 자동 승인 takes people after its start too, while a seat is free and until
+        // 출석 closes (30 minutes before the end) — they are confirmed at once and can still check in. No waitlist then.
+        boolean started = !now.isBefore(activity.startsAt());
+        if (!"RECRUITING".equals(activity.status()) && !(started && "IN_PROGRESS".equals(activity.status()))) {
             if ("DRAFT".equals(activity.status())) throw activityNotFound();
             throw conflict("INVALID_STATE", "모집 중인 활동에만 신청할 수 있습니다.");
         }
         if (activity.organizerId() == userId) throw forbidden("FORBIDDEN", "내가 만든 활동에는 신청할 수 없습니다.");
-        LocalDateTime now = now();
-        if (!now.isBefore(activity.startsAt())) throw conflict("INVALID_STATE", "이미 시작한 활동입니다.");
+        if (started && !activity.autoApprove()) throw conflict("INVALID_STATE", "이미 시작한 활동입니다.");
+        if (started && !now.isBefore(activity.endsAt().minus(JOIN_UNTIL_END))) throw conflict("INVALID_STATE", "출석이 마감되어 합류할 수 없어요.");
         // V37: 청소년 참여 가능이 꺼진 글은 만 19세 이상만, 신청 질문이 있으면 답이 있어야 함.
         Map<String, Object> options = jdbc.queryForMap("SELECT youth_ok, apply_question FROM activities WHERE id = ?", activityId);
         if (!Boolean.TRUE.equals(options.get("youth_ok"))) {
@@ -106,6 +112,7 @@ public class ParticipationService {
         }
 
         boolean full = seatsTaken(activityId) >= activity.capacity();
+        if (full && started) throw conflict("FULL", "자리가 없어 합류할 수 없어요.");
         if (full && !now.isBefore(activity.waitlistClosesAt()))
             throw conflict("WAITLIST_CLOSED", "정원이 찼고 대기 신청도 마감되었습니다(시작 2시간 전 마감).");
         // 자동 승인: a free seat is confirmed at once (the seat count above ran under the activity lock).
@@ -125,7 +132,7 @@ public class ParticipationService {
         log(activityId, id, userId, from, to, (from == null ? "신청" : "다시 신청") + ("CONFIRMED".equals(to) ? " · 자동 승인" : ""));
         if ("CONFIRMED".equals(to)) {
             notifications.send(activity.organizerId(), "APPLIED", "새 참가자 확정", activity.title() + " · 자동 승인으로 한 명이 참가 확정되었습니다.", activity.link());
-            notifications.send(userId, "APPROVED", "참가가 확정되었습니다", activity.title() + " · " + SHORT.format(activity.startsAt()) + " 시작", activity.link());
+            notifications.send(userId, "APPROVED", "참가가 확정되었습니다", activity.title() + (started ? " · 진행 중인 활동에 합류했어요" : " · " + SHORT.format(activity.startsAt()) + " 시작"), activity.link());
         } else
             notifications.send(activity.organizerId(), "APPLIED", "새 참가 신청", activity.title() + (full ? " · 대기 " + order + "번으로 신청이 들어왔습니다." : " · 승인을 기다리는 신청이 있습니다."), activity.link(),
                     activity.id(), null, full ? null : id);
@@ -319,7 +326,7 @@ public class ParticipationService {
         if (value < taken) throw conflict("BELOW_TAKEN", "확정·제안 중인 " + taken + "명보다 적게 줄일 수 없어요.");
         if (value == activity.capacity()) return Map.of("capacity", value, "offered", 0, "confirmed", 0);
         jdbc.update("UPDATE activities SET capacity = ? WHERE id = ?", value, activityId);
-        Activity changed = new Activity(activity.id(), activity.organizerId(), activity.title(), activity.status(), activity.startsAt(), value, activity.autoApprove());
+        Activity changed = new Activity(activity.id(), activity.organizerId(), activity.title(), activity.status(), activity.startsAt(), activity.endsAt(), value, activity.autoApprove());
         int offered = value > activity.capacity() ? offerNext(changed, organizerId) : 0;
         int confirmed = 0;
         if (value > activity.capacity() && activity.autoApprove())
@@ -407,9 +414,9 @@ public class ParticipationService {
     }
 
     private Activity lock(long activityId) {
-        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, capacity, auto_approve FROM activities WHERE id = ? FOR UPDATE", activityId)
+        return jdbc.queryForList("SELECT id, organizer_id, title, status, starts_at, ends_at, capacity, auto_approve FROM activities WHERE id = ? FOR UPDATE", activityId)
                 .stream().findFirst().map(row -> new Activity(((Number) row.get("id")).longValue(), ((Number) row.get("organizer_id")).longValue(),
-                        (String) row.get("title"), (String) row.get("status"), time(row.get("starts_at")), ((Number) row.get("capacity")).intValue(),
+                        (String) row.get("title"), (String) row.get("status"), time(row.get("starts_at")), time(row.get("ends_at")), ((Number) row.get("capacity")).intValue(),
                         Boolean.TRUE.equals(row.get("auto_approve")) || Integer.valueOf(1).equals(row.get("auto_approve"))))
                 .orElseThrow(ParticipationService::activityNotFound);
     }
