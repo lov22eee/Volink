@@ -2,7 +2,7 @@
 # 최종 발표 시연 준비 (2026-11-22). Run on the server from /opt/volink, the evening before:
 #   sudo bash scripts/aws/demo-tomorrow.sh '<모집자 이메일>' '<모집자 비밀번호>' '[장소 검색어]'
 # One post by the organizer (개인 회원, 이름 박용빈; signed up if the e-mail is new, 7 days without the phone step):
-#   "캠퍼스 산책로 쓰레기 줍기", 자동 승인 켬, 정원 9, TOMORROW 14:00~17:00, a 공지 in 소식. Nobody is signed in to it.
+#   "캠퍼스 산책로 쓰레기 줍기", 자동 승인 켬, 정원 1, TOMORROW 14:00~17:00, a 공지 in 소식. Nobody is signed in to it.
 #   A post must start 24 h ahead, so it is made 2 days later and moved to tomorrow here in the database.
 # On stage, whenever the talk is between 13:30 and 16:30: the participant applies (before 14:00) or joins (진행 중 합류,
 # after 14:00) and is confirmed at once by 자동 승인; [출석 시작] works from 13:30 and 체크인 until 16:30.
@@ -56,7 +56,7 @@ else
 fi
 
 echo "3) 모집글"
-B=$(call POST /api/activities "{\"activityType\":\"GENERAL\",\"title\":\"캠퍼스 산책로 쓰레기 줍기\",\"category\":\"환경\",$PLACE_JSON,\"meetingPoint\":\"건물 정문 앞\",\"date\":\"$(day 2)\",\"time\":\"14:00\",\"capacity\":9,\"durationMinutes\":120,\"description\":\"캠퍼스 산책로의 쓰레기를 함께 주워요. 집게와 봉투는 나눠 드려요.\",\"safetyConfirmed\":true,\"difficulty\":\"EASY\",\"placeKind\":\"OUTDOOR\",\"newcomerOk\":true,\"autoApprove\":true,\"youthOk\":true}" "$H" | json id)
+B=$(call POST /api/activities "{\"activityType\":\"GENERAL\",\"title\":\"캠퍼스 산책로 쓰레기 줍기\",\"category\":\"환경\",$PLACE_JSON,\"meetingPoint\":\"건물 정문 앞\",\"date\":\"$(day 2)\",\"time\":\"14:00\",\"capacity\":1,\"durationMinutes\":120,\"description\":\"캠퍼스 산책로의 쓰레기를 함께 주워요. 집게와 봉투는 나눠 드려요.\",\"safetyConfirmed\":true,\"difficulty\":\"EASY\",\"placeKind\":\"OUTDOOR\",\"newcomerOk\":true,\"autoApprove\":true,\"youthOk\":true}" "$H" | json id)
 [ -n "$B" ] || { echo "모집글을 만들지 못했어요." >&2; exit 1; }
 # A school or a street can be a place that goes to 운영자 검토 (DRAFT): opened here for the demo, with a note.
 sql "UPDATE activities SET status = 'RECRUITING', review_note = '시연 준비 스크립트로 공개' WHERE id = $B AND status = 'DRAFT'"
