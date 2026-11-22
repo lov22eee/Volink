@@ -67,7 +67,9 @@ function friendly(message: string) {
   if (/expired/i.test(message)) return '인증번호 시간이 지났어요. 다시 받아 주세요.'
   if (/too.?many|quota|blocked/i.test(message)) return '요청이 많아요. 잠시 뒤 다시 해 주세요.'
   if (/invalid.*phone|format/i.test(message)) return '휴대폰 번호를 확인해 주세요.'
-  return '인증하지 못했어요. 잠시 뒤 다시 해 주세요.'
+  // 2026-11-22 (device check): an unknown Firebase error keeps its own short text, so the cause can be seen and fixed.
+  const raw = message.replace(/^Error:\s*/, '').trim().slice(0, 120)
+  return '인증하지 못했어요. 잠시 뒤 다시 해 주세요.' + (raw ? ` (${raw})` : '')
 }
 
 /** 번호 입력 → 인증번호 받기 → 6자리 → proof. */
