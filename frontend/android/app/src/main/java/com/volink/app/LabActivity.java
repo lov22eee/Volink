@@ -652,7 +652,12 @@ public class LabActivity extends AppCompatActivity {
             jumped = true;
             String next = targetUrl.isEmpty() ? startUrl : targetUrl;
             if (web != null) web.loadUrl(next);
-            if (both || "S".equals(target)) { coverLoading("1365에서 가져오는 중이에요"); setGoal(10, 30); }
+            if (both || "S".equals(target)) {
+                coverLoading("1365에서 가져오는 중이에요"); setGoal(10, 30);
+                // 2026-11-22 (device check): the cover was already up for 정보 확인, so coverLoading did not start the gauge
+                // again (it does only when the cover first opens) and it stayed at 0%. Started here.
+                timer.removeCallbacks(gaugeTick); timer.post(gaugeTick);
+            }
             else uncover(null);
         }, 1500);
     }
