@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { api, serverUrl } from '../api'
 import type { LiveActivity, MyParticipation, MyRecord, User } from '../api'
 import { categories } from '../categories'
-import { CategoryPhoto } from '../covers'
+import { categoryTone } from '../covers'
 import type { Program } from '../explore'
 import { currentPosition, syncLocation } from '../location'
 import type { PostSummary } from './community'
@@ -155,13 +155,15 @@ export function HomeScreen({ user, actions }: { user: User; actions: ReactNode }
       </nav>
 
       <Sec title={mine3.length ? '나에게 맞는 봉사' : '이번 주 동네 봉사'} note={mine3.length ? mine3.join(' · ') : undefined} more={['더 보기', mine3.length ? '#/find?category=' + encodeURIComponent(mine3[0]) : '#/find']}>
-        {suits.length || (programs?.length ?? 0) ? <div className="hb-weekend">
+        {suits.length || (programs?.length ?? 0) ? <div className="hb-weekend hb-dates">
           {suits.map(a => <a key={a.id} href={'#/activity/' + a.id} onClick={peekActivity(a)}>
-            <span className="hb-pic"><CategoryPhoto category={a.category} seed={a.id} /></span>
-            <small>{a.category} · {dayWord(a.date)} {a.startTime}</small><b>{a.title}</b><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></a>)}
+            <DateBand category={a.category} date={a.date} time={a.startTime} />
+            <b>{a.title}</b>
+            <span className="hb-src"><i className="v">Volink</i><em className={seatsLeft(a) <= 2 ? 'hot' : ''}>{seats(a)}</em></span></a>)}
           {(programs ?? []).slice(0, 3).map(p => <a key={p.programNo} href={'#/find?chip=1365&category=' + encodeURIComponent(p.category ?? '')} onClick={event => { event.preventDefault(); setPeek({ program: p }) }}>
-            <span className="hb-pic"><CategoryPhoto category={p.category ?? '지역사회'} seed={Number(p.programNo) || 1} /></span>
-            <small>{p.category ?? '봉사'} · <i className="hb-1365">1365</i></small><b>{p.title}</b><small>{[p.distanceKm != null ? p.distanceKm + 'km' : null, p.organization].filter(Boolean).join(' · ')}</small></a>)}
+            <DateBand category={p.category ?? '기타'} date={p.periodStart ?? p.periodEnd} end={p.periodEnd} time={p.beginTime} weekdays={p.weekdays} />
+            <b>{p.title}</b>
+            <span className="hb-src"><i className="b">1365</i><small>{p.organization ?? (p.distanceKm != null ? p.distanceKm + 'km' : '')}</small></span></a>)}
         </div> : <p className="hb-empty">{mine3.length ? `관심 분야(${mine3.join(', ')}) 모집이 아직 없어요` : '이번 주 동네 모집이 아직 없어요'}</p>}
         {!mine3.length && <div className="hb-interest"><span>관심 분야를 고르면 맞는 봉사를 먼저 보여 드려요</span>
           <div className="m-chips wrap">{categories.map(c => <a key={c} className="m-chip" href="#/my?view=interests">{c}</a>)}</div></div>}
@@ -244,4 +246,27 @@ function TodayCard({ next, hostNext, done, first, now }: { next?: MyParticipatio
     <b>예정된 봉사가 없어요</b><p>이번 주 동네 봉사를 찾아보거나 직접 열어 보세요</p>
     <span className="hb-two"><a className="m-btn" href="#/find">봉사 찾기</a><a className="m-btn line" href="#/host"><MIcon name="plus" size={18} />활동 만들기</a></span>
   </section>
+}
+
+/**
+ * 나에게 맞는 봉사 (2026-11-22, user choice D3·S3): no photo (one photo per field repeated itself), a soft field-colored band
+ * with the date instead. One day: "24 · 11월 월요일 · 14:00" and 오늘/내일/D-n. A 1365 program over many days:
+ * "11.25 ~ 12.20 · 매주 토 · 14:00" and 상시.
+ */
+function DateBand({ category, date, end, time, weekdays }: { category: string; date: string | null | undefined; end?: string | null; time?: string | null; weekdays?: string | null }) {
+  const tone = categoryTone(category)
+  const style = { background: tone.soft, color: tone.ink }
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date())
+  const md = (d: string) => `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`
+  if (!date) return <span className="hb-band" style={style}><span><em className="sm">날짜 미정</em>{time ?? ''}</span></span>
+  if (end && end !== date) {
+    const days = weekdays ? `매주 ${weekdays}` : ''
+    return <span className="hb-band" style={style}><span><em className="sm">{md(date)} ~ {md(end)}</em>{[days, time].filter(Boolean).join(' · ')}</span><i>상시</i></span>
+  }
+  const at = new Date(date + 'T12:00:00+09:00')
+  const diff = Math.round((new Date(date + 'T12:00:00Z').getTime() - new Date(today + 'T12:00:00Z').getTime()) / 86_400_000)
+  const week = new Intl.DateTimeFormat('ko-KR', { weekday: 'long', timeZone: 'Asia/Seoul' }).format(at)
+  return <span className="hb-band" style={style}><strong>{Number(date.slice(8, 10))}</strong>
+    <span><em className="sm">{Number(date.slice(5, 7))}월 {week}</em>{time ?? ''}</span>
+    <i>{diff <= 0 ? '오늘' : diff === 1 ? '내일' : 'D-' + diff}</i></span>
 }
