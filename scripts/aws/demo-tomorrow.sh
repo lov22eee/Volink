@@ -1,7 +1,7 @@
 #!/bin/bash
 # 최종 발표 시연 준비 (2026-11-22). Run on the server from /opt/volink, the day before the demo:
 #   sudo bash scripts/aws/demo-tomorrow.sh <참가자 이메일> <참가자 비밀번호> <모집자 이메일> <모집자 비밀번호> [장소 검색어]
-# - 모집자 계정: signed up if it does not exist (개인 회원), allowed to post for 7 days without the phone step.
+# - 모집자 계정 (이름 박용빈): signed up if it does not exist (개인 회원; an existing one takes the name too), allowed to post for 7 days without the phone step.
 # - 활동 A (신청 시연용): 3일 뒤 10:00, 자동 승인 꺼짐 — the participant applies on stage and the organizer approves.
 # - 활동 B (출석 시연용): made for 2 days later (an activity must start 24 h ahead), the participant applies (자동 승인 켬 →
 #   확정), a question and its answer go in 소식, then B is moved to TOMORROW 14:00~17:00 here in the database.
@@ -32,9 +32,10 @@ TOMORROW=$(day 1)
 echo "1) 계정"
 P=$(login "$P_EMAIL" "$P_PASS")
 [ -n "$P" ] || { echo "참가자 계정으로 로그인하지 못했어요. 이메일·비밀번호를 확인해 주세요." >&2; exit 1; }
-call POST /api/auth/signup "{\"memberType\":\"GENERAL\",\"name\":\"모집자\",\"email\":\"$H_EMAIL\",\"password\":\"$H_PASS\",\"birthDate\":\"1995-01-01\",\"interests\":[\"환경\"],\"agreedNotice\":true}" >/dev/null || true
+call POST /api/auth/signup "{\"memberType\":\"GENERAL\",\"name\":\"박용빈\",\"email\":\"$H_EMAIL\",\"password\":\"$H_PASS\",\"birthDate\":\"1995-01-01\",\"interests\":[\"환경\"],\"agreedNotice\":true}" >/dev/null || true
 H=$(login "$H_EMAIL" "$H_PASS")
 [ -n "$H" ] || { echo "모집자 계정을 만들거나 로그인하지 못했어요(이미 있는 이메일이면 그 계정의 비밀번호를 넣어 주세요)." >&2; exit 1; }
+sql "UPDATE users SET display_name = '박용빈' WHERE email = '$H_EMAIL'" # an existing account takes the name too
 # 1인 1계정 (V42): without a verified phone, 7 days like the accounts from before the change.
 sql "UPDATE users SET phone_grace_until = GREATEST(COALESCE(phone_grace_until, NOW()), NOW() + INTERVAL 7 DAY) WHERE phone_hash IS NULL AND email IN ('$P_EMAIL', '$H_EMAIL')"
 
