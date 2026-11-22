@@ -12,7 +12,7 @@ import { showToast } from '../App'
 import { AskSheet, MarkSheet, recordToCalendar } from './record'
 import type { ExternalRecord } from './record'
 import { applyIn1365, findApplied, keep1365, KEEP_MINUTES, read1365Applications, setKeep1365, useExtMode } from './lab'
-import { currentPosition, declined, decline, remember, remembered } from '../location'
+import { currentPosition, declined, decline, remember, remembered, syncLocation } from '../location'
 import { kmBetween, PlaceMap } from '../map'
 import type { MapView } from '../map'
 import { districts, provinces, shortProvince } from '../regions'
@@ -115,7 +115,7 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
   // A remembered position is looked up in the background; 1365 waits for it instead of saying 'nothing found' first.
-  const [waitPos, setWaitPos] = useState(() => remembered())
+  const [waitPos, setWaitPos] = useState(() => remembered() || Capacitor.isNativePlatform())
   const [notice, setNotice] = useState('')
   const [items, setItems] = useState<LiveActivity[] | null>(null)
   const [programs, setPrograms] = useState<Program[] | null>(null)
@@ -143,7 +143,8 @@ export function FindScreen({ actions, focus, initial, category }: { actions: Rea
       }
     })
   }, [near, origin])
-  useEffect(() => { if (remembered()) currentPosition().then(position => { if (position) setOrigin(position); setWaitPos(false) }) }, [])
+  // 2026-11-21: the phone's permission decides in the app (a reinstall forgot the remembered answer).
+  useEffect(() => { syncLocation().then(ok => ok ? currentPosition() : null).then(position => { if (position) setOrigin(position); setWaitPos(false) }) }, [])
 
   const showVolink = filters.source !== '1365', show1365 = filters.source !== 'VOLINK'
   const area = view === 'map' ? mapArea : null
