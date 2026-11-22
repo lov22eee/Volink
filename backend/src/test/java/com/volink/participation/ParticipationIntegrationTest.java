@@ -87,6 +87,51 @@ class ParticipationIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void joiningAStartedPostNeedsAutoApproveAFreeSeatAndTimeBeforeCheckInCloses() throws Exception {
+        // 진행 중 합류 (2026-11-22): after the start, a post with 자동 승인 still takes people (confirmed at once, no waitlist)
+        // while a seat is free and until 출석 closes 30 minutes before the end; it stays in the lists meanwhile.
+        String organizer = token(member("GENERAL"));
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>(withCapacity(2));
+        body.put("autoApprove", true);
+        long auto = createActivity(body, organizer);
+        long manual = createActivity(withCapacity(2), organizer);
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ?, status = 'IN_PROGRESS' WHERE id IN (?, ?)", now.minusMinutes(10), now.plusMinutes(110), auto, manual);
+
+        for (String status : new String[] {null, "OPEN", "WAITLIST"}) {
+            var request = get("/api/activities");
+            if (status != null) request = request.param("status", status);
+            mvc.perform(request).andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + auto + ")]").exists())
+                    .andExpect(jsonPath("$[?(@.id == " + manual + ")]").doesNotExist());
+        }
+        apply(manual, token(member("GENERAL"))).andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("이미 시작한 활동입니다."));
+
+        String first = token(member("GENERAL"));
+        long joined = pid(apply(auto, first).andExpect(status().isCreated()).andExpect(jsonPath("$.participation.status").value("CONFIRMED")));
+        assertThat(statusOf(joined)).isEqualTo("CONFIRMED");
+        apply(auto, token(member("GENERAL"))).andExpect(jsonPath("$.participation.status").value("CONFIRMED"));
+        // Full: no waitlist after the start, and the post leaves the lists.
+        apply(auto, token(member("GENERAL"))).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("FULL"));
+        mvc.perform(get("/api/activities")).andExpect(jsonPath("$[?(@.id == " + auto + ")]").doesNotExist());
+        // The organizer can open 출석 and the one who joined is on the list as confirmed.
+        perform(post("/api/activities/" + auto + "/checkin/start"), Map.of(), organizer).andExpect(status().isOk());
+        perform(get("/api/activities/" + auto + "/participations"), null, organizer)
+                .andExpect(jsonPath("$.items[?(@.status == 'CONFIRMED')]").isNotEmpty());
+        // Cancelling after the start stays closed.
+        perform(post("/api/participations/" + joined + "/cancel"), Map.of(), first).andExpect(status().isConflict());
+
+        // 출석 closed (less than 30 minutes to the end): no joining, and not in the lists.
+        long late = createActivity(body, organizer);
+        jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ?, status = 'IN_PROGRESS' WHERE id = ?", now.minusMinutes(90), now.plusMinutes(20), late);
+        apply(late, token(member("GENERAL"))).andExpect(status().isConflict()).andExpect(jsonPath("$.message").value("출석이 마감되어 합류할 수 없어요."));
+        mvc.perform(get("/api/activities")).andExpect(jsonPath("$[?(@.id == " + late + ")]").doesNotExist());
+        // Finished or cancelled posts never take anyone.
+        jdbc.update("UPDATE activities SET status = 'FINISHED' WHERE id = ?", late);
+        apply(late, token(member("GENERAL"))).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("INVALID_STATE"));
+    }
+
+    @Test
     void cancellationOffersTheSeatInOrderAndOffersExpireOrCanBeDeclined() throws Exception {
         String organizer = token(member("GENERAL"));
         long activity = createActivity(withCapacity(2), organizer);

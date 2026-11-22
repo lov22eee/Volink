@@ -15,7 +15,7 @@ import { hhmm, phaseOf, useNow } from '../checkin'
 import type { Phase } from '../checkin'
 import { durationLabel } from '../create'
 import { activityRules as r } from '../rules'
-import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, placeKindLabel, seatsLeft } from './cards'
+import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, joinable, placeKindLabel, seatsLeft } from './cards'
 import { DateSheet, DurationSheet, TimeSheet } from './host'
 import { NewsEntry, NewsScreen } from './news'
 import type { Thread } from './news'
@@ -129,7 +129,7 @@ export function ActivitySheet({ activity: first, onClose }: { activity: LiveActi
   useEffect(() => { api<LiveActivity>('/api/activities/' + first.id).then(setActivity).catch(() => {}) }, [first.id])
   const left = seatsLeft(activity), full = left === 0
   const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
-  const open = activity.status === 'RECRUITING' && Date.now() < start && !(full && start - Date.now() < 2 * 3_600_000)
+  const open = activity.status === 'RECRUITING' && Date.now() < start && !(full && start - Date.now() < 2 * 3_600_000) || joinable(activity)
   return <Sheet title="" onClose={onClose} className="as-sheet" footer={<div className="m-two">
     <a className="m-btn line" href={'#/activity/' + activity.id}>자세히 보기</a>
     {open ? <a className={'m-btn' + (full ? ' amber' : '')} href={'#/activity/' + activity.id + '?apply=1'}>{full ? '대기 신청하기' : '신청하기'}</a>
@@ -237,7 +237,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     const fresh = !mine || ((mine.status === 'CANCELLED' || mine.status === 'EXPIRED') && (mine.cancelCount ?? 0) < 2)
     const start = new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime()
     const waitClosed = seatsLeft(activity) === 0 && start - Date.now() < 2 * 3_600_000
-    if (fresh && activity.status === 'RECRUITING' && Date.now() < start && !waitClosed) setSheet('safety')
+    if (fresh && (activity.status === 'RECRUITING' && Date.now() < start && !waitClosed || joinable(activity))) setSheet('safety')
   }, [activity, viewer, id])
   useEffect(() => { api<LiveActivity[]>('/api/me/saved').then(list => setSaved(list.some(a => a.id === id))).catch(() => {}) }, [id])
 
@@ -257,7 +257,8 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     : mine.status === 'COMPLETED' ? 'done' : 'closed'
   const full = seatsLeft(activity) === 0
   const waitClosed = start - now < 2 * 3_600_000
-  const recruiting = activity.status === 'RECRUITING' && now < start
+  const joining = joinable(activity, now)
+  const recruiting = activity.status === 'RECRUITING' && now < start || joining
 
   async function act(path: string, body: object | undefined, done: string) {
     setBusy(true)
@@ -308,6 +309,7 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
     if (cancelled) return <CancelledCard activity={activity} organizer={false} />
     switch (stage) {
       case 'before': return !recruiting ? <div className="m-state gray"><strong>{activity.status === 'FINISHED' ? '끝난 활동이에요' : '신청이 마감됐어요'}</strong></div>
+        : joining ? <div className="m-state mint"><strong>진행 중 · 지금 합류할 수 있어요</strong><span>자동 승인이라 신청하면 바로 확정돼요 · {hhmm(closes)}까지</span></div>
         : <div className="m-state"><strong>{full ? (waitClosed ? '정원이 찼어요' : `정원이 찼어요 · 대기 ${viewer.waiting}명`) : `${seatsLeft(activity)}자리 남았어요`}</strong>
           <span>{full ? (waitClosed ? '시작 2시간 전부터는 대기 신청을 받지 않아요.' : '대기 신청하면 빈자리가 생길 때 순서대로 알려 드려요.') : '신청하면 모집자가 확인한 뒤 알림으로 알려 드려요.'}</span></div>
       case 'waiting': return mine!.status === 'APPLIED' ? <div className="m-state amber"><strong>모집자 확인을 기다리고 있어요</strong><span>승인되면 알림으로 알려 드려요.</span></div>

@@ -74,3 +74,13 @@ function calendarFile(a: CalendarActivity, start: Date, end: Date, note: string)
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(link.href), 4000)
 }
+
+/**
+ * 진행 중 합류 (2026-11-22): a post with 자동 승인 that has started still takes people while a seat is free, until 출석
+ * closes (30 minutes before the end). The server checks the same.
+ */
+export function joinable(a: Pick<LiveActivity, 'status' | 'autoApprove' | 'date' | 'startTime' | 'durationMinutes' | 'capacity' | 'confirmed'>, now = Date.now()) {
+  const start = new Date(`${a.date}T${a.startTime}:00+09:00`).getTime()
+  const end = start + a.durationMinutes * 60_000
+  return Boolean(a.autoApprove) && (a.status === 'RECRUITING' || a.status === 'IN_PROGRESS') && now >= start && now < end - 30 * 60_000 && seatsLeft(a) > 0
+}
