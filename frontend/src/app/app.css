@@ -261,7 +261,7 @@ textarea.m-input { padding: 14px 16px; line-height: 1.55; resize: none; min-heig
 .m-result-head h2 { font-size: 17px; font-weight: 700; }
 .m-map-box { position: relative; border-radius: 20px; overflow: hidden; background: #fff; border: 1px solid var(--line); }
 .m-map-box .kakao-map, .m-map-box .map-canvas { height: 56vh; min-height: 320px; border-radius: 0; }
-.m-map-card { position: absolute; left: 10px; right: 10px; bottom: 10px; }
+.m-map-card { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; } /* 2026-11-25: above the Kakao map layers (it was drawn behind the map) */
 .m-map-box > .m-help { padding: 8px; }
 /* 찾기 지도: a small pill over the map while it looks again where the person moved it (or asks to zoom in). */
 .m-map-note { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 5; margin: 0; padding: 7px 14px; border-radius: 999px; background: #fff; color: var(--ink); font-size: 13px; font-weight: 650; box-shadow: 0 2px 10px rgba(0,0,0,.15); white-space: nowrap; }
