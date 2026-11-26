@@ -150,9 +150,12 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         Cookie first = cookie(login);
         MvcResult refreshed = mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty()).andReturn();
-        mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isUnauthorized());
         Cookie second = cookie(refreshed);
-        mvc.perform(post("/api/auth/logout").cookie(second)).andExpect(status().isNoContent());
+        // Rotation: once the new token is used, the first one is refused (V43: only while the new one is unused is it taken back).
+        Cookie third = cookie(mvc.perform(post("/api/auth/refresh").cookie(second)).andExpect(status().isOk()).andReturn());
+        mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/logout").cookie(third)).andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/refresh").cookie(third)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/refresh").cookie(second)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/me").header("Authorization", "Bearer not-a-token")).andExpect(status().isUnauthorized());
     }
