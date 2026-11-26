@@ -286,6 +286,8 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await expect(page.getByText('이 내용으로는 등록할 수 없어요')).toBeVisible()
   await page.getByRole('button', { name: /등록할 수 없는 이유/ }).click()
   await expect(page.getByRole('tooltip')).toContainText('사다리')
+  await expect(page.getByRole('button', { name: '다음' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /고칠 곳이 1개 있어요/ })).toBeVisible()
   await page.locator('input[name=title]').fill('앱에서 만든 공원 정리 모임')
   await expect(page.getByText('이 내용으로는 등록할 수 없어요')).toHaveCount(0)
   await page.getByRole('button', { name: '보통' }).click()
