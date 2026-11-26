@@ -206,6 +206,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   const risk = { title: riskOf(words.title), description: riskOf(words.description), supplies: riskOf(words.supplies),
     place: place?.placeClass === 'REVIEW' && !place.recent ? { level: 'REVIEW', reasons: [{ head: place.name, why: '등록되지 않은 장소라 승인이 필요해요.' }] } as Risk : null }
   const blockedFields = Object.entries(risk).filter(([, value]) => value?.level === 'BLOCKED').map(([key]) => key)
+  const blockedHere = blockedFields.filter(key => (stepOf[key] ?? 3) === step)
   const late = minutes(start) > minutes(sunsetOf(date))
   const needsReview = !blockedFields.length && (late || Object.values(risk).some(value => value?.level === 'REVIEW'))
   const supplyHit = (name: string) => words.supplies.find(hit => name.replace(/\s/g, '').includes(hit.keyword.replace(/\s/g, '')))
@@ -235,6 +236,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
     return found
   }
   function next() {
+    // 2026-11-26 (기기 확인): a red field on this step stops 다음 too, not only the last button.
+    if (step < 3 && blockedHere.length) { goFix(); return }
     const found = check(step)
     setErrors(found)
     if (Object.keys(found).length) { focusError(found); return }
@@ -307,7 +310,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
       onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>{name}{hit && ' !'}</button>
   })}</div>
 
-  const goFix = () => { const first = blockedFields[0]; document.querySelector<HTMLElement>(`[name="${first}"]`)?.scrollIntoView({ block: 'center' }) }
+  function goFix() { const first = (blockedHere[0] ?? blockedFields[0]); document.querySelector<HTMLElement>(`[name="${first}"]`)?.scrollIntoView({ block: 'center' }) }
   const postButton = (label: string) => <>
     {blockedFields.length > 0 && <button type="button" className="m-fix" onClick={goFix}>고칠 곳이 {blockedFields.length}개 있어요 · 눌러서 이동</button>}
     {needsReview && <p className="m-fix o">관리자 확인 뒤 공개돼요</p>}
@@ -457,7 +460,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
       </>}
       {message && <div className="m-note bad" role="alert">{message}</div>}
       <ActionBar>{step > 1 && <button type="button" className="m-btn line" onClick={() => setStep(step - 1)}>이전</button>}
-        {step < 3 || locked || editId ? <button className="m-btn" disabled={busy}>{step < 3 ? '다음' : busy ? '저장하는 중…' : locked ? '고친 내용 저장' : '수정 완료'}</button> : postButton('모집 시작하기')}</ActionBar>
+        {step < 3 && blockedHere.length > 0 && !locked && <button type="button" className="m-fix" onClick={goFix}>고칠 곳이 {blockedHere.length}개 있어요 · 눌러서 이동</button>}
+        {step < 3 || locked || editId ? <button className="m-btn" disabled={busy || (step < 3 && blockedHere.length > 0 && !locked)}>{step < 3 ? '다음' : busy ? '저장하는 중…' : locked ? '고친 내용 저장' : '수정 완료'}</button> : postButton('모집 시작하기')}</ActionBar>
     </form>}
 
     {sheets}
