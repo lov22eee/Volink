@@ -73,6 +73,48 @@ const templates: Template[] = [
 ]
 
 // Which step shows each server field error.
+/** 2026-11-26: risk words checked while typing (the server's table, the same check as posting). */
+type WordHit = { keyword: string; level: 'BLOCKED' | 'REVIEW'; reason: string }
+type Risk = { level: 'BLOCKED' | 'REVIEW'; reasons: { head: string; why: string }[] } | null
+/** What each reason group of the server's risk table (V3/V44) is called in one plain sentence (2026-11-26 user wording). */
+const riskNoun: Record<string, string> = {
+  '금전 모금': '모금 활동', '높은 곳 작업': '높은 곳 작업', '물속 작업': '물속 활동', '안전·운영 원칙': '음주가 있는 활동',
+  '위험 장비': '위험 장비를 쓰는 활동', '의료행위': '의료 행위', '전기·가스 작업': '전기·가스 작업', '화학물질': '약품을 쓰는 활동',
+  '가스 관련 활동': '가스를 다루는 활동', '공사 구역': '공사 구역 활동', '교통 위험': '차도 주변 활동', '날붙이 도구': '칼·낫을 쓰는 활동',
+  '부상 위험': '무거운 짐을 드는 활동', '비공개 장소': '가정 방문 활동', '산행 위험': '등산 활동', '시설 내부 활동': '시설 안 활동',
+  '어두울 때 하는 활동': '일몰 후 활동', '전기 관련 활동': '전기를 다루는 활동', '차량 이동': '차량 이동이 있는 활동',
+  '취약 대상': '아이와 함께하는 활동', '화기·위생': '조리 활동',
+}
+/** 은 after a final consonant, otherwise 는. */
+const topic = (word: string) => { const code = word.charCodeAt(word.length - 1) - 0xac00; return word + (code >= 0 && code <= 11171 && code % 28 ? '은' : '는') }
+function riskOf(hits: WordHit[] | undefined): Risk {
+  if (!hits?.length) return null
+  const blocked = hits.filter(hit => hit.level === 'BLOCKED')
+  const shown = blocked.length ? blocked : hits
+  return { level: blocked.length ? 'BLOCKED' : 'REVIEW', reasons: shown.map(hit => ({ head: `‘${hit.keyword}’`,
+    why: topic(riskNoun[hit.reason] ?? hit.reason) + (hit.level === 'BLOCKED' ? ' 등록할 수 없어요.' : ' 검토 후 승인이 필요해요.') })) }
+}
+
+/** The (!) in a field: red = cannot be posted, amber = an admin checks first. Tapping it opens a white bubble with why. */
+function RiskMark({ risk, name }: { risk: Risk; name: string }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.setTimeout(() => document.addEventListener('click', close, { once: true }), 0)
+    return () => document.removeEventListener('click', close)
+  }, [open])
+  if (!risk) return null
+  const blocked = risk.level === 'BLOCKED'
+  return <span className="m-risk">
+    <button type="button" className={'m-risk-ico' + (blocked ? ' r' : ' o')} aria-label={(blocked ? '등록할 수 없는 이유' : '검토하는 이유') + ' · ' + name} aria-expanded={open}
+      onClick={event => { event.preventDefault(); event.stopPropagation(); setOpen(!open) }}>!</button>
+    {open && <span className="m-risk-bubble" role="tooltip">{risk.reasons.map(reason => <span key={reason.head}><strong>{reason.head}</strong>{reason.why}</span>)}</span>}
+  </span>
+}
+const riskLine = (risk: Risk) => risk && <span className={'m-risk-line' + (risk.level === 'BLOCKED' ? ' r' : ' o')}>{risk.level === 'BLOCKED' ? '이 내용으로는 등록할 수 없어요' : '관리자 검토 후 승인돼요'}</span>
+const riskClass = (risk: Risk) => risk ? (risk.level === 'BLOCKED' ? ' risk-r' : ' risk-o') : ''
+
 const quickFields = ['place', 'date', 'time', 'duration', 'supplies', 'description', 'capacity', 'safety', 'risk']
 const stepOf: Record<string, number> = { title: 1, category: 1, difficulty: 1, placeKind: 1, activityType: 1, place: 2, meetingPoint: 2, date: 2, time: 2, duration: 2, supplies: 2, description: 2, capacity: 3, safety: 3 }
 
@@ -151,6 +193,22 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
     }).catch(() => setMessage('활동 정보를 불러오지 못했어요.')).finally(() => setLoading(false))
   }, [from, editId])
 
+  const [words, setWords] = useState<{ title: WordHit[]; description: WordHit[]; supplies: WordHit[] }>({ title: [], description: [], supplies: [] })
+  const supplyNames = supplies.map(item => item.name).join('|')
+  useEffect(() => {
+    let live = true
+    const timer = window.setTimeout(() => {
+      api<typeof words>('/api/activities/check', 'POST', { title, description, supplies: supplyNames ? supplyNames.split('|') : [] })
+        .then(found => { if (live) setWords(found) }).catch(() => undefined)
+    }, 400)
+    return () => { live = false; window.clearTimeout(timer) }
+  }, [title, description, supplyNames])
+  const risk = { title: riskOf(words.title), description: riskOf(words.description), supplies: riskOf(words.supplies),
+    place: place?.placeClass === 'REVIEW' && !place.recent ? { level: 'REVIEW', reasons: [{ head: place.name, why: '등록되지 않은 장소라 승인이 필요해요.' }] } as Risk : null }
+  const blockedFields = Object.entries(risk).filter(([, value]) => value?.level === 'BLOCKED').map(([key]) => key)
+  const late = minutes(start) > minutes(sunsetOf(date))
+  const needsReview = !blockedFields.length && (late || Object.values(risk).some(value => value?.level === 'REVIEW'))
+  const supplyHit = (name: string) => words.supplies.find(hit => name.replace(/\s/g, '').includes(hit.keyword.replace(/\s/g, '')))
   const end = clock(minutes(start) + duration)
   const lengths = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= Math.min(r.durationMax, minutes(r.latestEnd) - minutes(start)); v += 10) out.push(v); return out }, [start])
   useEffect(() => { if (lengths.length && !lengths.includes(duration)) setDuration(lengths[lengths.length - 1]) }, [lengths, duration])
@@ -244,9 +302,16 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   </>
   const supplyChips = <div className="m-chips wrap">{presetSupplies.concat(supplies.filter(s => !presetSupplies.includes(s.name)).map(s => s.name)).map(name => {
     const item = supplies.find(s => s.name === name)
-    return <button type="button" key={name} className={'m-chip' + (item ? ' on' : '')} aria-pressed={Boolean(item)}
-      onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>{name}</button>
+    const hit = item && supplyHit(name)
+    return <button type="button" key={name} className={'m-chip' + (item ? ' on' : '') + (hit ? (hit.level === 'BLOCKED' ? ' risk-r' : ' risk-o') : '')} aria-pressed={Boolean(item)}
+      onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>{name}{hit && ' !'}</button>
   })}</div>
+
+  const goFix = () => { const first = blockedFields[0]; document.querySelector<HTMLElement>(`[name="${first}"]`)?.scrollIntoView({ block: 'center' }) }
+  const postButton = (label: string) => <>
+    {blockedFields.length > 0 && <button type="button" className="m-fix" onClick={goFix}>고칠 곳이 {blockedFields.length}개 있어요 · 눌러서 이동</button>}
+    {needsReview && <p className="m-fix o">관리자 확인 뒤 공개돼요</p>}
+    <button className={'m-btn' + (needsReview ? ' amber' : '')} disabled={busy || blockedFields.length > 0}>{busy ? '올리는 중…' : needsReview ? '검토 요청하고 올리기' : label}</button></>
 
   if (mode === 'pick') return <div className="m-screen m-create">
     <TopBar title="새 활동 만들기" back={() => goUp('#/host')} />
@@ -283,14 +348,16 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
     }}>
       <div className="m-quick-head">
         <span className={'m-row-ico f' + categoryTone(category)}><MIcon name={fieldIcon[category] ?? 'sprout'} size={22} /></span>
-        <span><strong>{title}</strong><small>{category} · {difficultyLabel[difficulty]} · {placeKindLabel[placeKind]}</small></span>
+        <span><strong>{title}</strong><small>{category} · {difficultyLabel[difficulty]} · {placeKindLabel[placeKind]}</small>{riskLine(risk.title)}</span>
+        <RiskMark risk={risk.title} name="활동 이름" />
         <button type="button" className="m-link" onClick={() => { setMode('full'); setStep(1) }}>바꾸기</button>
       </div>
-      <PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point); setErrors(e => ({ ...e, place: '' })) }} />
+      <div className="m-risk-box"><PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point); setErrors(e => ({ ...e, place: '' })) }} />
+        <span className="m-risk-at place"><RiskMark risk={risk.place} name="장소" /></span>{riskLine(risk.place)}</div>
       <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
       <PickField name="time" label="시간" icon="clock" value={`${start} ~ ${end} · ${durationLabel(duration)}`} error={errors.time} onOpen={() => setSheet('time')} />
       <SunsetNote date={date} start={start} />
-      <div className="m-field"><span className="m-label">준비물</span>{supplyChips}{err('supplies')}</div>
+      <div className="m-field"><span className="m-label">준비물</span>{supplyChips}{riskLine(risk.supplies)}{err('supplies')}</div>
       <div className="m-field"><span className="m-label">모집 인원 <small>나를 빼고</small></span>
         <div className="m-stepper"><button type="button" aria-label="한 명 줄이기" disabled={capacity <= r.capacityMin} onClick={() => setCapacity(capacity - 1)}>−</button>
           <output name="capacity" aria-live="polite">{capacity}명</output>
@@ -300,14 +367,15 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
       <label className="m-switch"><span><strong>신청 바로 확정</strong><small>{autoApprove ? '빈자리가 있으면 승인 없이 확정돼요' : '신청을 하나씩 보고 승인해요'}</small></span>
         <input type="checkbox" role="switch" checked={autoApprove} onChange={event => setAutoApprove(event.target.checked)} /><i /></label>
       <label className="m-field"><span className="m-label">활동 소개</span>
-        <TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '')} rows={4} maxLength={r.descriptionMax} value={description} onChange={event => setDescription(event.target.value)} />
-        {err('description')}</label>
+        <span className="m-risk-box"><TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '') + riskClass(risk.description)} rows={4} maxLength={r.descriptionMax} value={description} onChange={event => setDescription(event.target.value)} />
+          <span className="m-risk-at"><RiskMark risk={risk.description} name="활동 소개" /></span></span>
+        {riskLine(risk.description)}{err('description')}</label>
       <label className={'m-check box' + (errors.safety ? ' bad' : '')}><input name="safety" type="checkbox" checked={safety} onChange={event => setSafety(event.target.checked)} /><span className="m-box" />
         <span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금이 없고, 사고가 나면 먼저 119에 신고해요.</span></label>
       {err('safety')}
       <p className="m-help">Volink 활동은 공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않아요.</p>
       {message && <div className="m-note bad" role="alert">{message}</div>}
-      <ActionBar><button className="m-btn" disabled={busy}>{busy ? '올리는 중…' : '모집 올리기'}</button></ActionBar>
+      <ActionBar>{postButton('모집 올리기')}</ActionBar>
     </form>}
     {sheets}
   </div>
@@ -324,7 +392,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
           <button type="button" className={kind === 'GENERAL' ? 'on' : ''} aria-pressed={kind === 'GENERAL'} onClick={() => setKind('GENERAL')}>자율 활동</button>
           <button type="button" className={kind === 'INSTITUTION' ? 'on' : ''} aria-pressed={kind === 'INSTITUTION'} onClick={() => setKind('INSTITUTION')}>기관 주관</button></div></div>}
         <label className="m-field"><span className="m-label">활동 이름</span>
-          <TextInput name="title" className={'m-input' + (errors.title ? ' bad' : '')} placeholder="예: 공원 산책로 함께 걷고 줍기" maxLength={r.titleMax} value={title} disabled={locked} onChange={event => setTitle(event.target.value)} enterKeyHint="done" />
+          <span className="m-risk-box"><TextInput name="title" className={'m-input' + (errors.title ? ' bad' : '') + riskClass(risk.title)} placeholder="예: 공원 산책로 함께 걷고 줍기" maxLength={r.titleMax} value={title} disabled={locked} onChange={event => setTitle(event.target.value)} enterKeyHint="done" />
+            <span className="m-risk-at"><RiskMark risk={risk.title} name="활동 이름" /></span></span>{riskLine(risk.title)}
           <span className="m-count">{title.trim().length} / {r.titleMax}</span>{err('title')}</label>
         <div className="m-field"><span className="m-label">분야</span><div className="m-tiles">{categories.map(c =>
           <button type="button" key={c} className={'m-tile' + (category === c ? ' on' : '')} aria-pressed={category === c} disabled={locked} onClick={() => setCategory(c)}><MIcon name={fieldIcon[c] ?? 'sprout'} size={24} />{c}</button>)}</div>
@@ -339,7 +408,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
 
       {step === 2 && <>
         <h2 className="m-h2">어디서, 언제 만나요?</h2>
-        {!locked && <div><PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} /></div>}
+        {!locked && <div className="m-risk-box"><PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point) }} />
+          <span className="m-risk-at place"><RiskMark risk={risk.place} name="장소" /></span>{riskLine(risk.place)}</div>}
         <label className="m-field"><span className="m-label">만나는 곳 <small>선택</small></span>
           <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
@@ -356,12 +426,13 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
             <span className="m-inline"><TextInput className="m-input" placeholder="직접 추가 (10자)" maxLength={10} value={custom} onChange={event => setCustom(event.target.value)} enterKeyHint="done"
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); const name = custom.trim(); if (name && supplies.length < 6 && !supplies.some(s => s.name === name)) { setSupplies([...supplies, { name, provided: false }]); setCustom('') } } }} />
               <button type="button" className="m-btn line sm" disabled={!custom.trim() || supplies.length >= 6} onClick={() => { const name = custom.trim(); if (name && !supplies.some(s => s.name === name)) { setSupplies([...supplies, { name, provided: false }]); setCustom('') } }}>추가</button></span>
-            {err('supplies')}</div>
+            {riskLine(risk.supplies)}{err('supplies')}</div>
         </>}
         <label className="m-field"><span className="m-label">활동 소개</span>
-          <TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '')} rows={5} maxLength={r.descriptionMax} placeholder="무엇을 하는지, 처음 오는 분이 알아야 할 것을 적어 주세요. 연락처는 적지 마세요."
+          <span className="m-risk-box"><TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '') + riskClass(risk.description)} rows={5} maxLength={r.descriptionMax} placeholder="무엇을 하는지, 처음 오는 분이 알아야 할 것을 적어 주세요. 연락처는 적지 마세요."
             value={description} onChange={event => setDescription(event.target.value)} />
-          <span className="m-count">{description.trim().length} / {r.descriptionMax}</span>{err('description')}</label>
+            <span className="m-risk-at"><RiskMark risk={risk.description} name="활동 소개" /></span></span>
+          <span className="m-count">{description.trim().length} / {r.descriptionMax}</span>{riskLine(risk.description)}{err('description')}</label>
       </>}
 
       {step === 3 && <>
@@ -386,7 +457,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
       </>}
       {message && <div className="m-note bad" role="alert">{message}</div>}
       <ActionBar>{step > 1 && <button type="button" className="m-btn line" onClick={() => setStep(step - 1)}>이전</button>}
-        <button className="m-btn" disabled={busy}>{step < 3 ? '다음' : busy ? '저장하는 중…' : locked ? '고친 내용 저장' : editId ? '수정 완료' : '모집 시작하기'}</button></ActionBar>
+        {step < 3 || locked || editId ? <button className="m-btn" disabled={busy}>{step < 3 ? '다음' : busy ? '저장하는 중…' : locked ? '고친 내용 저장' : '수정 완료'}</button> : postButton('모집 시작하기')}</ActionBar>
     </form>}
 
     {sheets}

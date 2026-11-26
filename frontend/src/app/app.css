@@ -1922,3 +1922,28 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .m-quick-head strong { font-size: 15.5px; }
 .m-quick-head small { font-size: 12.5px; color: var(--ink-3); }
 .m-quick-head .m-link { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--m-green-ink); flex: none; }
+/* 2026-11-26 risk words in the field itself: red (cannot post) / amber (admin review), (!) opens a white bubble */
+.m-risk-box { position: relative; display: block; }
+.m-risk-at { position: absolute; right: 10px; top: 14px; z-index: 3; }
+.m-risk-at.place { top: 46px; right: 74px; }
+.m-input.risk-r, .m-input.risk-r:focus { border: 2px solid #d9483b; background: #fff7f6; padding-right: 46px; }
+.m-input.risk-o, .m-input.risk-o:focus { border: 2px solid #e2a33a; background: #fffaf0; padding-right: 46px; }
+.m-risk { position: relative; display: inline-block; }
+.m-risk-ico { width: 26px; height: 26px; border-radius: 50%; border: 0; color: #fff; font-weight: 800; font-size: 15px; line-height: 26px; padding: 0; }
+.m-risk-ico.r { background: #d9483b; }
+.m-risk-ico.o { background: #e2a33a; }
+.m-risk-bubble { position: absolute; right: -6px; top: 36px; z-index: 30; width: 260px; display: flex; flex-direction: column; gap: 4px; padding: 12px 13px; border-radius: 14px;
+  background: #fff; border: 1px solid var(--line); box-shadow: 0 8px 24px rgb(0 0 0 / 16%); font-size: 13px; line-height: 1.5; color: var(--ink); text-align: left; font-weight: 600; }
+.m-risk-bubble::before { content: ''; position: absolute; right: 13px; top: -7px; width: 12px; height: 12px; background: #fff; border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.m-risk-bubble small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.m-risk-line { display: block; margin-top: 6px; font-size: 13px; font-weight: 700; }
+.m-risk-line.r { color: #c23a2e; }
+.m-risk-line.o { color: #a5650a; }
+.m-chip.risk-r { border-color: #d9483b !important; background: #fff7f6 !important; color: #c23a2e !important; }
+.m-chip.risk-o { border-color: #e2a33a !important; background: #fffaf0 !important; color: #a5650a !important; }
+.m-quick-head > .m-risk { flex: none; }
+.m-fix { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; padding: 4px 0; border: 0; background: none; text-align: center; font: inherit; font-size: 13px; font-weight: 700; color: #c23a2e; }
+.m-fix.o { color: #a5650a; }
+.m-action > .m-fix { flex: none; }
+.m-risk-bubble > span { display: flex; flex-direction: column; gap: 2px; font-weight: 500; color: var(--ink-2); }
+.m-risk-bubble > span strong { font-weight: 700; color: var(--ink); }
