@@ -117,6 +117,25 @@ class ExternalRecordIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    void aCertificateRecordJoinsThe1365ListRowOfTheSameDayInsteadOfCountingTwice() throws Exception {
+        // 2026-11-26: a record entered from a 실적확인서 (OCR) keeps the paper's name; the 1365 list names it differently.
+        String member = token(member("GENERAL"));
+        String day = TODAY.minusDays(10).toString();
+        long cert = id(body(perform(post("/api/me/external"), Map.of("title", "어르신 말벗 봉사", "date", day), member).andExpect(status().isCreated())));
+        perform(put("/api/me/external/" + cert + "/certificate"), Map.of("title", "어르신 말벗 봉사", "date", day, "minutes", 240), member).andExpect(status().isOk());
+        // Another day, or other minutes, is another activity.
+        Map<String, Object> listed = Map.of("title", "[노인복지관] 어르신 정서지원 말벗", "date", day, "minutes", 240, "kind", "TIME");
+        Map<String, Object> other = Map.of("title", "[노인복지관] 어르신 정서지원 말벗", "date", TODAY.minusDays(11).toString(), "minutes", 240, "kind", "TIME");
+        Map<String, Object> shorter = Map.of("title", "도서관 정리", "date", day, "minutes", 60, "kind", "TIME");
+        perform(post("/api/me/external/import"), Map.of("items", List.of(listed, other, shorter)), member).andExpect(status().isOk())
+                .andExpect(jsonPath("$.matched").value(1)).andExpect(jsonPath("$.added").value(2));
+        perform(get("/api/me/external/" + cert), null, member).andExpect(jsonPath("$.extKind").value("TIME")).andExpect(jsonPath("$.extMinutes").value(240))
+                .andExpect(jsonPath("$.certified").value(true)).andExpect(jsonPath("$.title").value("어르신 말벗 봉사"));
+        // Read again: still one record for that day and those minutes.
+        perform(post("/api/me/external/import"), Map.of("items", List.of(listed)), member).andExpect(jsonPath("$.added").value(0)).andExpect(jsonPath("$.matched").value(0));
+    }
+
+    @Test
     void labImportSkipsRowsAlreadyThereAndRemindersGoOnce() throws Exception {
         String member = token(member("GENERAL"));
         Map<String, Object> soon = Map.of("title", "도서관 정리 도우미", "date", TODAY.plusDays(1).toString(), "startTime", "10:00", "endTime", "12:00", "labStatus", "승인완료");

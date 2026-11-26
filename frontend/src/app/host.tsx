@@ -59,7 +59,21 @@ const presetSupplies = ['장갑', '집게', '봉투', '물', '모자', '편한 �
 type Supply = { name: string; provided: boolean }
 type Saved = { kind: 'published' | 'review'; activity: LiveActivity }
 
+/** 빠른 모집 (2026-11-26): one tap fills the post; the organizer then picks place, date, time, supplies and people on one page. */
+type Template = { key: string; label: string; title: string; category: string; difficulty: 'EASY' | 'NORMAL' | 'HARD'; placeKind: 'OUTDOOR' | 'INDOOR' | 'MIXED'; duration: number; supplies: string[]; description: string }
+const templates: Template[] = [
+  { key: 'plogging', label: '공원 플로깅', title: '공원 산책로 플로깅 함께해요', category: '환경', difficulty: 'EASY', placeKind: 'OUTDOOR', duration: 120, supplies: ['장갑', '집게', '봉투'],
+    description: '공원 산책로를 천천히 걸으며 쓰레기를 함께 주워요. 집게와 봉투는 나눠 드려요. 처음 오셔도 괜찮아요.' },
+  { key: 'garden', label: '화단 가꾸기', title: '동네 화단 함께 가꿔요', category: '환경', difficulty: 'EASY', placeKind: 'OUTDOOR', duration: 120, supplies: ['장갑', '모자', '물'],
+    description: '동네 화단의 잡초를 뽑고 꽃에 물을 줘요. 장갑은 나눠 드려요. 편한 옷차림으로 오세요.' },
+  { key: 'talk', label: '이웃 말벗', title: '이웃 어르신과 말벗 나눠요', category: '복지', difficulty: 'EASY', placeKind: 'INDOOR', duration: 90, supplies: ['편한 신발'],
+    description: '이웃 어르신들과 이야기를 나누고 간단한 놀이를 함께해요. 밝은 인사만 준비해 주세요.' },
+  { key: 'dog', label: '유기견 산책', title: '보호소 강아지 산책 함께해요', category: '동물', difficulty: 'NORMAL', placeKind: 'OUTDOOR', duration: 120, supplies: ['편한 신발', '물'],
+    description: '보호소 강아지들과 산책을 해요. 처음 오시면 담당자가 줄 잡는 법부터 알려 드려요.' },
+]
+
 // Which step shows each server field error.
+const quickFields = ['place', 'date', 'time', 'duration', 'supplies', 'description', 'capacity', 'safety', 'risk']
 const stepOf: Record<string, number> = { title: 1, category: 1, difficulty: 1, placeKind: 1, activityType: 1, place: 2, meetingPoint: 2, date: 2, time: 2, duration: 2, supplies: 2, description: 2, capacity: 3, safety: 3 }
 
 /**
@@ -101,9 +115,25 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   const [saved, setSaved] = useState<Saved | null>(null)
   // After a new recruitment: once, ask whether to put it in the phone calendar (2026-11-06).
   const [calendarAsk, setCalendarAsk] = useState(true)
-  const [sheet, setSheet] = useState<'date' | 'time' | 'duration' | null>(null)
+  const [sheet, setSheet] = useState<'date' | 'time' | null>(null)
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(Boolean(from || editId))
+  // 2026-11-26: a new post starts from 빠른 모집 (pick) or 직접 만들기 (full); 다시 모집 opens the one-page form.
+  const [mode, setMode] = useState<'pick' | 'quick' | 'full'>(editId ? 'full' : from ? 'quick' : 'pick')
+  const [template, setTemplate] = useState<Template | null>(null)
+  const [past, setPast] = useState<LiveActivity[]>([])
+  useEffect(() => {
+    if (mode !== 'pick') return
+    api<LiveActivity[]>('/api/me/activities').then(list => {
+      const seen = new Set<string>()
+      setPast(list.filter(a => a.status !== 'DELETED' && !seen.has(a.title) && seen.add(a.title)).slice(0, 3))
+    }).catch(() => setPast([]))
+  }, [mode])
+  function applyTemplate(t: Template) {
+    setTemplate(t); setTitle(t.title); setCategory(t.category); setDifficulty(t.difficulty); setPlaceKind(t.placeKind); setDuration(t.duration)
+    setSupplies(t.supplies.map(name => ({ name, provided: false }))); setDescription(t.description); setNewcomer(true); setAutoApprove(true); setErrors({})
+    setMode('quick'); window.scrollTo(0, 0)
+  }
   const canHost = user.organization?.status === 'APPROVED'
 
   // 다시 모집 (from) copies everything but the date; 수정 (editId) loads it all. With applicants only notes change.
@@ -122,9 +152,15 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   }, [from, editId])
 
   const end = clock(minutes(start) + duration)
-  const afterSunset = minutes(end) > minutes(sunset[Number(date.slice(5, 7)) - 1])
   const lengths = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= Math.min(r.durationMax, minutes(r.latestEnd) - minutes(start)); v += 10) out.push(v); return out }, [start])
   useEffect(() => { if (lengths.length && !lengths.includes(duration)) setDuration(lengths[lengths.length - 1]) }, [lengths, duration])
+
+  /** 2026-11-26: the calendar says from when exactly a post may start (24 hours from now). */
+  function leadNote() {
+    const at = new Date(Date.now() + r.minLeadHours * 3_600_000)
+    const text = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Seoul' }).format(at)
+    return `지금부터 ${r.minLeadHours}시간 뒤인 ${text} 이후로 잡을 수 있어요`
+  }
 
   function check(upTo: number): Errors {
     const found: Errors = {}
@@ -172,6 +208,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
         setErrors(found)
         if (found.risk) setMessage(cause.message)
         const back = Math.min(...Object.keys(found).map(key => stepOf[key] ?? 3))
+        if (mode === 'quick' && Object.keys(found).every(key => quickFields.includes(key))) { focusError(found); return }
+        setMode('full')
         setStep(back)
         focusError(found)
       } else setMessage(cause instanceof Error ? cause.message : '저장하지 못했어요.')
@@ -200,8 +238,81 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
 
   const stepTitle = ['기본 정보', '참여 안내', '운영 설정'][step - 1]
   const err = (key: string) => errors[key] && <span className="m-err" role="alert">{errors[key]}</span>
+  const sheets = <>
+    {sheet === 'date' && <DateSheet value={date} first={addDays(today, 1)} last={addDays(today, r.maxDaysAhead)} note={leadNote()} onClose={() => setSheet(null)} onPick={value => { setDate(value); setSheet(null); setErrors(e => ({ ...e, date: '' })) }} />}
+    {sheet === 'time' && <ScheduleSheet date={date} start={start} duration={duration} onClose={() => setSheet(null)} onPick={(value, length) => { setStart(value); setDuration(length); setSheet(null); setErrors(e => ({ ...e, date: '', time: '' })) }} />}
+  </>
+  const supplyChips = <div className="m-chips wrap">{presetSupplies.concat(supplies.filter(s => !presetSupplies.includes(s.name)).map(s => s.name)).map(name => {
+    const item = supplies.find(s => s.name === name)
+    return <button type="button" key={name} className={'m-chip' + (item ? ' on' : '')} aria-pressed={Boolean(item)}
+      onClick={() => setSupplies(item ? supplies.filter(s => s.name !== name) : supplies.length < 6 ? [...supplies, { name, provided: false }] : supplies)}>{name}</button>
+  })}</div>
+
+  if (mode === 'pick') return <div className="m-screen m-create">
+    <TopBar title="새 활동 만들기" back={() => goUp('#/host')} />
+    <div className="m-body">
+      <h2 className="m-h2">어떤 봉사를 열까요?</h2>
+      <p className="m-help">고르면 내용이 채워져요. 장소와 날짜만 정하면 돼요.</p>
+      <div className="m-tpl-grid">{templates.map(t => <button type="button" key={t.key} className="m-tpl" onClick={() => applyTemplate(t)}>
+        <span className={'m-row-ico f' + categoryTone(t.category)}><MIcon name={fieldIcon[t.category] ?? 'sprout'} size={20} /></span>
+        <strong>{t.label}</strong><small>{t.category} · {durationLabel(t.duration)}</small></button>)}</div>
+      <hr className="m-divider" />
+      <button type="button" className="m-start-row" onClick={() => { setMode('full'); setStep(1) }}>
+        <span className="m-row-ico"><MIcon name="edit" size={20} /></span><span><strong>직접 만들기</strong><small>처음부터 하나씩 적어요</small></span><MIcon name="chevron" size={18} /></button>
+      {past.length > 0 && <>
+        <p className="m-sec-label">지난 활동 다시 모집</p>
+        {past.map(a => <a key={a.id} className="m-start-row" href={'#/create?from=' + a.id}>
+          <span className={'m-row-ico f' + categoryTone(a.category)}><MIcon name={fieldIcon[a.category] ?? 'sprout'} size={20} /></span>
+          <span><strong>{a.title}</strong><small>{dayWord(a.date)} · {a.placeName ?? '장소 미정'}</small></span><MIcon name="chevron" size={18} /></a>)}
+      </>}
+    </div>
+  </div>
+
+  if (mode === 'quick') return <div className="m-screen m-create">
+    <TopBar title={from ? '다시 모집하기' : template?.label ?? '빠른 모집'} back={() => from ? goUp('#/host') : setMode('pick')} />
+    {loading ? <Loading /> : <form className="m-body m-form" noValidate onSubmit={event => {
+      event.preventDefault()
+      const found = check(3)
+      setErrors(found)
+      if (Object.keys(found).length) {
+        if (Object.keys(found).every(key => quickFields.includes(key))) focusError(found)
+        else { setMode('full'); setStep(Math.min(...Object.keys(found).map(key => stepOf[key] ?? 3))) }
+        return
+      }
+      submit()
+    }}>
+      <div className="m-quick-head">
+        <span className={'m-row-ico f' + categoryTone(category)}><MIcon name={fieldIcon[category] ?? 'sprout'} size={22} /></span>
+        <span><strong>{title}</strong><small>{category} · {difficultyLabel[difficulty]} · {placeKindLabel[placeKind]}</small></span>
+        <button type="button" className="m-link" onClick={() => { setMode('full'); setStep(1) }}>바꾸기</button>
+      </div>
+      <PlaceField app value={place} meetingPoint={meeting} error={errors.place} onChange={(picked, point) => { setPlace(picked); setMeeting(point); setErrors(e => ({ ...e, place: '' })) }} />
+      <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
+      <PickField name="time" label="시간" icon="clock" value={`${start} ~ ${end} · ${durationLabel(duration)}`} error={errors.time} onOpen={() => setSheet('time')} />
+      <SunsetNote date={date} start={start} />
+      <div className="m-field"><span className="m-label">준비물</span>{supplyChips}{err('supplies')}</div>
+      <div className="m-field"><span className="m-label">모집 인원 <small>나를 빼고</small></span>
+        <div className="m-stepper"><button type="button" aria-label="한 명 줄이기" disabled={capacity <= r.capacityMin} onClick={() => setCapacity(capacity - 1)}>−</button>
+          <output name="capacity" aria-live="polite">{capacity}명</output>
+          <button type="button" aria-label="한 명 늘리기" disabled={capacity >= r.capacityMax} onClick={() => setCapacity(capacity + 1)}>+</button></div>{err('capacity')}</div>
+      <label className="m-switch"><span><strong>처음 오는 분 환영</strong><small>찾기에서 ‘처음 환영’으로 보여요</small></span>
+        <input type="checkbox" role="switch" checked={newcomer} onChange={event => setNewcomer(event.target.checked)} /><i /></label>
+      <label className="m-switch"><span><strong>신청 바로 확정</strong><small>{autoApprove ? '빈자리가 있으면 승인 없이 확정돼요' : '신청을 하나씩 보고 승인해요'}</small></span>
+        <input type="checkbox" role="switch" checked={autoApprove} onChange={event => setAutoApprove(event.target.checked)} /><i /></label>
+      <label className="m-field"><span className="m-label">활동 소개</span>
+        <TextArea name="description" className={'m-input' + (errors.description ? ' bad' : '')} rows={4} maxLength={r.descriptionMax} value={description} onChange={event => setDescription(event.target.value)} />
+        {err('description')}</label>
+      <label className={'m-check box' + (errors.safety ? ' bad' : '')}><input name="safety" type="checkbox" checked={safety} onChange={event => setSafety(event.target.checked)} /><span className="m-box" />
+        <span>높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금이 없고, 사고가 나면 먼저 119에 신고해요.</span></label>
+      {err('safety')}
+      <p className="m-help">Volink 활동은 공식 봉사실적이 아니며 자원봉사 종합보험이 적용되지 않아요.</p>
+      {message && <div className="m-note bad" role="alert">{message}</div>}
+      <ActionBar><button className="m-btn" disabled={busy}>{busy ? '올리는 중…' : '모집 올리기'}</button></ActionBar>
+    </form>}
+    {sheets}
+  </div>
   return <div className="m-screen m-create">
-    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : goUp(editId ? '#/manage/' + editId : '#/host')} />
+    <TopBar title={editId ? '활동 고치기' : from ? '다시 모집하기' : '새 활동 만들기'} back={() => step > 1 ? setStep(step - 1) : !editId && !from ? setMode('pick') : goUp(editId ? '#/manage/' + editId : '#/host')} />
     <div className="m-progress" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label="만들기 단계"><i style={{ width: step * 33.34 + '%' }} /></div>
     {loading ? <Loading /> : <form className="m-body m-form" noValidate onSubmit={event => { event.preventDefault(); next() }}>
       <span className="m-step">{step} / 3 · {stepTitle}</span>
@@ -233,11 +344,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
           <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
           <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
-          <div className="m-two">
-            <PickField name="time" label="시작" icon="clock" value={start} error={errors.time} onOpen={() => setSheet('time')} />
-            <PickField name="duration" label="활동 시간" icon="timer" value={durationLabel(duration)} onOpen={() => setSheet('duration')} />
-          </div>
-          <p className={'m-help' + (afterSunset ? ' warn' : '')}><MIcon name="sun" size={16} />{start} ~ {end} · {afterSunset ? `해 진 뒤(${sunset[Number(date.slice(5, 7)) - 1]} 이후) 끝나서 관리자 확인 후 공개돼요.` : '해 지기 전에 끝나요.'}</p>
+          <PickField name="time" label="시간" icon="clock" value={`${start} ~ ${end} · ${durationLabel(duration)}`} error={errors.time} onOpen={() => setSheet('time')} />
+          <SunsetNote date={date} start={start} />
           <div className="m-field"><span className="m-label">준비물</span>
             <div className="m-chips wrap">{presetSupplies.concat(supplies.filter(s => !presetSupplies.includes(s.name)).map(s => s.name)).map(name => {
               const item = supplies.find(s => s.name === name)
@@ -281,9 +389,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
         <button className="m-btn" disabled={busy}>{step < 3 ? '다음' : busy ? '저장하는 중…' : locked ? '고친 내용 저장' : editId ? '수정 완료' : '모집 시작하기'}</button></ActionBar>
     </form>}
 
-    {sheet === 'date' && <DateSheet value={date} first={addDays(today, 1)} last={addDays(today, r.maxDaysAhead)} onClose={() => setSheet(null)} onPick={value => { setDate(value); setSheet(null); setErrors(e => ({ ...e, date: '' })) }} />}
-    {sheet === 'time' && <TimeSheet value={start} onClose={() => setSheet(null)} onPick={value => { setStart(value); setSheet(null) }} />}
-    {sheet === 'duration' && <DurationSheet value={duration} start={start} options={lengths} onClose={() => setSheet(null)} onPick={value => { setDuration(value); setSheet(null) }} />}
+    {sheets}
   </div>
 }
 
@@ -346,23 +452,57 @@ export function DateSheet({ value, first, last, onPick, onClose, note }: { value
   </Sheet>
 }
 
-export function TimeSheet({ value, onPick, onClose }: { value: string; onPick: (time: string) => void; onClose: () => void }) {
-  const hours = Array.from({ length: 16 }, (_, i) => i + 6)
-  const mins = [0, 10, 20, 30, 40, 50]
-  const [h, setH] = useState(Number(value.slice(0, 2)))
-  const [mm, setMm] = useState(Number(value.slice(3, 5)))
-  const result = clock(Math.min(h * 60 + mm, minutes(r.latestEnd) - r.durationMin))
-  return <Sheet title="시작 시간" onClose={onClose} footer={<><p className="m-help center">{r.earliestStart} ~ {clock(minutes(r.latestEnd) - r.durationMin)} · 10분 단위</p><button type="button" className="m-btn" onClick={() => onPick(result)}>{result} 시작</button></>}>
-    <Wheels>
-      <WheelColumn label="시" items={hours} value={h} render={x => (x < 12 ? '오전 ' : '오후 ') + (x % 12 === 0 ? 12 : x % 12) + '시'} onChange={setH} />
-      <WheelColumn label="분" items={mins} value={mm} render={x => String(x).padStart(2, '0') + '분'} onChange={setMm} />
-    </Wheels>
-  </Sheet>
+const half = (t: number) => (t < 720 ? '오전' : '오후')
+const hour12 = (t: number) => Math.floor(t / 60) % 12 === 0 ? 12 : Math.floor(t / 60) % 12
+const nearest = (list: number[], target: number) => list.reduce((best, t) => Math.abs(t - target) < Math.abs(best - target) ? t : best, list[0])
+
+/** 오전/오후 · 시 · 분 in three wheels over a list of allowed times (minutes of the day); each column only offers what fits. */
+function TimeWheels({ allowed, value, onChange, label }: { allowed: number[]; value: number; onChange: (t: number) => void; label: string }) {
+  const halves = [...new Set(allowed.map(half))]
+  const inHalf = allowed.filter(t => half(t) === half(value))
+  const hours = [...new Set(inHalf.map(hour12))]
+  const mins = inHalf.filter(t => hour12(t) === hour12(value)).map(t => t % 60)
+  return <Wheels>
+    <WheelColumn label={label + ' 오전/오후'} items={halves} value={half(value)} onChange={h => onChange(nearest(allowed.filter(t => half(t) === h), value + (h === '오후' ? 720 : -720)))} />
+    <WheelColumn label={label + ' 시'} items={hours} value={hour12(value)} render={h => h + '시'} onChange={h => onChange(nearest(inHalf.filter(t => hour12(t) === h), value))} />
+    <WheelColumn label={label + ' 분'} items={mins} value={value % 60} render={m => String(m).padStart(2, '0') + '분'}
+      onChange={m => onChange(inHalf.find(t => hour12(t) === hour12(value) && t % 60 === m) ?? value)} />
+  </Wheels>
 }
 
-export function DurationSheet({ value, start, options, onPick, onClose }: { value: number; start: string; options: number[]; onPick: (minutes: number) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState(value)
-  return <Sheet title="활동 시간" onClose={onClose} footer={<><p className="m-help center">{start} 시작 → <strong>{clock(minutes(start) + draft)} 종료</strong></p><button type="button" className="m-btn" onClick={() => onPick(draft)}>{durationLabel(draft)}</button></>}>
-    <Wheels><WheelColumn label="활동 시간" items={options} value={options.includes(draft) ? draft : options[options.length - 1]} render={x => durationLabel(x)} onChange={setDraft} /></Wheels>
+/** The month's sunset (same table as the server's RiskClassifier): an activity that starts after it goes to review. */
+export function sunsetOf(date: string) { return sunset[Number(date.slice(5, 7)) - 1] }
+
+/** One line under the time: before sunset, or after it (review). Ending after sunset is fine (2026-11-26). */
+export function SunsetNote({ date, start }: { date: string; start: string }) {
+  const late = minutes(start) > minutes(sunsetOf(date))
+  return <p className={'m-help' + (late ? ' warn' : '')}><MIcon name="sun" size={16} />{late ? `일몰(${sunsetOf(date)}) 이후 활동으로 관리자 검토 후 승인될 예정이에요.` : `일몰(${sunsetOf(date)}) 전에 시작해요.`}</p>
+}
+
+/**
+ * 2026-11-26: start and end in one sheet (tabs 활동 시작 / 활동 종료, one wheel). The start is free in 06:00~21:30
+ * and keeps the length; the end only turns within 30 min ~ 3 h after the start (and by 22:00); the length is shown.
+ */
+export function ScheduleSheet({ date, start, duration, onPick, onClose }: { date: string; start: string; duration: number; onPick: (start: string, duration: number) => void; onClose: () => void }) {
+  const latestStart = minutes(r.latestEnd) - r.durationMin
+  const [tab, setTab] = useState<'start' | 'end'>('start')
+  const [from, setFrom] = useState(Math.min(minutes(start), latestStart))
+  const room = (at: number) => Math.min(r.durationMax, minutes(r.latestEnd) - at)
+  // The length the person chose; a late start only trims what is shown (moving back gives it back).
+  const [want, setLength] = useState(duration)
+  const length = Math.min(want, room(from))
+  const starts = useMemo(() => { const out: number[] = []; for (let t = minutes(r.earliestStart); t <= latestStart; t += 10) out.push(t); return out }, [latestStart])
+  const ends = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= room(from); v += 10) out.push(from + v); return out }, [from])
+  const moveStart = (t: number) => setFrom(t)
+  return <Sheet title="시간" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => onPick(clock(from), length)}>이 시간으로 할게요</button>}>
+    <div className="m-seg wide m-time-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected={tab === 'start'} className={tab === 'start' ? 'on' : ''} onClick={() => setTab('start')}><small>활동 시작</small><strong>{clock(from)}</strong></button>
+      <button type="button" role="tab" aria-selected={tab === 'end'} className={tab === 'end' ? 'on' : ''} onClick={() => setTab('end')}><small>활동 종료</small><strong>{clock(from + length)}</strong></button>
+    </div>
+    {tab === 'start'
+      ? <TimeWheels key="start" label="활동 시작" allowed={starts} value={from} onChange={moveStart} />
+      : <TimeWheels key="end" label="활동 종료" allowed={ends} value={from + length} onChange={t => setLength(t - from)} />}
+    <p className="m-time-sum">활동 시간 <strong>{durationLabel(length)}</strong></p>
+    <SunsetNote date={date} start={clock(from)} />
   </Sheet>
 }

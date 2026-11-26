@@ -122,7 +122,7 @@ public class ActivityService {
         if (text.length() < 20 || text.length() > 2000) errors.put("description", "활동 소개는 20~2000자로 적어 주세요.");
         if (meeting.length() > 100) errors.put("meetingPoint", "만나는 곳은 100자 이내로 적어 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
-        RiskClassifier.Result result = risk.classify((String) row.get("title"), text, (String) row.get("category"), (LocalDateTime) row.get("ends_at"), placeReview(((Number) row.get("place_id")).longValue()));
+        RiskClassifier.Result result = risk.classify((String) row.get("title"), text, (String) row.get("category"), (LocalDateTime) row.get("starts_at"), placeReview(((Number) row.get("place_id")).longValue()));
         if ("BLOCKED".equals(result.level())) throw blocked(result);
         String from = (String) row.get("status");
         String status = "REVIEW".equals(result.level()) ? "DRAFT" : from;
@@ -230,7 +230,7 @@ public class ActivityService {
                 .map(supply -> Map.<String, Object>of("name", ActivityRules.trim(supply.name()), "provided", Boolean.TRUE.equals(supply.provided()))).toList();
         // Supply names are checked for risky words too (e.g. a ladder to bring).
         String supplyText = supplies.stream().map(supply -> " " + supply.get("name")).reduce("", String::concat);
-        RiskClassifier.Result result = risk.classify(title, description + supplyText, category, times[0].endsAt(), placeReview);
+        RiskClassifier.Result result = risk.classify(title, description + supplyText, category, times[0].startsAt(), placeReview);
         if ("BLOCKED".equals(result.level())) throw blocked(result);
 
         String status = "LOW".equals(result.level()) ? "RECRUITING" : "DRAFT";

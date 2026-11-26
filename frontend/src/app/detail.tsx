@@ -16,7 +16,7 @@ import type { Phase } from '../checkin'
 import { durationLabel } from '../create'
 import { activityRules as r } from '../rules'
 import { addToCalendar, difficultyLabel, fieldIcon, isNewcomer, joinable, placeKindLabel, seatsLeft } from './cards'
-import { DateSheet, DurationSheet, TimeSheet } from './host'
+import { DateSheet, ScheduleSheet, SunsetNote } from './host'
 import { NewsEntry, NewsScreen } from './news'
 import type { Thread } from './news'
 import { RollCall } from './rollcall'
@@ -773,20 +773,18 @@ function RescheduleSheet({ activity, busy, onClose, onSend }: { activity: LiveAc
   const [time, setTime] = useState(activity.startTime)
   const [duration, setDuration] = useState(activity.durationMinutes)
   const [reason, setReason] = useState('')
-  const [pick, setPick] = useState<'date' | 'time' | 'duration' | null>(null)
+  const [pick, setPick] = useState<'date' | 'time' | null>(null)
   const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
-  const lengths: number[] = []
-  for (let v = r.durationMin; v <= Math.min(r.durationMax, toMin(r.latestEnd) - toMin(time)); v += 10) lengths.push(v)
   const same = date === activity.date && time === activity.startTime && duration === activity.durationMinutes
   return <Sheet title="일정 바꾸기" onClose={onClose} footer={<button className="m-btn" disabled={busy || same || reason.trim().length < 2} onClick={() => onSend({ date, time, durationMinutes: duration, reason: reason.trim() })}>바꾸고 알리기</button>}>
     <div className="m-note warm"><strong>한 번만 바꿀 수 있어요</strong>확정된 사람은 그대로 참가로 남고, 모두에게 알림이 가요. 시간이 안 맞는 사람은 취소할 수 있어요.</div>
     <p className="m-help">지금: {dayWord(activity.date)} {activity.startTime} · {durationLabel(activity.durationMinutes)}</p>
     <PickField label="새 날짜" icon="calendar" value={dayWord(date)} onOpen={() => setPick('date')} />
-    <div className="m-two"><PickField label="시작" icon="clock" value={time} onOpen={() => setPick('time')} /><PickField label="활동 시간" icon="timer" value={durationLabel(duration)} onOpen={() => setPick('duration')} /></div>
+    <PickField label="새 시간" icon="clock" value={`${time} ~ ${String(Math.floor((toMin(time) + duration) / 60)).padStart(2, '0')}:${String((toMin(time) + duration) % 60).padStart(2, '0')} · ${durationLabel(duration)}`} onOpen={() => setPick('time')} />
+    <SunsetNote date={date} start={time} />
     <label className="m-field"><span className="m-label">바꾸는 이유 <small>참가자에게 보여요</small></span>
       <TextInput className="m-input" maxLength={200} value={reason} placeholder="예: 장소 사정으로 오후로 옮겨요" onChange={event => setReason(event.target.value)} enterKeyHint="done" /></label>
     {pick === 'date' && <DateSheet value={date} first={shift(1)} last={shift(r.maxDaysAhead)} onClose={() => setPick(null)} onPick={value => { setDate(value); setPick(null) }} />}
-    {pick === 'time' && <TimeSheet value={time} onClose={() => setPick(null)} onPick={value => { setTime(value); setPick(null) }} />}
-    {pick === 'duration' && <DurationSheet value={duration} start={time} options={lengths} onClose={() => setPick(null)} onPick={value => { setDuration(value); setPick(null) }} />}
+    {pick === 'time' && <ScheduleSheet date={date} start={time} duration={duration} onClose={() => setPick(null)} onPick={(value, length) => { setTime(value); setDuration(length); setPick(null) }} />}
   </Sheet>
 }

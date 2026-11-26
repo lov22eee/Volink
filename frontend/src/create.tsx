@@ -18,7 +18,7 @@ const r = activityRules
 const toMinutes = (time: string) => { const [h, m] = time.split(':').map(Number); return h * 60 + m }
 const toTime = (minutes: number) => String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0')
 const latestStart = toMinutes(r.latestEnd) - r.durationMin
-/** Approximate mid-month sunset (same table as the server's RiskClassifier); ending later sends the activity to review. */
+/** Approximate mid-month sunset (same table as the server's RiskClassifier); starting after it sends the activity to review (2026-11-26: ending after it is fine). */
 const sunset = ['17:40', '18:10', '18:40', '19:05', '19:30', '19:50', '19:50', '19:25', '18:45', '18:00', '17:25', '17:15']
 
 function seoulToday() {
@@ -38,7 +38,7 @@ function friendlyDate(date: string) {
 type WordHit = { keyword: string; level: 'BLOCKED' | 'REVIEW'; reason: string }
 type WordCheck = { title: WordHit[]; description: WordHit[]; supplies: WordHit[] }
 type FieldStatus = { level: 'BLOCKED' | 'REVIEW'; reasons: string[] }
-const safetyText = '높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없어요. 어르신·아이 돌봄 같은 활동, 어떤 곳인지 알 수 없는 장소, 해가 진 뒤 끝나는 활동은 관리자가 확인한 뒤 공개돼요.'
+const safetyText = '높은 곳·물속·전기·가스 작업, 의료행위, 금전 모금은 열 수 없어요. 어르신·아이 돌봄 같은 활동, 어떤 곳인지 알 수 없는 장소, 일몰 이후에 시작하는 활동은 관리자가 확인한 뒤 공개돼요.'
 
 /** Risk words of one field → the strongest level, with each word and why. */
 function fromWords(hits: WordHit[]): FieldStatus | null {
@@ -137,7 +137,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
   useEffect(() => { if (!durations.includes(duration)) setDuration(durations[durations.length - 1] ?? r.durationMin) }, [durations, duration])
   const end = toTime(toMinutes(start) + duration)
   const dates = useMemo(() => Array.from({ length: r.maxDaysAhead }, (_, i) => addDays(today, i + 1)), [today])
-  const afterSunset = toMinutes(end) > toMinutes(sunset[Number(date.slice(5, 7)) - 1])
+  const afterSunset = toMinutes(start) > toMinutes(sunset[Number(date.slice(5, 7)) - 1])
   // Per-field status shown under each field: risk words come from the server while typing (nothing is saved).
   const [words, setWords] = useState<WordCheck>({ title: [], description: [], supplies: [] })
   const supplyNames = supplies.map(item => item.name).join('|')
@@ -154,7 +154,7 @@ export default function CreateActivity({ user, ready, editId }: { user: User | n
     title: fromWords(words.title),
     category: null,
     place: place?.placeClass === 'REVIEW' ? { level: 'REVIEW', reasons: ['지도에서 직접 찍은 길·골목·공터는 어떤 곳인지 알 수 없어 관리자가 확인해요. 근처의 이름 있는 장소를 고르면 바로 공개돼요.'] } as FieldStatus : null,
-    schedule: afterSunset ? { level: 'REVIEW', reasons: ['해가 진 뒤(' + sunset[Number(date.slice(5, 7)) - 1] + ' 이후) 끝나는 활동은 관리자가 확인해요.'] } as FieldStatus : null,
+    schedule: afterSunset ? { level: 'REVIEW', reasons: ['일몰(' + sunset[Number(date.slice(5, 7)) - 1] + ') 이후 활동으로 관리자 검토 후 승인될 예정이에요.'] } as FieldStatus : null,
     description: fromWords(words.description),
     supplies: fromWords(words.supplies),
   }

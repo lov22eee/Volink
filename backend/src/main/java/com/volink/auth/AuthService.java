@@ -144,14 +144,23 @@ public class AuthService {
     public Session refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) throw unauthenticated();
         String hash = TokenService.hash(refreshToken);
-        List<Long> owners = jdbc.queryForList("""
-                SELECT user_id FROM refresh_tokens
-                WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ? FOR UPDATE
-                """, Long.class, hash, LocalDateTime.now(clock));
-        if (owners.isEmpty()) throw unauthenticated();
-        jdbc.update("UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ?", LocalDateTime.now(clock), hash);
-        AuthUser user = findById(owners.get(0));
-        return new Session(user, tokens.accessToken(user), issueRefresh(user.id()));
+        LocalDateTime now = LocalDateTime.now(clock);
+        Map<String, Object> row = jdbc.queryForList("""
+                SELECT id, user_id, revoked_at, replaced_by FROM refresh_tokens WHERE token_hash = ? AND expires_at > ? FOR UPDATE
+                """, hash, now).stream().findFirst().orElseThrow(AuthService::unauthenticated);
+        long id = ((Number) row.get("id")).longValue();
+        if (row.get("revoked_at") != null) {
+            // V43 (2026-11-26): rotated before, but the app never got (used) the replacement — the answer was lost. Accepted
+            // once more by taking that unused replacement back. A logout, or a replacement already used, still refuses it.
+            if (row.get("replaced_by") == null) throw unauthenticated();
+            long next = ((Number) row.get("replaced_by")).longValue();
+            if (jdbc.update("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", now, next) == 0) throw unauthenticated();
+        } else jdbc.update("UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?", now, id);
+        AuthUser user = findById(((Number) row.get("user_id")).longValue());
+        String token = issueRefresh(user.id());
+        Long newId = jdbc.queryForObject("SELECT id FROM refresh_tokens WHERE token_hash = ?", Long.class, TokenService.hash(token));
+        jdbc.update("UPDATE refresh_tokens SET replaced_by = ? WHERE id = ?", newId, id);
+        return new Session(user, tokens.accessToken(user), token);
     }
 
     public void logout(String refreshToken) {

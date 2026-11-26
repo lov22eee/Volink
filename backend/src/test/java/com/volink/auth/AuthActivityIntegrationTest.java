@@ -150,9 +150,12 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
         Cookie first = cookie(login);
         MvcResult refreshed = mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty()).andReturn();
-        mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isUnauthorized());
         Cookie second = cookie(refreshed);
-        mvc.perform(post("/api/auth/logout").cookie(second)).andExpect(status().isNoContent());
+        // Rotation: once the new token is used, the first one is refused (V43: only while the new one is unused is it taken back).
+        Cookie third = cookie(mvc.perform(post("/api/auth/refresh").cookie(second)).andExpect(status().isOk()).andReturn());
+        mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/logout").cookie(third)).andExpect(status().isNoContent());
+        mvc.perform(post("/api/auth/refresh").cookie(third)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/refresh").cookie(second)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/me").header("Authorization", "Bearer not-a-token")).andExpect(status().isUnauthorized());
     }
@@ -250,13 +253,19 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
     }
 
     @Test
-    void activitiesEndingAfterSunsetGoToReview() throws Exception {
+    void activitiesStartingAfterSunsetGoToReview() throws Exception {
         Map<String, Object> evening = activity("저녁 공원 정리 모임", "공원 산책로 주변의 가벼운 쓰레기를 함께 정리합니다.");
         evening.put("time", "19:30");
         evening.put("durationMinutes", 60);
         perform(post("/api/activities"), evening, token(member("GENERAL"))).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.riskLevel").value("REVIEW"))
-                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("해가 진 뒤")));
+                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("일몰")));
+        // 2026-11-26: starting in daylight and ending after sunset is opened at once.
+        Map<String, Object> afternoon = activity("오후 공원 정리 모임", "공원 산책로 주변의 가벼운 쓰레기를 함께 정리합니다.");
+        afternoon.put("time", "16:00");
+        afternoon.put("durationMinutes", 180);
+        perform(post("/api/activities"), afternoon, token(member("GENERAL"))).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.riskLevel").value("LOW"));
     }
 
     @Test

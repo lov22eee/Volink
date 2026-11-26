@@ -92,9 +92,14 @@ export function MyScreen({ user, actions }: { user: User; actions: ReactNode }) 
   // 1365 part: the imported official total; without one (직접 남기기), the hours on the certificates entered.
   const extRecords = useRecords()
   const certs = (extRecords ?? []).filter(r => r.certified)
-  const extMinutes = ext ? ext.totalMinutes : certs.reduce((sum, r) => sum + (r.certMinutes ?? 0), 0)
-  const extCount = ext ? ext.count : certs.length
-  const extNote = ext ? ext.fetchedAt.slice(5, 10).replace('-', '/') + ' 가져옴' : certs.length ? '실적확인서 기준' : '연결 전'
+  // 2026-11-26: 실적확인서 hours are added to the imported 1365 total too, unless that activity is already in the imported
+  // 1365 list (a list row of the same day, and the same minutes for a 시간인증) — then the total already has it.
+  const listed = (extRecords ?? []).filter(r => r.extKind)
+  const inList = (r: (typeof certs)[number]) => !!r.extKind || listed.some(x => x.id !== r.id && x.date === (r.certDate ?? r.date) && (x.extKind !== 'TIME' || x.extMinutes == null || x.extMinutes === r.certMinutes))
+  const extraCerts = ext ? certs.filter(r => !inList(r)) : certs
+  const extMinutes = (ext ? ext.totalMinutes : 0) + extraCerts.reduce((sum, r) => sum + (r.certMinutes ?? 0), 0)
+  const extCount = ext ? (ext.count != null ? ext.count + extraCerts.length : undefined) : certs.length
+  const extNote = ext ? ext.fetchedAt.slice(5, 10).replace('-', '/') + ' 가져옴' + (extraCerts.length ? ` + 확인서 ${extraCerts.length}건` : '') : certs.length ? '실적확인서 기준' : '연결 전'
   const allMinutes = volinkMinutes + extMinutes
   const ready = records !== null && hosted !== null && ext !== undefined && (ext !== null || extRecords !== null)
   const motion = useTimeMotion(ready ? { ext: extMinutes, volink: volinkMinutes } : null)

@@ -63,12 +63,26 @@ class AppClientIntegrationTest extends ApiTestSupport {
         String next = renewed.path("refreshToken").asText();
         assertThat(next).isNotBlank().isNotEqualTo(refresh);
         assertThat(renewed.path("accessToken").asText()).isNotBlank();
-        // Single use, then logout revokes the new one.
+        // V43 (2026-11-26): the answer may not reach the phone (asleep, weak Wi-Fi). While the replacement has never been used,
+        // the old token works once more and the unused replacement is taken back.
+        String lost = next;
+        next = json.readTree(mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("refreshToken", refresh)))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("refreshToken").asText();
+        assertThat(next).isNotBlank().isNotEqualTo(lost);
+        mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("refreshToken", lost))))
+                .andExpect(status().isUnauthorized());
+        // Once the replacement is used, the old token is refused (single use still holds).
+        String used = next;
+        next = json.readTree(mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("refreshToken", used)))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("refreshToken").asText();
         mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("refreshToken", refresh))))
                 .andExpect(status().isUnauthorized());
+        // Logout revokes the current one, and the one before it cannot bring the session back.
         mvc.perform(post("/api/auth/logout").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("refreshToken", next))))
                 .andExpect(status().isNoContent());
         mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("refreshToken", next))))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/refresh").header(HttpHeaders.ORIGIN, APP).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("refreshToken", used))))
                 .andExpect(status().isUnauthorized());
 
         // The site still gets the cookie and no token in the body.

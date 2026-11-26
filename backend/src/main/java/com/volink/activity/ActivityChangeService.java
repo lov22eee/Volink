@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Week 6 (2026-11-04): the organizer cancels the whole activity or moves its date/time once.
  * Everyone still holding or waiting for a place is told in the app. Rules (docs/rules.md):
  * cancel = before the start, reason required; reschedule = once, while RECRUITING, at least 24 h before the current start,
- * the new time follows the create rules (24 h ~ 60 days ahead, 06:00 ~ 22:00, 30 ~ 180 min) and must not end after sunset.
+ * the new time follows the create rules (24 h ~ 60 days ahead, 06:00 ~ 22:00, 30 ~ 180 min) and must not start after sunset.
  * Confirmed people keep their place after a reschedule; they can cancel without asking if the new time does not suit them.
  */
 @Service
@@ -129,8 +129,8 @@ public class ActivityChangeService {
                 errors.put("date", "지금 일정과 같아요. 바꿀 날짜나 시간을 골라 주세요.");
         }
         if (errors.isEmpty() && "LOW".equals(row.get("risk_level"))
-                && risk.classify("", "", "", endsAt, null).reasons().stream().anyMatch(text -> text.contains("해가 진 뒤")))
-            errors.put("time", "해가 진 뒤 끝나는 시간으로는 바꿀 수 없어요. 더 일찍 끝나게 정해 주세요.");
+                && RiskClassifier.afterSunset(startsAt))
+            errors.put("time", "일몰 이후에 시작하는 시간으로는 바꿀 수 없어요. 더 일찍 시작하게 정해 주세요.");
         if (!errors.isEmpty()) throw ApiException.validation(errors);
 
         jdbc.update("UPDATE activities SET starts_at = ?, ends_at = ?, reschedule_count = reschedule_count + 1 WHERE id = ?", startsAt, endsAt, id);

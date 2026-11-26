@@ -135,6 +135,10 @@ public class ExternalRecordService {
         if (!errors.isEmpty()) throw ApiException.validation(errors);
         List<Map<String, Object>> same = jdbc.queryForList(
                 "SELECT id, ext_kind FROM external_records WHERE user_id = ? AND DATE(starts_at) = ? AND title = ? ORDER BY id LIMIT 1 FOR UPDATE", userId, day, title);
+        // 2026-11-26: a record entered from a 실적확인서 (OCR) has the paper's name, which often differs from the 1365 list.
+        // The same day (and the same minutes for a 시간인증) is that one: it joins the list row (or is already it) instead of counting twice.
+        if (same.isEmpty()) same = jdbc.queryForList("SELECT id, ext_kind FROM external_records WHERE user_id = ? AND cert_at IS NOT NULL"
+                + " AND DATE(COALESCE(cert_date, starts_at)) = ? AND (? IS NULL OR cert_minutes = ?) ORDER BY id LIMIT 1 FOR UPDATE", userId, day, minutes, minutes);
         if (!same.isEmpty()) {
             if (same.get(0).get("ext_kind") != null) return 0;
             jdbc.update("UPDATE external_records SET status = 'ATTENDED', reflected_at = COALESCE(reflected_at, ?), ext_minutes = ?, ext_kind = ? WHERE id = ?",
