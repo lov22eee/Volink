@@ -1903,3 +1903,22 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .ap-sec { margin: 0; padding: 14px 4px 4px; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
 .ap-results button > svg { flex: none; color: var(--ink-3); }
 .ap-map-pane .ap-hint { bottom: 24px; }
+.kakao-me { display: block; width: 16px; height: 16px; border-radius: 50%; background: #2b6fd6; border: 3px solid #fff; box-shadow: 0 0 0 8px rgb(43 111 214 / 18%), 0 1px 4px rgb(0 0 0 / 30%); }
+/* 2026-11-26 빠른 모집: templates, 직접 만들기, 다시 모집, one-page form */
+.m-tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.m-tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 108px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; font: inherit; color: var(--ink); }
+.m-tpl:active { border-color: var(--m-green); background: #f1f7f3; }
+.m-tpl strong { font-size: 15.5px; }
+.m-tpl small { font-size: 12.5px; color: var(--ink-3); }
+.m-divider { border: 0; border-top: 1px solid var(--line); margin: 20px 0 12px; }
+.m-start-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; margin-top: 8px; border: 1px solid var(--line); border-radius: 16px; background: #fff; text-align: left; font: inherit; color: var(--ink); text-decoration: none; }
+.m-start-row > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.m-start-row strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-start-row small { font-size: 12.5px; color: var(--ink-3); }
+.m-start-row > svg { color: var(--ink-3); flex: none; }
+.m-sec-label { margin: 20px 0 0; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.m-quick-head { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); }
+.m-quick-head > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.m-quick-head strong { font-size: 15.5px; }
+.m-quick-head small { font-size: 12.5px; color: var(--ink-3); }
+.m-quick-head .m-link { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--m-green-ink); flex: none; }

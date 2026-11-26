@@ -45,6 +45,17 @@ async function pickDay(page: Page, field: string | RegExp, date: string) {
   await expect(sheet).toHaveCount(0)
 }
 
+/** The suggested nickname is random and may already be taken in a busy test database: ask for another one. */
+async function agreeNickname(page: Page) {
+  const sheet = page.getByRole('dialog', { name: '모집글에 보일 닉네임' })
+  for (let i = 0; i < 5; i++) {
+    await sheet.getByRole('button', { name: '동의하고 이 닉네임으로 시작' }).click()
+    if (await sheet.waitFor({ state: 'hidden', timeout: 3000 }).then(() => true, () => false)) return
+    await sheet.getByRole('button', { name: '닉네임 새로 추천받기' }).click()
+  }
+  throw new Error('no free nickname')
+}
+
 async function login(page: Page, email: string) {
   await page.goto('/#/login')
   await page.getByLabel('이메일').fill(email)
@@ -210,14 +221,54 @@ test('signing up again with the same e-mail: the same password just logs in, ano
   await expect(page).not.toHaveURL(/#\/signup/)
 })
 
+test('빠른 모집: a template fills the post, the organizer picks the place and posts it from one page', async ({ page }) => {
+  const organizer = await signupByApi(page, '앱 빠른 모집')
+  await login(page, organizer)
+  await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '찾기' }).click()
+  await page.getByRole('link', { name: '모집하기' }).click()
+  await agreeNickname(page)
+  await page.getByRole('link', { name: '새 활동 만들기' }).click()
+  await page.getByRole('button', { name: /공원 플로깅/ }).click()
+  await expect(page.getByText('공원 산책로 플로깅 함께해요')).toBeVisible()
+  await expect(page.getByRole('button', { name: '집게', pressed: true })).toBeVisible()
+  await expect(page.getByRole('switch', { name: /신청 바로 확정/ })).toBeChecked()
+  // Nothing typed: without a place it says what is missing.
+  await page.getByRole('button', { name: '모집 올리기' }).click()
+  await expect(page.getByText('장소를 골라 주세요.')).toBeVisible()
+  // The time sheet: an end only within 30 min ~ 3 h of the start; a start after sunset says it goes to review.
+  await page.getByRole('button', { name: /^시간/ }).click()
+  const sheet = page.getByRole('dialog', { name: '시간' })
+  await sheet.getByRole('tab', { name: /활동 종료/ }).click()
+  await expect(sheet.getByRole('option', { name: '오후 1:00' })).toBeVisible()
+  await expect(sheet.getByRole('option', { name: '오후 1:10' })).toHaveCount(0)
+  await sheet.getByRole('tab', { name: /활동 시작/ }).click()
+  await sheet.getByRole('option', { name: '오후 8:00' }).click()
+  await expect(sheet.getByText(/이후 활동으로 관리자 검토 후 승인될 예정이에요/)).toBeVisible()
+  await sheet.getByRole('option', { name: '오후 2:00' }).click()
+  await expect(sheet.getByText(/전에 시작해요/)).toBeVisible()
+  await sheet.getByRole('button', { name: '이 시간으로 할게요' }).click()
+  await page.getByRole('button', { name: /장소를 골라/ }).click()
+  const dialog = page.getByRole('dialog', { name: '장소 고르기' })
+  await dialog.getByLabel('장소 이름이나 주소').fill('옥정')
+  await dialog.getByRole('list', { name: '추천 장소' }).getByRole('button', { name: /옥정중앙공원/ }).click()
+  await dialog.getByRole('button', { name: '옥정중앙공원으로 정하기' }).click()
+  await page.locator('input[name=safety]').check({ force: true })
+  await page.getByRole('button', { name: '모집 올리기' }).click()
+  await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
+  await expect(page.getByText(/14:00 · 2시간/)).toBeVisible()
+})
+
 test('an organizer creates in three steps, a member applies, the organizer approves, and moves the date, and the member is told', async ({ page, browser }) => {
   const organizer = await signupByApi(page, '앱 모집자')
   await login(page, organizer)
   await page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link', { name: '찾기' }).click()
   await page.getByRole('link', { name: '모집하기' }).click()
   // Week 7 (공개 이름 통일): without a community nickname, one is chosen first; it is shown instead of the name.
-  await page.getByRole('button', { name: '동의하고 이 닉네임으로 시작' }).click()
+  await agreeNickname(page)
   await page.getByRole('link', { name: '새 활동 만들기' }).click()
+  // 2026-11-26: a new post starts from 빠른 모집 templates; 직접 만들기 opens the three steps.
+  await expect(page.getByRole('button', { name: /공원 플로깅/ })).toBeVisible()
+  await page.getByRole('button', { name: /직접 만들기/ }).click()
   await page.getByRole('button', { name: '다음' }).click()
   await expect(page.getByText(/활동 이름은 5~100자/)).toBeVisible()
   await page.locator('input[name=title]').fill('앱에서 만든 공원 정리 모임')
@@ -263,9 +314,11 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await expect(page.getByText('참가 확정').first()).toBeVisible()
   await page.getByRole('button', { name: '활동 메뉴' }).click()
   await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
-  await page.getByRole('button', { name: /^시작/ }).click()
-  await page.getByRole('option', { name: '오후 2시' }).click()
-  await page.getByRole('button', { name: /14:00 시작/ }).click()
+  // One sheet with 활동 시작 / 활동 종료 (2026-11-26): the start keeps the length.
+  await page.getByRole('button', { name: /^새 시간/ }).click()
+  await page.getByRole('option', { name: '오후 2:00' }).click()
+  await expect(page.getByRole('tab', { name: /활동 시작 14:00/ })).toBeVisible()
+  await page.getByRole('button', { name: '이 시간으로 할게요' }).click()
   await page.getByPlaceholder(/장소 사정/).fill('오전에 행사가 있어 오후로 옮겨요')
   await page.getByRole('button', { name: '바꾸고 알리기' }).click()
   await expect(page.getByText(/14:00/).first()).toBeVisible()

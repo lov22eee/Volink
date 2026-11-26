@@ -121,6 +121,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
   const [locating, setLocating] = useState(false)
   const recent = useRecentPlaces(Boolean(app))
   const [searched, setSearched] = useState(false)
+  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null)
 
   async function startHere() {
     setAsking(false)
@@ -129,6 +130,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     setLocating(false)
     if (!here) { remember(false); setMessage('위치를 확인하지 못했어요. 장소 이름으로 검색해 주세요.'); return }
     remember(true)
+    setHere(here)
     setCentre(here)
     if (kakaoEnabled) run(() => api<SearchResult>(`/api/places/nearby?lat=${here.lat.toFixed(6)}&lng=${here.lng.toFixed(6)}`), '내 주변에서 고를 수 있는 장소를 찾지 못했습니다. 장소 이름으로 검색해 보세요.', here)
     else run(() => searchPlaces('공원', here), '', here)
@@ -248,7 +250,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       {/* 2026-11-26: the map on top and the list under it, on one screen (recent places, places around me, search results). */}
       <div className={'ap-place-body split' + (hasMap ? '' : ' nomap')}>
         {hasMap && <div className="ap-map-pane">
-          <PinMap noCentrePin centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose}
+          <PinMap noCentrePin me={here} centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose}
             onNearby={point => { setSuggest([]); setSearched(true); run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) choose(spot) }) }} />
           <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span>
         </div>}
@@ -316,9 +318,11 @@ const keyOf = (place: PlaceResult) => place.kakaoId ?? 'p' + place.placeId
  * One click on the map moves there and finds the places around it; clicking a pin picks that place.
  * Double-click stays Kakao's zoom.
  */
-function PinMap({ centre, chosen, items, hovered, onChoose, onNearby, noCentrePin }: {
+function PinMap({ centre, chosen, items, hovered, onChoose, onNearby, noCentrePin, me }: {
   /** App (2026-11-06): no fixed pin in the middle; a pin shows only where the person tapped or chose. */
   noCentrePin?: boolean
+  /** Where I am (a blue dot, 2026-11-26), when the position was allowed. Never saved. */
+  me?: { lat: number; lng: number } | null
   centre: { lat: number; lng: number } | null; chosen: PlaceResult | null; items: PlaceResult[]; hovered: string | null
   onChoose: (place: PlaceResult) => void; onNearby: (point: { lat: number; lng: number }) => void
 }) {
@@ -380,6 +384,15 @@ function PinMap({ centre, chosen, items, hovered, onChoose, onNearby, noCentrePi
       drawn.current.push(new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(Number(item.latitude), Number(item.longitude)), content, yAnchor: 1, clickable: true, zIndex: big ? 4 : 1 }))
     }
   }, [items, hovered, chosen, ready])
+  useEffect(() => {
+    const kakao = window.kakao
+    if (!ready || !map.current || !kakao?.maps || !me) return
+    const dot = document.createElement('span')
+    dot.className = 'kakao-me'
+    dot.setAttribute('aria-label', '내 위치')
+    const overlay = new kakao.maps.CustomOverlay({ map: map.current, position: new kakao.maps.LatLng(me.lat, me.lng), content: dot, zIndex: 2 })
+    return () => overlay.setMap(null)
+  }, [me, ready])
   if (failed) return <div className="pin-map empty"><Glyph name="map" size={28} /><p>지도를 불러오지 못했습니다. 목록에서 골라 주세요.</p></div>
   return <div className="pin-map">
     <div ref={box} className="kakao-map" role="img" aria-label="장소 고르기 지도" />
