@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
@@ -43,6 +43,13 @@ async function pickDay(page: Page, field: string | RegExp, date: string) {
   for (let i = 0; i < 14 && !(await sheet.getByText(`${y}년 ${m}월`).count()); i++) await sheet.getByRole('button', { name: '다음 달' }).click()
   await sheet.locator('button.m-day').filter({ hasText: new RegExp(`^${d}$`) }).click()
   await expect(sheet).toHaveCount(0)
+}
+
+/** The time sheet's three wheels (오전/오후 · 시 · 분), 2026-11-26. */
+async function pickTime(scope: Locator, label: string, half: '오전' | '오후', hour: number, minute: number) {
+  await scope.getByRole('listbox', { name: label + ' 오전/오후' }).getByRole('option', { name: half, exact: true }).click()
+  await scope.getByRole('listbox', { name: label + ' 시' }).getByRole('option', { name: hour + '시', exact: true }).click()
+  await scope.getByRole('listbox', { name: label + ' 분' }).getByRole('option', { name: String(minute).padStart(2, '0') + '분', exact: true }).click()
 }
 
 /** The suggested nickname is random and may already be taken in a busy test database: ask for another one. */
@@ -239,12 +246,15 @@ test('빠른 모집: a template fills the post, the organizer picks the place an
   await page.getByRole('button', { name: /^시간/ }).click()
   const sheet = page.getByRole('dialog', { name: '시간' })
   await sheet.getByRole('tab', { name: /활동 종료/ }).click()
-  await expect(sheet.getByRole('option', { name: '오후 1:00' })).toBeVisible()
-  await expect(sheet.getByRole('option', { name: '오후 1:10' })).toHaveCount(0)
+  // From a 10:00 start the end only goes to 13:00: 오후 has 12시 and 1시, and 1시 only 00분.
+  await pickTime(sheet, '활동 종료', '오후', 1, 0)
+  await expect(sheet.getByRole('listbox', { name: '활동 종료 시' }).getByRole('option')).toHaveText(['12시', '1시'])
+  await expect(sheet.getByRole('listbox', { name: '활동 종료 분' }).getByRole('option')).toHaveText(['00분'])
+  await expect(sheet.getByText('활동 시간 3시간')).toBeVisible()
   await sheet.getByRole('tab', { name: /활동 시작/ }).click()
-  await sheet.getByRole('option', { name: '오후 8:00' }).click()
+  await pickTime(sheet, '활동 시작', '오후', 8, 0)
   await expect(sheet.getByText(/이후 활동으로 관리자 검토 후 승인될 예정이에요/)).toBeVisible()
-  await sheet.getByRole('option', { name: '오후 2:00' }).click()
+  await pickTime(sheet, '활동 시작', '오후', 2, 0)
   await expect(sheet.getByText(/전에 시작해요/)).toBeVisible()
   await sheet.getByRole('button', { name: '이 시간으로 할게요' }).click()
   await page.getByRole('button', { name: /장소를 골라/ }).click()
@@ -255,7 +265,7 @@ test('빠른 모집: a template fills the post, the organizer picks the place an
   await page.locator('input[name=safety]').check({ force: true })
   await page.getByRole('button', { name: '모집 올리기' }).click()
   await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
-  await expect(page.getByText(/14:00 · 2시간/)).toBeVisible()
+  await expect(page.getByText(/14:00 · 3시간/)).toBeVisible()
 })
 
 test('an organizer creates in three steps, a member applies, the organizer approves, and moves the date, and the member is told', async ({ page, browser }) => {
@@ -316,7 +326,7 @@ test('an organizer creates in three steps, a member applies, the organizer appro
   await page.getByRole('dialog', { name: '활동 관리' }).getByRole('button', { name: /일정 바꾸기/ }).click()
   // One sheet with 활동 시작 / 활동 종료 (2026-11-26): the start keeps the length.
   await page.getByRole('button', { name: /^새 시간/ }).click()
-  await page.getByRole('option', { name: '오후 2:00' }).click()
+  await pickTime(page.getByRole('dialog', { name: '시간' }), '활동 시작', '오후', 2, 0)
   await expect(page.getByRole('tab', { name: /활동 시작 14:00/ })).toBeVisible()
   await page.getByRole('button', { name: '이 시간으로 할게요' }).click()
   await page.getByPlaceholder(/장소 사정/).fill('오전에 행사가 있어 오후로 옮겨요')

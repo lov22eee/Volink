@@ -452,7 +452,23 @@ export function DateSheet({ value, first, last, onPick, onClose, note }: { value
   </Sheet>
 }
 
-const ampm = (t: number) => (t < 720 ? '오전 ' : '오후 ') + (Math.floor(t / 60) % 12 === 0 ? 12 : Math.floor(t / 60) % 12) + ':' + String(t % 60).padStart(2, '0')
+const half = (t: number) => (t < 720 ? '오전' : '오후')
+const hour12 = (t: number) => Math.floor(t / 60) % 12 === 0 ? 12 : Math.floor(t / 60) % 12
+const nearest = (list: number[], target: number) => list.reduce((best, t) => Math.abs(t - target) < Math.abs(best - target) ? t : best, list[0])
+
+/** 오전/오후 · 시 · 분 in three wheels over a list of allowed times (minutes of the day); each column only offers what fits. */
+function TimeWheels({ allowed, value, onChange, label }: { allowed: number[]; value: number; onChange: (t: number) => void; label: string }) {
+  const halves = [...new Set(allowed.map(half))]
+  const inHalf = allowed.filter(t => half(t) === half(value))
+  const hours = [...new Set(inHalf.map(hour12))]
+  const mins = inHalf.filter(t => hour12(t) === hour12(value)).map(t => t % 60)
+  return <Wheels>
+    <WheelColumn label={label + ' 오전/오후'} items={halves} value={half(value)} onChange={h => onChange(nearest(allowed.filter(t => half(t) === h), value + (h === '오후' ? 720 : -720)))} />
+    <WheelColumn label={label + ' 시'} items={hours} value={hour12(value)} render={h => h + '시'} onChange={h => onChange(nearest(inHalf.filter(t => hour12(t) === h), value))} />
+    <WheelColumn label={label + ' 분'} items={mins} value={value % 60} render={m => String(m).padStart(2, '0') + '분'}
+      onChange={m => onChange(inHalf.find(t => hour12(t) === hour12(value) && t % 60 === m) ?? value)} />
+  </Wheels>
+}
 
 /** The month's sunset (same table as the server's RiskClassifier): an activity that starts after it goes to review. */
 export function sunsetOf(date: string) { return sunset[Number(date.slice(5, 7)) - 1] }
@@ -472,20 +488,20 @@ export function ScheduleSheet({ date, start, duration, onPick, onClose }: { date
   const [tab, setTab] = useState<'start' | 'end'>('start')
   const [from, setFrom] = useState(Math.min(minutes(start), latestStart))
   const room = (at: number) => Math.min(r.durationMax, minutes(r.latestEnd) - at)
-  const [length, setLength] = useState(Math.min(duration, room(Math.min(minutes(start), latestStart))))
+  // The length the person chose; a late start only trims what is shown (moving back gives it back).
+  const [want, setLength] = useState(duration)
+  const length = Math.min(want, room(from))
   const starts = useMemo(() => { const out: number[] = []; for (let t = minutes(r.earliestStart); t <= latestStart; t += 10) out.push(t); return out }, [latestStart])
   const ends = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= room(from); v += 10) out.push(from + v); return out }, [from])
-  const moveStart = (t: number) => { setFrom(t); setLength(Math.min(length, room(t))) }
+  const moveStart = (t: number) => setFrom(t)
   return <Sheet title="시간" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => onPick(clock(from), length)}>이 시간으로 할게요</button>}>
     <div className="m-seg wide m-time-tabs" role="tablist">
       <button type="button" role="tab" aria-selected={tab === 'start'} className={tab === 'start' ? 'on' : ''} onClick={() => setTab('start')}><small>활동 시작</small><strong>{clock(from)}</strong></button>
       <button type="button" role="tab" aria-selected={tab === 'end'} className={tab === 'end' ? 'on' : ''} onClick={() => setTab('end')}><small>활동 종료</small><strong>{clock(from + length)}</strong></button>
     </div>
-    <Wheels>
-      {tab === 'start'
-        ? <WheelColumn key="start" label="활동 시작" items={starts} value={from} render={ampm} onChange={moveStart} />
-        : <WheelColumn key="end" label="활동 종료" items={ends} value={from + length} render={ampm} onChange={t => setLength(t - from)} />}
-    </Wheels>
+    {tab === 'start'
+      ? <TimeWheels key="start" label="활동 시작" allowed={starts} value={from} onChange={moveStart} />
+      : <TimeWheels key="end" label="활동 종료" allowed={ends} value={from + length} onChange={t => setLength(t - from)} />}
     <p className="m-time-sum">활동 시간 <strong>{durationLabel(length)}</strong></p>
     <SunsetNote date={date} start={clock(from)} />
   </Sheet>
