@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class RiskClassifier {
-    /** Approximate mid-month sunset in the Seoul area (minutes rounded down). Used only to send late activities to REVIEW. */
+    /** Approximate mid-month sunset in the Seoul area (minutes rounded down). Used only to send activities that start after it to REVIEW (2026-11-26: ending after it is fine). */
     static final LocalTime[] SUNSET = {
             LocalTime.of(17, 40), LocalTime.of(18, 10), LocalTime.of(18, 40), LocalTime.of(19, 5),
             LocalTime.of(19, 30), LocalTime.of(19, 50), LocalTime.of(19, 50), LocalTime.of(19, 25),
@@ -45,7 +45,7 @@ public class RiskClassifier {
     }
 
     /** placeReview: why the chosen place needs a look (e.g. "요양·복지시설"), or null for an open place. */
-    public Result classify(String title, String description, String category, LocalDateTime endsAt, String placeReview) {
+    public Result classify(String title, String description, String category, LocalDateTime startsAt, String placeReview) {
         // Spaces are ignored on both sides: "전기 배관", "전기배관" and "전기  작업" all match.
         List<String> blocked = new ArrayList<>();
         List<String> review = new ArrayList<>();
@@ -55,9 +55,14 @@ public class RiskClassifier {
         String baseRisk = jdbc.queryForList("SELECT base_risk FROM categories WHERE name = ?", String.class, category)
                 .stream().findFirst().orElse("LOW");
         if ("REVIEW".equals(baseRisk)) review.add("'" + category + "' 분야 · 대상자 확인 필요");
-        if (endsAt.toLocalTime().isAfter(SUNSET[endsAt.getMonthValue() - 1])) review.add("해가 진 뒤 끝나는 활동");
+        if (afterSunset(startsAt)) review.add("일몰(" + SUNSET[startsAt.getMonthValue() - 1] + ") 이후 시작하는 활동");
         if (placeReview != null) review.add("장소가 " + placeReview + " · 관리자 확인 필요");
         return review.isEmpty() ? new Result("LOW", List.of()) : new Result("REVIEW", review);
+    }
+
+    /** True when the activity starts after that month's sunset. */
+    public static boolean afterSunset(LocalDateTime startsAt) {
+        return startsAt.toLocalTime().isAfter(SUNSET[startsAt.getMonthValue() - 1]);
     }
 
     static String squash(String value) {

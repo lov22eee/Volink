@@ -253,13 +253,19 @@ class AuthActivityIntegrationTest extends ApiTestSupport {
     }
 
     @Test
-    void activitiesEndingAfterSunsetGoToReview() throws Exception {
+    void activitiesStartingAfterSunsetGoToReview() throws Exception {
         Map<String, Object> evening = activity("저녁 공원 정리 모임", "공원 산책로 주변의 가벼운 쓰레기를 함께 정리합니다.");
         evening.put("time", "19:30");
         evening.put("durationMinutes", 60);
         perform(post("/api/activities"), evening, token(member("GENERAL"))).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.riskLevel").value("REVIEW"))
-                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("해가 진 뒤")));
+                .andExpect(jsonPath("$.riskReasons").value(org.hamcrest.Matchers.containsString("일몰")));
+        // 2026-11-26: starting in daylight and ending after sunset is opened at once.
+        Map<String, Object> afternoon = activity("오후 공원 정리 모임", "공원 산책로 주변의 가벼운 쓰레기를 함께 정리합니다.");
+        afternoon.put("time", "16:00");
+        afternoon.put("durationMinutes", 180);
+        perform(post("/api/activities"), afternoon, token(member("GENERAL"))).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.riskLevel").value("LOW"));
     }
 
     @Test

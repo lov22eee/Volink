@@ -1887,3 +1887,19 @@ button.st-limit { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .hb-dates .hb-src i.v { background: #e9f3ee; color: var(--m-green-ink); }
 .hb-dates .hb-src i.b { background: #eaf0fa; color: var(--blue); }
 .hb-dates .hb-src small { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 2026-11-26 time sheet: 활동 시작 / 활동 종료 tabs over one wheel */
+.m-time-tabs { margin: 2px 0 6px; }
+.m-time-tabs button { min-height: 62px; flex-direction: column; gap: 2px; }
+.m-time-tabs button small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.m-time-tabs button strong { font-size: 20px; color: var(--ink); }
+.m-time-tabs button.on strong { color: var(--m-green-ink); }
+.m-time-sum { text-align: center; font-size: 14px; color: var(--ink-2); margin: 0 0 2px; }
+.m-time-sum strong { color: var(--ink); }
+/* 2026-11-26 place picker: map on top, list under it */
+.ap-place-body.split { display: flex; flex-direction: column; }
+.ap-map-pane { position: relative; flex: none; height: 40%; min-height: 200px; }
+.ap-list.split { position: relative; flex: 1; max-height: none; margin-top: -14px; border-radius: 18px 18px 0 0; padding-top: 4px; }
+.ap-place-body.split.nomap .ap-list.split { margin-top: 0; border-radius: 0; box-shadow: none; }
+.ap-sec { margin: 0; padding: 14px 4px 4px; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+.ap-results button > svg { flex: none; color: var(--ink-3); }
+.ap-map-pane .ap-hint { bottom: 24px; }

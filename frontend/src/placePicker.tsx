@@ -15,6 +15,8 @@ export type PlaceResult = {
   placeClass: 'OPEN' | 'REVIEW' | 'BLOCKED'; classLabel: string; token?: string; meetingPoint?: string | null
   /** A spot picked straight on the map (street, alley, empty lot): no place there, so an admin takes a look. */
   picked?: boolean
+  /** One of my own earlier activities' places (2026-11-26): its class is checked again by the server when posting. */
+  recent?: boolean
 }
 type SearchResult = { mode: 'KAKAO' | 'LOCAL'; items: PlaceResult[] }
 
@@ -68,6 +70,26 @@ export function PlaceField({ value, meetingPoint, onChange, error, app }: {
   </div>
 }
 
+/** The places of my own earlier activities, newest first, each once (app picker, 2026-11-26). */
+function useRecentPlaces(on: boolean) {
+  const [list, setList] = useState<PlaceResult[]>([])
+  useEffect(() => {
+    if (!on || preview) return
+    api<{ placeId: number | null; placeName: string | null; placeAddress?: string | null; latitude?: number | null; longitude?: number | null }[]>('/api/me/activities').then(rows => {
+      const seen = new Set<number>()
+      const out: PlaceResult[] = []
+      for (const a of rows) {
+        if (a.placeId == null || !a.placeName || seen.has(a.placeId)) continue
+        seen.add(a.placeId)
+        out.push({ placeId: a.placeId, name: a.placeName, address: a.placeAddress ?? '', categoryName: '', latitude: a.latitude ?? null, longitude: a.longitude ?? null,
+          distanceMeters: null, placeClass: 'OPEN', classLabel: '최근에 쓴 장소', recent: true })
+      }
+      setList(out.slice(0, 3))
+    }).catch(() => {})
+  }, [on])
+  return list
+}
+
 /** 로 after a vowel or ㄹ, otherwise 으로 (옥정호수공원으로, 쌍문역 4호선으로, 공터로). */
 function toward(name: string) {
   const last = name.trim().slice(-1)
@@ -97,6 +119,8 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
   // A new place starts where the user is: asked once (the same answer as 활동 찾기), then used without asking.
   const [asking, setAsking] = useState(!initial && !preview && !remembered() && !declined())
   const [locating, setLocating] = useState(false)
+  const recent = useRecentPlaces(Boolean(app))
+  const [searched, setSearched] = useState(false)
 
   async function startHere() {
     setAsking(false)
@@ -172,7 +196,7 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
     typed.current = false
     setSuggest([])
     // App with a map (2026-11-06, no bottom sheet): the results open as the same short list under the search box.
-    if (query.trim()) run(() => searchPlaces(query.trim(), centre), '', undefined, app && kakaoEnabled ? result => setSuggest(result.items.slice(0, 8)) : undefined)
+    if (query.trim()) { setSearched(true); run(() => searchPlaces(query.trim(), centre), '') }
   }
 
   function choose(item: PlaceResult) {
@@ -185,9 +209,16 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
   const same = (a: PlaceResult | null, b: PlaceResult) => a != null && keyOf(a) === keyOf(b)
   const hasMap = kakaoEnabled && mode !== 'LOCAL'
   if (app) {
+    const shown = recent.length && !searched ? items.filter(item => !recent.some(r => r.placeId != null && r.placeId === item.placeId)) : items
     const results = <>
+      {recent.length > 0 && !searched && <>
+        <p className="ap-sec">최근에 쓴 장소</p>
+        <ul className="ap-results" aria-label="최근에 쓴 장소">{recent.map(item => <li key={'r' + item.placeId}>
+          <button type="button" className={same(chosen, item) ? 'on' : ''} aria-pressed={same(chosen, item)} onClick={() => choose(item)}>
+            <span><strong>{item.name}</strong><small>{item.address || '지난 모집'}</small></span><Glyph name="clock" size={16} /></button></li>)}</ul></>}
+      {shown.length > 0 && <p className="ap-sec">{searched ? `검색 결과 ${shown.length}` : '내 주변 장소'}</p>}
       {message && <p className="ap-msg" role="status">{message}</p>}
-      <ul className="ap-results" aria-label="검색 결과">{items.map(item => {
+      <ul className="ap-results" aria-label="검색 결과">{shown.map(item => {
         const badge = classBadge[item.placeClass]
         return <li key={item.kakaoId ?? 'p' + item.placeId}>
           <button type="button" className={same(chosen, item) ? 'on' : ''} aria-pressed={same(chosen, item)} disabled={item.placeClass === 'BLOCKED'} onClick={() => choose(item)}>
@@ -214,17 +245,18 @@ function PlaceDialog({ initial, initialMeeting, onClose, onPick, app }: {
       {asking && <div className="ap-ask" role="group" aria-label="내 위치에서 시작"><span>내 위치 주변부터 볼까요? <small>위치는 저장하지 않아요</small></span>
         <button type="button" className="ap-ask-yes" onClick={startHere}>내 위치로</button><button type="button" className="ap-ask-no" onClick={() => { decline(); setAsking(false) }}>괜찮아요</button></div>}
       {locating && <p className="ap-msg" role="status">내 위치를 확인하는 중이에요…</p>}
-      <div className={'ap-place-body' + (hasMap ? '' : ' nomap')}>
-        {hasMap ? <>
+      {/* 2026-11-26: the map on top and the list under it, on one screen (recent places, places around me, search results). */}
+      <div className={'ap-place-body split' + (hasMap ? '' : ' nomap')}>
+        {hasMap && <div className="ap-map-pane">
           <PinMap noCentrePin centre={centre} chosen={chosen} items={items} hovered={hovered} onChoose={choose}
-            onNearby={point => { setSuggest([]); run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) choose(spot) }) }} />
-          {/* No result sheet over the map (2026-11-06): results are pins on the map and the list under the search box. */}
-          {message ? <span className="ap-hint warn">{message}</span> : <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span>}
-        </> : <div className="ap-list full">{!items.length && !message && <p className="ap-msg">장소 이름으로 검색해 주세요.</p>}{results}</div>}
+            onNearby={point => { setSuggest([]); setSearched(true); run(() => pointAndAround(point), '', point, result => { const spot = result.items[0]; if (spot?.picked) choose(spot) }) }} />
+          <span className="ap-hint"><Glyph name="pin" size={14} />지도를 누르면 그 자리를 골라요</span>
+        </div>}
+        <div className="ap-list split">{!items.length && !recent.length && !message && <p className="ap-msg">장소 이름으로 검색해 주세요.</p>}{results}</div>
       </div>
       <div className="ap-place-foot">
         {chosen ? <div className="ap-chosen"><span><strong>{chosen.name}</strong><small>{[chosen.classLabel, chosen.picked ? '' : chosen.address, distance(chosen.distanceMeters)].filter(Boolean).join(' · ')}</small></span>
-          {badge && <span className={'place-badge ' + badge.tone}>{badge.text}</span>}</div>
+          {badge && !chosen.recent && <span className={'place-badge ' + badge.tone}>{badge.text}</span>}</div>
           : <p className="ap-none">검색하거나 지도를 눌러 장소를 골라 주세요</p>}
         {chosen?.placeClass === 'REVIEW' && <p className="ap-msg">{chosen.classLabel}에서 하는 활동은 관리자가 확인한 뒤 공개돼요.</p>}
         <button type="button" className="m-btn" disabled={!chosen} onClick={() => chosen && onPick(chosen, initialMeeting)}>{chosen ? toward(chosen.name) + ' 정하기' : '장소를 골라 주세요'}</button>

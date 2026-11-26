@@ -101,7 +101,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   const [saved, setSaved] = useState<Saved | null>(null)
   // After a new recruitment: once, ask whether to put it in the phone calendar (2026-11-06).
   const [calendarAsk, setCalendarAsk] = useState(true)
-  const [sheet, setSheet] = useState<'date' | 'time' | 'duration' | null>(null)
+  const [sheet, setSheet] = useState<'date' | 'time' | null>(null)
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(Boolean(from || editId))
   const canHost = user.organization?.status === 'APPROVED'
@@ -122,7 +122,6 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
   }, [from, editId])
 
   const end = clock(minutes(start) + duration)
-  const afterSunset = minutes(end) > minutes(sunset[Number(date.slice(5, 7)) - 1])
   const lengths = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= Math.min(r.durationMax, minutes(r.latestEnd) - minutes(start)); v += 10) out.push(v); return out }, [start])
   useEffect(() => { if (lengths.length && !lengths.includes(duration)) setDuration(lengths[lengths.length - 1]) }, [lengths, duration])
 
@@ -233,11 +232,8 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
           <TextInput name="meetingPoint" className="m-input" placeholder="예: 정문 안내판 앞" maxLength={100} value={meeting} onChange={event => setMeeting(event.target.value)} enterKeyHint="done" />{err('meetingPoint')}</label>
         {!locked && <>
           <PickField name="date" label="날짜" icon="calendar" value={dayWord(date) + (dayWord(date).length <= 2 ? ' · ' + date.slice(5).replace('-', '/') : '')} error={errors.date} onOpen={() => setSheet('date')} />
-          <div className="m-two">
-            <PickField name="time" label="시작" icon="clock" value={start} error={errors.time} onOpen={() => setSheet('time')} />
-            <PickField name="duration" label="활동 시간" icon="timer" value={durationLabel(duration)} onOpen={() => setSheet('duration')} />
-          </div>
-          <p className={'m-help' + (afterSunset ? ' warn' : '')}><MIcon name="sun" size={16} />{start} ~ {end} · {afterSunset ? `해 진 뒤(${sunset[Number(date.slice(5, 7)) - 1]} 이후) 끝나서 관리자 확인 후 공개돼요.` : '해 지기 전에 끝나요.'}</p>
+          <PickField name="time" label="시간" icon="clock" value={`${start} ~ ${end} · ${durationLabel(duration)}`} error={errors.time} onOpen={() => setSheet('time')} />
+          <SunsetNote date={date} start={start} />
           <div className="m-field"><span className="m-label">준비물</span>
             <div className="m-chips wrap">{presetSupplies.concat(supplies.filter(s => !presetSupplies.includes(s.name)).map(s => s.name)).map(name => {
               const item = supplies.find(s => s.name === name)
@@ -282,8 +278,7 @@ function CreateForm({ user, from, editId }: { user: User; from?: number; editId?
     </form>}
 
     {sheet === 'date' && <DateSheet value={date} first={addDays(today, 1)} last={addDays(today, r.maxDaysAhead)} onClose={() => setSheet(null)} onPick={value => { setDate(value); setSheet(null); setErrors(e => ({ ...e, date: '' })) }} />}
-    {sheet === 'time' && <TimeSheet value={start} onClose={() => setSheet(null)} onPick={value => { setStart(value); setSheet(null) }} />}
-    {sheet === 'duration' && <DurationSheet value={duration} start={start} options={lengths} onClose={() => setSheet(null)} onPick={value => { setDuration(value); setSheet(null) }} />}
+    {sheet === 'time' && <ScheduleSheet date={date} start={start} duration={duration} onClose={() => setSheet(null)} onPick={(value, length) => { setStart(value); setDuration(length); setSheet(null) }} />}
   </div>
 }
 
@@ -346,23 +341,41 @@ export function DateSheet({ value, first, last, onPick, onClose, note }: { value
   </Sheet>
 }
 
-export function TimeSheet({ value, onPick, onClose }: { value: string; onPick: (time: string) => void; onClose: () => void }) {
-  const hours = Array.from({ length: 16 }, (_, i) => i + 6)
-  const mins = [0, 10, 20, 30, 40, 50]
-  const [h, setH] = useState(Number(value.slice(0, 2)))
-  const [mm, setMm] = useState(Number(value.slice(3, 5)))
-  const result = clock(Math.min(h * 60 + mm, minutes(r.latestEnd) - r.durationMin))
-  return <Sheet title="시작 시간" onClose={onClose} footer={<><p className="m-help center">{r.earliestStart} ~ {clock(minutes(r.latestEnd) - r.durationMin)} · 10분 단위</p><button type="button" className="m-btn" onClick={() => onPick(result)}>{result} 시작</button></>}>
-    <Wheels>
-      <WheelColumn label="시" items={hours} value={h} render={x => (x < 12 ? '오전 ' : '오후 ') + (x % 12 === 0 ? 12 : x % 12) + '시'} onChange={setH} />
-      <WheelColumn label="분" items={mins} value={mm} render={x => String(x).padStart(2, '0') + '분'} onChange={setMm} />
-    </Wheels>
-  </Sheet>
+const ampm = (t: number) => (t < 720 ? '오전 ' : '오후 ') + (Math.floor(t / 60) % 12 === 0 ? 12 : Math.floor(t / 60) % 12) + ':' + String(t % 60).padStart(2, '0')
+
+/** The month's sunset (same table as the server's RiskClassifier): an activity that starts after it goes to review. */
+export function sunsetOf(date: string) { return sunset[Number(date.slice(5, 7)) - 1] }
+
+/** One line under the time: before sunset, or after it (review). Ending after sunset is fine (2026-11-26). */
+export function SunsetNote({ date, start }: { date: string; start: string }) {
+  const late = minutes(start) > minutes(sunsetOf(date))
+  return <p className={'m-help' + (late ? ' warn' : '')}><MIcon name="sun" size={16} />{late ? `일몰(${sunsetOf(date)}) 이후 활동으로 관리자 검토 후 승인될 예정이에요.` : `일몰(${sunsetOf(date)}) 전에 시작해요.`}</p>
 }
 
-export function DurationSheet({ value, start, options, onPick, onClose }: { value: number; start: string; options: number[]; onPick: (minutes: number) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState(value)
-  return <Sheet title="활동 시간" onClose={onClose} footer={<><p className="m-help center">{start} 시작 → <strong>{clock(minutes(start) + draft)} 종료</strong></p><button type="button" className="m-btn" onClick={() => onPick(draft)}>{durationLabel(draft)}</button></>}>
-    <Wheels><WheelColumn label="활동 시간" items={options} value={options.includes(draft) ? draft : options[options.length - 1]} render={x => durationLabel(x)} onChange={setDraft} /></Wheels>
+/**
+ * 2026-11-26: start and end in one sheet (tabs 활동 시작 / 활동 종료, one wheel). The start is free in 06:00~21:30
+ * and keeps the length; the end only turns within 30 min ~ 3 h after the start (and by 22:00); the length is shown.
+ */
+export function ScheduleSheet({ date, start, duration, onPick, onClose }: { date: string; start: string; duration: number; onPick: (start: string, duration: number) => void; onClose: () => void }) {
+  const latestStart = minutes(r.latestEnd) - r.durationMin
+  const [tab, setTab] = useState<'start' | 'end'>('start')
+  const [from, setFrom] = useState(Math.min(minutes(start), latestStart))
+  const room = (at: number) => Math.min(r.durationMax, minutes(r.latestEnd) - at)
+  const [length, setLength] = useState(Math.min(duration, room(Math.min(minutes(start), latestStart))))
+  const starts = useMemo(() => { const out: number[] = []; for (let t = minutes(r.earliestStart); t <= latestStart; t += 10) out.push(t); return out }, [latestStart])
+  const ends = useMemo(() => { const out: number[] = []; for (let v = r.durationMin; v <= room(from); v += 10) out.push(from + v); return out }, [from])
+  const moveStart = (t: number) => { setFrom(t); setLength(Math.min(length, room(t))) }
+  return <Sheet title="시간" onClose={onClose} footer={<button type="button" className="m-btn" onClick={() => onPick(clock(from), length)}>이 시간으로 할게요</button>}>
+    <div className="m-seg wide m-time-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected={tab === 'start'} className={tab === 'start' ? 'on' : ''} onClick={() => setTab('start')}><small>활동 시작</small><strong>{clock(from)}</strong></button>
+      <button type="button" role="tab" aria-selected={tab === 'end'} className={tab === 'end' ? 'on' : ''} onClick={() => setTab('end')}><small>활동 종료</small><strong>{clock(from + length)}</strong></button>
+    </div>
+    <Wheels>
+      {tab === 'start'
+        ? <WheelColumn key="start" label="활동 시작" items={starts} value={from} render={ampm} onChange={moveStart} />
+        : <WheelColumn key="end" label="활동 종료" items={ends} value={from + length} render={ampm} onChange={t => setLength(t - from)} />}
+    </Wheels>
+    <p className="m-time-sum">활동 시간 <strong>{durationLabel(length)}</strong></p>
+    <SunsetNote date={date} start={clock(from)} />
   </Sheet>
 }
