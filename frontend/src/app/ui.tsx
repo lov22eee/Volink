@@ -96,6 +96,7 @@ export function goUp(target: string) {
 }
 
 /** Swap this screen for another without a new history entry (the list follows: the old one leaves it). */
+export function goReplace(target: string) { replace(target) }
 function replace(target: string) {
   visited.pop()
   window.location.replace(norm(target))
