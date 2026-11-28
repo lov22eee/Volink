@@ -262,7 +262,10 @@ test('빠른 모집: a template fills the post, the organizer picks the place an
   await dialog.getByLabel('장소 이름이나 주소').fill('옥정')
   await dialog.getByRole('list', { name: '추천 장소' }).getByRole('button', { name: /옥정중앙공원/ }).click()
   await dialog.getByRole('button', { name: '옥정중앙공원으로 정하기' }).click()
+  // The full-screen picker must be gone before the tick (a click during its exit landed on it in CI, 2026-11-28).
+  await expect(dialog).toHaveCount(0)
   await page.locator('input[name=safety]').check({ force: true })
+  await expect(page.locator('input[name=safety]')).toBeChecked()
   await page.getByRole('button', { name: '모집 올리기' }).click()
   await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
   await expect(page.getByText(/14:00 · 3시간/)).toBeVisible()
@@ -557,6 +560,9 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   await expect(page.getByText('참가자 3명에게 알렸어요')).toBeVisible()
   await expect(page.getByText('출석 코드')).toBeVisible()
 
+  // 2026-11-28: the participant on the activity screen (no push here) is told within the next look (10 s).
+  await expect(waiting.getByText('출석이 시작됐어요')).toBeVisible({ timeout: 15_000 })
+  await expect(waiting.getByRole('button', { name: 'QR 찍고 체크인' })).toBeEnabled()
   // The participant hears it, and the push opens the camera straight away (here: the QR sheet).
   const told = await (await page.request.get('/api/me/notifications', { headers: { Authorization: members[0].token } })).json()
   expect(told.items[0].title).toBe('출석이 시작됐어요')
