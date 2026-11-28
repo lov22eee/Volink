@@ -557,6 +557,9 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   await expect(page.getByText('참가자 3명에게 알렸어요')).toBeVisible()
   await expect(page.getByText('출석 코드')).toBeVisible()
 
+  // 2026-11-28: the participant on the activity screen (no push here) is told within the next look (10 s).
+  await expect(waiting.getByText('출석이 시작됐어요')).toBeVisible({ timeout: 15_000 })
+  await expect(waiting.getByRole('button', { name: 'QR 찍고 체크인' })).toBeEnabled()
   // The participant hears it, and the push opens the camera straight away (here: the QR sheet).
   const told = await (await page.request.get('/api/me/notifications', { headers: { Authorization: members[0].token } })).json()
   expect(told.items[0].title).toBe('출석이 시작됐어요')

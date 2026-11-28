@@ -205,9 +205,23 @@ export function ActivityScreen({ id, user, onChange }: { id: number; user: User;
   // Waiting for the organizer's [출석 시작] (the day itself, confirmed): look again every 20 s and when the app comes back.
   const waitingStart = Boolean(activity && viewer?.participation?.status === 'CONFIRMED' && !activity.checkinOpenedAt && activity.status !== 'FINISHED'
     && new Date(`${activity.date}T${activity.startTime}:00+09:00`).getTime() - now <= 3 * 3_600_000)
+  // 2026-11-28 (기기 확인): on this screen the push banner is hidden (same screen), so say it here when 출석 opens —
+  // right away when the push arrives, else at the next look (every 10 s).
+  const opened = activity?.checkinOpenedAt ?? null
+  const wasOpened = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (wasOpened.current === null && opened && viewer?.participation?.status === 'CONFIRMED')
+      showToast('출석이 시작됐어요', 'QR 찍고 체크인을 눌러 주세요')
+    if (activity) wasOpened.current = opened
+  }, [opened, activity, viewer])
+  useEffect(() => {
+    const pushed = (event: Event) => { if (String((event as CustomEvent<{ link: string }>).detail?.link ?? '').startsWith('#/activity/' + id)) load() }
+    window.addEventListener('volink:push', pushed)
+    return () => window.removeEventListener('volink:push', pushed)
+  }, [id, load])
   useEffect(() => {
     if (!waitingStart) return
-    const t = window.setInterval(() => { if (!document.hidden) load() }, 20_000)
+    const t = window.setInterval(() => { if (!document.hidden) load() }, 10_000)
     const back = () => { if (!document.hidden) load() }
     document.addEventListener('visibilitychange', back)
     return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', back) }
