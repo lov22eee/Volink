@@ -10,7 +10,7 @@ import { api, ApiError } from '../api'
 import { showToast } from '../App'
 import { DateField } from './host'
 import { AddApplicationSheet } from './record'
-import { ActionBar, MIcon, Sheet, TextArea, TopBar } from './ui'
+import { ActionBar, MIcon, Sheet, TextArea, TopBar, goReplace } from './ui'
 import type { PhoneStatus } from './phone'
 
 const lab = registerPlugin<{ open(options: { guide: string; step?: string; target?: 'S' | 'A' | 'P'; url?: string; next?: string; program?: string; other?: string; keep?: boolean; verifyName?: string; verifyLast4?: string }): Promise<{ text: string; texts?: string[]; host?: string; applied?: boolean; partial?: boolean }>; logout(): Promise<void> }>('VolinkLab')
@@ -439,9 +439,10 @@ function LabFlow({ go }: { go?: string; both?: boolean }) {
       const result = items.length ? await api<{ added: number; matched: number }>('/api/me/external/import', 'POST', { items }) : { added: 0, matched: 0 }
       if (summary) await api('/api/me/external/summary', 'PUT', { ...summary, listed: true })
       showToast(result.added || result.matched ? `1365 실적 ${result.added + result.matched}건을 넣었어요` : '새로 넣을 실적은 없어요',
-        result.matched ? `참여 예정이던 ${result.matched}건은 실적 반영됨으로 바꿨어요` : '완료 기록에서 볼 수 있어요')
+        result.matched ? `참여 예정이던 ${result.matched}건은 실적 반영됨으로 바꿨어요` : '')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
-      window.location.hash = '#/records'
+      // 2026-11-28: to 마이, where 함께한 시간 counts up by what came in (the lab page leaves the back history).
+      goReplace('#/my')
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   /** 실적 and 신청 현황 from one visit (A안): finished activities, the total, and the picked applications in one go. */
@@ -454,9 +455,10 @@ function LabFlow({ go }: { go?: string; both?: boolean }) {
       if (summary) await api('/api/me/external/summary', 'PUT', { ...summary, listed: true })
       const planned = applied.length ? await api<{ added: number }>('/api/me/external/import', 'POST', { items: applied }) : { added: 0 }
       const n = got.added + got.matched + planned.added
-      showToast(n ? `1365에서 ${n}건을 넣었어요` : '1365 기록을 확인했어요', n ? `실적 ${got.added + got.matched}건 · 신청 ${planned.added}건 · 내 활동에서 볼 수 있어요` : '마지막으로 가져온 날만 새로 바꿨어요')
+      const toMy = Boolean(summary) || got.added + got.matched > 0
+      showToast(n ? `1365에서 ${n}건을 넣었어요` : '1365 기록을 확인했어요', n ? `실적 ${got.added + got.matched}건 · 신청 ${planned.added}건` : '마지막으로 가져온 날만 새로 바꿨어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
-      window.location.hash = '#/mine'
+      goReplace(toMy ? '#/my' : '#/mine')
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   async function save() {
@@ -470,9 +472,10 @@ function LabFlow({ go }: { go?: string; both?: boolean }) {
       const saved = total ? await api<{ count?: number; before?: number | null; reflected?: number }>('/api/me/external/summary', 'PUT', total) : null
       if (saved?.reflected) showToast(`실적이 늘었어요 ${saved.before}→${saved.count}건`, `활동 ${saved.reflected}개를 ‘실적 반영됨(추정)’으로 바꿨어요`)
       else if (saved && saved.before != null && saved.before === saved.count) showToast('새로 늘어난 실적은 아직 없어요', '1365에 반영되기까지 며칠 걸릴 수 있어요')
-      else showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', '내 활동에서 볼 수 있어요')
+      else showToast(total ? '1365 봉사 실적을 가져왔어요' : result.added ? `내 활동에 ${result.added}개를 넣었어요` : '이미 넣은 활동이에요', total ? '' : '내 활동에서 볼 수 있어요')
       try { localStorage.setItem(USED, '1') } catch { /* asked with the consent sheet again */ }
-      window.location.hash = total ? '#/records' : '#/mine'
+      // Only 신청 (no 실적, nothing for 함께한 시간): 내 활동, where the planned days are.
+      goReplace(total ? '#/my' : '#/mine')
     } catch (cause) { setError(cause instanceof ApiError ? Object.values(cause.fieldErrors)[0] ?? cause.message : '잠시 후 다시 시도해 주세요.') } finally { setBusy(false) }
   }
   const failed = rows !== null && !rows.length && !summary && !done.length

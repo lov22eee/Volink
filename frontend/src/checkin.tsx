@@ -157,7 +157,8 @@ export function CheckInHint({ phase, opens, closes }: { phase: Phase; opens: num
 }
 
 /** Participant: opened by scanning the organizer's QR. One position reading goes to the server and is not stored. */
-export function CheckInPage({ id, token, user, ready }: { id: number; token?: string; user: User | null; ready: boolean }) {
+/** `onDone` (app, 2026-11-28): leave this page once checked in, so going back does not open the 200 m step again. */
+export function CheckInPage({ id, token, user, ready, onDone }: { id: number; token?: string; user: User | null; ready: boolean; onDone?: (at: string, title: string) => void }) {
   const [activity, setActivity] = useState<LiveActivity | null>(null)
   const [state, setState] = useState<'idle' | 'locating' | 'sending' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
@@ -179,6 +180,7 @@ export function CheckInPage({ id, token, user, ready }: { id: number; token?: st
     try {
       const result = await api<{ checkedInAt: string }>('/api/activities/' + id + '/check-ins', 'POST', byCode ? { code, lat, lng, accuracy: acc } : { qrToken: token, lat, lng, accuracy: acc })
       setAt(result.checkedInAt?.slice(11, 16) ?? '')
+      if (onDone) { onDone(result.checkedInAt?.slice(11, 16) ?? '', activity?.title ?? ''); return }
       setState('done')
     } catch (cause) {
       setState('error')

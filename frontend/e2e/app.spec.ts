@@ -573,7 +573,9 @@ test('roll call: a member checks in with the 4-digit code, the organizer checks 
   await memberPage.goto('/#/checkin/' + id)
   await memberPage.getByLabel('출석 코드').fill(code)
   await memberPage.getByRole('button', { name: '코드로 체크인' }).click()
-  await expect(memberPage.getByRole('heading', { name: /체크인했어요/ })).toBeVisible()
+  // 2026-11-28: checked in → 홈 with a toast (back does not open the 200 m step again).
+  await expect(memberPage).toHaveURL(/#\/home$/)
+  await expect(memberPage.getByText(/체크인했어요/)).toBeVisible()
   await phone.close()
 
   await page.reload()
@@ -792,9 +794,8 @@ test('1365: a marked activity → went → review; the lab reads a pasted 1365 l
   await expect(page.getByText('봉사 실적 총 57시간 30분 · 14건')).toBeVisible()
   await expect(page.getByText('기타 57시간 30분')).toBeVisible()
   await page.getByRole('button', { name: '실적 가져오기' }).click()
-  // 2026-11-08: 실적 → 마이 › 활동 기록 (chips over one list); 함께한 시간 = 1365 + Volink and the refresh row on 마이.
-  await expect(page).toHaveURL(/#\/records/)
-  await page.goto('/#/my')
+  // 2026-11-28: 실적 → 마이 (함께한 시간 counts up by what came in); 함께한 시간 = 1365 + Volink and the refresh row on 마이.
+  await expect(page).toHaveURL(/#\/my$/)
   const total = page.getByRole('region', { name: '함께한 시간' })
   await expect(total).toContainText('1365 57시간 30분 + Volink')
   await expect(total).not.toContainText('홍길동')
@@ -1110,7 +1111,8 @@ test('1365 실적 list (V32): every row with its hours and kind goes to 완료 �
   await expect(page.getByText(/2023\.12\.14 · 4시간/)).toBeVisible()
   await expect(page.getByText(/참여 예정과 같아 실적 반영됨으로 바꿔요/)).toBeVisible()
   await page.getByRole('button', { name: '3건 완료 기록에 넣기' }).click()
-  await expect(page).toHaveURL(/#\/records/)
+  await expect(page).toHaveURL(/#\/my$/)
+  await page.goto('/#/records')
   await expect(page.getByRole('link', { name: /헌혈실적연계.*2023\.12\.14 · 4시간 · 시간인증/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /하천 쓰레기 줍기 플로깅.*2시간 · 시간인증.*반영됨/ })).toBeVisible()
   // Again: all three are already in.

@@ -25,7 +25,7 @@ import { SafetyNoticeHost } from './status'
 import { PhoneNoticeHost, PhoneRequiredHost, PhoneScreen } from './phone'
 import { MyScreen, NicknameScreen, SavedScreen, InterestsScreen } from './my'
 import { NoticeSettingsScreen, NoticesScreen } from './notices'
-import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, useKeyboardAware } from './ui'
+import { BellLink, Loading, MIcon, PushBanner, TabBar, TopBar, goReplace, useKeyboardAware } from './ui'
 import type { Tab } from './ui'
 
 setupNative()
@@ -116,7 +116,8 @@ export default function MobileApp() {
     case 'my': screen = route.id === undefined && route.query.get('view') === 'saved' ? <SavedScreen /> : route.query.get('view') === 'interests' ? <InterestsScreen user={user} onChange={setUser} /> : route.query.get('view') === 'nickname' ? <NicknameScreen /> : route.query.get('view') === 'notice-settings' ? <NoticeSettingsScreen /> : route.query.get('view') === 'status' ? <StatusScreen /> : <MyScreen user={user} actions={bell} />; break
     case 'activity': screen = route.id ? <ActivityScreen key={route.id} id={route.id} user={user} onChange={pollUnread} /> : null; break
     case 'manage': screen = route.id ? <ManageScreen key={route.id} id={route.id} user={user} onChange={pollUnread} initial={route.query.get('tab') ?? undefined} /> : null; break
-    case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready /></div></div> : null; break
+    case 'checkin': screen = route.id ? <div className="m-screen"><TopBar title="체크인" back="#/home" /><div className="m-body m-legacy"><CheckInPage key={route.id} id={route.id} token={route.query.get('t') ?? undefined} user={user} ready
+      onDone={(at, title) => { showToast('체크인했어요' + (at ? ' · ' + at : ''), title || undefined); goReplace('#/home') }} /></div></div> : null; break
     case 'news': screen = route.id ? <NewsScreen key={route.id} id={route.id} user={user} /> : null; break
     case 'notifications': screen = <NoticesScreen onChange={pollUnread} />; break
     case 'settings': screen = route.query.get('view') === 'account' ? <AccountScreen onWithdrawn={signOut} /> : <SettingsScreen user={user} onSignOut={signOut} />; break
