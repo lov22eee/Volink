@@ -262,7 +262,10 @@ test('빠른 모집: a template fills the post, the organizer picks the place an
   await dialog.getByLabel('장소 이름이나 주소').fill('옥정')
   await dialog.getByRole('list', { name: '추천 장소' }).getByRole('button', { name: /옥정중앙공원/ }).click()
   await dialog.getByRole('button', { name: '옥정중앙공원으로 정하기' }).click()
+  // The full-screen picker must be gone before the tick (a click during its exit landed on it in CI, 2026-11-28).
+  await expect(dialog).toHaveCount(0)
   await page.locator('input[name=safety]').check({ force: true })
+  await expect(page.locator('input[name=safety]')).toBeChecked()
   await page.getByRole('button', { name: '모집 올리기' }).click()
   await expect(page.getByRole('heading', { name: '모집을 시작했어요!' })).toBeVisible()
   await expect(page.getByText(/14:00 · 3시간/)).toBeVisible()
